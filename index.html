@@ -673,7 +673,7 @@ window.PROFESSIFY_CONFIG = {
           <option>San Diego State University</option>
           <option>UC Santa Barbara</option>
         </select></div><div id="obSchoolNote" class="ob-hint" style="margin-top:6px;display:none"></div></div>
-        <div class="ob-field full"><label>Major</label><div class="selwrap"><select id="obMajor" onchange="obMajorChange()"></select></div></div>
+        <div class="ob-field full"><label>Major</label><div class="selwrap"><select id="obMajor" onchange="obMajorChange()"></select></div><div id="obMajorNote" class="ob-hint" style="margin-top:6px;display:none;color:#c0674f">Pick your major to continue.</div></div>
         <div class="ob-field full" id="obConcWrap" style="display:none"><label>Concentration <span class="ob-hint">optional</span></label><div class="selwrap"><select id="obConcSel"></select></div></div>
         <div class="ob-field"><label>Class standing</label><div class="selwrap"><select id="obStanding"><option>Freshman</option><option>Sophomore</option><option>Junior</option><option>Senior</option></select></div></div>
         <div class="ob-field"><label>Catalog year</label><div class="selwrap"><select id="obYear"></select></div></div>
@@ -1039,7 +1039,8 @@ const COLLEGES={
   'Bailey College of Science & Mathematics':['Biochemistry','Biological Sciences','Chemistry','Kinesiology','Liberal Studies','Marine Sciences','Mathematics','Microbiology','Physics','Public Health','Statistics']
 };
 function majorOptionsHtml(sel){
-  return Object.entries(COLLEGES).map(([col,list])=>`<optgroup label="${col}">${list.map(m=>`<option ${m===sel?'selected':''}>${m}</option>`).join('')}</optgroup>`).join('');
+  const ph=`<option value="" ${!sel?'selected':''} disabled hidden>Select your major…</option>`;
+  return ph+Object.entries(COLLEGES).map(([col,list])=>`<optgroup label="${col}">${list.map(m=>`<option ${m===sel?'selected':''}>${m}</option>`).join('')}</optgroup>`).join('');
 }
 
 /* ============ SCHOOLS (per-school config — this is how new schools get added) ============ */
@@ -2998,7 +2999,7 @@ function renderModal(){
 
 /* ============ SCHEDULE ============ */
 function randomMajor(){const keys=Object.keys(FLOWCHARTS);return keys.length?keys[Math.floor(Math.random()*keys.length)]:'Business Administration';}
-function buildMajorSel(){document.getElementById('majorSel').innerHTML=majorOptionsHtml(randomMajor());}
+function buildMajorSel(){document.getElementById('majorSel').innerHTML=majorOptionsHtml(student.major||'');}
 /* Catalog year starts at the current academic year and only goes forward — no past years. */
 function currentCatalogStart(){const d=new Date();return d.getMonth()>=5?d.getFullYear():d.getFullYear()-1;}
 function catalogLabel(y){return `${y}–${(y+1).toString().slice(2)}`;}
@@ -3132,6 +3133,10 @@ function renderRoadmap(){
   const out=document.getElementById('roadmapOut');
   const sc=SCHOOLS[student.school];
   if(sc&&sc.status!=='live'){out.innerHTML=personalBar()+schoolComingHtml(sc);return;}
+  if(!major){
+    out.innerHTML=personalBar()+`<div class="note" style="margin-top:20px"><b style="color:var(--text-2)">Pick your major and catalog year above</b> to see your degree term by term, with the professor teaching each required course. New here? Tap <b style="color:var(--text-2)">Set up your plan</b>, or just choose a major to get started.</div>`;
+    return;
+  }
   if(!fc){
     out.innerHTML=personalBar()+`<div class="note" style="margin-top:20px"><b style="color:var(--text-2)">Full roadmap coming soon.</b> We're still building the term-by-term class map for <b style="color:var(--text-2)">${major}</b>. You can still browse professors and rank the GEs below — and we'll notify you the moment your major is ready.</div>`;
     return;
@@ -3267,7 +3272,7 @@ function profFit(p){
 
 /* ============ ONBOARDING (account wizard) ============ */
 function startOnboard(){
-  document.getElementById('obMajor').innerHTML=majorOptionsHtml(student.major||'Computer Science');
+  document.getElementById('obMajor').innerHTML=majorOptionsHtml(student.major||'');
   document.getElementById('obStanding').value=student.standing;
   document.getElementById('obYear').value=student.year;
   obMajorChange();
@@ -3282,7 +3287,12 @@ function obShowStep(n){
   document.getElementById('obDot1').classList.toggle('on',n>=1);
   document.getElementById('obDot2').classList.toggle('on',n>=2);
 }
-function obNext(){renderObChips();obShowStep(2);}
+function obNext(){
+  const note=document.getElementById('obMajorNote');
+  if(!document.getElementById('obMajor').value){if(note)note.style.display='block';document.getElementById('obMajor').focus();return;}
+  if(note)note.style.display='none';
+  renderObChips();obShowStep(2);
+}
 function obBack(){obShowStep(1);}
 function obMajorChange(){
   const m=document.getElementById('obMajor').value;
@@ -3305,7 +3315,7 @@ function obSchoolChange(){
     document.getElementById('obConcWrap').style.display='none';
   }else{
     note.style.display='none';
-    majorSel.innerHTML=majorOptionsHtml(student.major||'Computer Science');
+    majorSel.innerHTML=majorOptionsHtml(student.major||'');
     obMajorChange();
   }
 }
