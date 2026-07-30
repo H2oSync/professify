@@ -13,9 +13,8 @@ Built by students, for students. Ad-free. Verified `.edu` reviews only.
 ```
 index.html              ← the entire app (one self-contained file: HTML + CSS + JS)
 netlify.toml            ← deploy config
-docs/
-  BACKEND-SETUP.md      ← how to turn on persistent, .edu-verified reviews (Supabase)
-  supabase-setup.sql    ← the database schema to run in Supabase
+BACKEND-SETUP.md        ← how to turn on persistent, .edu-verified reviews (Supabase)
+supabase-setup.sql      ← the database schema to run in Supabase
 CONTRIBUTING.md         ← how to make changes without breaking the live site
 ```
 
@@ -54,7 +53,7 @@ We never invent a course, a professor, or a future teaching assignment. If we do
 
 The site auto-deploys from this repo via Netlify: **push to `main` → Netlify rebuilds professify.app** (see `netlify.toml`). No manual drag-and-drop needed once it's connected.
 
-To turn on real persistent reviews, follow **`docs/BACKEND-SETUP.md`** (about 15 minutes).
+To turn on real persistent reviews, follow **`BACKEND-SETUP.md`** (about 15 minutes).
 
 ---
 
