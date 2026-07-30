@@ -1,0 +1,20 @@
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Node (only if you ever add tooling — the app itself needs none)
+node_modules/
+npm-debug.log*
+
+# Local env / secrets — NEVER commit real keys.
+# The Supabase anon key is safe to be public and lives in index.html,
+# but keep any private/service_role keys or local overrides out of git.
+.env
+.env.*
+*.local
+
+# Netlify
+.netlify/
