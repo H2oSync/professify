@@ -542,6 +542,7 @@ window.PROFESSIFY_CONFIG = {
       <button id="tab-home" class="active" onclick="show('home')">Home</button>
       <button id="tab-sched" onclick="show('sched')">Schedule</button>
       <button id="tab-explore" onclick="show('explore')">Explore</button>
+      <button id="tab-watch" onclick="show('watch')">Watchlist<span id="watchCount" class="wl-navbadge" hidden>0</span></button>
     </nav>
   </div>
 </header>
@@ -654,6 +655,61 @@ window.PROFESSIFY_CONFIG = {
     </div>
 
     <div id="exOut"></div>
+  </div>
+</main>
+
+<style>
+.wl-navbadge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;margin-left:7px;border-radius:9px;background:#6f9e6a;color:#0b0d10;font-size:11px;font-weight:800;line-height:1;vertical-align:middle}
+.wl-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid rgba(255,255,255,.14);border-radius:8px;background:rgba(15,17,20,.72);color:var(--text-2);font-size:12.5px;font-weight:600;cursor:pointer;transition:border-color .15s,background .15s,color .15s;white-space:nowrap}
+.wl-btn svg{width:15px;height:15px;flex:none}
+.wl-btn:hover{border-color:rgba(255,255,255,.32)}
+.wl-btn.on{background:rgba(111,158,106,.16);border-color:rgba(111,158,106,.5);color:#9fd09a}
+.pcard{position:relative}
+.pcard>.wl-btn{position:absolute;top:11px;right:11px;padding:6px}
+.wl-modalbtn{display:flex;width:100%;justify-content:center;margin-top:10px;padding:11px 14px;font-size:13.5px}
+.wl-empty{max-width:520px;margin:36px auto;text-align:center}
+.wl-empty h3{font-size:20px;margin:0 0 8px}
+.wl-empty p{color:var(--faint);margin:0 0 18px;line-height:1.55}
+.wl-head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+.wl-toggle{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--text-2);cursor:pointer;user-select:none}
+.wl-toggle input{accent-color:#6f9e6a;width:15px;height:15px}
+.wl-clear{background:none;border:none;color:var(--faint);font-size:13px;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.wl-clear:hover{color:var(--text-2)}
+.wl-insight{border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.02);border-radius:12px;padding:14px 16px;margin-bottom:18px;font-size:13.5px;line-height:1.6;color:var(--text-2)}
+.wl-insight b{color:var(--text-2)}
+.wl-insight .ov{color:#9fd09a;font-weight:600}
+.wl-scroll{overflow-x:auto;border:1px solid rgba(255,255,255,.08);border-radius:14px}
+table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
+.wl-table th,.wl-table td{padding:13px 15px;text-align:left;vertical-align:top;border-bottom:1px solid rgba(255,255,255,.06)}
+.wl-table tbody tr:last-child td{border-bottom:none}
+.wl-table thead th{position:sticky;top:0;background:#15171b;z-index:2}
+.wl-table .wl-attr{position:sticky;left:0;background:#111317;z-index:1;font-size:11.5px;letter-spacing:.03em;text-transform:uppercase;color:var(--faint);font-weight:600;width:150px;min-width:132px}
+.wl-table thead .wl-attr{z-index:3;background:#15171b}
+.wl-table tbody tr:nth-child(even) td{background:rgba(255,255,255,.016)}
+.wl-table tbody tr:nth-child(even) .wl-attr{background:#131519}
+.wl-phead{min-width:150px}
+.wl-phead .pn{font-size:15px;font-weight:600;color:#eceef0;display:block;margin-bottom:2px}
+.wl-phead .pn:hover{color:#9fd09a}
+.wl-phead .pdp{font-size:12px;color:var(--faint);display:block;margin-bottom:7px}
+.wl-phead .prb{font-size:18px;font-weight:700}
+.wl-phead .prb small{font-size:11px;color:var(--faint);font-weight:500}
+.wl-rm{background:none;border:none;color:var(--faint);cursor:pointer;font-size:12px;padding:0;margin-top:9px}
+.wl-rm:hover{color:#d98a7a}
+.wl-chip{display:inline-block;padding:2px 8px;margin:0 4px 4px 0;border:1px solid rgba(255,255,255,.12);border-radius:20px;font-size:11.5px;color:var(--text-2)}
+.wl-val{font-size:14px;color:var(--text-2)}
+.wl-note{font-size:12.5px;color:var(--faint);margin-top:14px;line-height:1.5}
+@media(max-width:640px){.wl-table .wl-attr{width:112px;min-width:104px}.wl-table th,.wl-table td{padding:11px 12px}}
+</style>
+
+<!-- ============ WATCHLIST ============ -->
+<main class="view" id="view-watch">
+  <div class="wrap">
+    <div class="phead">
+      <p class="eyebrow">Watchlist</p>
+      <h2>Compare the professors you're eyeing</h2>
+      <p>Every professor you add lands here side by side — rating, reviews, style, and which classes they overlap on — so you can weigh them before committing anyone to your schedule.</p>
+    </div>
+    <div id="watchOut"></div>
   </div>
 </main>
 
@@ -2671,8 +2727,9 @@ function show(v){
   document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
   document.getElementById('view-'+v).classList.add('active');
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
-  const map={home:'tab-home',sched:'tab-sched',explore:'tab-explore'};
-  document.getElementById(map[v]).classList.add('active');
+  const map={home:'tab-home',sched:'tab-sched',explore:'tab-explore',watch:'tab-watch'};
+  if(map[v])document.getElementById(map[v]).classList.add('active');
+  if(v==='watch')renderWatch();
   window.scrollTo({top:0,behavior:'smooth'});
 }
 function goGE(){
@@ -2807,7 +2864,7 @@ function renderExplore(){
     list.sort((a,b)=>(b[1].rating??-1)-(a[1].rating??-1));
     const CAP=60;const shown=list.slice(0,CAP);const more=list.length-shown.length;
     out.innerHTML=(more>0?`<p class="emptyq" style="text-align:left;margin:0 0 14px">Showing the ${CAP} top-rated of ${list.length} professors${exQuery?` matching “${escapeHtml(document.getElementById('exQuery').value)}”`:''} — type a name or department to narrow it down.</p>`:'')+`<div class="pgrid">${shown.map(([id,p])=>`
-      <div class="pcard" onclick="openProf('${id}')">
+      <div class="pcard" onclick="openProf('${id}')">${watchBtn(id)}
         <div class="ini">${initials(p.name)}</div>
         <div style="flex:1;min-width:0">
           <h3>${p.name}${(p.rating!=null&&matchesStudent(p))?'<span class="fitbadge">Fits you</span>':''}</h3>
@@ -3012,6 +3069,7 @@ function renderModal(){
       <div class="modal-actions">
         <button class="btn primary rate-open" onclick="startRate('${currentProf}')">Rate this professor</button>
       </div>
+      <button class="wl-btn wl-modalbtn ${isWatched(currentProf)?'on':''}" onclick="toggleWatch('${currentProf}',event)">${isWatched(currentProf)?WL_ON:WL_OFF}<span>${isWatched(currentProf)?'On your watchlist':'Add to watchlist'}</span></button>
       <div class="msec"><h4>About &amp; background</h4>
         ${(p.since||p.field||p.edu)?`<div class="bio-grid">
           ${p.since?`<div class="bio-cell"><span class="bio-k">At Cal Poly</span><span class="bio-v">Since ${p.since} · ${2026-p.since} yrs</span></div>`:''}
@@ -3029,6 +3087,68 @@ function renderModal(){
       ${modalRevs.length?`<div class="msec"><div class="revhead"><h4>Reviews · ${modalRevs.length}</h4><div class="revsort"><button class="${revSort==='helpful'?'active':''}" onclick="setRevSort('helpful')">Most helpful</button><button class="${revSort==='recent'?'active':''}" onclick="setRevSort('recent')">Most recent</button></div></div>${revs.map(r=>`<div class="review"><div class="rtop"><span class="rc">${r.course}</span><span class="rt">${r.term}</span>${r.verified?`<span class="ver">${CHECK} Verified enrolled</span>`:''}${r._i===topIdx?`<span class="best">Most helpful for ${r.course}</span>`:''}<span class="rs" style="color:${scoreColor(r.score)}"><span class="rd" style="width:6px;height:6px;border-radius:50%;background:${scoreColor(r.score)};display:inline-block"></span>${r.score}.0</span></div><p class="rtext">${r.text}</p><div class="rtags">${r.tags.map(t=>`<span class="t">${t}</span>`).join('')}</div><div class="rfoot"><button class="hbtn ${r._v?'on':''}" onclick="voteHelpful(${r._i})">${THUMB} Helpful</button><span class="hcount">${r.helpful} found this helpful</span></div></div>`).join('')}</div>`:`<div class="msec"><h4>Reviews</h4><div class="norev"><p>No reviews yet.</p><button class="btn primary rate-open" onclick="startRate('${currentProf}')">Be the first to rate</button></div></div>`}
     </div>`;
 }
+
+/* ============ WATCHLIST ============ */
+const WL_OFF='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/></svg>';
+const WL_ON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
+let watchlist=[];
+try{const _w=JSON.parse(localStorage.getItem('professify_watch')||'[]');if(Array.isArray(_w))watchlist=_w;}catch(e){}
+let wlDiffOnly=false;
+function saveWatch(){try{localStorage.setItem('professify_watch',JSON.stringify(watchlist));}catch(e){}}
+function isWatched(id){return watchlist.indexOf(id)>=0;}
+function watchBtn(id){const on=isWatched(id);return `<button class="wl-btn ${on?'on':''}" title="${on?'On your watchlist':'Add to watchlist'}" aria-label="Watchlist toggle" onclick="toggleWatch('${id}',event)">${on?WL_ON:WL_OFF}</button>`;}
+function toggleWatch(id,ev){if(ev){ev.stopPropagation();}const i=watchlist.indexOf(id);if(i>=0)watchlist.splice(i,1);else watchlist.push(id);saveWatch();updateWatchUI();}
+function clearWatch(){watchlist=[];saveWatch();updateWatchUI();}
+function updateWatchBadge(){const b=document.getElementById('watchCount');if(b){b.textContent=watchlist.length;b.hidden=watchlist.length===0;}}
+function updateWatchUI(){
+  updateWatchBadge();
+  const mb=document.getElementById('mback');
+  if(mb&&mb.classList.contains('open')&&currentProf!=null&&modalMode==='profile')renderModal();
+  const ve=document.getElementById('view-explore');if(ve&&ve.classList.contains('active'))renderExplore();
+  const vw=document.getElementById('view-watch');if(vw&&vw.classList.contains('active'))renderWatch();
+}
+function wlCourses(p){const a=(p&&(p.courses||p.prCourses))||[];return Array.isArray(a)?a.map(c=>String(c).toUpperCase().trim()).filter(Boolean):[];}
+function setWlDiff(cb){wlDiffOnly=cb.checked;renderWatch();}
+function renderWatch(){
+  const out=document.getElementById('watchOut');if(!out)return;
+  const profs=watchlist.filter(id=>PROFESSORS[id]).map(id=>({id,p:PROFESSORS[id]}));
+  if(!profs.length){
+    out.innerHTML=`<div class="wl-empty"><h3>Nothing on your watchlist yet</h3><p>When you spot a professor worth considering, hit <b style="color:var(--text-2)">Watch</b> on their card or profile. They'll collect here so you can compare them side by side — no commitment.</p><button class="btn primary" onclick="show('explore')">Find professors →</button></div>`;
+    return;
+  }
+  const cmap={};
+  profs.forEach(({p})=>{wlCourses(p).forEach(c=>{(cmap[c]=cmap[c]||new Set()).add(p.name);});});
+  const shared=Object.entries(cmap).map(([c,s])=>[c,[...s]]).filter(x=>x[1].length>=2).sort((a,b)=>b[1].length-a[1].length);
+  let insight;
+  if(shared.length){
+    insight=`<div class="wl-insight"><b>Some of these have taught the same class.</b> Where two overlap they're likely <span class="ov">alternatives for the same course</span> — so you'd pick one:<br>`+shared.slice(0,4).map(x=>`<b>${x[0]}</b> — ${x[1].join(', ')}`).join('  ·  ')+`</div>`;
+  }else{
+    insight=`<div class="wl-insight">No overlapping classes among these professors — based on what they've taught they cover <span class="ov">different courses</span>, so you could potentially take several of them in one term.</div>`;
+  }
+  const rows=[
+    {k:'Rating · PolyRatings', raw:profs.map(({p})=>p.rating!=null?p.rating.toFixed(2):'—'), cell:profs.map(({p})=>p.rating!=null?`<span class="prb" style="color:${scoreColor(p.rating)}">${p.rating.toFixed(2)}<small> /4</small></span>`:'<span class="wl-val" style="color:var(--faint)">No rating yet</span>')},
+    {k:'# of ratings', raw:profs.map(({p})=>String(p.evals||0)), cell:profs.map(({p})=>`<span class="wl-val">${p.evals?p.evals.toLocaleString():'—'}</span>`)},
+    {k:'Student reviews', raw:profs.map(({p})=>{const c=profReviews(p).length;const a=studentAvg(p);return c?a.toFixed(1)+'·'+c:'0';}), cell:profs.map(({p})=>{const c=profReviews(p).length;const a=studentAvg(p);return c?`<span class="wl-val"><b style="color:${scoreColor(a/5*4)}">${a.toFixed(1)}</b>/5 · ${c}</span>`:'<span class="wl-val" style="color:var(--faint)">None yet</span>';})},
+    {k:'Department', raw:profs.map(({p})=>pdept(p)||p.dept||'—'), cell:profs.map(({p})=>`<span class="wl-val">${pdept(p)||p.dept||'—'}</span>`)},
+    {k:'Fits your style', raw:profs.map(({p})=>matchesStudent(p)?'yes':'no'), cell:profs.map(({p})=>matchesStudent(p)?'<span class="wl-val" style="color:#9fd09a">✓ Match</span>':'<span class="wl-val" style="color:var(--faint)">—</span>')},
+    {k:'Strong suits', raw:profs.map(({p})=>(p.strong||(p.field?[p.field]:[])).join(',')), cell:profs.map(({p})=>{const t=p.strong?p.strong.slice(0,3):(p.field?[p.field]:[]);return t.length?t.map(s=>`<span class="wl-chip">${s}</span>`).join(''):'<span class="wl-val" style="color:var(--faint)">—</span>';})},
+    {k:'Classes taught', raw:profs.map(({p})=>wlCourses(p).slice(0,6).join(',')), cell:profs.map(({p})=>{const c=wlCourses(p).slice(0,6);return c.length?c.map(x=>`<span class="wl-chip">${x}</span>`).join(''):'<span class="wl-val" style="color:var(--faint)">—</span>';})}
+  ];
+  const visRows=wlDiffOnly?rows.filter(r=>new Set(r.raw).size>1):rows;
+  const thead=`<tr><th class="wl-attr"></th>${profs.map(({id,p})=>`<th class="wl-phead"><span class="pn" onclick="openProf('${id}')" style="cursor:pointer">${p.name}</span><span class="pdp">${pdept(p)||p.dept||''}</span>${p.rating!=null?`<span class="prb" style="color:${scoreColor(p.rating)}">${p.rating.toFixed(2)}<small>/4</small></span>`:'<span class="pdp">No rating</span>'}<br><button class="wl-rm" title="Remove from watchlist" onclick="toggleWatch('${id}')">Remove ✕</button></th>`).join('')}</tr>`;
+  const tbody=visRows.length?visRows.map(r=>`<tr><td class="wl-attr">${r.k}</td>${r.cell.map(c=>`<td>${c}</td>`).join('')}</tr>`).join(''):`<tr><td class="wl-attr"></td><td colspan="${profs.length}" style="color:var(--faint)">These professors are identical on every tracked attribute.</td></tr>`;
+  const over=profs.length>5?`<p class="wl-note">Comparison is easiest with 5 or fewer — you're comparing ${profs.length}. On a phone, scroll sideways to see them all.</p>`:'';
+  out.innerHTML=`
+    <div class="wl-head">
+      <label class="wl-toggle"><input type="checkbox" ${wlDiffOnly?'checked':''} onchange="setWlDiff(this)">Only show differences</label>
+      <button class="wl-clear" onclick="clearWatch()">Clear watchlist</button>
+    </div>
+    ${insight}
+    <div class="wl-scroll"><table class="wl-table"><thead>${thead}</thead><tbody>${tbody}</tbody></table></div>
+    ${over}
+    <p class="wl-note">Tip: tap a professor's name to open their full profile and reviews. Add a handful, compare, then commit the winners to your schedule.</p>`;
+}
+updateWatchBadge();
 
 /* ============ SCHEDULE ============ */
 function randomMajor(){const keys=Object.keys(FLOWCHARTS);return keys.length?keys[Math.floor(Math.random()*keys.length)]:'Business Administration';}
