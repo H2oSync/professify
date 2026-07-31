@@ -15,8 +15,8 @@
    stay in-memory for the session). Setup steps: PROFESSIFY-BACKEND-SETUP.md
    ============================================================ */
 window.PROFESSIFY_CONFIG = {
-  SUPABASE_URL: '',      // e.g. https://xxxxxxxx.supabase.co
-  SUPABASE_ANON_KEY: '', // e.g. eyJhbGciOi... (the anon/public key — safe to expose)
+  SUPABASE_URL: 'https://rqkndeqbcahozidniesn.supabase.co',
+  SUPABASE_ANON_KEY: 'sb_publishable_h7Hllays0O3KRORIKfRdzg_iMBVInrD', // publishable key — safe to expose
   EMAIL_DOMAIN: ''       // optional: lock sign-in to one domain, e.g. 'calpoly.edu'. Blank = any .edu
 };
 </script>
@@ -959,6 +959,33 @@ const MAJOR_CATALOG={
         ['CSC 4710','Introduction to Computer Graphics','__tbd',4],
         ['CSC 3710','Game Design and Development','__tbd',4],
         ['CSC 3201','Introduction to Computer Security','__tbd',4]]}
+    }},
+  'Kinesiology':{core:[
+      {code:'KINE 1180',name:'Introduction to Kinesiology',prof:'__tbd',units:1,type:'Core'},
+      {code:'KINE 2266',name:'Sport and Performance Psychology',prof:'__tbd',units:3,type:'Core'},
+      {code:'KINE 3303',name:'Physiology of Exercise',prof:'__tbd',units:4,type:'Core'},
+      {code:'KINE 3307',name:'Adapted Physical Activity',prof:'__tbd',units:3,type:'Core'},
+      {code:'KINE 3312',name:'Motor Learning',prof:'__tbd',units:3,type:'Core'},
+      {code:'KINE 3319',name:'Introduction to Research Methods in Kinesiology',prof:'__tbd',units:4,type:'Core'},
+      {code:'KINE 4403',name:'Biomechanics',prof:'__tbd',units:4,type:'Core'},
+      {code:'KINE 4412',name:'Physical Activity and Public Health',prof:'__tbd',units:3,type:'Core'},
+      {code:'KINE 4451',name:'Nutrition for Fitness and Sport',prof:'__tbd',units:4,type:'Core'}
+    ],concentrations:{
+      'General / Open':{desc:'A flexible track — choose kinesiology electives across exercise science, health, and sport.',classes:[]},
+      'Exercise Science':{desc:'Exercise testing, clinical physiology, and motor control — strong prep for health and clinical careers and grad school.',classes:[
+        ['KINE 3330','Group Exercise and Personal Training','__tbd',2],
+        ['KINE 3349','Exercise Testing and Prescription','__tbd',3],
+        ['KINE 4404','Clinical Exercise Physiology','__tbd',4],
+        ['KINE 4406','Motor Control','__tbd',3]]},
+      'Health Promotion':{desc:'Community and public health — program planning, epidemiology, and health behavior.',classes:[
+        ['HLTH 2261','Social Determinants of Health','__tbd',3],
+        ['HLTH 4434','Health Promotion Program Planning','__tbd',4],
+        ['KINE 4401','Leadership in Health and Physical Activity Programs','__tbd',3]]},
+      'Sport Science':{desc:'Sport performance and psychology — coaching, performance, and the science of sport.',classes:[
+        ['KINE 3325','Sport and Physical Activity Throughout Civilizations','__tbd',3],
+        ['KINE 3330','Group Exercise and Personal Training','__tbd',2],
+        ['KINE 3366','Applied Sport and Performance Psychology','__tbd',3],
+        ['KINE 4401','Leadership in Health and Physical Activity Programs','__tbd',3]]}
     }},
   'Business Administration':{core:[
       {code:'BUS 3306',name:'Career Readiness III',prof:'__tbd',units:1,type:'Core'},
@@ -2806,7 +2833,7 @@ let rateDraft=null;
 const RATE_CHIPS=['Clear lectures','Cares about students','Tough but fair','Fair grader','Project-based','Lots of discussion','Light workload','Heavy workload','Learned a ton','Easy to talk to'];
 
 /* ===== SUPABASE BACKEND — persistent, .edu-verified reviews (optional; dormant until keys are set) ===== */
-let sb=null, sbUser=null, sbBusy=false;
+let sb=null, sbUser=null, sbBusy=false, awaitingLink=false;
 const dbReviews={};           // professor_key -> [reviews from the database]
 let modalRevs=[];             // current merged review list backing the open modal
 let modalMode='profile';      // 'profile' = professor view, 'rate' = verify/rating flow (don't clobber it)
@@ -2827,7 +2854,7 @@ async function initBackend(){
     sb=window.supabase.createClient(c.SUPABASE_URL,c.SUPABASE_ANON_KEY);
     const {data}=await sb.auth.getSession();
     if(data&&data.session){sbUser=data.session.user;eduVerified=true;}
-    sb.auth.onAuthStateChange((_e,session)=>{sbUser=session?session.user:null;eduVerified=!!sbUser;});
+    sb.auth.onAuthStateChange((_e,session)=>{sbUser=session?session.user:null;eduVerified=!!sbUser;if(sbUser&&awaitingLink&&currentProf!=null){awaitingLink=false;startRate(currentProf);}});
   }catch(e){sb=null;}
 }
 async function loadReviews(id){
@@ -2853,7 +2880,7 @@ function renderVerify(id){
     <p class="rate-sub">Only verified students can rate — that's what makes Professify trustworthy. Your email is never shown and reviews post anonymously.</p>
     <input id="eduEmail" class="rate-input" type="email" autocomplete="off" placeholder="you@calpoly.edu" oninput="checkEdu()">
     <div id="eduErr" class="rate-err"></div>
-    <button id="eduBtn" class="btn primary rate-submit" disabled onclick="doVerify('${id}')">${backendReady()?'Email me a code':'Verify &amp; continue'}</button>
+    <button id="eduBtn" class="btn primary rate-submit" disabled onclick="doVerify('${id}')">${backendReady()?'Email me a sign-in link':'Verify &amp; continue'}</button>
     <button class="rate-skip" onclick="renderModal()">Cancel</button></div></div>`;
 }
 function checkEdu(){const v=(document.getElementById('eduEmail').value||'').trim();document.getElementById('eduBtn').disabled=!eduOk(v);}
@@ -2864,32 +2891,35 @@ async function doVerify(id){
   if(sbBusy)return;sbBusy=true;
   const btn=document.getElementById('eduBtn');if(btn){btn.disabled=true;btn.textContent='Sending…';}
   try{
-    const {error}=await sb.auth.signInWithOtp({email,options:{shouldCreateUser:true}});
+    const {error}=await sb.auth.signInWithOtp({email,options:{shouldCreateUser:true,emailRedirectTo:location.origin}});
     if(error)throw error;
-    renderCodeStep(id,email);
-  }catch(e){const el=document.getElementById('eduErr');if(el)el.textContent=(e&&e.message)||'Could not send the code. Try again.';if(btn){btn.disabled=false;btn.textContent='Email me a code';}}
+    awaitingLink=true;
+    renderLinkSent(id,email);
+  }catch(e){const el=document.getElementById('eduErr');if(el)el.textContent=(e&&e.message)||'Could not send the link. Try again.';if(btn){btn.disabled=false;btn.textContent='Email me a sign-in link';}}
   sbBusy=false;
 }
-function renderCodeStep(id,email){
+function renderLinkSent(id,email){
   modalMode='rate';
   document.getElementById('modal').innerHTML=`<div class="rate-wrap"><button class="mclose" onclick="renderModal()">&times;</button><div class="rate-step">
     <div class="rate-kicker">Check your inbox</div>
-    <h2 class="rate-h">Enter your code</h2>
-    <p class="rate-sub">We emailed a 6-digit code to <b>${escapeHtml(email)}</b>. It confirms you're a real student — your email is never shown and reviews post anonymously.</p>
-    <input id="otpCode" class="rate-input" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" oninput="document.getElementById('otpBtn').disabled=this.value.trim().length<6">
-    <div id="otpErr" class="rate-err"></div>
-    <button id="otpBtn" class="btn primary rate-submit" disabled onclick="verifyCode('${id}','${escapeHtml(email)}')">Verify &amp; continue</button>
-    <button class="rate-skip" onclick="renderVerify('${id}')">Use a different email</button></div></div>`;
+    <h2 class="rate-h">Click your sign-in link</h2>
+    <p class="rate-sub">We emailed a one-time sign-in link to <b>${escapeHtml(email)}</b>. Open it <b>in this browser</b> to verify you're a real student — then come back here and continue. Your email is never shown and reviews post anonymously.</p>
+    <div id="linkErr" class="rate-err"></div>
+    <button id="linkBtn" class="btn primary rate-submit" onclick="checkLink('${id}')">I've clicked the link — continue</button>
+    <button class="rate-skip" onclick="renderVerify('${id}')">Use a different email</button>
+    <p class="rate-fine" style="margin-top:10px">Didn't get it? Check spam, or wait a minute and try a different email. (Free-tier email is limited to a few per hour.)</p></div></div>`;
 }
-async function verifyCode(id,email){
+async function checkLink(id){
+  if(!backendReady()){eduVerified=true;startRate(id);return;}
   if(sbBusy)return;sbBusy=true;
-  const code=(document.getElementById('otpCode').value||'').trim();
-  const btn=document.getElementById('otpBtn');if(btn){btn.disabled=true;btn.textContent='Verifying…';}
+  const btn=document.getElementById('linkBtn');if(btn){btn.disabled=true;btn.textContent='Checking…';}
   try{
-    const {data,error}=await sb.auth.verifyOtp({email,token:code,type:'email'});
-    if(error)throw error;
-    sbUser=data&&data.user;eduVerified=true;sbBusy=false;startRate(id);
-  }catch(e){const el=document.getElementById('otpErr');if(el)el.textContent=(e&&e.message)||'That code didn\'t work. Check it and try again.';if(btn){btn.disabled=false;btn.textContent='Verify & continue';}sbBusy=false;}
+    const {data}=await sb.auth.getSession();
+    if(data&&data.session){sbUser=data.session.user;eduVerified=true;awaitingLink=false;sbBusy=false;startRate(id);return;}
+    const el=document.getElementById('linkErr');if(el)el.textContent='Not verified yet — click the link in your email first, then tap continue.';
+  }catch(e){const el=document.getElementById('linkErr');if(el)el.textContent=(e&&e.message)||'Could not check. Try again.';}
+  if(btn){btn.disabled=false;btn.textContent="I've clicked the link — continue";}
+  sbBusy=false;
 }
 function renderRateForm(id){
   modalMode='rate';
