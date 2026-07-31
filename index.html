@@ -2902,8 +2902,8 @@ function renderCodeStep(id,email){
   document.getElementById('modal').innerHTML=`<div class="rate-wrap"><button class="mclose" onclick="renderModal()">&times;</button><div class="rate-step">
     <div class="rate-kicker">Check your inbox</div>
     <h2 class="rate-h">Enter your code</h2>
-    <p class="rate-sub">We emailed a 6-digit verification code to <b>${escapeHtml(email)}</b>. Enter it below to confirm you're a real student. Your email is never shown and reviews post anonymously.</p>
-    <input id="eduCode" class="rate-input" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" style="letter-spacing:8px;text-align:center;font-size:22px;font-weight:700" oninput="checkCode()">
+    <p class="rate-sub">We emailed a verification code to <b>${escapeHtml(email)}</b>. Enter it below to confirm you're a real student. Your email is never shown and reviews post anonymously.</p>
+    <input id="eduCode" class="rate-input" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="Enter code" style="letter-spacing:5px;text-align:center;font-size:22px;font-weight:700" oninput="checkCode()">
     <div id="codeErr" class="rate-err"></div>
     <button id="codeBtn" class="btn primary rate-submit" disabled onclick="verifyCode('${id}','${escapeHtml(email)}')">Verify &amp; continue</button>
     <button class="rate-skip" onclick="renderVerify('${id}')">Use a different email</button>
@@ -2913,7 +2913,7 @@ function renderCodeStep(id,email){
 function checkCode(){const v=(document.getElementById('eduCode').value||'').replace(/\D/g,'');const el=document.getElementById('eduCode');if(el&&el.value!==v)el.value=v;const b=document.getElementById('codeBtn');if(b)b.disabled=v.length<6;}
 async function verifyCode(id,email){
   const code=(document.getElementById('eduCode').value||'').replace(/\D/g,'');
-  if(code.length<6){const el=document.getElementById('codeErr');if(el)el.textContent='Enter the 6-digit code from your email.';return;}
+  if(code.length<6){const el=document.getElementById('codeErr');if(el)el.textContent='Enter the code from your email.';return;}
   if(sbBusy)return;sbBusy=true;
   const btn=document.getElementById('codeBtn');if(btn){btn.disabled=true;btn.textContent='Verifying…';}
   try{
