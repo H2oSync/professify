@@ -577,38 +577,54 @@ window.PROFESSIFY_CONFIG = {
   </div>
 </main>
 
+<style>
+.sched-bar{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;padding:15px 17px;border:1px solid rgba(255,255,255,.09);border-radius:14px;background:rgba(255,255,255,.02);margin-bottom:10px;transition:border-color .15s,background .15s}
+.sched-bar.drag{border-color:rgba(111,158,106,.6);background:rgba(111,158,106,.07)}
+.sb-lab{display:block;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);margin-bottom:7px;font-weight:600}
+.sb-major{min-width:242px}
+.sb-major select{font-weight:600}
+.sb-sep{width:1px;align-self:stretch;background:rgba(255,255,255,.08);margin:6px 2px}
+.sb-field{flex:0 0 auto}
+.sb-plan{display:inline-flex;align-items:center;padding:11px 14px;border:1px solid rgba(255,255,255,.1);border-radius:10px;color:var(--text-2);font-size:14px;font-weight:500;background:rgba(255,255,255,.015)}
+.sb-spacer{flex:1 1 auto;min-width:0}
+.sb-import{display:inline-flex;align-items:center;gap:7px;padding:11px 15px;border:1px dashed rgba(255,255,255,.22);border-radius:10px;background:transparent;color:var(--text-2);font-size:13.5px;font-weight:600;cursor:pointer;transition:border-color .15s,color .15s}
+.sb-import:hover{border-color:rgba(255,255,255,.42);color:#eceef0}
+.sb-hint{font-size:12.5px;color:var(--faint);margin:11px 2px 0;line-height:1.5}
+@media(max-width:720px){.sb-major{min-width:100%}.sb-sep{display:none}.sb-spacer{display:none}.sb-import{width:100%;justify-content:center}}
+</style>
+
 <!-- ============ SCHEDULE ============ -->
 <main class="view" id="view-sched">
   <div class="wrap">
     <div class="phead">
       <p class="eyebrow">My Schedule</p>
       <h2>Your degree, term by term</h2>
-      <p>Pick your major and catalog year — or drop in your flowchart — and we'll pull the professor teaching each required course each term.</p>
+      <p>Your major's required classes, term by term — with the professor teaching each one and their live rating.</p>
     </div>
 
-    <div class="controls">
-      <div class="field">
-        <label>Major</label>
-        <div class="selwrap"><select id="majorSel" onchange="renderRoadmap()"></select></div>
+    <div class="sched-bar" id="schedBar" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="this.classList.remove('drag');dropFile(event)">
+      <div class="sb-field">
+        <label class="sb-lab">Your major</label>
+        <div class="selwrap sb-major"><select id="majorSel" onchange="renderRoadmap()"></select></div>
       </div>
-      <div class="field">
-        <label>Catalog year</label>
+      <div class="sb-sep"></div>
+      <div class="sb-field">
+        <label class="sb-lab">Catalog year</label>
         <div class="selwrap"><select id="yearSel" onchange="renderRoadmap()"></select></div>
       </div>
-      <div class="field">
-        <label>Planning</label>
-        <div class="plan-term" id="planTerm">Fall 2026</div>
+      <div class="sb-field">
+        <label class="sb-lab">Planning</label>
+        <span class="sb-plan" id="planTerm">Fall 2026</span>
       </div>
-      <div class="field import">
-        <label>Or import your plan</label>
-        <input type="file" id="planFile" accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.csv,image/*" style="display:none" onchange="handleFile(this.files)">
-        <div class="drop" onclick="document.getElementById('planFile').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="dropFile(event)">
-          <svg class="plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
-          <span>Drop in your flowchart or class schedule — or click to browse</span>
-        </div>
-        <p class="import-note" id="importNote"></p>
-      </div>
+      <div class="sb-spacer"></div>
+      <input type="file" id="planFile" accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.csv,image/*" style="display:none" onchange="handleFile(this.files)">
+      <button type="button" class="sb-import" onclick="document.getElementById('planFile').click()" title="Import your flowchart or class schedule — or drag a file onto this bar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><path d="M12 15V3m0 0L8 7m4-4 4 4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        Import plan
+      </button>
     </div>
+    <p class="import-note" id="importNote"></p>
+    <p class="sb-hint">Set up in onboarding? Your plan's already loaded below. Change your major anytime above, or import your real flowchart to pin exact courses.</p>
 
     <div id="importResult"></div>
     <div id="roadmapOut"></div>
