@@ -2880,7 +2880,7 @@ function renderVerify(id){
     <p class="rate-sub">Only verified students can rate — that's what makes Professify trustworthy. Your email is never shown and reviews post anonymously.</p>
     <input id="eduEmail" class="rate-input" type="email" autocomplete="off" placeholder="you@calpoly.edu" oninput="checkEdu()">
     <div id="eduErr" class="rate-err"></div>
-    <button id="eduBtn" class="btn primary rate-submit" disabled onclick="doVerify('${id}')">${backendReady()?'Email me a sign-in link':'Verify &amp; continue'}</button>
+    <button id="eduBtn" class="btn primary rate-submit" disabled onclick="doVerify('${id}')">${backendReady()?'Email me a code':'Verify &amp; continue'}</button>
     <button class="rate-skip" onclick="renderModal()">Cancel</button></div></div>`;
 }
 function checkEdu(){const v=(document.getElementById('eduEmail').value||'').trim();document.getElementById('eduBtn').disabled=!eduOk(v);}
@@ -2891,34 +2891,37 @@ async function doVerify(id){
   if(sbBusy)return;sbBusy=true;
   const btn=document.getElementById('eduBtn');if(btn){btn.disabled=true;btn.textContent='Sending…';}
   try{
-    const {error}=await sb.auth.signInWithOtp({email,options:{shouldCreateUser:true,emailRedirectTo:location.origin}});
+    const {error}=await sb.auth.signInWithOtp({email,options:{shouldCreateUser:true}});
     if(error)throw error;
-    awaitingLink=true;
-    renderLinkSent(id,email);
-  }catch(e){const el=document.getElementById('eduErr');if(el)el.textContent=(e&&e.message)||'Could not send the link. Try again.';if(btn){btn.disabled=false;btn.textContent='Email me a sign-in link';}}
+    renderCodeStep(id,email);
+  }catch(e){const el=document.getElementById('eduErr');if(el)el.textContent=(e&&e.message)||'Could not send the code. Try again.';if(btn){btn.disabled=false;btn.textContent='Email me a code';}}
   sbBusy=false;
 }
-function renderLinkSent(id,email){
+function renderCodeStep(id,email){
   modalMode='rate';
   document.getElementById('modal').innerHTML=`<div class="rate-wrap"><button class="mclose" onclick="renderModal()">&times;</button><div class="rate-step">
     <div class="rate-kicker">Check your inbox</div>
-    <h2 class="rate-h">Click your sign-in link</h2>
-    <p class="rate-sub">We emailed a one-time sign-in link to <b>${escapeHtml(email)}</b>. Open it <b>in this browser</b> to verify you're a real student — then come back here and continue. Your email is never shown and reviews post anonymously.</p>
-    <div id="linkErr" class="rate-err"></div>
-    <button id="linkBtn" class="btn primary rate-submit" onclick="checkLink('${id}')">I've clicked the link — continue</button>
+    <h2 class="rate-h">Enter your code</h2>
+    <p class="rate-sub">We emailed a 6-digit verification code to <b>${escapeHtml(email)}</b>. Enter it below to confirm you're a real student. Your email is never shown and reviews post anonymously.</p>
+    <input id="eduCode" class="rate-input" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" style="letter-spacing:8px;text-align:center;font-size:22px;font-weight:700" oninput="checkCode()">
+    <div id="codeErr" class="rate-err"></div>
+    <button id="codeBtn" class="btn primary rate-submit" disabled onclick="verifyCode('${id}','${escapeHtml(email)}')">Verify &amp; continue</button>
     <button class="rate-skip" onclick="renderVerify('${id}')">Use a different email</button>
-    <p class="rate-fine" style="margin-top:10px">Didn't get it? Check spam, or wait a minute and try a different email. (Free-tier email is limited to a few per hour.)</p></div></div>`;
+    <p class="rate-fine" style="margin-top:10px">Didn't get it? Check spam, or go back and try again in a minute.</p></div></div>`;
+  setTimeout(()=>{const c=document.getElementById('eduCode');if(c)c.focus();},60);
 }
-async function checkLink(id){
-  if(!backendReady()){eduVerified=true;startRate(id);return;}
+function checkCode(){const v=(document.getElementById('eduCode').value||'').replace(/\D/g,'');const el=document.getElementById('eduCode');if(el&&el.value!==v)el.value=v;const b=document.getElementById('codeBtn');if(b)b.disabled=v.length<6;}
+async function verifyCode(id,email){
+  const code=(document.getElementById('eduCode').value||'').replace(/\D/g,'');
+  if(code.length<6){const el=document.getElementById('codeErr');if(el)el.textContent='Enter the 6-digit code from your email.';return;}
   if(sbBusy)return;sbBusy=true;
-  const btn=document.getElementById('linkBtn');if(btn){btn.disabled=true;btn.textContent='Checking…';}
+  const btn=document.getElementById('codeBtn');if(btn){btn.disabled=true;btn.textContent='Verifying…';}
   try{
-    const {data}=await sb.auth.getSession();
+    const {data,error}=await sb.auth.verifyOtp({email,token:code,type:'email'});
+    if(error)throw error;
     if(data&&data.session){sbUser=data.session.user;eduVerified=true;awaitingLink=false;sbBusy=false;startRate(id);return;}
-    const el=document.getElementById('linkErr');if(el)el.textContent='Not verified yet — click the link in your email first, then tap continue.';
-  }catch(e){const el=document.getElementById('linkErr');if(el)el.textContent=(e&&e.message)||'Could not check. Try again.';}
-  if(btn){btn.disabled=false;btn.textContent="I've clicked the link — continue";}
+    throw new Error('Could not verify. Try again.');
+  }catch(e){const el=document.getElementById('codeErr');if(el)el.textContent=(e&&e.message)||'That code was wrong or expired. Check your email and try again.';if(btn){btn.disabled=false;btn.textContent='Verify & continue';}}
   sbBusy=false;
 }
 function renderRateForm(id){
