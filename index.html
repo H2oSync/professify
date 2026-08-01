@@ -1215,6 +1215,18 @@ function matchesStudent(p){
     if(l==='Steady homework (not big exams)'&&p.style['Exam-heavy']<=40)return true;
     if(l==='Manageable workload'&&p.difficulty<=3.2)return true;
   }
+const student={school:'Cal Poly, San Luis Obispo',major:null,conc:null,minor:'None',standing:'Freshman',year:'2026',learn:new Set(),time:'No preference',priority:'Great teaching'};
+
+const savedStudent = localStorage.getItem('professify_student');
+let hasOnboarded = false;
+if (savedStudent) {
+  try {
+    const parsed = JSON.parse(savedStudent);
+    Object.assign(student, parsed);
+    student.learn = new Set(parsed.learn || []);
+    hasOnboarded = true;
+  } catch(e) {}
+}
   return false;
 }
 function personalBar(){
@@ -3336,7 +3348,8 @@ function finishOnboard(){
   student.minor=document.getElementById('obMinor').value;
   const cat=MAJOR_CATALOG[student.major];
   student.conc=cat?document.getElementById('obConcSel').value:null;
-  // sync the app controls
+  localStorage.setItem('professify_student', JSON.stringify({...student, learn: [...student.learn]}));
+  localStorage.setItem('professify_student', JSON.stringify(student));   
   document.getElementById('majorSel').value=student.major;
   document.getElementById('yearSel').value=student.year;
   exMajor=student.major; if(student.conc)exConc=student.conc;
@@ -3344,7 +3357,7 @@ function finishOnboard(){
   document.getElementById('onboard').style.display='none';
   document.body.style.overflow='';
   show('sched');
-}
+
 function skipOnboard(){document.getElementById('onboard').style.display='none';document.body.style.overflow='';}
 
 /* ============ INIT ============ */
