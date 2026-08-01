@@ -1206,16 +1206,6 @@ const LEARN_OPTS=['Hands-on projects','Lectures','Class discussion','Steady home
 const TIME_OPTS=['No early mornings','Mornings are fine','Afternoons / evenings','No preference'];
 const PRIORITY_OPTS=['Great teaching','Easier workload','Learn the most'];
 const student={school:'Cal Poly, San Luis Obispo',major:null,conc:null,minor:'None',standing:'Freshman',year:'2026',learn:new Set(),time:'No preference',priority:'Great teaching'};
-function matchesStudent(p){
-  if(!p||!p.style||!student.learn||!student.learn.size)return false;
-  for(const l of student.learn){
-    if(l==='Hands-on projects'&&p.style['Project-based']>=60)return true;
-    if(l==='Lectures'&&p.style['Lecture']>=60)return true;
-    if(l==='Class discussion'&&p.style['Discussion']>=60)return true;
-    if(l==='Steady homework (not big exams)'&&p.style['Exam-heavy']<=40)return true;
-    if(l==='Manageable workload'&&p.difficulty<=3.2)return true;
-  }
-const student={school:'Cal Poly, San Luis Obispo',major:null,conc:null,minor:'None',standing:'Freshman',year:'2026',learn:new Set(),time:'No preference',priority:'Great teaching'};
 
 const savedStudent = localStorage.getItem('professify_student');
 let hasOnboarded = false;
@@ -1227,6 +1217,16 @@ if (savedStudent) {
     hasOnboarded = true;
   } catch(e) {}
 }
+
+function matchesStudent(p){
+  if(!p||!p.style||!student.learn||!student.learn.size)return false;
+  for(const l of student.learn){
+    if(l==='Hands-on projects'&&p.style['Project-based']>=60)return true;
+    if(l==='Lectures'&&p.style['Lecture']>=60)return true;
+    if(l==='Class discussion'&&p.style['Discussion']>=60)return true;
+    if(l==='Steady homework (not big exams)'&&p.style['Exam-heavy']<=40)return true;
+    if(l==='Manageable workload'&&p.difficulty<=3.2)return true;
+  }
   return false;
 }
 function personalBar(){
@@ -3349,7 +3349,6 @@ function finishOnboard(){
   const cat=MAJOR_CATALOG[student.major];
   student.conc=cat?document.getElementById('obConcSel').value:null;
   localStorage.setItem('professify_student', JSON.stringify({...student, learn: [...student.learn]}));
-  localStorage.setItem('professify_student', JSON.stringify(student));   
   document.getElementById('majorSel').value=student.major;
   document.getElementById('yearSel').value=student.year;
   exMajor=student.major; if(student.conc)exConc=student.conc;
@@ -3357,11 +3356,20 @@ function finishOnboard(){
   document.getElementById('onboard').style.display='none';
   document.body.style.overflow='';
   show('sched');
+}
 
 function skipOnboard(){document.getElementById('onboard').style.display='none';document.body.style.overflow='';}
 
 /* ============ INIT ============ */
-applySchoolTheme(student.school);realify();buildClassIndex();buildIndexes();buildCourseIndex();buildMajorSel();buildYearOptions();setPlanTerm();renderRoadmap();buildAreas();renderGe();renderExContext();renderExplore();updateSavedCount();startOnboard();
+applySchoolTheme(student.school);realify();buildClassIndex();buildIndexes();buildCourseIndex();buildMajorSel();buildYearOptions();setPlanTerm();renderRoadmap();buildAreas();renderGe();renderExContext();renderExplore();updateSavedCount();
+if(hasOnboarded){
+  document.getElementById('majorSel').value=student.major;
+  document.getElementById('yearSel').value=student.year;
+  exMajor=student.major; if(student.conc)exConc=student.conc;
+  show('sched');
+}else{
+  startOnboard();
+}
 /* Pull live PolyRatings after first paint; re-render with real, current ratings once it lands. */
 (function(){const ls=document.getElementById('liveSync');if(ls)ls.style.display='flex';})();
 loadPolyRatings().then(ok=>{if(ok){assignProfs();renderRoadmap();renderGe();renderExContext();renderExplore();}}).finally(()=>{const ls=document.getElementById('liveSync');if(ls)ls.style.display='none';});
