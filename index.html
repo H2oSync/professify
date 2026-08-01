@@ -778,6 +778,35 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
   <div class="modal" id="savedModal" style="max-width:540px"></div>
 </div>
 
+<style>
+.rf{max-height:66vh;overflow-y:auto;padding-right:3px}
+.rf-head{margin-bottom:14px}
+.rf-sub{font-size:11.5px;color:#6b737b;margin:3px 0 0}
+.rf-blk{margin-bottom:12px}
+.rf-lab{font-size:12.5px;color:#8a9299;display:block;margin-bottom:6px}
+.rf-req{color:#78b083;font-size:10px;font-weight:800;letter-spacing:.04em;margin-left:5px}
+.rf-opt{color:#6b737b}
+.rf-sel,.rf-note{width:100%;font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:10px 11px;border-radius:10px;border:1px solid rgba(255,255,255,.16);background:#1b1f26;color:#e9ecef;box-sizing:border-box}
+.rf-note{resize:none}
+.rf-row{display:flex;align-items:center;gap:9px}
+.rf-rl{margin:0;flex:1}
+.rf-stars{display:flex;gap:4px;flex:none}
+.rf-st{position:relative;display:inline-block;width:28px;height:28px;cursor:pointer}
+.rf-st .rf-fl{position:absolute;top:0;left:0;height:100%;width:0;overflow:hidden;display:block;pointer-events:none}
+.rf-val{font-size:15px;font-weight:700;color:#78b083;margin-left:auto;min-width:26px;text-align:right}
+.rf-val.empty{color:#6b737b;font-weight:500}
+.rf-hint{font-size:10.5px;color:#6b737b;margin-top:5px}
+.rf-seg{display:flex;gap:6px}
+.rf-seg button{flex:1;height:36px;border-radius:9px;border:1px solid rgba(255,255,255,.16);background:#1b1f26;color:#c3c9d0;font:600 13px -apple-system,BlinkMacSystemFont,sans-serif;cursor:pointer;padding:0}
+.rf-seg button.on{background:rgba(111,158,106,.18);border-color:rgba(111,158,106,.6);color:#78b083}
+.rf-tags{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.rf-tags button{text-align:left;font-size:12.5px;padding:9px 10px;border-radius:9px;border:1px solid rgba(255,255,255,.16);background:#1b1f26;color:#c3c9d0;cursor:pointer}
+.rf-tags button.on{background:rgba(111,158,106,.18);border-color:rgba(111,158,106,.6);color:#78b083}
+.rf-submit{width:100%;margin-top:4px}
+.rf-meta{display:flex;flex-wrap:wrap;gap:6px;margin:7px 0 3px}
+.rf-meta span{font-size:11px;color:#8a9299;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:20px;padding:2px 8px}
+</style>
+
 <!-- ============ MODAL ============ -->
 <div class="mback" id="mback" onclick="if(event.target===this)closeModal()">
   <div class="modal" id="modal"></div>
@@ -2936,14 +2965,14 @@ async function loadReviews(id){
   try{
     const {data,error}=await sb.from('reviews').select('*').eq('professor_key',key).order('created_at',{ascending:false}).limit(200);
     if(!error&&Array.isArray(data)){
-      dbReviews[key]=data.map(r=>({course:r.course||'',term:r.term||'Fall 2026',score:r.score,verified:true,helpful:r.helpful||0,text:r.note||'',tags:Array.isArray(r.tags)?r.tags:[],_db:true}));
+      dbReviews[key]=data.map(r=>({course:r.course||'',term:r.term||'Fall 2026',score:r.score,difficulty:r.difficulty,teach:r.teach_ability,hours:r.hours||'',format:r.format||'',again:r.would_again,verified:true,helpful:r.helpful||0,text:r.note||'',tags:Array.isArray(r.tags)?r.tags:[],_db:true}));
       if(currentProf===id&&modalMode==='profile')renderModal();
     }
   }catch(e){}
 }
 function openRate(){show('explore');setExMode('professors');setTimeout(()=>{const s=document.getElementById('exQuery');if(s){s.focus();s.scrollIntoView({block:'center'});}},60);}
 function studentAvg(p){const rv=profReviews(p);if(!rv.length)return null;return rv.reduce((a,r)=>a+(r.score||0),0)/rv.length;}
-function startRate(id){currentProf=id;rateErrMsg='';if(!eduVerified){renderVerify(id);return;}rateDraft={course:'',score:0,again:null,chips:new Set(),text:''};renderRateForm(id);}
+function startRate(id){currentProf=id;rateErrMsg='';if(!eduVerified){renderVerify(id);return;}rateDraft={course:'',score:0,difficulty:0,teach:0,hours:'',format:'',again:null,chips:new Set(),text:''};renderRateForm(id);}
 function renderVerify(id){
   modalMode='rate';
   const p=PROFESSORS[id];
@@ -2999,35 +3028,83 @@ async function verifyCode(id,email){
 }
 function renderRateForm(id){
   modalMode='rate';
-  const p=PROFESSORS[id];const d=rateDraft||(rateDraft={course:'',score:0,again:null,chips:new Set(),text:''});
-  document.getElementById('modal').innerHTML=`<div class="rate-wrap"><button class="mclose" onclick="renderModal()">&times;</button><div class="rate-step">
-    <div class="rate-kicker">Rating ${escapeHtml(p.name)}</div>
-    <h2 class="rate-h">How were they?</h2>
-    <div class="stars">${[1,2,3,4,5].map(n=>`<button class="star ${d.score>=n?'on':''}" onclick="setStar(${n})" aria-label="${n} stars">★</button>`).join('')}</div>
-    <div class="rate-q">Would you take them again?</div>
-    <div class="yn"><button class="ynbtn ${d.again===true?'on':''}" onclick="setAgain(true)">Yes</button><button class="ynbtn ${d.again===false?'on':''}" onclick="setAgain(false)">No</button></div>
-    <div class="rate-q">Which class? <span class="opt">optional</span></div>
-    <input class="rate-input sm" placeholder="e.g. CSC 1001" value="${escapeHtml(d.course)}" oninput="rateDraft.course=this.value">
-    <div class="rate-q">What stood out? <span class="opt">tap any</span></div>
-    <div class="rate-chips">${RATE_CHIPS.map(c=>`<button class="rchip ${d.chips.has(c)?'on':''}" onclick="toggleRChip('${c}')">${c}</button>`).join('')}</div>
-    <div class="rate-q">Add a note <span class="opt">optional</span></div>
-    <textarea id="rateText" class="rate-text" maxlength="240" placeholder="Loved this professor? Say why — great teachers deserve the shout-out." oninput="rateDraft.text=this.value">${escapeHtml(d.text)}</textarea>
-    ${rateErrMsg?`<div class="rate-err" style="min-height:0;margin:2px 0 8px">${escapeHtml(rateErrMsg)}</div>`:''}
-    <button class="btn primary rate-submit" ${d.score?'':'disabled'} onclick="submitRate('${id}')">Post review</button>
-    <p class="rate-fine">Posts anonymously · one review per class · verified student</p></div></div>`;
+  const p=PROFESSORS[id];
+  const d=rateDraft||(rateDraft={course:'',score:0,difficulty:0,teach:0,hours:'',format:'',again:null,chips:new Set(),text:''});
+  const courses=wlCourses(p);
+  const courseField=courses.length
+    ? `<select id="rfCourse" class="rf-sel">${courses.map(c=>`<option ${d.course===c?'selected':''}>${c}</option>`).join('')}<option value="__other" ${(d.course&&courses.indexOf(d.course)<0)?'selected':''}>Other / not listed</option></select>`
+    : `<input id="rfCourse" class="rf-sel" placeholder="e.g. CSC 101" value="${escapeHtml(d.course)}">`;
+  const HOURS=['1–3','3–6','6–9','9–12','12+'],FMT=['In person','Hybrid','Online'],WELL=['Explains concepts clearly','Gave timely, useful feedback','Ran engaging discussions','Graded fairly &amp; transparently'];
+  document.getElementById('modal').innerHTML=`<div class="rate-wrap"><button class="mclose" onclick="renderModal()">&times;</button>
+    <div class="rf">
+      <div class="rf-head"><h2 class="rate-h" style="margin:0">Rate ${escapeHtml(p.name)}</h2><p class="rf-sub">Anonymous · verified student · ~20 seconds</p></div>
+      <div class="rf-blk"><label class="rf-lab">Which course?</label>${courseField}</div>
+      <div class="rf-blk"><div class="rf-row"><span class="rf-lab rf-rl">Overall rating<span class="rf-req">REQUIRED</span></span><div class="rf-stars" id="rf-overall"></div><span class="rf-val empty" id="rfv-overall">–</span></div><div class="rf-hint">Tap a star — tap its <b>left half</b> for a half-star.</div></div>
+      <div class="rf-blk"><div class="rf-row"><span class="rf-lab rf-rl">Professor difficulty</span><div class="rf-stars" id="rf-diff"></div><span class="rf-val empty" id="rfv-diff">–</span></div><div class="rf-hint">1 = easy · 5 = hard</div></div>
+      <div class="rf-blk"><div class="rf-row"><span class="rf-lab rf-rl">Ability to teach the material</span><div class="rf-stars" id="rf-teach"></div><span class="rf-val empty" id="rfv-teach">–</span></div></div>
+      <div class="rf-blk"><label class="rf-lab">Hours per week outside class</label><div class="rf-seg" id="rf-hours">${HOURS.map(h=>`<button type="button" class="${d.hours===h?'on':''}">${h}</button>`).join('')}</div></div>
+      <div class="rf-blk"><label class="rf-lab">Was this class in person, hybrid, or online?</label><div class="rf-seg" id="rf-format">${FMT.map(f=>`<button type="button" class="${d.format===f?'on':''}">${f}</button>`).join('')}</div></div>
+      <div class="rf-blk"><label class="rf-lab">What did the professor do well? <span class="rf-opt">(pick any)</span></label><div class="rf-tags" id="rf-well">${WELL.map(w=>`<button type="button" class="${d.chips.has(w)?'on':''}">${w}</button>`).join('')}</div></div>
+      <div class="rf-blk"><label class="rf-lab">Would you take this professor again?<span class="rf-req">REQUIRED</span></label><div class="rf-seg" id="rf-again"><button type="button" class="${d.again===true?'on':''}">Yes</button><button type="button" class="${d.again===false?'on':''}">No</button></div></div>
+      <div class="rf-blk"><label class="rf-lab">Anything else? <span class="rf-opt">(optional)</span></label><textarea id="rfNote" class="rf-note" rows="2" maxlength="280" placeholder="Short note…">${escapeHtml(d.text)}</textarea></div>
+      <div id="rfErr" class="rate-err" style="min-height:0"></div>
+      <button id="rfSubmit" class="btn primary rf-submit" onclick="submitRate('${id}')" disabled>Submit review</button>
+      <p class="rate-fine" style="text-align:center">Posts anonymously · one review per class · verified student</p>
+    </div></div>`;
+  setupRateForm();
 }
-function setStar(n){rateDraft.score=n;renderRateForm(currentProf);}
-function setAgain(v){rateDraft.again=v;if(v===true)rateDraft.chips.add('Would take again');else rateDraft.chips.delete('Would take again');renderRateForm(currentProf);}
-function toggleRChip(c){rateDraft.chips.has(c)?rateDraft.chips.delete(c):rateDraft.chips.add(c);renderRateForm(currentProf);}
+const RF_STAR='M12 1.5l2.98 6.04 6.67.97-4.83 4.7 1.14 6.64L12 16.9l-5.96 3.13 1.14-6.64-4.83-4.70 6.67-.97z';
+function rfColor(v){ if(v<=1)return '#e2564f'; if(v<=2)return '#e88a4a'; if(v<=3)return '#e6c14a'; if(v<=4)return '#9fce78'; return '#6fb87f'; }
+function rfBack(s){return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 24 24" style="position:absolute;top:0;left:0"><path d="'+RF_STAR+'" fill="none" stroke="#3a3f47" stroke-width="1.5"/></svg>';}
+function rfFront(s,c){return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 24 24" style="display:block"><path d="'+RF_STAR+'" fill="'+c+'" stroke="'+c+'" stroke-width="1.5"/></svg>';}
+function rfMakeStars(elId,valId,field,colorFn){
+  const el=document.getElementById(elId),out=document.getElementById(valId),size=28,sts=[];
+  for(let i=0;i<5;i++){const sp=document.createElement('span');sp.className='rf-st';sp.innerHTML=rfBack(size)+'<span class="rf-fl"></span>';el.appendChild(sp);sts.push(sp);}
+  function paint(v){const c=colorFn?colorFn(v):'#78b083';for(let i=0;i<5;i++){const dd=v-i,pc=dd>=1?100:dd>=0.5?50:0,fl=sts[i].querySelector('.rf-fl');fl.style.width=pc+'%';fl.innerHTML=pc>0?rfFront(size,c):'';}}
+  function valAt(e,i){const r=sts[i].getBoundingClientRect();const cx=(e.clientX!=null?e.clientX:(e.changedTouches&&e.changedTouches[0].clientX));return (cx-r.left)<r.width/2?i+0.5:i+1;}
+  sts.forEach((sp,i)=>{
+    sp.addEventListener('mousemove',e=>paint(valAt(e,i)));
+    sp.addEventListener('click',e=>{const v=valAt(e,i);rateDraft[field]=v;paint(v);out.textContent=v.toFixed(1);out.classList.remove('empty');out.style.color=colorFn?colorFn(v):'#78b083';rfCheck();});
+  });
+  el.addEventListener('mouseleave',()=>paint(rateDraft[field]||0));
+  paint(rateDraft[field]||0);
+}
+function rfSingle(elId,cb){const g=document.getElementById(elId);if(!g)return;g.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{g.querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on');cb(b.textContent);}));}
+function rfCheck(){const b=document.getElementById('rfSubmit');if(b)b.disabled=!(rateDraft.score>0&&rateDraft.again!==null);}
+function rfErr(m){const e=document.getElementById('rfErr');if(e)e.textContent=m||'';}
+function setupRateForm(){
+  rfMakeStars('rf-overall','rfv-overall','score',rfColor);
+  rfMakeStars('rf-diff','rfv-diff','difficulty',null);
+  rfMakeStars('rf-teach','rfv-teach','teach',null);
+  rfSingle('rf-hours',t=>{rateDraft.hours=t;});
+  rfSingle('rf-format',t=>{rateDraft.format=t;});
+  rfSingle('rf-again',t=>{rateDraft.again=(t==='Yes');rfCheck();});
+  const well=document.getElementById('rf-well');if(well)well.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{b.classList.toggle('on');const t=b.textContent;if(b.classList.contains('on'))rateDraft.chips.add(t);else rateDraft.chips.delete(t);}));
+  const cEl=document.getElementById('rfCourse');if(cEl){const upd=()=>{let v=cEl.value;if(v==='__other')v='';rateDraft.course=v;};cEl.addEventListener('change',upd);cEl.addEventListener('input',upd);upd();}
+  const nEl=document.getElementById('rfNote');if(nEl)nEl.addEventListener('input',()=>{rateDraft.text=nEl.value;});
+  rfCheck();
+}
+function rfMeta(r){
+  const parts=[];
+  if(r.difficulty!=null&&r.difficulty!=='')parts.push('Difficulty '+Number(r.difficulty).toFixed(1));
+  if(r.teach!=null&&r.teach!=='')parts.push('Teaching '+Number(r.teach).toFixed(1));
+  if(r.hours)parts.push(r.hours+' hrs/wk');
+  if(r.format)parts.push(r.format);
+  if(r.again!=null&&r.again!=='')parts.push(r.again?'Would take again':'Would not retake');
+  if(!parts.length)return '';
+  return '<div class="rf-meta">'+parts.map(x=>'<span>'+escapeHtml(x)+'</span>').join('')+'</div>';
+}
 let rateErrMsg='';
 async function submitRate(id){
   const p=PROFESSORS[id];const d=rateDraft||{chips:new Set()};
+  if(!(d.score>0&&d.again!==null)){rfErr('Add an overall rating and whether you\'d take them again.');return;}
   const tags=[...(d.chips||[])];
   const course=(d.course||'').trim().toUpperCase();
-  const review={course:course||p.dept,term:'Fall 2026',score:d.score,verified:true,helpful:0,text:(d.text||'').trim(),tags:tags,_mine:true};
+  const review={course:course||p.dept,term:'Fall 2026',score:d.score,difficulty:d.difficulty||null,teach:d.teach||null,hours:d.hours||'',format:d.format||'',again:d.again,verified:true,helpful:0,text:(d.text||'').trim(),tags:tags,_mine:true};
   if(backendReady()&&sbUser){
     if(sbBusy)return;sbBusy=true;
-    const row={professor_key:profKey(p),professor_name:p.name,department:p.dept,course:course||null,score:d.score,would_again:d.again===true,tags:tags,note:review.text||null};
+    const btn=document.getElementById('rfSubmit');if(btn){btn.disabled=true;btn.textContent='Posting…';}
+    const row={professor_key:profKey(p),professor_name:p.name,department:p.dept,course:course||null,score:d.score,difficulty:d.difficulty||null,teach_ability:d.teach||null,hours:d.hours||null,format:d.format||null,would_again:d.again===true,tags:tags,note:review.text||null};
     try{
       const {error}=await sb.from('reviews').insert(row);
       if(error)throw error;
@@ -3035,8 +3112,8 @@ async function submitRate(id){
       reviewsGiven++;sbBusy=false;renderThanks(id);
     }catch(e){
       sbBusy=false;
-      rateErrMsg=(e&&/duplicate|unique/i.test(e.message||''))?'You\'ve already reviewed this class — thank you!':((e&&e.message)||'Could not post your review. Try again.');
-      renderRateForm(id);
+      rfErr((e&&/duplicate|unique/i.test(e.message||''))?'You\'ve already reviewed this class — thank you!':((e&&e.message)||'Could not post your review. Try again.'));
+      if(btn){btn.disabled=false;btn.textContent='Submit review';}
     }
     return;
   }
@@ -3100,7 +3177,7 @@ function renderModal(){
       ${p.style?`<div class="msec"><h4>Teaching style — does it fit you?</h4><div class="sbars">${Object.entries(p.style).map(([k,v])=>`<div class="sbar"><div class="st"><span>${k}</span><span class="v">${v}%</span></div><div class="track"><i style="width:${v}%"></i></div></div>`).join('')}</div></div>`:''}
       ${p.track?`<div class="msec"><h4>Track record — where they've taught</h4><div class="rows">${p.track.map(t=>`<div class="trow ${t[2]?'cur':''}"><span class="dash"></span><span>${t[0]}</span><span class="yr">${t[1]}</span></div>`).join('')}</div></div>`:''}
       ${''/* Grade distributions intentionally omitted — Cal Poly doesn't publish real per-professor grade data in a usable feed, so we show nothing rather than a fabricated chart. */}
-      ${modalRevs.length?`<div class="msec"><div class="revhead"><h4>Reviews · ${modalRevs.length}</h4><div class="revsort"><button class="${revSort==='helpful'?'active':''}" onclick="setRevSort('helpful')">Most helpful</button><button class="${revSort==='recent'?'active':''}" onclick="setRevSort('recent')">Most recent</button></div></div>${revs.map(r=>`<div class="review"><div class="rtop"><span class="rc">${r.course}</span><span class="rt">${r.term}</span>${r.verified?`<span class="ver">${CHECK} Verified enrolled</span>`:''}${r._i===topIdx?`<span class="best">Most helpful for ${r.course}</span>`:''}<span class="rs" style="color:${scoreColor(r.score)}"><span class="rd" style="width:6px;height:6px;border-radius:50%;background:${scoreColor(r.score)};display:inline-block"></span>${r.score}.0</span></div><p class="rtext">${r.text}</p><div class="rtags">${r.tags.map(t=>`<span class="t">${t}</span>`).join('')}</div><div class="rfoot"><button class="hbtn ${r._v?'on':''}" onclick="voteHelpful(${r._i})">${THUMB} Helpful</button><span class="hcount">${r.helpful} found this helpful</span></div></div>`).join('')}</div>`:`<div class="msec"><h4>Reviews</h4><div class="norev"><p>No reviews yet.</p><button class="btn primary rate-open" onclick="startRate('${currentProf}')">Be the first to rate</button></div></div>`}
+      ${modalRevs.length?`<div class="msec"><div class="revhead"><h4>Reviews · ${modalRevs.length}</h4><div class="revsort"><button class="${revSort==='helpful'?'active':''}" onclick="setRevSort('helpful')">Most helpful</button><button class="${revSort==='recent'?'active':''}" onclick="setRevSort('recent')">Most recent</button></div></div>${revs.map(r=>`<div class="review"><div class="rtop"><span class="rc">${r.course}</span><span class="rt">${r.term}</span>${r.verified?`<span class="ver">${CHECK} Verified enrolled</span>`:''}${r._i===topIdx?`<span class="best">Most helpful for ${r.course}</span>`:''}<span class="rs" style="color:${scoreColor(r.score)}"><span class="rd" style="width:6px;height:6px;border-radius:50%;background:${scoreColor(r.score)};display:inline-block"></span>${Number(r.score).toFixed(1)}</span></div>${rfMeta(r)}<p class="rtext">${r.text}</p><div class="rtags">${r.tags.map(t=>`<span class="t">${t}</span>`).join('')}</div><div class="rfoot"><button class="hbtn ${r._v?'on':''}" onclick="voteHelpful(${r._i})">${THUMB} Helpful</button><span class="hcount">${r.helpful} found this helpful</span></div></div>`).join('')}</div>`:`<div class="msec"><h4>Reviews</h4><div class="norev"><p>No reviews yet.</p><button class="btn primary rate-open" onclick="startRate('${currentProf}')">Be the first to rate</button></div></div>`}
     </div>`;
 }
 
