@@ -3,26 +3,27 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Professify — Sprint Checklist (live)</title>
+<title>Professify — Team Plan (live)</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
     --bg:#0d0f12; --panel:#15181d; --panel2:#191d23; --line:rgba(255,255,255,.08);
     --line2:rgba(255,255,255,.14); --tx:#e9ecef; --tx2:#c3c9d0; --mut:#8a9299; --faint:#6b737b;
     --green:#78b083; --blue:#6ea8d8; --purple:#b18fd6; --amber:#e0b26a; --coral:#e0847a;
+    --tate:#78b083; --sean:#6ea8d8; --sage:#b18fd6;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
-  .wrap{max-width:900px;margin:0 auto;padding:0 20px}
+  .wrap{max-width:920px;margin:0 auto;padding:0 18px}
   h1,h2,h3,h4{margin:0;line-height:1.25;font-weight:650}
   p{margin:0}
 
-  header.top{position:sticky;top:0;z-index:20;background:rgba(13,15,18,.86);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:14px 0}
-  .top-in{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header.top{position:sticky;top:0;z-index:20;background:rgba(13,15,18,.9);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:13px 0}
+  .top-in{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
   .brand{font-weight:750;font-size:16px;letter-spacing:-.01em}
   .brand .g{color:var(--green)}
   .sync{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--mut)}
-  .live-dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(120,176,131,.5);animation:pulse 2s infinite}
+  .live-dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(120,176,131,.45)}70%{box-shadow:0 0 0 7px rgba(120,176,131,0)}100%{box-shadow:0 0 0 0 rgba(120,176,131,0)}}
   .live-dot.off{background:var(--amber);animation:none}
   .spacer{flex:1 1 auto}
@@ -30,49 +31,82 @@
   .whoami:hover{border-color:var(--faint)}
   .whoami b{color:var(--tx)}
 
-  .prog-wrap{padding:22px 0 6px}
-  .prog-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px}
-  .prog-top h1{font-size:20px}
+  .intro{padding:22px 0 4px}
+  .intro h1{font-size:21px}
+  .intro .sub{color:var(--mut);font-size:13px;margin-top:7px;max-width:640px}
+  .prog-top{display:flex;justify-content:space-between;align-items:baseline;margin:16px 0 8px}
+  .prog-top .lbl{font-size:12.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.08em;font-weight:700}
   .prog-count{font-size:13.5px;color:var(--mut)}
   .prog-count b{color:var(--green);font-size:16px}
   .bar{height:9px;border-radius:6px;background:var(--panel2);overflow:hidden;border:1px solid var(--line)}
   .bar > i{display:block;height:100%;background:linear-gradient(90deg,#6f9e6a,#8fc78a);transition:width .35s ease}
-  .sub{color:var(--mut);font-size:12.5px;margin-top:8px}
 
-  .phase{margin:26px 0 2px;padding:12px 16px;border-radius:12px;border:1px solid var(--line);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-  .phase .tag{font-size:11px;letter-spacing:.09em;text-transform:uppercase;font-weight:800;padding:4px 9px;border-radius:7px}
-  .phase h2{font-size:16.5px}
-  .phase .rng{color:var(--mut);font-size:12px;margin-left:auto}
-  .phase .mini{flex-basis:100%;display:flex;align-items:center;gap:10px;margin-top:8px}
-  .phase .mini .bar{flex:1;height:6px}
-  .phase .mini span{font-size:11.5px;color:var(--faint);min-width:44px;text-align:right}
-  .p1{background:rgba(120,176,131,.06)} .p1 .tag{background:rgba(120,176,131,.16);color:var(--green)}
-  .p2{background:rgba(110,168,216,.06)} .p2 .tag{background:rgba(110,168,216,.16);color:var(--blue)}
-  .p3{background:rgba(177,143,214,.06)} .p3 .tag{background:rgba(177,143,214,.16);color:var(--purple)}
-  .p4{background:rgba(224,178,106,.06)} .p4 .tag{background:rgba(224,178,106,.16);color:var(--amber)}
-  .p5{background:rgba(224,132,122,.06)} .p5 .tag{background:rgba(224,132,122,.16);color:var(--coral)}
+  /* who filter */
+  .filter{display:flex;gap:7px;flex-wrap:wrap;margin:18px 0 4px}
+  .filter button{font:600 12.5px inherit;padding:7px 13px;border-radius:20px;border:1px solid var(--line2);background:var(--panel2);color:var(--tx2);cursor:pointer}
+  .filter button:hover{border-color:var(--faint)}
+  .filter button.on{background:var(--tx);color:#0c0f0c;border-color:var(--tx)}
+  .filter button.on.f-tate{background:var(--tate);border-color:var(--tate)}
+  .filter button.on.f-sean{background:var(--sean);border-color:var(--sean)}
+  .filter button.on.f-sage{background:var(--sage);border-color:var(--sage)}
 
-  .day{border:1px solid var(--line);border-radius:12px;background:var(--panel);margin:10px 0;overflow:hidden}
-  .day-h{padding:12px 16px 4px}
-  .day-h .dl{font-size:11px;font-weight:800;letter-spacing:.05em;color:var(--faint)}
-  .day-h .dd{font-size:14.5px;font-weight:700;margin-left:8px}
-  .day-h .df{color:var(--tx2);font-size:13px;margin-top:1px}
-  .tasklist{padding:4px 0 6px}
+  /* section titles */
+  .sect{margin:30px 0 12px;display:flex;align-items:center;gap:10px}
+  .sect h2{font-size:17px}
+  .sect .hint{color:var(--faint);font-size:12px;margin-left:auto}
+
+  /* PARTS / finalized tracker */
+  .part{border:1px solid var(--line);border-radius:13px;background:var(--panel);margin:11px 0;overflow:hidden;transition:.2s}
+  .part.final{border-color:rgba(120,176,131,.55);background:rgba(120,176,131,.05)}
+  .part-h{display:flex;align-items:center;gap:11px;padding:13px 16px;cursor:pointer}
+  .part-h .nm{font-size:15.5px;font-weight:700}
+  .part-h .lead{font-size:11px;color:var(--faint)}
+  .part-h .right{margin-left:auto;display:flex;align-items:center;gap:12px}
+  .part-h .cnt{font-size:12px;color:var(--mut)}
+  .minibar{width:88px;height:6px;border-radius:5px;background:var(--panel2);overflow:hidden;border:1px solid var(--line)}
+  .minibar > i{display:block;height:100%;background:linear-gradient(90deg,#6f9e6a,#8fc78a)}
+  .lock{font-size:11px;font-weight:800;letter-spacing:.05em;padding:4px 9px;border-radius:7px;background:rgba(120,176,131,.16);color:var(--green);display:none}
+  .part.final .lock{display:inline-block}
+  .part.final .minibar,.part.final .cnt{display:none}
+  .chev{color:var(--faint);transition:transform .2s}
+  .part.open .chev{transform:rotate(90deg)}
+  .crit{display:none;padding:2px 0 8px;border-top:1px solid var(--line)}
+  .part.open .crit{display:block}
+  .final-note{padding:8px 16px 2px;font-size:11.5px;color:var(--green);display:none}
+  .part.final .final-note{display:block}
+
+  /* days */
+  .week{margin:22px 0 2px;padding:11px 15px;border-radius:11px;border:1px solid var(--line);background:rgba(255,255,255,.02);display:flex;align-items:center;gap:12px}
+  .week h3{font-size:15px}
+  .week .rng{color:var(--mut);font-size:12px;margin-left:auto}
+  .day{border:1px solid var(--line);border-radius:12px;background:var(--panel);margin:9px 0;overflow:hidden}
+  .day.today{border-color:rgba(224,178,106,.5);box-shadow:0 0 0 1px rgba(224,178,106,.25)}
+  .day-h{padding:11px 16px 5px}
+  .day-h .dd{font-size:14px;font-weight:700}
+  .day-h .today-tag{font-size:10px;font-weight:800;letter-spacing:.06em;color:var(--amber);border:1px solid rgba(224,178,106,.5);border-radius:6px;padding:2px 6px;margin-left:8px}
+  .day-h .df{color:var(--tx2);font-size:12.5px;margin-top:2px}
+  .launch .day-h .dd{color:var(--coral)}
+  .launch{border-color:rgba(224,132,122,.4);background:rgba(224,132,122,.04)}
+
+  /* tasks */
+  .tasklist{padding:3px 0 6px}
   .task{display:flex;align-items:flex-start;gap:11px;padding:9px 16px;border-top:1px solid var(--line);cursor:pointer;transition:background .12s}
   .task:hover{background:rgba(255,255,255,.02)}
-  .task:first-child{border-top:none}
   .box{flex:none;width:19px;height:19px;margin-top:1px;border:1.6px solid var(--faint);border-radius:6px;display:flex;align-items:center;justify-content:center;transition:.15s}
   .box svg{width:12px;height:12px;opacity:0;transform:scale(.6);transition:.15s;stroke:#0c0f0c}
   .task.done .box{background:var(--green);border-color:var(--green)}
   .task.done .box svg{opacity:1;transform:scale(1)}
   .t-body{flex:1;min-width:0}
-  .t-text{font-size:13.8px;color:var(--tx2);transition:.15s}
+  .t-text{font-size:13.7px;color:var(--tx2);transition:.15s}
   .task.done .t-text{color:var(--faint);text-decoration:line-through}
+  .who{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.03em;padding:2px 7px;border-radius:6px;margin-right:8px;vertical-align:middle;transform:translateY(-1px)}
+  .who.Tate{background:rgba(120,176,131,.16);color:var(--tate)}
+  .who.Sean{background:rgba(110,168,216,.16);color:var(--sean)}
+  .who.Sage{background:rgba(177,143,214,.16);color:var(--sage)}
+  .who.All{background:rgba(255,255,255,.08);color:var(--tx2)}
   .t-by{font-size:11px;color:var(--green);margin-top:3px;display:none}
   .task.done .t-by{display:block}
-
-  .lw{border:1px solid rgba(224,132,122,.35);border-radius:12px;background:rgba(224,132,122,.04);margin:10px 0;overflow:hidden}
-  .lw .day-h .dd{color:var(--coral)}
+  .hide{display:none !important}
 
   footer{padding:26px 0 60px;color:var(--mut);font-size:12.5px;text-align:center}
   .banner{margin:16px 0;padding:12px 16px;border-radius:10px;border:1px solid rgba(224,178,106,.4);background:rgba(224,178,106,.08);color:#e8cf9a;font-size:13px;display:none}
@@ -82,7 +116,7 @@
 
 <header class="top">
   <div class="wrap top-in">
-    <span class="brand">Profess<span class="g">ify</span> · Sprint</span>
+    <span class="brand">Profess<span class="g">ify</span> · Team Plan</span>
     <span class="sync"><span class="live-dot" id="liveDot"></span><span id="syncTxt">Live</span></span>
     <span class="spacer"></span>
     <span class="whoami" id="whoami" onclick="pickWho(true)">You: <b id="whoName">…</b> · switch</span>
@@ -92,31 +126,38 @@
 <div class="wrap">
   <div class="banner" id="banner"></div>
 
-  <div class="prog-wrap">
-    <div class="prog-top">
-      <h1>20-Day Launch Sprint</h1>
-      <div class="prog-count"><b id="pDone">0</b> <span id="pTotal">/ 0</span> done</div>
-    </div>
+  <div class="intro">
+    <h1>Professify — road to launch</h1>
+    <p class="sub">Everything left to do, who's on it, and when. Tick a box and it saves instantly — Tate, Sean, and Sage all see it live. A <b style="color:var(--green)">part</b> turns green and locks as <b style="color:var(--green)">Finalized</b> when its whole checklist is done — once it's locked, we don't reopen it. Launch: <b style="color:var(--coral)">Mon Aug 24</b>.</p>
+    <div class="prog-top"><span class="lbl">Overall progress</span><div class="prog-count"><b id="pDone">0</b> <span id="pTotal">/ 0</span> done</div></div>
     <div class="bar"><i id="pBar" style="width:0%"></i></div>
-    <p class="sub">Tick a task and it saves instantly — Tate and Sean both see it live. Jul 31 → public launch Mon Aug 24.</p>
   </div>
 
-  <div id="list"></div>
+  <div class="filter" id="filter">
+    <button class="on" data-who="All" onclick="setFilter('All')">Everyone</button>
+    <button class="f-tate" data-who="Tate" onclick="setFilter('Tate')">Tate</button>
+    <button class="f-sean" data-who="Sean" onclick="setFilter('Sean')">Sean</button>
+    <button class="f-sage" data-who="Sage" onclick="setFilter('Sage')">Sage</button>
+  </div>
 
-  <footer>
-    Shared checklist · Professify · changes sync in real time. If a box won't tick, refresh once.
-  </footer>
+  <div class="sect"><h2>The 6 parts — finalize each one</h2><span class="hint">tap a part to see what it needs</span></div>
+  <div id="parts"></div>
+
+  <div class="sect"><h2>Day by day</h2><span class="hint">Aug 2 → Aug 24</span></div>
+  <div id="plan"></div>
+
+  <footer>Shared team plan · Professify · changes sync in real time. If a box won't tick, refresh once.</footer>
 </div>
 
 <!-- who picker -->
 <div id="whoBack" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:50;align-items:center;justify-content:center">
   <div style="background:var(--panel);border:1px solid var(--line2);border-radius:16px;padding:24px;width:320px;max-width:90vw;text-align:center">
-    <h3 style="font-size:17px;margin-bottom:6px">Who's checking things off?</h3>
-    <p style="color:var(--mut);font-size:13px;margin-bottom:16px">So each completed task shows who did it.</p>
-    <div id="whoBtns" style="display:flex;flex-direction:column;gap:9px">
+    <h3 style="font-size:17px;margin-bottom:6px">Who are you?</h3>
+    <p style="color:var(--mut);font-size:13px;margin-bottom:16px">So each finished task shows who did it.</p>
+    <div style="display:flex;flex-direction:column;gap:9px">
       <button onclick="setWho('Tate')" style="padding:11px;border-radius:10px;border:1px solid var(--line2);background:var(--panel2);color:var(--tx);font-weight:600;font-size:14px;cursor:pointer">Tate</button>
       <button onclick="setWho('Sean')" style="padding:11px;border-radius:10px;border:1px solid var(--line2);background:var(--panel2);color:var(--tx);font-weight:600;font-size:14px;cursor:pointer">Sean</button>
-      <input id="whoOther" placeholder="or type your name" style="padding:11px;border-radius:10px;border:1px solid var(--line2);background:var(--panel2);color:var(--tx);font-size:14px;text-align:center" onkeydown="if(event.key==='Enter'){setWho(this.value.trim())}">
+      <button onclick="setWho('Sage')" style="padding:11px;border-radius:10px;border:1px solid var(--line2);background:var(--panel2);color:var(--tx);font-weight:600;font-size:14px;cursor:pointer">Sage</button>
     </div>
   </div>
 </div>
@@ -125,140 +166,188 @@
 const CFG={ URL:'https://rqkndeqbcahozidniesn.supabase.co', KEY:'sb_publishable_h7Hllays0O3KRORIKfRdzg_iMBVInrD' };
 let sb=null; try{ sb=window.supabase.createClient(CFG.URL,CFG.KEY); }catch(e){}
 
-/* ---- the plan ---- */
-const PLAN=[
- {phase:1,cls:'p1',name:'Foundation & highest-leverage',rng:'Days 1–4 · Jul 31 – Aug 3',days:[
-   {n:1,date:'Fri, Jul 31',focus:'Lock the review schema + clear the small stuff',tasks:[
-     {id:'d1a',t:'Agree the final review-form fields — before any real review comes in (can’t backfill later)'},
-     {id:'d1b',t:'Ship the structured review form + Supabase columns (workload required; grade-basis, curved, attendance, your-year optional)'},
-     {id:'d1c',t:'Remove stray index_5.html from repo; add a visible Verified / Sign-out state'},
-     {id:'d1d',t:'Seed reviews: write your own 15–20 (incl. the great profs); text 8–10 friends across majors'} ]},
-   {n:2,date:'Sat, Aug 1',focus:'Seamless first run + seed-review pipeline',tasks:[
-     {id:'d2a',t:'First-run polish: major → plan is instant; returning users skip re-entry; friendly empty states'},
-     {id:'d2b',t:'Build the CSV → Supabase seed-review import path'},
-     {id:'d2c',t:'Concentrations: Kinesiology, Psychology'} ]},
-   {n:3,date:'Sun, Aug 2',focus:'Accuracy — real instructors + prerequisites',tasks:[
-     {id:'d3a',t:'Confirmed Fall 2026 instructors for the biggest intro courses → confirmed-instructors.csv (skip “Staff”)'},
-     {id:'d3b',t:'Import confirmed instructors so courses show the real assigned prof'},
-     {id:'d3c',t:'Surface prerequisites on the term-by-term plan'} ]},
-   {n:4,date:'Mon, Aug 3',focus:'Mobile-first QA + basic analytics',tasks:[
-     {id:'d4a',t:'QA sweep 15–20 majors on a phone; log bugs.md; test with 2–3 friends'},
-     {id:'d4b',t:'Fix top bugs; add lightweight analytics (views, rate funnel, watchlist adds)'} ]} ]},
-
- {phase:2,cls:'p2',name:'Data depth & trust',rng:'Days 5–9 · Aug 4 – Aug 8',days:[
-   {n:5,date:'Tue, Aug 4',focus:'Concentrations depth',tasks:[
-     {id:'d5a',t:'Concentrations: Biological Sciences, Economics, Political Science'},
-     {id:'d5b',t:'Wire them in; verify the Explore-classes view per concentration'} ]},
-   {n:6,date:'Wed, Aug 5',focus:'Seed reviews to critical mass',tasks:[
-     {id:'d6a',t:'Push seed reviews toward 50+ with cross-major coverage'},
-     {id:'d6b',t:'Import; make sure the most-searched professors aren’t empty'} ]},
-   {n:7,date:'Thu, Aug 6',focus:'Professor profile depth + “fits you”',tasks:[
-     {id:'d7a',t:'Tune the “fits your style” match; polish the profile + reviews layout'},
-     {id:'d7b',t:'Spot-check ~20 professors for wrong dept / typos / mismatched names'} ]},
-   {n:8,date:'Fri, Aug 7',focus:'The “wish I’d known” decision facts',tasks:[
-     {id:'d8a',t:'Surface lab present + hours, expensive-materials flag, and a nuanced attendance policy'} ]},
-   {n:9,date:'Sat, Aug 8',focus:'Buffer + mid-sprint gate',tasks:[
-     {id:'d9a',t:'Review analytics + QA together; catch up on any slipped data tasks'},
-     {id:'d9b',t:'GATE: confirm the Cal Poly core is genuinely seamless & valuable before starting experiments'} ]} ]},
-
- {phase:3,cls:'p3',name:'Experiments & the social layer',rng:'Days 10–14 · Aug 9 – Aug 13',days:[
-   {n:10,date:'Sun, Aug 9',focus:'Design the social layer first',tasks:[
-     {id:'d10a',t:'One-page spec each for schedule sharing + major discussion; lock the private-by-default model'},
-     {id:'d10b',t:'Sketch the data model (auth already solved)'} ]},
-   {n:11,date:'Mon, Aug 10',focus:'Class schedule sharing — MVP',tasks:[
-     {id:'d11a',t:'Publish schedule via share link; default private; tiers (Private / Link / Public); friends see mutual classes'} ]},
-   {n:12,date:'Tue, Aug 11',focus:'Sharing polish + safety rails',tasks:[
-     {id:'d12a',t:'Privacy guards: no public directory, unguessable links, one-tap unshare, hide exact times'},
-     {id:'d12b',t:'Test the “who’s in my class” experience with a few friends'} ]},
-   {n:13,date:'Wed, Aug 12',focus:'Major discussion — MVP or clean scaffold',tasks:[
-     {id:'d13a',t:'Per-major / per-course threads; .edu to post; report/hide moderation; seed a few threads'},
-     {id:'d13b',t:'Decide: full MVP vs “coming soon + notify me” if time is tight'} ]},
-   {n:14,date:'Thu, Aug 13',focus:'Light multi-school seed + harden',tasks:[
-     {id:'d14a',t:'Minimal SDSU/UCSB sharing so an invited student can land and leave a review'},
-     {id:'d14b',t:'Harden the new features; make sure nothing can break the Cal Poly core'} ]} ]},
-
- {phase:4,cls:'p4',name:'Harden & pre-launch',rng:'Days 15–18 · Aug 14 – Aug 17',days:[
-   {n:15,date:'Fri, Aug 14',focus:'Feature freeze + full QA',tasks:[
-     {id:'d15a',t:'FEATURE FREEZE. Full cross-device QA (majors, Explore, Watchlist, reviews, sharing) — fix, don’t add'} ]},
-   {n:16,date:'Sat, Aug 15',focus:'Performance, SEO & share cards',tasks:[
-     {id:'d16a',t:'Trim load time; meta tags; og:image share card; favicon; final mobile polish'} ]},
-   {n:17,date:'Sun, Aug 16',focus:'Marketing assets locked',tasks:[
-     {id:'d17a',t:'Finalize launch-channels.md (r/CalPoly rules, Discord/GroupMe list) + launch-posts.md (3 Reddit, 2 Discord)'},
-     {id:'d17b',t:'Prep screenshots / graphics — ready to paste, scheduled nothing yet'} ]},
-   {n:18,date:'Mon, Aug 17',focus:'Soft beta',tasks:[
-     {id:'d18a',t:'Invite 15–30 friends to use it for real (plan, review, share); collect all feedback in one place'} ]} ]},
-
- {phase:5,cls:'p5',name:'Marketing ramp & launch',rng:'Days 19–20 + launch week · Aug 18 – Aug 24',days:[
-   {n:19,date:'Tue, Aug 18',focus:'Fix beta feedback + warm up',tasks:[
-     {id:'d19a',t:'Fix everything the beta surfaced; final content pass'},
-     {id:'d19b',t:'Warm the channels (“something’s coming”); make sure beta reviews are in'} ]},
-   {n:20,date:'Wed, Aug 19',focus:'Launch dry-run + final checklist',tasks:[
-     {id:'d20a',t:'Run the Launch-Ready checklist end to end (see bottom)'} ]} ],
-   launchweek:[
-     {id:'lw1',t:'Thu–Fri 20–21: teasers in a few close channels; hotfixes only; line up 5–10 first-hour friends'},
-     {id:'lw2',t:'Sat–Sun 22–23: final walkthrough; pre-write comment replies; re-confirm r/CalPoly self-promo rules'},
-     {id:'lw3',t:'🚀 MON AUG 24 — PUBLIC LAUNCH: post to r/CalPoly + reply for hours; Discord/GroupMe blasts; text 10+ friends; monitor & hotfix'} ]}
-];
-const READY=[
- {id:'r1',t:'Site is public on professify.app (already done ✓)'},
- {id:'r2',t:'Review flow works end-to-end on desktop AND phone'},
- {id:'r3',t:'50+ real reviews live; top professors aren’t empty'},
- {id:'r4',t:'Confirmed Fall instructors imported for the biggest intro courses'},
- {id:'r5',t:'Concentrations complete for the 5–6 largest majors'},
- {id:'r6',t:'Watchlist + compare works; Schedule loads value-first'},
- {id:'r7',t:'No known serious bug on mobile'},
- {id:'r8',t:'og:image share card + favicon render in Discord / iMessage / Reddit'},
- {id:'r9',t:'Schedule sharing (if shipped) defaults to private, can’t leak whereabouts'},
- {id:'r10',t:'r/CalPoly posts + Discord/GroupMe messages written; channel list ready'},
- {id:'r11',t:'Current r/CalPoly self-promo rules confirmed for launch day'},
- {id:'r12',t:'5–10 friends lined up to engage in the first hour'}
+/* ============ THE PARTS (finalize each) ============ */
+const PARTS=[
+ {id:'A',nm:'Schedule Planner',lead:'Sean builds · Sage verifies · Tate loads',crit:[
+   {id:'A1',w:'Tate',t:'All the majors we want are loaded in'},
+   {id:'A2',w:'Sage',t:'Every live major checked against the real Cal Poly flowchart'},
+   {id:'A3',w:'Sean',t:'Engine handles edge cases (partway students, 5-year majors)'},
+   {id:'A4',w:'Sean',t:'Planner is clean in the app and works on a phone'} ]},
+ {id:'B',nm:'Review Form',lead:'Sean deploys · Tate approves · Sage checks wording',crit:[
+   {id:'B1',w:'Tate',t:'Final fields locked — no more changes (reviews can’t be backfilled)'},
+   {id:'B2',w:'Sean',t:'Deployed live, with the struggle-tags database column added'},
+   {id:'B3',w:'Sean',t:'A real verified student submitted a review end-to-end'},
+   {id:'B4',w:'Sage',t:'Every tag + label reads the way students actually talk'} ]},
+ {id:'C',nm:'Professor Page',lead:'Sean builds · Tate + Sage approve',crit:[
+   {id:'C1',w:'Sean',t:'Simple snapshot built and wired to real review data'},
+   {id:'C2',w:'Sean',t:'Empty state + PolyRatings fallback handled (no blank pages)'},
+   {id:'C3',w:'Tate',t:'Design signed off by Tate and Sage'},
+   {id:'C4',w:'Sean',t:'Looks right on a phone'} ]},
+ {id:'D',nm:'Data Accuracy & Trust',lead:'Sage verifies · Sean imports · Tate seeds',crit:[
+   {id:'D1',w:'Sage',t:'Every live major cross-checked and signed off'},
+   {id:'D2',w:'Sean',t:'Confirmed Fall 2026 instructors imported for the biggest courses'},
+   {id:'D3',w:'Tate',t:'50+ real reviews live — top professors aren’t empty'},
+   {id:'D4',w:'Sage',t:'Professor list spot-checked (no wrong dept, typos, or mismatched names)'} ]},
+ {id:'E',nm:'Accounts & Backend',lead:'Sean · Tate',crit:[
+   {id:'E1',w:'Sean',t:'Email verification works from a brand-new email'},
+   {id:'E2',w:'Sean',t:'One review per class enforced — no duplicates'},
+   {id:'E3',w:'Sean',t:'Clear signed-in / sign-out state everywhere'},
+   {id:'E4',w:'Sean',t:'Students can’t edit anyone else’s data'} ]},
+ {id:'F',nm:'Launch & Growth',lead:'Tate leads · Sean assets · Sage feedback',crit:[
+   {id:'F1',w:'Sean',t:'Landing polished; share card + favicon render in iMessage/Discord/Reddit'},
+   {id:'F2',w:'Tate',t:'Launch posts written; r/CalPoly self-promo rules confirmed'},
+   {id:'F3',w:'Sage',t:'8–10 real students tested it and their feedback is fixed'},
+   {id:'F4',w:'Tate',t:'Launch-ready checklist passes end to end'} ]}
 ];
 
-/* ---- state ---- */
-let doneMap={}; // task_id -> {done_by, done_at}
+/* ============ DAY BY DAY ============ */
+const WEEKS=[
+ {name:'Week 1 — Lock the Cal Poly core',rng:'Aug 2 – Aug 8',days:[
+   {date:'Sun · Aug 2',iso:'2026-08-02',focus:'Make the calls, start checking the data',tasks:[
+     {id:'p0802a',w:'Tate',t:'Approve the final review-form fields so they can be locked'},
+     {id:'p0802b',w:'Tate',t:'Approve the simple professor-page direction so Sean can build'},
+     {id:'p0802c',w:'Sean',t:'Build the new professor page as a standalone (name, rating, 3 facts, reviews)'},
+     {id:'p0802d',w:'Sage',t:'Open 5 live majors next to the real flowchart and flag anything wrong'},
+     {id:'p0802e',w:'Sage',t:'Walk the whole app as a lost freshman — write down every confusing spot'} ]},
+   {date:'Mon · Aug 3',iso:'2026-08-03',focus:'Ship the review form',tasks:[
+     {id:'p0803a',w:'Sean',t:'Deploy the new review form live (add the struggle-tags column first)'},
+     {id:'p0803b',w:'Sean',t:'Test a real review end-to-end on desktop and phone'},
+     {id:'p0803c',w:'Tate',t:'Write 15–20 of your own honest reviews (include the great profs) to seed'},
+     {id:'p0803d',w:'Sage',t:'Line up 8–10 real Cal Poly students to test before launch'} ]},
+   {date:'Tue · Aug 4',iso:'2026-08-04',focus:'Professor page into the app',tasks:[
+     {id:'p0804a',w:'Sean',t:'Wire the new professor page into the live app; mobile-test'},
+     {id:'p0804b',w:'Sage',t:'Verify 5 more majors against the flowcharts'},
+     {id:'p0804c',w:'Sage',t:'Check the review tags/wording feel like how students really talk'},
+     {id:'p0804d',w:'Tate',t:'Keep seeding reviews; text friends across different majors'} ]},
+   {date:'Wed · Aug 5',iso:'2026-08-05',focus:'Real instructors',tasks:[
+     {id:'p0805a',w:'Tate',t:'Pull confirmed Fall 2026 instructors for the biggest intro courses from Cal Poly class search'},
+     {id:'p0805b',w:'Sean',t:'Import confirmed instructors so courses show the real assigned prof'},
+     {id:'p0805c',w:'Sage',t:'Spot-check ~20 professors for wrong dept / typos / mismatched names'} ]},
+   {date:'Thu · Aug 6',iso:'2026-08-06',focus:'Reviews to critical mass',tasks:[
+     {id:'p0806a',w:'All',t:'Push seed reviews past 50 with cross-major coverage'},
+     {id:'p0806b',w:'Sean',t:'Fix the top issues from Sage’s usability notes'} ]},
+   {date:'Fri · Aug 7',iso:'2026-08-07',focus:'Concentrations',tasks:[
+     {id:'p0807a',w:'Sean',t:'Add concentrations for the biggest majors (Business, CS, Bio)'},
+     {id:'p0807b',w:'Sage',t:'Second usability pass — on a phone this time'},
+     {id:'p0807c',w:'Tate',t:'Load any remaining big majors'} ]},
+   {date:'Sat · Aug 8',iso:'2026-08-08',focus:'Week-1 gate — lock what’s done',tasks:[
+     {id:'p0808a',w:'All',t:'GATE: is the Cal Poly core seamless, accurate, and trustworthy? Mark the finished parts Finalized.'} ]} ]},
+
+ {name:'Week 2 — Finalize data & harden',rng:'Aug 9 – Aug 15',days:[
+   {date:'Sun · Aug 9',iso:'2026-08-09',focus:'Finish the data',tasks:[
+     {id:'p0809a',w:'Tate',t:'Finish loading any remaining majors'},
+     {id:'p0809b',w:'Sage',t:'Finish verifying every live major and sign off'} ]},
+   {date:'Mon · Aug 10',iso:'2026-08-10',focus:'Decide the social layer',tasks:[
+     {id:'p0810a',w:'Tate',t:'Decide: does schedule-sharing make launch, or wait? Write the one-line call.'},
+     {id:'p0810b',w:'Sean',t:'If yes: spec + start schedule sharing (private by default)'} ]},
+   {date:'Tue · Aug 11',iso:'2026-08-11',focus:'Social build / buffer',tasks:[
+     {id:'p0811a',w:'Sean',t:'Build schedule-sharing MVP, or mark it “coming soon”'},
+     {id:'p0811b',w:'Sage',t:'If built: test “who’s in my class” with a few friends'} ]},
+   {date:'Wed · Aug 12',iso:'2026-08-12',focus:'Catch-up buffer',tasks:[
+     {id:'p0812a',w:'All',t:'Catch up on anything that slipped; keep reviews growing'} ]},
+   {date:'Thu · Aug 13',iso:'2026-08-13',focus:'Polish pass',tasks:[
+     {id:'p0813a',w:'Sean',t:'Polish the profile + reviews layout; smooth rough edges'},
+     {id:'p0813b',w:'Sage',t:'Fresh-eyes pass on the whole thing'} ]},
+   {date:'Fri · Aug 14',iso:'2026-08-14',focus:'Pre-freeze QA',tasks:[
+     {id:'p0814a',w:'All',t:'Full cross-device QA — majors, Explore, Watchlist, reviews'} ]},
+   {date:'Sat · Aug 15',iso:'2026-08-15',focus:'Feature freeze',tasks:[
+     {id:'p0815a',w:'All',t:'FEATURE FREEZE — from here on, only fix, don’t add'} ]} ]},
+
+ {name:'Week 3 — Polish, beta, launch',rng:'Aug 16 – Aug 24',days:[
+   {date:'Sun · Aug 16',iso:'2026-08-16',focus:'Share card + speed',tasks:[
+     {id:'p0816a',w:'Sean',t:'og:image share card + favicon; trim load time; meta tags'} ]},
+   {date:'Mon · Aug 17',iso:'2026-08-17',focus:'Soft beta',tasks:[
+     {id:'p0817a',w:'Tate',t:'Invite the 8–10 testers to use it for real; collect all feedback in one place'} ]},
+   {date:'Tue · Aug 18',iso:'2026-08-18',focus:'Fix beta feedback',tasks:[
+     {id:'p0818a',w:'Sean',t:'Fix everything the beta surfaced'},
+     {id:'p0818b',w:'Sage',t:'Confirm the fixes actually feel better'} ]},
+   {date:'Wed · Aug 19',iso:'2026-08-19',focus:'Marketing assets',tasks:[
+     {id:'p0819a',w:'Tate',t:'Write launch posts (r/CalPoly, Discord/GroupMe) + confirm self-promo rules'} ]},
+   {date:'Thu · Aug 20',iso:'2026-08-20',focus:'Dry run',tasks:[
+     {id:'p0820a',w:'All',t:'Run the launch-ready checklist end to end; quietly warm the channels'} ]},
+   {date:'Fri · Aug 21',iso:'2026-08-21',focus:'Final walkthrough',tasks:[
+     {id:'p0821a',w:'All',t:'Final walkthrough; pre-write comment replies; line up 5–10 first-hour friends'} ]},
+   {date:'Sat–Sun · Aug 22–23',iso:'2026-08-22',focus:'Standby',tasks:[
+     {id:'p0822a',w:'All',t:'Hotfixes only; re-confirm r/CalPoly rules; get some sleep'} ]} ]}
+];
+const LAUNCH={date:'Mon · Aug 24',iso:'2026-08-24',focus:'🚀 PUBLIC LAUNCH',tasks:[
+   {id:'launch1',w:'All',t:'Post to r/CalPoly and reply for hours; Discord/GroupMe blasts; text 10+ friends; monitor & hotfix'} ]};
+
+/* ============ state ============ */
+let doneMap={};
 let me=localStorage.getItem('sprint_who')||'';
+let filter='All';
 
-function allTasks(){
+function allTaskIds(){
   const out=[];
-  PLAN.forEach(ph=>{ph.days.forEach(d=>d.tasks.forEach(t=>out.push(t.id))); if(ph.launchweek)ph.launchweek.forEach(t=>out.push(t.id));});
-  READY.forEach(t=>out.push(t.id));
+  PARTS.forEach(p=>p.crit.forEach(c=>out.push(c.id)));
+  WEEKS.forEach(w=>w.days.forEach(d=>d.tasks.forEach(t=>out.push(t.id))));
+  LAUNCH.tasks.forEach(t=>out.push(t.id));
   return out;
 }
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function fmt(iso){try{return new Date(iso).toLocaleDateString(undefined,{month:'short',day:'numeric'});}catch(e){return '';}}
+function visible(w){ return filter==='All' || w===filter || w==='All'; }
+
 function taskRow(t){
   const on=!!doneMap[t.id]; const info=doneMap[t.id];
   const by=info? `✓ ${esc(info.done_by||'someone')}${info.done_at?' · '+fmt(info.done_at):''}`:'';
-  return `<div class="task ${on?'done':''}" onclick="toggle('${t.id}')">
+  const hide=visible(t.w)?'':' hide';
+  return `<div class="task ${on?'done':''}${hide}" onclick="toggle('${t.id}')">
     <div class="box"><svg viewBox="0 0 24 24" fill="none" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
-    <div class="t-body"><div class="t-text">${esc(t.t)}</div><div class="t-by">${by}</div></div>
+    <div class="t-body"><div class="t-text"><span class="who ${t.w}">${t.w==='All'?'ALL':t.w}</span>${esc(t.t)}</div><div class="t-by">${by}</div></div>
   </div>`;
 }
-function fmt(iso){try{const d=new Date(iso);return d.toLocaleDateString(undefined,{month:'short',day:'numeric'});}catch(e){return '';}}
-function phaseProgress(ph){
-  let ids=[];ph.days.forEach(d=>d.tasks.forEach(t=>ids.push(t.id)));if(ph.launchweek)ph.launchweek.forEach(t=>ids.push(t.id));
-  const done=ids.filter(id=>doneMap[id]).length;return {done,total:ids.length};
+function partDone(p){const ids=p.crit.map(c=>c.id);return {done:ids.filter(id=>doneMap[id]).length,total:ids.length};}
+
+function renderParts(){
+  let html='';
+  PARTS.forEach(p=>{
+    const pp=partDone(p);const pct=pp.total?Math.round(pp.done/pp.total*100):0;const fin=pp.done===pp.total;
+    const anyVisible=p.crit.some(c=>visible(c.w));
+    html+=`<div class="part${fin?' final':''}${anyVisible?'':' hide'}" id="part-${p.id}">
+      <div class="part-h" onclick="togglePart('${p.id}')">
+        <span class="chev">▸</span>
+        <div><div class="nm">${esc(p.nm)}</div><div class="lead">${esc(p.lead)}</div></div>
+        <div class="right"><span class="lock">✓ FINALIZED</span><span class="cnt">${pp.done}/${pp.total}</span><span class="minibar"><i style="width:${pct}%"></i></span></div>
+      </div>
+      <div class="final-note">Locked — this part is done. Don’t reopen without telling the team.</div>
+      <div class="crit"><div class="tasklist">${p.crit.map(taskRow).join('')}</div></div>
+    </div>`;
+  });
+  document.getElementById('parts').innerHTML=html;
+}
+function renderPlan(){
+  const todayISO='2026-08-02';
+  let html='';
+  WEEKS.forEach(w=>{
+    html+=`<div class="week"><h3>${esc(w.name)}</h3><span class="rng">${w.rng}</span></div>`;
+    w.days.forEach(d=>{
+      const anyVisible=d.tasks.some(t=>visible(t.w));
+      const isToday=d.iso===todayISO;
+      html+=`<div class="day${isToday?' today':''}${anyVisible?'':' hide'}"><div class="day-h"><span class="dd">${esc(d.date)}</span>${isToday?'<span class="today-tag">TODAY</span>':''}<div class="df">${esc(d.focus)}</div></div><div class="tasklist">${d.tasks.map(taskRow).join('')}</div></div>`;
+    });
+  });
+  const lv=LAUNCH.tasks.some(t=>visible(t.w));
+  html+=`<div class="day launch${lv?'':' hide'}"><div class="day-h"><span class="dd">${esc(LAUNCH.date)}</span><div class="df">${esc(LAUNCH.focus)}</div></div><div class="tasklist">${LAUNCH.tasks.map(taskRow).join('')}</div></div>`;
+  document.getElementById('plan').innerHTML=html;
 }
 function render(){
-  let html='';
-  PLAN.forEach(ph=>{
-    const pp=phaseProgress(ph);const pct=pp.total?Math.round(pp.done/pp.total*100):0;
-    html+=`<div class="phase ${ph.cls}"><span class="tag">Phase ${ph.phase}</span><h2>${ph.name}</h2><span class="rng">${ph.rng}</span>
-      <div class="mini"><div class="bar"><i style="width:${pct}%"></i></div><span>${pp.done}/${pp.total}</span></div></div>`;
-    ph.days.forEach(d=>{
-      html+=`<div class="day"><div class="day-h"><span class="dl">DAY ${d.n}</span><span class="dd">${d.date}</span><div class="df">${esc(d.focus)}</div></div><div class="tasklist">${d.tasks.map(taskRow).join('')}</div></div>`;
-    });
-    if(ph.launchweek){
-      html+=`<div class="lw"><div class="day-h"><span class="dl">LAUNCH WEEK</span><span class="dd">Aug 20–24</span><div class="df">Ramp and go live.</div></div><div class="tasklist">${ph.launchweek.map(taskRow).join('')}</div></div>`;
-    }
-  });
-  html+=`<div class="phase" style="background:rgba(255,255,255,.02)"><span class="tag" style="background:rgba(255,255,255,.1);color:var(--tx2)">Checklist</span><h2>Launch-ready — run on Day 20</h2></div>
-    <div class="day"><div class="tasklist">${READY.map(taskRow).join('')}</div></div>`;
-  document.getElementById('list').innerHTML=html;
-  // overall
-  const ids=allTasks();const done=ids.filter(id=>doneMap[id]).length;
+  renderParts();renderPlan();
+  const ids=allTaskIds();const done=ids.filter(id=>doneMap[id]).length;
   document.getElementById('pDone').textContent=done;
   document.getElementById('pTotal').textContent='/ '+ids.length;
   document.getElementById('pBar').style.width=(ids.length?done/ids.length*100:0)+'%';
+}
+let openParts={};
+function togglePart(id){openParts[id]=!openParts[id];const el=document.getElementById('part-'+id);if(el)el.classList.toggle('open',openParts[id]);}
+
+function setFilter(w){
+  filter=w;
+  document.querySelectorAll('#filter button').forEach(b=>b.classList.toggle('on',b.dataset.who===w));
+  render();
+  // keep open parts open after re-render
+  Object.keys(openParts).forEach(id=>{if(openParts[id]){const el=document.getElementById('part-'+id);if(el)el.classList.add('open');}});
 }
 
 async function loadProgress(){
@@ -267,45 +356,36 @@ async function loadProgress(){
     const {data,error}=await sb.from('sprint_progress').select('task_id,done_by,done_at');
     if(error)throw error;
     const m={};(data||[]).forEach(r=>{m[r.task_id]={done_by:r.done_by,done_at:r.done_at};});
-    doneMap=m; render(); setSync(true);
+    doneMap=m; render(); setFilter(filter); setSync(true);
     document.getElementById('banner').style.display='none';
   }catch(e){
     setSync(false);
-    const b=document.getElementById('banner');
-    b.style.display='block';
-    b.textContent='Checklist database not set up yet (or unreachable). Boxes will save once the sprint_progress table exists.';
+    const b=document.getElementById('banner');b.style.display='block';
+    b.textContent='Live sync is off right now — your ticks still show here and will save once it reconnects.';
   }
 }
 async function toggle(id){
   if(!me){pickWho(true);return;}
   const on=!!doneMap[id];
-  if(on){ // uncheck -> delete
-    doneMap={...doneMap}; delete doneMap[id]; render();
+  if(on){ doneMap={...doneMap}; delete doneMap[id]; render(); reopen();
     if(sb)try{await sb.from('sprint_progress').delete().eq('task_id',id);}catch(e){}
-  }else{ // check -> upsert
-    doneMap={...doneMap,[id]:{done_by:me,done_at:new Date().toISOString()}}; render();
+  }else{ doneMap={...doneMap,[id]:{done_by:me,done_at:new Date().toISOString()}}; render(); reopen();
     if(sb)try{await sb.from('sprint_progress').upsert({task_id:id,done_by:me,done_at:new Date().toISOString()});}catch(e){}
   }
 }
-function setSync(live){
-  document.getElementById('liveDot').className='live-dot'+(live?'':' off');
-  document.getElementById('syncTxt').textContent=live?'Live':'Offline';
-}
+function reopen(){Object.keys(openParts).forEach(id=>{if(openParts[id]){const el=document.getElementById('part-'+id);if(el)el.classList.add('open');}});
+  document.querySelectorAll('#filter button').forEach(b=>b.classList.toggle('on',b.dataset.who===filter));}
+function setSync(live){document.getElementById('liveDot').className='live-dot'+(live?'':' off');document.getElementById('syncTxt').textContent=live?'Live':'Offline';}
 
-/* identity */
 function pickWho(force){ if(me && !force)return; document.getElementById('whoBack').style.display='flex'; }
 function setWho(name){ if(!name)return; me=name; localStorage.setItem('sprint_who',name); document.getElementById('whoName').textContent=name; document.getElementById('whoBack').style.display='none'; }
 
-/* realtime + refresh */
 function initRealtime(){ if(!sb)return; try{ sb.channel('sprint_rt').on('postgres_changes',{event:'*',schema:'public',table:'sprint_progress'},()=>loadProgress()).subscribe(); }catch(e){} }
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden)loadProgress(); });
 window.addEventListener('focus',loadProgress);
 
-/* boot */
 document.getElementById('whoName').textContent=me||'set name';
-render();
-loadProgress();
-initRealtime();
+render();loadProgress();initRealtime();
 if(!me) setTimeout(()=>pickWho(false),400);
 </script>
 </body>
