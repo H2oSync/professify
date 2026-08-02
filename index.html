@@ -15,8 +15,8 @@
    stay in-memory for the session). Setup steps: PROFESSIFY-BACKEND-SETUP.md
    ============================================================ */
 window.PROFESSIFY_CONFIG = {
-  SUPABASE_URL: '',      // e.g. https://xxxxxxxx.supabase.co
-  SUPABASE_ANON_KEY: '', // e.g. eyJhbGciOi... (the anon/public key — safe to expose)
+  SUPABASE_URL: 'https://rqkndeqbcahozidniesn.supabase.co',
+  SUPABASE_ANON_KEY: 'sb_publishable_h7Hllays0O3KRORIKfRdzg_iMBVInrD', // publishable key — safe to expose
   EMAIL_DOMAIN: ''       // optional: lock sign-in to one domain, e.g. 'calpoly.edu'. Blank = any .edu
 };
 </script>
@@ -542,6 +542,7 @@ window.PROFESSIFY_CONFIG = {
       <button id="tab-home" class="active" onclick="show('home')">Home</button>
       <button id="tab-sched" onclick="show('sched')">Schedule</button>
       <button id="tab-explore" onclick="show('explore')">Explore</button>
+      <button id="tab-watch" onclick="show('watch')">Watchlist<span id="watchCount" class="wl-navbadge" hidden>0</span></button>
     </nav>
   </div>
 </header>
@@ -576,38 +577,146 @@ window.PROFESSIFY_CONFIG = {
   </div>
 </main>
 
+<style>
+.sched-bar{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;padding:15px 17px;border:1px solid rgba(255,255,255,.09);border-radius:14px;background:rgba(255,255,255,.02);margin-bottom:10px;transition:border-color .15s,background .15s}
+.sched-bar.drag{border-color:rgba(111,158,106,.6);background:rgba(111,158,106,.07)}
+.sb-lab{display:block;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);margin-bottom:7px;font-weight:600}
+.sb-major{min-width:242px}
+.sb-major select{font-weight:600}
+.sb-sep{width:1px;align-self:stretch;background:rgba(255,255,255,.08);margin:6px 2px}
+.sb-field{flex:0 0 auto}
+.sb-plan{display:inline-flex;align-items:center;padding:11px 14px;border:1px solid rgba(255,255,255,.1);border-radius:10px;color:var(--text-2);font-size:14px;font-weight:500;background:rgba(255,255,255,.015)}
+.sb-spacer{flex:1 1 auto;min-width:0}
+.sb-import{display:inline-flex;align-items:center;gap:7px;padding:11px 15px;border:1px dashed rgba(255,255,255,.22);border-radius:10px;background:transparent;color:var(--text-2);font-size:13.5px;font-weight:600;cursor:pointer;transition:border-color .15s,color .15s}
+.sb-import:hover{border-color:rgba(255,255,255,.42);color:#eceef0}
+.sb-hint{font-size:12.5px;color:var(--faint);margin:11px 2px 0;line-height:1.5}
+@media(max-width:720px){.sb-major{min-width:100%}.sb-sep{display:none}.sb-spacer{display:none}.sb-import{width:100%;justify-content:center}}
+</style>
+
 <!-- ============ SCHEDULE ============ -->
 <main class="view" id="view-sched">
   <div class="wrap">
     <div class="phead">
       <p class="eyebrow">My Schedule</p>
-      <h2>Your degree, term by term</h2>
-      <p>Pick your major and catalog year — or drop in your flowchart — and we'll pull the professor teaching each required course each term.</p>
+      <h2>Plan your next semester</h2>
+      <p>Pick your major, tell us what you've already taken, and we'll build the smartest next term — only the next one, because that's where we'll know who's teaching.</p>
     </div>
 
-    <div class="controls">
-      <div class="field">
-        <label>Major</label>
-        <div class="selwrap"><select id="majorSel" onchange="renderRoadmap()"></select></div>
+<style>
+.sp-wrap{max-width:660px;margin:0 auto}
+.sp-card{background:#15181d;border:1px solid rgba(255,255,255,.09);border-radius:15px;padding:18px;margin-bottom:14px}
+.sp-step{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#6b737b;font-weight:700;margin-bottom:11px}
+.sp-lab{display:block;font-size:12.5px;color:#8a9299;margin-bottom:6px}
+.sp-row{display:flex;gap:12px;flex-wrap:wrap}
+.sp-row>div{flex:1;min-width:150px}
+.sp-sel{font-family:inherit;font-size:14px;padding:10px 11px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:#1b1f26;color:#e9ecef;width:100%;appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' stroke='%238a9299' stroke-width='2'><path d='M3 5l4 4 4-4'/></svg>");background-repeat:no-repeat;background-position:right 12px center}
+.sp-note{font-size:12.5px;color:#8a9299;background:#1b1f26;border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:10px 12px;margin-top:12px}
+.sp-quick{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.sp-quick button{font:600 12px inherit;padding:6px 11px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:#1b1f26;color:#c3c9d0;cursor:pointer}
+.sp-quick button:hover{border-color:#6b737b}
+.sp-termblk{margin-bottom:13px}
+.sp-th{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:#c3c9d0;margin:0 0 7px}
+.sp-th .yr{color:#6b737b;font-weight:600}
+.sp-th .un{margin-left:auto;color:#6b737b;font-weight:600;font-size:11px}
+.sp-slot{display:flex;align-items:flex-start;gap:10px;padding:7px 9px;border-radius:9px;cursor:pointer;transition:.12s}
+.sp-slot:hover{background:#1b1f26}
+.sp-slot.done{opacity:.5}
+.sp-box{flex:none;width:18px;height:18px;border-radius:5px;border:1.6px solid rgba(255,255,255,.15);margin-top:1px;display:flex;align-items:center;justify-content:center}
+.sp-slot.done .sp-box{background:#6fb87f;border-color:#6fb87f}
+.sp-box svg{opacity:0}.sp-slot.done .sp-box svg{opacity:1}
+.sp-slot .b{flex:1;min-width:0}
+.sp-slot .t{font-size:13.5px;color:#e9ecef}
+.sp-slot .t b{font-weight:700}
+.sp-slot .s{font-size:11px;color:#6b737b;margin-top:1px}
+.sp-tag{display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.03em;padding:1px 6px;border-radius:5px;margin-left:6px;vertical-align:middle}
+.sp-tag.req{background:rgba(215,180,106,.16);color:#d7b46a}
+.sp-tag.ge{background:rgba(127,168,208,.16);color:#7fa8d0}
+.sp-tag.flex{background:rgba(138,146,153,.16);color:#8a9299}
+.sp-u{flex:none;font-size:12px;color:#6b737b;margin-top:1px}
+.sp-btn{width:100%;height:46px;border:none;border-radius:12px;background:#6fb87f;color:#0b0f0b;font:700 15px inherit;cursor:pointer;margin-top:6px}
+.sp-btn:hover{filter:brightness(1.06)}
+.sp-result{border-color:rgba(111,158,106,.5);background:linear-gradient(180deg,rgba(111,158,106,.07),transparent 60%)}
+.sp-rslot{display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:1px solid rgba(255,255,255,.09)}
+.sp-rslot:last-child{border-bottom:none}
+.sp-rnum{flex:none;width:26px;height:26px;border-radius:8px;background:rgba(111,158,106,.14);color:#6fb87f;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center}
+.sp-rslot .t{font-size:14px;font-weight:600;color:#e9ecef}
+.sp-rslot .s{font-size:11px;color:#6b737b}
+.sp-rslot .p{font-size:11px;color:#8a9299;margin-top:2px}
+.sp-rslot .u{margin-left:auto;font-size:13px;color:#c3c9d0;font-weight:700;flex:none}
+.sp-tot{display:flex;align-items:center;margin-top:13px;padding-top:12px;border-top:1px solid rgba(255,255,255,.09)}
+.sp-tot .l{color:#8a9299;font-size:13px}
+.sp-tot .v{margin-left:auto;font-size:16px;font-weight:800;color:#6fb87f}
+.sp-hidden{display:none}
+.sp-fulltoggle{display:block;margin:4px auto 0;background:none;border:none;color:#8a9299;font:600 13px inherit;cursor:pointer;padding:8px}
+.sp-fulltoggle:hover{color:#c3c9d0}
+.sp-fullyear{margin-bottom:16px}
+.sp-fullyear h4{font-size:13px;color:#c3c9d0;margin:0 0 8px;font-weight:700}
+.sp-fullterm{border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:10px 12px;margin-bottom:8px}
+.sp-fullterm .ft-h{font-size:11.5px;color:#8a9299;font-weight:700;margin-bottom:6px;display:flex}
+.sp-fullterm .ft-h .u{margin-left:auto;color:#6b737b}
+.sp-fullterm .ft-c{font-size:12.5px;color:#c3c9d0;padding:2px 0}
+</style>
+
+<div class="sp-wrap">
+  <div class="sp-card">
+    <div class="sp-step">Step 1 · Your major</div>
+    <div class="sp-row">
+      <div><label class="sp-lab">Major</label><select id="schMajorSel" class="sp-sel"></select></div>
+    </div>
+    <div class="sp-row" style="margin-top:11px">
+      <div><label class="sp-lab">Upcoming term</label><select id="schTermSel" class="sp-sel"><option>Fall</option><option>Spring</option></select></div>
+      <div><label class="sp-lab">Target units</label><select id="schUnitSel" class="sp-sel"><option>12</option><option>13</option><option>14</option><option selected>15</option><option>16</option><option>17</option></select></div>
+    </div>
+    <div id="schNoData" class="sp-note sp-hidden"></div>
+  </div>
+
+  <div class="sp-card sp-hidden" id="schCheckCard">
+    <div class="sp-step">Step 2 · Check off everything you've already completed</div>
+    <div class="sp-quick">
+      <button id="schQNone" type="button">Clear all</button>
+      <button type="button" data-yr="1">Done with 1st year</button>
+      <button type="button" data-yr="2">Done through 2nd year</button>
+      <button type="button" data-yr="3">Done through 3rd year</button>
+    </div>
+    <div id="schChecklist"></div>
+    <button class="sp-btn" id="schBuildBtn" type="button">Build my next semester &rarr;</button>
+  </div>
+
+  <div class="sp-card sp-result sp-hidden" id="schResultCard">
+    <div class="sp-step" id="schResultHd">Your suggested next semester</div>
+    <div id="schResultList"></div>
+    <div class="sp-tot"><span class="l">Total</span><span class="v" id="schResultUnits"></span></div>
+    <div class="sp-note" id="schProfNote">Once course offerings post for the term, each fixed course here will show its best-rated professor from Professify.</div>
+  </div>
+
+  <button class="sp-fulltoggle" id="schFullToggle" type="button" onclick="schToggleFull()">See my full 4-year plan &#9662;</button>
+  <div id="schFullOut" class="sp-hidden"></div>
+</div>
+
+<div id="fullPlanWrap" style="display:none">
+    <div class="sched-bar" id="schedBar" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="this.classList.remove('drag');dropFile(event)">
+      <div class="sb-field">
+        <label class="sb-lab">Your major</label>
+        <div class="selwrap sb-major"><select id="majorSel" onchange="renderRoadmap()"></select></div>
       </div>
-      <div class="field">
-        <label>Catalog year</label>
+      <div class="sb-sep"></div>
+      <div class="sb-field">
+        <label class="sb-lab">Catalog year</label>
         <div class="selwrap"><select id="yearSel" onchange="renderRoadmap()"></select></div>
       </div>
-      <div class="field">
-        <label>Planning</label>
-        <div class="plan-term" id="planTerm">Fall 2026</div>
+      <div class="sb-field">
+        <label class="sb-lab">Planning</label>
+        <span class="sb-plan" id="planTerm">Fall 2026</span>
       </div>
-      <div class="field import">
-        <label>Or import your plan</label>
-        <input type="file" id="planFile" accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.csv,image/*" style="display:none" onchange="handleFile(this.files)">
-        <div class="drop" onclick="document.getElementById('planFile').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="dropFile(event)">
-          <svg class="plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
-          <span>Drop in your flowchart or class schedule — or click to browse</span>
-        </div>
-        <p class="import-note" id="importNote"></p>
-      </div>
+      <div class="sb-spacer"></div>
+      <input type="file" id="planFile" accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.csv,image/*" style="display:none" onchange="handleFile(this.files)">
+      <button type="button" class="sb-import" onclick="document.getElementById('planFile').click()" title="Import your flowchart or class schedule — or drag a file onto this bar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><path d="M12 15V3m0 0L8 7m4-4 4 4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        Import plan
+      </button>
     </div>
+    <p class="import-note" id="importNote"></p>
+    <p class="sb-hint">Set up in onboarding? Your plan's already loaded below. Change your major anytime above, or import your real flowchart to pin exact courses.</p>
 
     <div id="importResult"></div>
     <div id="roadmapOut"></div>
@@ -631,6 +740,7 @@ window.PROFESSIFY_CONFIG = {
       <div class="picks" id="picksBar"></div>
       <div class="ge-list" id="geList"></div>
     </div>
+    </div><!-- /fullPlanWrap -->
   </div>
 </main>
 
@@ -654,6 +764,61 @@ window.PROFESSIFY_CONFIG = {
     </div>
 
     <div id="exOut"></div>
+  </div>
+</main>
+
+<style>
+.wl-navbadge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;margin-left:7px;border-radius:9px;background:#6f9e6a;color:#0b0d10;font-size:11px;font-weight:800;line-height:1;vertical-align:middle}
+.wl-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid rgba(255,255,255,.14);border-radius:8px;background:rgba(15,17,20,.72);color:var(--text-2);font-size:12.5px;font-weight:600;cursor:pointer;transition:border-color .15s,background .15s,color .15s;white-space:nowrap}
+.wl-btn svg{width:15px;height:15px;flex:none}
+.wl-btn:hover{border-color:rgba(255,255,255,.32)}
+.wl-btn.on{background:rgba(111,158,106,.16);border-color:rgba(111,158,106,.5);color:#9fd09a}
+.pcard{position:relative}
+.pcard>.wl-btn{position:absolute;top:11px;right:11px;padding:6px}
+.wl-modalbtn{display:flex;width:100%;justify-content:center;margin-top:10px;padding:11px 14px;font-size:13.5px}
+.wl-empty{max-width:520px;margin:36px auto;text-align:center}
+.wl-empty h3{font-size:20px;margin:0 0 8px}
+.wl-empty p{color:var(--faint);margin:0 0 18px;line-height:1.55}
+.wl-head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+.wl-toggle{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--text-2);cursor:pointer;user-select:none}
+.wl-toggle input{accent-color:#6f9e6a;width:15px;height:15px}
+.wl-clear{background:none;border:none;color:var(--faint);font-size:13px;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.wl-clear:hover{color:var(--text-2)}
+.wl-insight{border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.02);border-radius:12px;padding:14px 16px;margin-bottom:18px;font-size:13.5px;line-height:1.6;color:var(--text-2)}
+.wl-insight b{color:var(--text-2)}
+.wl-insight .ov{color:#9fd09a;font-weight:600}
+.wl-scroll{overflow-x:auto;border:1px solid rgba(255,255,255,.08);border-radius:14px}
+table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
+.wl-table th,.wl-table td{padding:13px 15px;text-align:left;vertical-align:top;border-bottom:1px solid rgba(255,255,255,.06)}
+.wl-table tbody tr:last-child td{border-bottom:none}
+.wl-table thead th{position:sticky;top:0;background:#15171b;z-index:2}
+.wl-table .wl-attr{position:sticky;left:0;background:#111317;z-index:1;font-size:11.5px;letter-spacing:.03em;text-transform:uppercase;color:var(--faint);font-weight:600;width:150px;min-width:132px}
+.wl-table thead .wl-attr{z-index:3;background:#15171b}
+.wl-table tbody tr:nth-child(even) td{background:rgba(255,255,255,.016)}
+.wl-table tbody tr:nth-child(even) .wl-attr{background:#131519}
+.wl-phead{min-width:150px}
+.wl-phead .pn{font-size:15px;font-weight:600;color:#eceef0;display:block;margin-bottom:2px}
+.wl-phead .pn:hover{color:#9fd09a}
+.wl-phead .pdp{font-size:12px;color:var(--faint);display:block;margin-bottom:7px}
+.wl-phead .prb{font-size:18px;font-weight:700}
+.wl-phead .prb small{font-size:11px;color:var(--faint);font-weight:500}
+.wl-rm{background:none;border:none;color:var(--faint);cursor:pointer;font-size:12px;padding:0;margin-top:9px}
+.wl-rm:hover{color:#d98a7a}
+.wl-chip{display:inline-block;padding:2px 8px;margin:0 4px 4px 0;border:1px solid rgba(255,255,255,.12);border-radius:20px;font-size:11.5px;color:var(--text-2)}
+.wl-val{font-size:14px;color:var(--text-2)}
+.wl-note{font-size:12.5px;color:var(--faint);margin-top:14px;line-height:1.5}
+@media(max-width:640px){.wl-table .wl-attr{width:112px;min-width:104px}.wl-table th,.wl-table td{padding:11px 12px}}
+</style>
+
+<!-- ============ WATCHLIST ============ -->
+<main class="view" id="view-watch">
+  <div class="wrap">
+    <div class="phead">
+      <p class="eyebrow">Watchlist</p>
+      <h2>Compare the professors you're eyeing</h2>
+      <p>Every professor you add lands here side by side — rating, reviews, style, and which classes they overlap on — so you can weigh them before committing anyone to your schedule.</p>
+    </div>
+    <div id="watchOut"></div>
   </div>
 </main>
 
@@ -705,6 +870,35 @@ window.PROFESSIFY_CONFIG = {
 <div class="mback" id="savedBack" onclick="if(event.target===this)closeSaved()">
   <div class="modal" id="savedModal" style="max-width:540px"></div>
 </div>
+
+<style>
+.rf{max-height:66vh;overflow-y:auto;padding-right:3px}
+.rf-head{margin-bottom:14px}
+.rf-sub{font-size:11.5px;color:#6b737b;margin:3px 0 0}
+.rf-blk{margin-bottom:12px}
+.rf-lab{font-size:12.5px;color:#8a9299;display:block;margin-bottom:6px}
+.rf-req{color:#78b083;font-size:10px;font-weight:800;letter-spacing:.04em;margin-left:5px}
+.rf-opt{color:#6b737b}
+.rf-sel,.rf-note{width:100%;font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:10px 11px;border-radius:10px;border:1px solid rgba(255,255,255,.16);background:#1b1f26;color:#e9ecef;box-sizing:border-box}
+.rf-note{resize:none}
+.rf-row{display:flex;align-items:center;gap:9px}
+.rf-rl{margin:0;flex:1}
+.rf-stars{display:flex;gap:4px;flex:none}
+.rf-st{position:relative;display:inline-block;width:28px;height:28px;cursor:pointer}
+.rf-st .rf-fl{position:absolute;top:0;left:0;height:100%;width:0;overflow:hidden;display:block;pointer-events:none}
+.rf-val{font-size:15px;font-weight:700;color:#78b083;margin-left:auto;min-width:26px;text-align:right}
+.rf-val.empty{color:#6b737b;font-weight:500}
+.rf-hint{font-size:10.5px;color:#6b737b;margin-top:5px}
+.rf-seg{display:flex;gap:6px}
+.rf-seg button{flex:1;height:36px;border-radius:9px;border:1px solid rgba(255,255,255,.16);background:#1b1f26;color:#c3c9d0;font:600 13px -apple-system,BlinkMacSystemFont,sans-serif;cursor:pointer;padding:0}
+.rf-seg button.on{background:rgba(111,158,106,.18);border-color:rgba(111,158,106,.6);color:#78b083}
+.rf-tags{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.rf-tags button{text-align:left;font-size:12.5px;padding:9px 10px;border-radius:9px;border:1px solid rgba(255,255,255,.16);background:#1b1f26;color:#c3c9d0;cursor:pointer}
+.rf-tags button.on{background:rgba(111,158,106,.18);border-color:rgba(111,158,106,.6);color:#78b083}
+.rf-submit{width:100%;margin-top:4px}
+.rf-meta{display:flex;flex-wrap:wrap;gap:6px;margin:7px 0 3px}
+.rf-meta span{font-size:11px;color:#8a9299;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:20px;padding:2px 8px}
+</style>
 
 <!-- ============ MODAL ============ -->
 <div class="mback" id="mback" onclick="if(event.target===this)closeModal()">
@@ -960,6 +1154,33 @@ const MAJOR_CATALOG={
         ['CSC 3710','Game Design and Development','__tbd',4],
         ['CSC 3201','Introduction to Computer Security','__tbd',4]]}
     }},
+  'Kinesiology':{core:[
+      {code:'KINE 1180',name:'Introduction to Kinesiology',prof:'__tbd',units:1,type:'Core'},
+      {code:'KINE 2266',name:'Sport and Performance Psychology',prof:'__tbd',units:3,type:'Core'},
+      {code:'KINE 3303',name:'Physiology of Exercise',prof:'__tbd',units:4,type:'Core'},
+      {code:'KINE 3307',name:'Adapted Physical Activity',prof:'__tbd',units:3,type:'Core'},
+      {code:'KINE 3312',name:'Motor Learning',prof:'__tbd',units:3,type:'Core'},
+      {code:'KINE 3319',name:'Introduction to Research Methods in Kinesiology',prof:'__tbd',units:4,type:'Core'},
+      {code:'KINE 4403',name:'Biomechanics',prof:'__tbd',units:4,type:'Core'},
+      {code:'KINE 4412',name:'Physical Activity and Public Health',prof:'__tbd',units:3,type:'Core'},
+      {code:'KINE 4451',name:'Nutrition for Fitness and Sport',prof:'__tbd',units:4,type:'Core'}
+    ],concentrations:{
+      'General / Open':{desc:'A flexible track — choose kinesiology electives across exercise science, health, and sport.',classes:[]},
+      'Exercise Science':{desc:'Exercise testing, clinical physiology, and motor control — strong prep for health and clinical careers and grad school.',classes:[
+        ['KINE 3330','Group Exercise and Personal Training','__tbd',2],
+        ['KINE 3349','Exercise Testing and Prescription','__tbd',3],
+        ['KINE 4404','Clinical Exercise Physiology','__tbd',4],
+        ['KINE 4406','Motor Control','__tbd',3]]},
+      'Health Promotion':{desc:'Community and public health — program planning, epidemiology, and health behavior.',classes:[
+        ['HLTH 2261','Social Determinants of Health','__tbd',3],
+        ['HLTH 4434','Health Promotion Program Planning','__tbd',4],
+        ['KINE 4401','Leadership in Health and Physical Activity Programs','__tbd',3]]},
+      'Sport Science':{desc:'Sport performance and psychology — coaching, performance, and the science of sport.',classes:[
+        ['KINE 3325','Sport and Physical Activity Throughout Civilizations','__tbd',3],
+        ['KINE 3330','Group Exercise and Personal Training','__tbd',2],
+        ['KINE 3366','Applied Sport and Performance Psychology','__tbd',3],
+        ['KINE 4401','Leadership in Health and Physical Activity Programs','__tbd',3]]}
+    }},
   'Business Administration':{core:[
       {code:'BUS 3306',name:'Career Readiness III',prof:'__tbd',units:1,type:'Core'},
       {code:'BUS 3346',name:'Principles of Marketing',prof:'__tbd',units:3,type:'Core'},
@@ -1206,18 +1427,6 @@ const LEARN_OPTS=['Hands-on projects','Lectures','Class discussion','Steady home
 const TIME_OPTS=['No early mornings','Mornings are fine','Afternoons / evenings','No preference'];
 const PRIORITY_OPTS=['Great teaching','Easier workload','Learn the most'];
 const student={school:'Cal Poly, San Luis Obispo',major:null,conc:null,minor:'None',standing:'Freshman',year:'2026',learn:new Set(),time:'No preference',priority:'Great teaching'};
-
-const savedStudent = localStorage.getItem('professify_student');
-let hasOnboarded = false;
-if (savedStudent) {
-  try {
-    const parsed = JSON.parse(savedStudent);
-    Object.assign(student, parsed);
-    student.learn = new Set(parsed.learn || []);
-    hasOnboarded = true;
-  } catch(e) {}
-}
-
 function matchesStudent(p){
   if(!p||!p.style||!student.learn||!student.learn.size)return false;
   for(const l of student.learn){
@@ -2656,8 +2865,9 @@ function show(v){
   document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
   document.getElementById('view-'+v).classList.add('active');
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
-  const map={home:'tab-home',sched:'tab-sched',explore:'tab-explore'};
-  document.getElementById(map[v]).classList.add('active');
+  const map={home:'tab-home',sched:'tab-sched',explore:'tab-explore',watch:'tab-watch'};
+  if(map[v])document.getElementById(map[v]).classList.add('active');
+  if(v==='watch')renderWatch();
   window.scrollTo({top:0,behavior:'smooth'});
 }
 function goGE(){
@@ -2792,7 +3002,7 @@ function renderExplore(){
     list.sort((a,b)=>(b[1].rating??-1)-(a[1].rating??-1));
     const CAP=60;const shown=list.slice(0,CAP);const more=list.length-shown.length;
     out.innerHTML=(more>0?`<p class="emptyq" style="text-align:left;margin:0 0 14px">Showing the ${CAP} top-rated of ${list.length} professors${exQuery?` matching “${escapeHtml(document.getElementById('exQuery').value)}”`:''} — type a name or department to narrow it down.</p>`:'')+`<div class="pgrid">${shown.map(([id,p])=>`
-      <div class="pcard" onclick="openProf('${id}')">
+      <div class="pcard" onclick="openProf('${id}')">${watchBtn(id)}
         <div class="ini">${initials(p.name)}</div>
         <div style="flex:1;min-width:0">
           <h3>${p.name}${(p.rating!=null&&matchesStudent(p))?'<span class="fitbadge">Fits you</span>':''}</h3>
@@ -2815,36 +3025,10 @@ function voteHelpful(i){const r=modalRevs[i];if(!r)return;if(r._v){r.helpful--;r
 let eduVerified=false;
 let reviewsGiven=0;
 let rateDraft=null;
-const WELL_CHIPS=['Explains concepts clearly','Gave timely, useful feedback','Ran engaging discussions','Graded fairly and transparently'];
-const STRUGGLE_CHIPS=['Explanations were unclear','Feedback was slow or unhelpful','Class sessions were disengaging','Inconsistent or unclear grading'];
-const STAR_PATH='M12 1.5l2.98 6.04 6.67.97-4.83 4.7 1.14 6.64L12 16.9l-5.96 3.13 1.14-6.64-4.83-4.70 6.67-.97z';
-const RATE_COLORS=[{max:2,hex:'#E24B4A'},{max:4,hex:'#EF9F27'},{max:6,hex:'#FAC775'},{max:8,hex:'#97C459'},{max:10,hex:'#0F6E56'}];
-function rateColorFor(v){for(const c of RATE_COLORS){if(v<=c.max)return c.hex;}return RATE_COLORS[RATE_COLORS.length-1].hex;}
-function starSvg(size,hex,strokeOnly){
-  return strokeOnly
-    ? `<svg width="${size}" height="${size}" viewBox="0 0 24 24" style="position:absolute;top:0;left:0"><path d="${STAR_PATH}" fill="none" stroke="#c9c5bc" stroke-width="1.4"/></svg>`
-    : `<svg width="${size}" height="${size}" viewBox="0 0 24 24" style="display:block"><path d="${STAR_PATH}" fill="${hex}" stroke="${hex}" stroke-width="1.4"/></svg>`;
-}
-function starsHtml(count,size,filledCount,hex){
-  let html='';
-  for(let i=0;i<count;i++){
-    const diff=filledCount-i;
-    const pct=diff>=1?100:diff>=0.5?50:0;
-    html+=`<span style="position:relative;display:inline-block;width:${size}px;height:${size}px">${starSvg(size,hex,true)}<span style="position:absolute;top:0;left:0;height:100%;width:${pct}%;overflow:hidden;display:block">${pct>0?starSvg(size,hex,false):''}</span></span>`;
-  }
-  return html;
-}
-function reviewCourseOptions(){
-  const cat=MAJOR_CATALOG[student.major];
-  if(!cat)return '<option value="">Select your major to see courses</option>';
-  const core=cat.core.map(c=>`<option value="${c.code}">${c.code} - ${c.name}</option>`);
-  const concClasses=(student.conc&&cat.concentrations[student.conc]&&cat.concentrations[student.conc].classes)||[];
-  const conc=concClasses.map(c=>`<option value="${c[0]}">${c[0]} - ${c[1]}</option>`);
-  return ['<option value="">Choose a course</option>',...core,...conc].join('');
-}
+const RATE_CHIPS=['Clear lectures','Cares about students','Tough but fair','Fair grader','Project-based','Lots of discussion','Light workload','Heavy workload','Learned a ton','Easy to talk to'];
 
 /* ===== SUPABASE BACKEND — persistent, .edu-verified reviews (optional; dormant until keys are set) ===== */
-let sb=null, sbUser=null, sbBusy=false;
+let sb=null, sbUser=null, sbBusy=false, awaitingLink=false;
 const dbReviews={};           // professor_key -> [reviews from the database]
 let modalRevs=[];             // current merged review list backing the open modal
 let modalMode='profile';      // 'profile' = professor view, 'rate' = verify/rating flow (don't clobber it)
@@ -2865,7 +3049,7 @@ async function initBackend(){
     sb=window.supabase.createClient(c.SUPABASE_URL,c.SUPABASE_ANON_KEY);
     const {data}=await sb.auth.getSession();
     if(data&&data.session){sbUser=data.session.user;eduVerified=true;}
-    sb.auth.onAuthStateChange((_e,session)=>{sbUser=session?session.user:null;eduVerified=!!sbUser;});
+    sb.auth.onAuthStateChange((_e,session)=>{sbUser=session?session.user:null;eduVerified=!!sbUser;if(sbUser&&awaitingLink&&currentProf!=null){awaitingLink=false;startRate(currentProf);}});
   }catch(e){sb=null;}
 }
 async function loadReviews(id){
@@ -2874,14 +3058,14 @@ async function loadReviews(id){
   try{
     const {data,error}=await sb.from('reviews').select('*').eq('professor_key',key).order('created_at',{ascending:false}).limit(200);
     if(!error&&Array.isArray(data)){
-      dbReviews[key]=data.map(r=>({course:r.course||'',term:r.term||'Fall 2026',score:r.score,verified:true,helpful:r.helpful||0,text:r.note||'',tags:Array.isArray(r.tags)?r.tags:[],_db:true}));
+      dbReviews[key]=data.map(r=>({course:r.course||'',term:r.term||'Fall 2026',score:r.score,difficulty:r.difficulty,teach:r.teach_ability,hours:r.hours||'',format:r.format||'',again:r.would_again,verified:true,helpful:r.helpful||0,text:r.note||'',tags:Array.isArray(r.tags)?r.tags:[],_db:true}));
       if(currentProf===id&&modalMode==='profile')renderModal();
     }
   }catch(e){}
 }
 function openRate(){show('explore');setExMode('professors');setTimeout(()=>{const s=document.getElementById('exQuery');if(s){s.focus();s.scrollIntoView({block:'center'});}},60);}
 function studentAvg(p){const rv=profReviews(p);if(!rv.length)return null;return rv.reduce((a,r)=>a+(r.score||0),0)/rv.length;}
-function startRate(id){currentProf=id;rateErrMsg='';if(!eduVerified){renderVerify(id);return;}rateDraft={course:'',overall:0,feasibility:0,teaching:0,hours:1,lab:null,reqType:null,again:null,wellChips:new Set(),struggleChips:new Set(),text:''};renderRateForm(id);}
+function startRate(id){currentProf=id;rateErrMsg='';if(!eduVerified){renderVerify(id);return;}rateDraft={course:'',score:0,difficulty:0,teach:0,hours:'',format:'',again:null,chips:new Set(),text:''};renderRateForm(id);}
 function renderVerify(id){
   modalMode='rate';
   const p=PROFESSORS[id];
@@ -2913,85 +3097,107 @@ function renderCodeStep(id,email){
   document.getElementById('modal').innerHTML=`<div class="rate-wrap"><button class="mclose" onclick="renderModal()">&times;</button><div class="rate-step">
     <div class="rate-kicker">Check your inbox</div>
     <h2 class="rate-h">Enter your code</h2>
-    <p class="rate-sub">We emailed a 6-digit code to <b>${escapeHtml(email)}</b>. It confirms you're a real student — your email is never shown and reviews post anonymously.</p>
-    <input id="otpCode" class="rate-input" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" oninput="document.getElementById('otpBtn').disabled=this.value.trim().length<6">
-    <div id="otpErr" class="rate-err"></div>
-    <button id="otpBtn" class="btn primary rate-submit" disabled onclick="verifyCode('${id}','${escapeHtml(email)}')">Verify &amp; continue</button>
-    <button class="rate-skip" onclick="renderVerify('${id}')">Use a different email</button></div></div>`;
+    <p class="rate-sub">We emailed a verification code to <b>${escapeHtml(email)}</b>. Enter it below to confirm you're a real student. Your email is never shown and reviews post anonymously.</p>
+    <input id="eduCode" class="rate-input" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="Enter code" style="letter-spacing:5px;text-align:center;font-size:22px;font-weight:700" oninput="checkCode()">
+    <div id="codeErr" class="rate-err"></div>
+    <button id="codeBtn" class="btn primary rate-submit" disabled onclick="verifyCode('${id}','${escapeHtml(email)}')">Verify &amp; continue</button>
+    <button class="rate-skip" onclick="renderVerify('${id}')">Use a different email</button>
+    <p class="rate-fine" style="margin-top:10px">Didn't get it? Check spam, or go back and try again in a minute.</p></div></div>`;
+  setTimeout(()=>{const c=document.getElementById('eduCode');if(c)c.focus();},60);
 }
+function checkCode(){const v=(document.getElementById('eduCode').value||'').replace(/\D/g,'');const el=document.getElementById('eduCode');if(el&&el.value!==v)el.value=v;const b=document.getElementById('codeBtn');if(b)b.disabled=v.length<6;}
 async function verifyCode(id,email){
+  const code=(document.getElementById('eduCode').value||'').replace(/\D/g,'');
+  if(code.length<6){const el=document.getElementById('codeErr');if(el)el.textContent='Enter the code from your email.';return;}
   if(sbBusy)return;sbBusy=true;
-  const code=(document.getElementById('otpCode').value||'').trim();
-  const btn=document.getElementById('otpBtn');if(btn){btn.disabled=true;btn.textContent='Verifying…';}
+  const btn=document.getElementById('codeBtn');if(btn){btn.disabled=true;btn.textContent='Verifying…';}
   try{
     const {data,error}=await sb.auth.verifyOtp({email,token:code,type:'email'});
     if(error)throw error;
-    sbUser=data&&data.user;eduVerified=true;sbBusy=false;startRate(id);
-  }catch(e){const el=document.getElementById('otpErr');if(el)el.textContent=(e&&e.message)||'That code didn\'t work. Check it and try again.';if(btn){btn.disabled=false;btn.textContent='Verify & continue';}sbBusy=false;}
+    if(data&&data.session){sbUser=data.session.user;eduVerified=true;awaitingLink=false;sbBusy=false;startRate(id);return;}
+    throw new Error('Could not verify. Try again.');
+  }catch(e){const el=document.getElementById('codeErr');if(el)el.textContent=(e&&e.message)||'That code was wrong or expired. Check your email and try again.';if(btn){btn.disabled=false;btn.textContent='Verify & continue';}}
+  sbBusy=false;
 }
 function renderRateForm(id){
   modalMode='rate';
-  const p=PROFESSORS[id];const d=rateDraft;
-  const overallColor=rateColorFor(d.overall);
-  document.getElementById('modal').innerHTML=`<div class="rate-wrap"><button class="mclose" onclick="renderModal()">&times;</button><div class="rate-step">
-    <div class="rate-kicker">Rating ${escapeHtml(p.name)}</div>
-    <div style="font-size:20px;font-weight:500;margin-bottom:8px">Overall rating</div>
-    <div style="display:flex;gap:6px;margin-bottom:8px">${starsHtml(5,24,d.overall/2,overallColor)}</div>
-    <div style="margin-bottom:16px">
-      <span style="font-size:28px;font-weight:500;color:${overallColor}">${d.overall}</span><span style="font-size:16px;color:#888">/10</span>
-      <input type="range" min="0" max="10" step="1" value="${d.overall}" oninput="setOverall(this.value)" style="width:100%;margin-top:8px">
-    </div>
-    <div class="rate-q">Which class?</div>
-    <div class="selwrap"><select onchange="rateDraft.course=this.value" style="width:100%">${reviewCourseOptions()}</select></div>
-    <div style="display:flex;gap:12px;margin:14px 0">
-      <div style="flex:1">
-        <div class="rate-q" style="margin-bottom:4px">Separate lab/discussion?</div>
-        <div class="yn"><button class="ynbtn ${d.lab===true?'on':''}" onclick="setLab(true)">Yes</button><button class="ynbtn ${d.lab===false?'on':''}" onclick="setLab(false)">No</button></div>
-      </div>
-      <div style="flex:1.3">
-        <div class="rate-q" style="margin-bottom:4px">Required, elective, or GE?</div>
-        <div class="yn"><button class="ynbtn ${d.reqType==='required'?'on':''}" onclick="setReqType('required')">Required</button><button class="ynbtn ${d.reqType==='elective'?'on':''}" onclick="setReqType('elective')">Elective</button><button class="ynbtn ${d.reqType==='ge'?'on':''}" onclick="setReqType('ge')">GE</button></div>
-      </div>
-    </div>
-    <div class="rate-q">How feasible was the coursework overall?</div>
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px"><input type="range" min="1" max="5" step="1" value="${d.feasibility}" oninput="setFeasibility(this.value)" style="flex:1"><div style="display:flex;gap:3px">${starsHtml(5,20,d.feasibility,'#0F6E56')}</div></div>
-    <div class="rate-q">How effectively did the professor teach the material?</div>
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px"><input type="range" min="1" max="5" step="1" value="${d.teaching}" oninput="setTeaching(this.value)" style="flex:1"><div style="display:flex;gap:3px">${starsHtml(5,20,d.teaching,'#0F6E56')}</div></div>
-    <div class="rate-q">Hours per week spent outside class: ${d.hours}</div>
-    <input type="range" min="1" max="15" step="1" value="${d.hours}" oninput="setHours(this.value)" style="width:100%;margin-bottom:16px">
-    <div class="rate-q">Would you take them again?</div>
-    <div class="yn"><button class="ynbtn ${d.again===true?'on':''}" onclick="setAgain(true)">Yes</button><button class="ynbtn ${d.again===false?'on':''}" onclick="setAgain(false)">No</button></div>
-    <div class="rate-q">What did the professor do well?</div>
-    <div class="rate-chips" style="display:grid;grid-template-columns:1fr 1fr;gap:6px">${WELL_CHIPS.map(c=>`<button class="rchip ${d.wellChips.has(c)?'on':''}" onclick="toggleWellChip('${c}')">${c}</button>`).join('')}</div>
-    <div class="rate-q">What did the professor struggle with?</div>
-    <div class="rate-chips" style="display:grid;grid-template-columns:1fr 1fr;gap:6px">${STRUGGLE_CHIPS.map(c=>`<button class="rchip ${d.struggleChips.has(c)?'on':''}" onclick="toggleStruggleChip('${c}')">${c}</button>`).join('')}</div>
-    <div class="rate-q">Add a note <span class="opt">optional</span></div>
-    <textarea id="rateText" class="rate-text" maxlength="240" placeholder="Anything else future students should know?" oninput="rateDraft.text=this.value">${escapeHtml(d.text)}</textarea>
-    ${rateErrMsg?`<div class="rate-err" style="min-height:0;margin:2px 0 8px">${escapeHtml(rateErrMsg)}</div>`:''}
-    <button class="btn primary rate-submit" ${d.overall?'':'disabled'} onclick="submitRate('${id}')">Post review</button>
-    <p class="rate-fine">Posts anonymously · one review per class · verified student</p></div></div>`;
+  const p=PROFESSORS[id];
+  const d=rateDraft||(rateDraft={course:'',score:0,difficulty:0,teach:0,hours:'',format:'',again:null,chips:new Set(),text:''});
+  const courses=wlCourses(p);
+  const courseField=courses.length
+    ? `<select id="rfCourse" class="rf-sel">${courses.map(c=>`<option ${d.course===c?'selected':''}>${c}</option>`).join('')}<option value="__other" ${(d.course&&courses.indexOf(d.course)<0)?'selected':''}>Other / not listed</option></select>`
+    : `<input id="rfCourse" class="rf-sel" placeholder="e.g. CSC 101" value="${escapeHtml(d.course)}">`;
+  const HOURS=['1–3','3–6','6–9','9–12','12+'],FMT=['In person','Hybrid','Online'],WELL=['Explains concepts clearly','Gave timely, useful feedback','Ran engaging discussions','Graded fairly &amp; transparently'];
+  document.getElementById('modal').innerHTML=`<div class="rate-wrap"><button class="mclose" onclick="renderModal()">&times;</button>
+    <div class="rf">
+      <div class="rf-head"><h2 class="rate-h" style="margin:0">Rate ${escapeHtml(p.name)}</h2><p class="rf-sub">Anonymous · verified student · ~20 seconds</p></div>
+      <div class="rf-blk"><label class="rf-lab">Which course?</label>${courseField}</div>
+      <div class="rf-blk"><div class="rf-row"><span class="rf-lab rf-rl">Overall rating<span class="rf-req">REQUIRED</span></span><div class="rf-stars" id="rf-overall"></div><span class="rf-val empty" id="rfv-overall">–</span></div><div class="rf-hint">Tap a star — tap its <b>left half</b> for a half-star.</div></div>
+      <div class="rf-blk"><div class="rf-row"><span class="rf-lab rf-rl">Professor difficulty</span><div class="rf-stars" id="rf-diff"></div><span class="rf-val empty" id="rfv-diff">–</span></div><div class="rf-hint">1 = easy · 5 = hard</div></div>
+      <div class="rf-blk"><div class="rf-row"><span class="rf-lab rf-rl">Ability to teach the material</span><div class="rf-stars" id="rf-teach"></div><span class="rf-val empty" id="rfv-teach">–</span></div></div>
+      <div class="rf-blk"><label class="rf-lab">Hours per week outside class</label><div class="rf-seg" id="rf-hours">${HOURS.map(h=>`<button type="button" class="${d.hours===h?'on':''}">${h}</button>`).join('')}</div></div>
+      <div class="rf-blk"><label class="rf-lab">Was this class in person, hybrid, or online?</label><div class="rf-seg" id="rf-format">${FMT.map(f=>`<button type="button" class="${d.format===f?'on':''}">${f}</button>`).join('')}</div></div>
+      <div class="rf-blk"><label class="rf-lab">What did the professor do well? <span class="rf-opt">(pick any)</span></label><div class="rf-tags" id="rf-well">${WELL.map(w=>`<button type="button" class="${d.chips.has(w)?'on':''}">${w}</button>`).join('')}</div></div>
+      <div class="rf-blk"><label class="rf-lab">Would you take this professor again?<span class="rf-req">REQUIRED</span></label><div class="rf-seg" id="rf-again"><button type="button" class="${d.again===true?'on':''}">Yes</button><button type="button" class="${d.again===false?'on':''}">No</button></div></div>
+      <div class="rf-blk"><label class="rf-lab">Anything else? <span class="rf-opt">(optional)</span></label><textarea id="rfNote" class="rf-note" rows="2" maxlength="280" placeholder="Short note…">${escapeHtml(d.text)}</textarea></div>
+      <div id="rfErr" class="rate-err" style="min-height:0"></div>
+      <button id="rfSubmit" class="btn primary rf-submit" onclick="submitRate('${id}')" disabled>Submit review</button>
+      <p class="rate-fine" style="text-align:center">Posts anonymously · one review per class · verified student</p>
+    </div></div>`;
+  setupRateForm();
 }
-function setOverall(n){rateDraft.overall=parseInt(n,10);renderRateForm(currentProf);}
-function setFeasibility(n){rateDraft.feasibility=parseInt(n,10);renderRateForm(currentProf);}
-function setTeaching(n){rateDraft.teaching=parseInt(n,10);renderRateForm(currentProf);}
-function setHours(n){rateDraft.hours=parseInt(n,10);renderRateForm(currentProf);}
-function setLab(v){rateDraft.lab=v;renderRateForm(currentProf);}
-function setReqType(v){rateDraft.reqType=v;renderRateForm(currentProf);}
-function setAgain(v){rateDraft.again=v;renderRateForm(currentProf);}
-function toggleWellChip(c){rateDraft.wellChips.has(c)?rateDraft.wellChips.delete(c):rateDraft.wellChips.add(c);renderRateForm(currentProf);}
-function toggleStruggleChip(c){rateDraft.struggleChips.has(c)?rateDraft.struggleChips.delete(c):rateDraft.struggleChips.add(c);renderRateForm(currentProf);}
+const RF_STAR='M12 1.5l2.98 6.04 6.67.97-4.83 4.7 1.14 6.64L12 16.9l-5.96 3.13 1.14-6.64-4.83-4.70 6.67-.97z';
+function rfColor(v){ if(v<=1)return '#e2564f'; if(v<=2)return '#e88a4a'; if(v<=3)return '#e6c14a'; if(v<=4)return '#9fce78'; return '#6fb87f'; }
+function rfBack(s){return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 24 24" style="position:absolute;top:0;left:0"><path d="'+RF_STAR+'" fill="none" stroke="#3a3f47" stroke-width="1.5"/></svg>';}
+function rfFront(s,c){return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 24 24" style="display:block"><path d="'+RF_STAR+'" fill="'+c+'" stroke="'+c+'" stroke-width="1.5"/></svg>';}
+function rfMakeStars(elId,valId,field,colorFn){
+  const el=document.getElementById(elId),out=document.getElementById(valId),size=28,sts=[];
+  for(let i=0;i<5;i++){const sp=document.createElement('span');sp.className='rf-st';sp.innerHTML=rfBack(size)+'<span class="rf-fl"></span>';el.appendChild(sp);sts.push(sp);}
+  function paint(v){const c=colorFn?colorFn(v):'#78b083';for(let i=0;i<5;i++){const dd=v-i,pc=dd>=1?100:dd>=0.5?50:0,fl=sts[i].querySelector('.rf-fl');fl.style.width=pc+'%';fl.innerHTML=pc>0?rfFront(size,c):'';}}
+  function valAt(e,i){const r=sts[i].getBoundingClientRect();const cx=(e.clientX!=null?e.clientX:(e.changedTouches&&e.changedTouches[0].clientX));return (cx-r.left)<r.width/2?i+0.5:i+1;}
+  sts.forEach((sp,i)=>{
+    sp.addEventListener('mousemove',e=>paint(valAt(e,i)));
+    sp.addEventListener('click',e=>{const v=valAt(e,i);rateDraft[field]=v;paint(v);out.textContent=v.toFixed(1);out.classList.remove('empty');out.style.color=colorFn?colorFn(v):'#78b083';rfCheck();});
+  });
+  el.addEventListener('mouseleave',()=>paint(rateDraft[field]||0));
+  paint(rateDraft[field]||0);
+}
+function rfSingle(elId,cb){const g=document.getElementById(elId);if(!g)return;g.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{g.querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on');cb(b.textContent);}));}
+function rfCheck(){const b=document.getElementById('rfSubmit');if(b)b.disabled=!(rateDraft.score>0&&rateDraft.again!==null);}
+function rfErr(m){const e=document.getElementById('rfErr');if(e)e.textContent=m||'';}
+function setupRateForm(){
+  rfMakeStars('rf-overall','rfv-overall','score',rfColor);
+  rfMakeStars('rf-diff','rfv-diff','difficulty',null);
+  rfMakeStars('rf-teach','rfv-teach','teach',null);
+  rfSingle('rf-hours',t=>{rateDraft.hours=t;});
+  rfSingle('rf-format',t=>{rateDraft.format=t;});
+  rfSingle('rf-again',t=>{rateDraft.again=(t==='Yes');rfCheck();});
+  const well=document.getElementById('rf-well');if(well)well.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{b.classList.toggle('on');const t=b.textContent;if(b.classList.contains('on'))rateDraft.chips.add(t);else rateDraft.chips.delete(t);}));
+  const cEl=document.getElementById('rfCourse');if(cEl){const upd=()=>{let v=cEl.value;if(v==='__other')v='';rateDraft.course=v;};cEl.addEventListener('change',upd);cEl.addEventListener('input',upd);upd();}
+  const nEl=document.getElementById('rfNote');if(nEl)nEl.addEventListener('input',()=>{rateDraft.text=nEl.value;});
+  rfCheck();
+}
+function rfMeta(r){
+  const parts=[];
+  if(r.difficulty!=null&&r.difficulty!=='')parts.push('Difficulty '+Number(r.difficulty).toFixed(1));
+  if(r.teach!=null&&r.teach!=='')parts.push('Teaching '+Number(r.teach).toFixed(1));
+  if(r.hours)parts.push(r.hours+' hrs/wk');
+  if(r.format)parts.push(r.format);
+  if(r.again!=null&&r.again!=='')parts.push(r.again?'Would take again':'Would not retake');
+  if(!parts.length)return '';
+  return '<div class="rf-meta">'+parts.map(x=>'<span>'+escapeHtml(x)+'</span>').join('')+'</div>';
+}
 let rateErrMsg='';
 async function submitRate(id){
-  const p=PROFESSORS[id];const d=rateDraft||{wellChips:new Set(),struggleChips:new Set()};
-  const wellTags=[...(d.wellChips||[])];
-  const struggleTags=[...(d.struggleChips||[])];
-  const tags=[...wellTags,...struggleTags];
+  const p=PROFESSORS[id];const d=rateDraft||{chips:new Set()};
+  if(!(d.score>0&&d.again!==null)){rfErr('Add an overall rating and whether you\'d take them again.');return;}
+  const tags=[...(d.chips||[])];
   const course=(d.course||'').trim().toUpperCase();
-  const legacyScore=d.overall/2;
-  const review={course:course||p.dept,term:'Fall 2026',score:legacyScore,verified:true,helpful:0,text:(d.text||'').trim(),tags:tags,_mine:true};
+  const review={course:course||p.dept,term:'Fall 2026',score:d.score,difficulty:d.difficulty||null,teach:d.teach||null,hours:d.hours||'',format:d.format||'',again:d.again,verified:true,helpful:0,text:(d.text||'').trim(),tags:tags,_mine:true};
   if(backendReady()&&sbUser){
     if(sbBusy)return;sbBusy=true;
-    const row={professor_key:profKey(p),professor_name:p.name,department:p.dept,course:course||null,score:legacyScore,would_again:d.again===true,tags:tags,note:review.text||null,feasibility:d.feasibility,teaching_effectiveness:d.teaching,hours_per_week:d.hours,has_lab:d.lab,req_type:d.reqType};
+    const btn=document.getElementById('rfSubmit');if(btn){btn.disabled=true;btn.textContent='Posting…';}
+    const row={professor_key:profKey(p),professor_name:p.name,department:p.dept,course:course||null,score:d.score,difficulty:d.difficulty||null,teach_ability:d.teach||null,hours:d.hours||null,format:d.format||null,would_again:d.again===true,tags:tags,note:review.text||null};
     try{
       const {error}=await sb.from('reviews').insert(row);
       if(error)throw error;
@@ -2999,8 +3205,8 @@ async function submitRate(id){
       reviewsGiven++;sbBusy=false;renderThanks(id);
     }catch(e){
       sbBusy=false;
-      rateErrMsg=(e&&/duplicate|unique/i.test(e.message||''))?'You\'ve already reviewed this class — thank you!':((e&&e.message)||'Could not post your review. Try again.');
-      renderRateForm(id);
+      rfErr((e&&/duplicate|unique/i.test(e.message||''))?'You\'ve already reviewed this class — thank you!':((e&&e.message)||'Could not post your review. Try again.'));
+      if(btn){btn.disabled=false;btn.textContent='Submit review';}
     }
     return;
   }
@@ -3049,6 +3255,7 @@ function renderModal(){
       <div class="modal-actions">
         <button class="btn primary rate-open" onclick="startRate('${currentProf}')">Rate this professor</button>
       </div>
+      <button class="wl-btn wl-modalbtn ${isWatched(currentProf)?'on':''}" onclick="toggleWatch('${currentProf}',event)">${isWatched(currentProf)?WL_ON:WL_OFF}<span>${isWatched(currentProf)?'On your watchlist':'Add to watchlist'}</span></button>
       <div class="msec"><h4>About &amp; background</h4>
         ${(p.since||p.field||p.edu)?`<div class="bio-grid">
           ${p.since?`<div class="bio-cell"><span class="bio-k">At Cal Poly</span><span class="bio-v">Since ${p.since} · ${2026-p.since} yrs</span></div>`:''}
@@ -3063,9 +3270,71 @@ function renderModal(){
       ${p.style?`<div class="msec"><h4>Teaching style — does it fit you?</h4><div class="sbars">${Object.entries(p.style).map(([k,v])=>`<div class="sbar"><div class="st"><span>${k}</span><span class="v">${v}%</span></div><div class="track"><i style="width:${v}%"></i></div></div>`).join('')}</div></div>`:''}
       ${p.track?`<div class="msec"><h4>Track record — where they've taught</h4><div class="rows">${p.track.map(t=>`<div class="trow ${t[2]?'cur':''}"><span class="dash"></span><span>${t[0]}</span><span class="yr">${t[1]}</span></div>`).join('')}</div></div>`:''}
       ${''/* Grade distributions intentionally omitted — Cal Poly doesn't publish real per-professor grade data in a usable feed, so we show nothing rather than a fabricated chart. */}
-      ${modalRevs.length?`<div class="msec"><div class="revhead"><h4>Reviews · ${modalRevs.length}</h4><div class="revsort"><button class="${revSort==='helpful'?'active':''}" onclick="setRevSort('helpful')">Most helpful</button><button class="${revSort==='recent'?'active':''}" onclick="setRevSort('recent')">Most recent</button></div></div>${revs.map(r=>`<div class="review"><div class="rtop"><span class="rc">${r.course}</span><span class="rt">${r.term}</span>${r.verified?`<span class="ver">${CHECK} Verified enrolled</span>`:''}${r._i===topIdx?`<span class="best">Most helpful for ${r.course}</span>`:''}<span class="rs" style="color:${scoreColor(r.score)}"><span class="rd" style="width:6px;height:6px;border-radius:50%;background:${scoreColor(r.score)};display:inline-block"></span>${r.score}.0</span></div><p class="rtext">${r.text}</p><div class="rtags">${r.tags.map(t=>`<span class="t">${t}</span>`).join('')}</div><div class="rfoot"><button class="hbtn ${r._v?'on':''}" onclick="voteHelpful(${r._i})">${THUMB} Helpful</button><span class="hcount">${r.helpful} found this helpful</span></div></div>`).join('')}</div>`:`<div class="msec"><h4>Reviews</h4><div class="norev"><p>No reviews yet.</p><button class="btn primary rate-open" onclick="startRate('${currentProf}')">Be the first to rate</button></div></div>`}
+      ${modalRevs.length?`<div class="msec"><div class="revhead"><h4>Reviews · ${modalRevs.length}</h4><div class="revsort"><button class="${revSort==='helpful'?'active':''}" onclick="setRevSort('helpful')">Most helpful</button><button class="${revSort==='recent'?'active':''}" onclick="setRevSort('recent')">Most recent</button></div></div>${revs.map(r=>`<div class="review"><div class="rtop"><span class="rc">${r.course}</span><span class="rt">${r.term}</span>${r.verified?`<span class="ver">${CHECK} Verified enrolled</span>`:''}${r._i===topIdx?`<span class="best">Most helpful for ${r.course}</span>`:''}<span class="rs" style="color:${scoreColor(r.score)}"><span class="rd" style="width:6px;height:6px;border-radius:50%;background:${scoreColor(r.score)};display:inline-block"></span>${Number(r.score).toFixed(1)}</span></div>${rfMeta(r)}<p class="rtext">${r.text}</p><div class="rtags">${r.tags.map(t=>`<span class="t">${t}</span>`).join('')}</div><div class="rfoot"><button class="hbtn ${r._v?'on':''}" onclick="voteHelpful(${r._i})">${THUMB} Helpful</button><span class="hcount">${r.helpful} found this helpful</span></div></div>`).join('')}</div>`:`<div class="msec"><h4>Reviews</h4><div class="norev"><p>No reviews yet.</p><button class="btn primary rate-open" onclick="startRate('${currentProf}')">Be the first to rate</button></div></div>`}
     </div>`;
 }
+
+/* ============ WATCHLIST ============ */
+const WL_OFF='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/></svg>';
+const WL_ON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
+let watchlist=[];
+try{const _w=JSON.parse(localStorage.getItem('professify_watch')||'[]');if(Array.isArray(_w))watchlist=_w;}catch(e){}
+let wlDiffOnly=false;
+function saveWatch(){try{localStorage.setItem('professify_watch',JSON.stringify(watchlist));}catch(e){}}
+function isWatched(id){return watchlist.indexOf(id)>=0;}
+function watchBtn(id){const on=isWatched(id);return `<button class="wl-btn ${on?'on':''}" title="${on?'On your watchlist':'Add to watchlist'}" aria-label="Watchlist toggle" onclick="toggleWatch('${id}',event)">${on?WL_ON:WL_OFF}</button>`;}
+function toggleWatch(id,ev){if(ev){ev.stopPropagation();}const i=watchlist.indexOf(id);if(i>=0)watchlist.splice(i,1);else watchlist.push(id);saveWatch();updateWatchUI();}
+function clearWatch(){watchlist=[];saveWatch();updateWatchUI();}
+function updateWatchBadge(){const b=document.getElementById('watchCount');if(b){b.textContent=watchlist.length;b.hidden=watchlist.length===0;}}
+function updateWatchUI(){
+  updateWatchBadge();
+  const mb=document.getElementById('mback');
+  if(mb&&mb.classList.contains('open')&&currentProf!=null&&modalMode==='profile')renderModal();
+  const ve=document.getElementById('view-explore');if(ve&&ve.classList.contains('active'))renderExplore();
+  const vw=document.getElementById('view-watch');if(vw&&vw.classList.contains('active'))renderWatch();
+}
+function wlCourses(p){const a=(p&&(p.courses||p.prCourses))||[];return Array.isArray(a)?a.map(c=>String(c).toUpperCase().trim()).filter(Boolean):[];}
+function setWlDiff(cb){wlDiffOnly=cb.checked;renderWatch();}
+function renderWatch(){
+  const out=document.getElementById('watchOut');if(!out)return;
+  const profs=watchlist.filter(id=>PROFESSORS[id]).map(id=>({id,p:PROFESSORS[id]}));
+  if(!profs.length){
+    out.innerHTML=`<div class="wl-empty"><h3>Nothing on your watchlist yet</h3><p>When you spot a professor worth considering, hit <b style="color:var(--text-2)">Watch</b> on their card or profile. They'll collect here so you can compare them side by side — no commitment.</p><button class="btn primary" onclick="show('explore')">Find professors →</button></div>`;
+    return;
+  }
+  const cmap={};
+  profs.forEach(({p})=>{wlCourses(p).forEach(c=>{(cmap[c]=cmap[c]||new Set()).add(p.name);});});
+  const shared=Object.entries(cmap).map(([c,s])=>[c,[...s]]).filter(x=>x[1].length>=2).sort((a,b)=>b[1].length-a[1].length);
+  let insight;
+  if(shared.length){
+    insight=`<div class="wl-insight"><b>Some of these have taught the same class.</b> Where two overlap they're likely <span class="ov">alternatives for the same course</span> — so you'd pick one:<br>`+shared.slice(0,4).map(x=>`<b>${x[0]}</b> — ${x[1].join(', ')}`).join('  ·  ')+`</div>`;
+  }else{
+    insight=`<div class="wl-insight">No overlapping classes among these professors — based on what they've taught they cover <span class="ov">different courses</span>, so you could potentially take several of them in one term.</div>`;
+  }
+  const rows=[
+    {k:'Rating · PolyRatings', raw:profs.map(({p})=>p.rating!=null?p.rating.toFixed(2):'—'), cell:profs.map(({p})=>p.rating!=null?`<span class="prb" style="color:${scoreColor(p.rating)}">${p.rating.toFixed(2)}<small> /4</small></span>`:'<span class="wl-val" style="color:var(--faint)">No rating yet</span>')},
+    {k:'# of ratings', raw:profs.map(({p})=>String(p.evals||0)), cell:profs.map(({p})=>`<span class="wl-val">${p.evals?p.evals.toLocaleString():'—'}</span>`)},
+    {k:'Student reviews', raw:profs.map(({p})=>{const c=profReviews(p).length;const a=studentAvg(p);return c?a.toFixed(1)+'·'+c:'0';}), cell:profs.map(({p})=>{const c=profReviews(p).length;const a=studentAvg(p);return c?`<span class="wl-val"><b style="color:${scoreColor(a/5*4)}">${a.toFixed(1)}</b>/5 · ${c}</span>`:'<span class="wl-val" style="color:var(--faint)">None yet</span>';})},
+    {k:'Department', raw:profs.map(({p})=>pdept(p)||p.dept||'—'), cell:profs.map(({p})=>`<span class="wl-val">${pdept(p)||p.dept||'—'}</span>`)},
+    {k:'Fits your style', raw:profs.map(({p})=>matchesStudent(p)?'yes':'no'), cell:profs.map(({p})=>matchesStudent(p)?'<span class="wl-val" style="color:#9fd09a">✓ Match</span>':'<span class="wl-val" style="color:var(--faint)">—</span>')},
+    {k:'Strong suits', raw:profs.map(({p})=>(p.strong||(p.field?[p.field]:[])).join(',')), cell:profs.map(({p})=>{const t=p.strong?p.strong.slice(0,3):(p.field?[p.field]:[]);return t.length?t.map(s=>`<span class="wl-chip">${s}</span>`).join(''):'<span class="wl-val" style="color:var(--faint)">—</span>';})},
+    {k:'Classes taught', raw:profs.map(({p})=>wlCourses(p).slice(0,6).join(',')), cell:profs.map(({p})=>{const c=wlCourses(p).slice(0,6);return c.length?c.map(x=>`<span class="wl-chip">${x}</span>`).join(''):'<span class="wl-val" style="color:var(--faint)">—</span>';})}
+  ];
+  const visRows=wlDiffOnly?rows.filter(r=>new Set(r.raw).size>1):rows;
+  const thead=`<tr><th class="wl-attr"></th>${profs.map(({id,p})=>`<th class="wl-phead"><span class="pn" onclick="openProf('${id}')" style="cursor:pointer">${p.name}</span><span class="pdp">${pdept(p)||p.dept||''}</span>${p.rating!=null?`<span class="prb" style="color:${scoreColor(p.rating)}">${p.rating.toFixed(2)}<small>/4</small></span>`:'<span class="pdp">No rating</span>'}<br><button class="wl-rm" title="Remove from watchlist" onclick="toggleWatch('${id}')">Remove ✕</button></th>`).join('')}</tr>`;
+  const tbody=visRows.length?visRows.map(r=>`<tr><td class="wl-attr">${r.k}</td>${r.cell.map(c=>`<td>${c}</td>`).join('')}</tr>`).join(''):`<tr><td class="wl-attr"></td><td colspan="${profs.length}" style="color:var(--faint)">These professors are identical on every tracked attribute.</td></tr>`;
+  const over=profs.length>5?`<p class="wl-note">Comparison is easiest with 5 or fewer — you're comparing ${profs.length}. On a phone, scroll sideways to see them all.</p>`:'';
+  out.innerHTML=`
+    <div class="wl-head">
+      <label class="wl-toggle"><input type="checkbox" ${wlDiffOnly?'checked':''} onchange="setWlDiff(this)">Only show differences</label>
+      <button class="wl-clear" onclick="clearWatch()">Clear watchlist</button>
+    </div>
+    ${insight}
+    <div class="wl-scroll"><table class="wl-table"><thead>${thead}</thead><tbody>${tbody}</tbody></table></div>
+    ${over}
+    <p class="wl-note">Tip: tap a professor's name to open their full profile and reviews. Add a handful, compare, then commit the winners to your schedule.</p>`;
+}
+updateWatchBadge();
 
 /* ============ SCHEDULE ============ */
 function randomMajor(){const keys=Object.keys(FLOWCHARTS);return keys.length?keys[Math.floor(Math.random()*keys.length)]:'Business Administration';}
@@ -3406,7 +3675,7 @@ function finishOnboard(){
   student.minor=document.getElementById('obMinor').value;
   const cat=MAJOR_CATALOG[student.major];
   student.conc=cat?document.getElementById('obConcSel').value:null;
-  localStorage.setItem('professify_student', JSON.stringify({...student, learn: [...student.learn]}));
+  // sync the app controls
   document.getElementById('majorSel').value=student.major;
   document.getElementById('yearSel').value=student.year;
   exMajor=student.major; if(student.conc)exConc=student.conc;
@@ -3415,24 +3684,142 @@ function finishOnboard(){
   document.body.style.overflow='';
   show('sched');
 }
-
 function skipOnboard(){document.getElementById('onboard').style.display='none';document.body.style.overflow='';}
 
 /* ============ INIT ============ */
-applySchoolTheme(student.school);realify();buildClassIndex();buildIndexes();buildCourseIndex();buildMajorSel();buildYearOptions();setPlanTerm();renderRoadmap();buildAreas();renderGe();renderExContext();renderExplore();updateSavedCount();
-if(hasOnboarded){
-  document.getElementById('majorSel').value=student.major;
-  document.getElementById('yearSel').value=student.year;
-  exMajor=student.major; if(student.conc)exConc=student.conc;
-  show('sched');
-}else{
-  startOnboard();
-}
+applySchoolTheme(student.school);realify();buildClassIndex();buildIndexes();buildCourseIndex();buildMajorSel();buildYearOptions();setPlanTerm();renderRoadmap();buildAreas();renderGe();renderExContext();renderExplore();updateSavedCount();startOnboard();
 /* Pull live PolyRatings after first paint; re-render with real, current ratings once it lands. */
 (function(){const ls=document.getElementById('liveSync');if(ls)ls.style.display='flex';})();
 loadPolyRatings().then(ok=>{if(ok){assignProfs();renderRoadmap();renderGe();renderExContext();renderExplore();}}).finally(()=>{const ls=document.getElementById('liveSync');if(ls)ls.style.display='none';});
 /* Connect the reviews backend if configured (stays dormant otherwise). */
 initBackend();
+</script>
+
+<script>
+window.SCHED_MAJORS={"cla-child-development":{"name":"Child Development","degree":"BS","college":"College of Liberal Arts","conc":null,"terms":[{"year":1,"term":"Fall","slots":[{"id":"cd1102","code":"CD 1102","title":"Orientation to the Psychology Major","units":2,"type":"course"},{"id":"psy2201","code":"PSY 2201","title":"Introductory Psychology","units":3,"type":"course","note":"GE Area 4B"},{"id":"stat1110","code":"STAT 1110","title":"Applied Statistical Concepts and Methods","units":3,"type":"course","note":"GE Area 2"},{"id":"ge1a","title":"GE — Area 1A","units":3,"type":"ge"},{"id":"ge1c","title":"GE — Area 1C","units":3,"type":"ge"}]},{"year":1,"term":"Spring","slots":[{"id":"cdsel1","title":"Select one: CD 1131 / PSY 2254 / CD 2202","units":3,"type":"choice","options":["CD 1131","PSY 2254","CD 2202"]},{"id":"psy2256","code":"PSY 2256","title":"Developmental Psychology","units":3,"type":"course","note":"PSY 2201"},{"id":"psy2229","code":"PSY 2229","title":"Research Methods in Psychology","units":3,"type":"course","note":"PSY 2201; STAT 1110"},{"id":"ge1b","title":"GE — Area 1B","units":3,"type":"ge"},{"id":"ge_s1","title":"GE","units":3,"type":"ge"}]},{"year":2,"term":"Fall","slots":[{"id":"devel1","title":"Development Elective — CD 3304 / 3305 / 3306","units":4,"type":"choice","options":["CD 3304","CD 3305","CD 3306"]},{"id":"cd3329","code":"CD 3329","title":"Advanced Research Methods","units":4,"type":"course","note":"PSY 2229; STAT 1110"},{"id":"cd2230","code":"CD 2230","title":"Preschool Lab","units":3,"type":"course","note":"CD 2256"},{"id":"ge_f2","title":"GE","units":3,"type":"ge"}]},{"year":2,"term":"Spring","slots":[{"id":"devel2","title":"Development Elective — a second CD 3304 / 3305 / 3306","units":4,"type":"choice","options":["CD 3304","CD 3305","CD 3306"]},{"id":"psy2240","code":"PSY 2240","title":"Biopsychology","units":3,"type":"course","note":"GE Area 2B"},{"id":"ge5a","title":"GE — Area 5A + 5C Lab","units":4,"type":"ge"},{"id":"ge_s2","title":"GE","units":3,"type":"ge"}]},{"year":3,"term":"Fall","slots":[{"id":"cdel_f3","title":"CD Elective (3000–4000 level)","units":4,"type":"elective"},{"id":"proskill","title":"Professional Skills Support Course","units":[3,4],"type":"support"},{"id":"udsci","title":"UD Science Support Course","units":[3,4],"type":"support","note":"GE UD Area 2/5"},{"id":"ge_f3","title":"GE","units":3,"type":"ge"},{"id":"free_f3","title":"Free Elective","units":3,"type":"elective"}]},{"year":3,"term":"Spring","slots":[{"id":"cd4424","code":"CD 4424","title":"Children's Development in Diverse Cultures","units":4,"type":"course","note":"Area 6/F; two of CD 3304/3305/3306"},{"id":"cdel_s3","title":"CD Elective (3000–4000 level)","units":4,"type":"elective"},{"id":"dei","title":"DEI Support Course","units":[3,4],"type":"support","note":"GE UD Area 4"},{"id":"geud3","title":"GE — UD Area 3","units":3,"type":"ge"}]},{"year":4,"term":"Fall","slots":[{"id":"cd4448","title":"CD 4448 Research Internship OR 4453 Supervised Fieldwork","units":3,"type":"choice","options":["CD 4448","CD 4453"],"note":"Junior standing; consent"},{"id":"cd4461","code":"CD 4461","title":"Senior Project Seminar","units":2,"type":"course","note":"Senior standing; CD 3329"},{"id":"cdel_f4","title":"CD Elective (3000–4000 level)","units":4,"type":"elective"},{"id":"free_f4","title":"Free Elective","units":[3,4],"type":"elective"},{"id":"free_f4b","title":"Free Elective","units":3,"type":"elective"}]},{"year":4,"term":"Spring","slots":[{"id":"cd4462","code":"CD 4462","title":"Senior Project","units":2,"type":"course","note":"CD 4461"},{"id":"cdel_s4","title":"CD Elective (3000–4000 level)","units":4,"type":"elective"},{"id":"free_s4","title":"Free Elective","units":[3,4],"type":"elective"},{"id":"free_s4b","title":"Free Elective","units":3,"type":"elective"},{"id":"free_s4c","title":"Free Elective","units":3,"type":"elective"}]}]},"cla-comparative-ethnic-studies":{"name":"Comparative Ethnic Studies","degree":"BA","college":"College of Liberal Arts","conc":null,"terms":[{"year":1,"term":"Fall","slots":[{"id":"es1112","code":"ES 1112","title":"Race, Culture, and Politics in the United States","units":3,"type":"course","note":"GE Area 4A"},{"id":"es1134","code":"ES 1134","title":"Writing and Rhetoric","units":3,"type":"course","note":"GE Area 1A"},{"id":"ge_f1a","title":"GE","units":3,"type":"ge"},{"id":"ge_f1b","title":"GE","units":3,"type":"ge"}]},{"year":1,"term":"Spring","slots":[{"id":"es1114","code":"ES 1114","title":"Introduction to Ethnic Studies","units":4,"type":"course"},{"id":"es1145","code":"ES 1145","title":"Writing, Reasoning, and Argumentation","units":3,"type":"course","note":"ES 1134 (C- or better); GE 1B"},{"id":"survey1","title":"Survey Elective — ES 2252/2253/2254/2255/2256","units":3,"type":"choice","options":["ES 2252","ES 2253","ES 2254","ES 2255","ES 2256"],"note":"GE Area 6"},{"id":"ge_s1","title":"GE","units":3,"type":"ge"},{"id":"free_s1","title":"Free Elective","units":3,"type":"elective"}]},{"year":2,"term":"Fall","slots":[{"id":"survey2","title":"Survey Elective — second ES 2252–2256","units":3,"type":"choice","options":["ES 2252","ES 2253","ES 2254","ES 2255","ES 2256"],"note":"GE Area 6"},{"id":"pop1","title":"Popular Culture Elective — ES 2220/2221/2222/2223","units":3,"type":"choice","options":["ES 2220","ES 2221","ES 2222","ES 2223"],"note":"GE Area 3A"},{"id":"gelab2","title":"GE + Lab","units":4,"type":"ge"},{"id":"ge_f2","title":"GE","units":3,"type":"ge"},{"id":"free_f2","title":"Free Elective","units":3,"type":"elective"}]},{"year":2,"term":"Spring","slots":[{"id":"survey3","title":"Survey Elective — third ES 2252–2256","units":3,"type":"choice","options":["ES 2252","ES 2253","ES 2254","ES 2255","ES 2256"],"note":"GE Area 6"},{"id":"pop2","title":"Popular Culture Elective — second ES 2220–2223","units":3,"type":"choice","options":["ES 2220","ES 2221","ES 2222","ES 2223"],"note":"GE Area 3A"},{"id":"pop3","title":"Popular Culture Elective — third ES 2220–2223","units":3,"type":"choice","options":["ES 2220","ES 2221","ES 2222","ES 2223"],"note":"GE Area 3A"},{"id":"ge4b","title":"GE — Area 4B (not in ES)","units":3,"type":"ge"},{"id":"free_s2","title":"Free Elective","units":3,"type":"elective"}]},{"year":3,"term":"Fall","slots":[{"id":"es3345","code":"ES 3345","title":"Queer Ethnic Studies","units":4,"type":"course","note":"Junior standing; UD GE Area 4"},{"id":"es3350","code":"ES 3350","title":"Gender, Race, Culture, Science, and Technology","units":4,"type":"course","note":"Junior standing; UD GE Area 2/5"},{"id":"es3380","code":"ES 3380","title":"Critical Race Theory","units":4,"type":"course","note":"Junior standing; UD GE Area 4"},{"id":"free_f3","title":"Free Elective","units":3,"type":"elective"}]},{"year":3,"term":"Spring","slots":[{"id":"es3382","code":"ES 3382","title":"Racial Capitalism","units":4,"type":"course","note":"Junior standing; UD GE Area 6"},{"id":"esud","title":"ES UD Designated Elective — ES 3330/3301/3302/3303/3324/3340","units":4,"type":"choice","options":["ES 3330","ES 3301","ES 3302","ES 3303","ES 3324","ES 3340"],"note":"UD GE Area 3"},{"id":"theory1","title":"ES Theory Course — ES 4401/4402/4403","units":4,"type":"choice","options":["ES 4401","ES 4402","ES 4403"]},{"id":"udes1","title":"UD ES Elective","units":4,"type":"elective"}]},{"year":4,"term":"Fall","slots":[{"id":"es3390","code":"ES 3390","title":"Research Methodology in Comparative Ethnic Studies","units":4,"type":"course","note":"Junior standing"},{"id":"theory2","title":"ES Theory Course — a second ES 4401/4402/4403","units":4,"type":"choice","options":["ES 4401","ES 4402","ES 4403"]},{"id":"udes2","title":"UD ES Elective","units":4,"type":"elective"},{"id":"free_f4","title":"Free Elective","units":3,"type":"elective"}]},{"year":4,"term":"Spring","slots":[{"id":"es4461","code":"ES 4461","title":"Senior Project","units":4,"type":"course","note":"Senior standing; ES 3390 or consent"},{"id":"theory3","title":"ES Theory Course — the last ES 4401/4402/4403","units":4,"type":"choice","options":["ES 4401","ES 4402","ES 4403"]},{"id":"udes3","title":"UD ES Elective","units":4,"type":"elective"},{"id":"free_s4","title":"Free Elective","units":3,"type":"elective"}]}]},"ceng-computer-science":{"id":"ceng-computer-science","name":"Computer Science","degree":"BS","college":"College of Engineering","conc":null,"terms":[{"year":1,"term":"Fall","slots":[{"id":"csc1","code":"CSC/CPE 1000","title":"Computing Majors Orientation","units":1,"type":"course"},{"id":"csc2","code":"CSC/CPE 1024","title":"Introduction to Computing","units":2,"type":"course"},{"id":"math1","title":"Calculus I or Calculus for Data Science I","units":4,"type":"choice","options":["MATH 1261","MATH 1264"]},{"id":"support1","title":"Life Science Support Elective (GE Area 5B)","units":1,"type":"support"},{"id":"ge1","title":"GE — Area 1A","units":3,"type":"ge"}]},{"year":1,"term":"Spring","slots":[{"id":"csc3","code":"CSC 1001 & 1001L","title":"Fundamentals of Computer Science and Laboratory","units":4,"type":"course"},{"id":"support2","title":"Chemistry (5A & 5C) or General Physics I","units":4,"type":"choice","options":["CHEM 1120","PHYS 1141"]},{"id":"math2","title":"Calculus II or Calculus for Data Science II","units":4,"type":"choice","options":["MATH 1262","MATH 1265"]},{"id":"ge2","title":"GE — Area 1B","units":3,"type":"ge"}]},{"year":2,"term":"Fall","slots":[{"id":"csc4","code":"CSC 2001 & 2001L","title":"Data Structures and Laboratory","units":4,"type":"course"},{"id":"math3","code":"MATH 1151","title":"Linear Algebra","units":3,"type":"course"},{"id":"ge3","title":"GE — Area 1C","units":3,"type":"ge"},{"id":"ge4","title":"GE — Area 3A","units":3,"type":"ge"}]},{"year":2,"term":"Spring","slots":[{"id":"cpe1","code":"CPE 2300","title":"Introduction to Computer Systems","units":3,"type":"course"},{"id":"csc5","code":"CSC/CPE 2050","title":"System Software Mechanics","units":3,"type":"course"},{"id":"math4","code":"MATH 2031","title":"Transition to Advanced Mathematics","units":3,"type":"course"},{"id":"ge5","title":"GE — Area 3B","units":3,"type":"ge"},{"id":"ge6","title":"GE — Area 4A","units":3,"type":"ge"}]},{"year":3,"term":"Fall","slots":[{"id":"csc6","code":"CSC 3001","title":"Modern Application Development","units":4,"type":"course"},{"id":"csc7","code":"CSC/CPE 3201","title":"Introduction to Computer Security","units":3,"type":"course"},{"id":"csc8","code":"CSC 3449","title":"Algorithms and Complexity","units":4,"type":"course"},{"id":"ge7","title":"GE — Area 4B","units":3,"type":"ge"},{"id":"ge8","title":"GE — Area 6","units":3,"type":"ge"}]},{"year":3,"term":"Spring","slots":[{"id":"csc9","code":"CSC 3100","title":"Software Engineering","units":4,"type":"course"},{"id":"csc10","code":"CSC 3300","title":"Programming Languages","units":3,"type":"course"},{"id":"stat1","code":"STAT 3210","title":"Engineering Statistics","units":3,"type":"course","note":"UD GE Area 2"},{"id":"techel1","title":"Technical Elective","units":[3,4],"type":"elective"},{"id":"ge9","title":"GE — UD Area 4","units":3,"type":"ge"}]},{"year":4,"term":"Fall","slots":[{"id":"csc11","code":"CSC/CPE 4553","title":"Introduction to Operating Systems","units":3,"type":"course"},{"id":"phil1","code":"PHIL 3323","title":"Ethics, Science, and Technology","units":3,"type":"course","note":"UD GE Area 3"},{"id":"wgqs1","title":"Gender, Race, Culture, Science & Technology (or WGQS 3351)","units":4,"type":"choice","options":["WGQS 3350","WGQS 3351"]},{"id":"techel2","title":"Technical Elective","units":[3,4],"type":"elective"}]},{"year":4,"term":"Spring","slots":[{"id":"techel3","title":"Technical Elective","units":[3,4],"type":"elective"},{"id":"techel4","title":"Technical Elective","units":[0,4],"type":"elective"},{"id":"extel1","title":"Approved External Elective","units":3,"type":"elective"},{"id":"extel2","title":"Approved External Elective","units":[2,3],"type":"elective"},{"id":"srproj1","title":"Senior Project","units":[2,8],"type":"choice","options":["CSC 4460","CSC 4160 & 4161"]}]}]},"ceng-mechanical-engineering":{"id":"ceng-mechanical-engineering","name":"Mechanical Engineering","degree":"BS","college":"College of Engineering","conc":null,"terms":[{"year":1,"term":"Fall","slots":[{"id":"me1125","code":"ME 1125","title":"Introduction to Mechanical Engineering","units":1,"type":"course"},{"id":"me1148","code":"ME 1148","title":"Engineering Design Communication","units":2,"type":"course"},{"id":"chem1120","code":"CHEM 1120","title":"Fundamentals of Chemical Structure and Properties","units":3,"type":"support","note":"GE Area 5A & 5C"},{"id":"ime1143","code":"IME 1143","title":"Introduction to Design and Manufacturing","units":2,"type":"support"},{"id":"math1261","code":"MATH 1261","title":"Calculus I","units":3,"type":"support","note":"GE Area 2"},{"id":"ge1a","title":"GE — Area 1A","units":3,"type":"ge"}]},{"year":1,"term":"Spring","slots":[{"id":"ime114x","title":"Manufacturing Processes elective","units":1,"type":"choice","options":["IME 1141","IME 1142","IME 1149"]},{"id":"math1262","code":"MATH 1262","title":"Calculus II","units":4,"type":"support"},{"id":"phys1141","code":"PHYS 1141","title":"General Physics I","units":4,"type":"support"},{"id":"ge1b","title":"GE — Area 1B","units":3,"type":"ge"},{"id":"ge1c","title":"GE — Area 1C","units":3,"type":"ge"}]},{"year":2,"term":"Fall","slots":[{"id":"me2240","code":"ME 2240","title":"Applied Programming for Mechanical Engineering","units":1,"type":"course"},{"id":"me2248","code":"ME 2248","title":"Design Using Solid Modeling","units":1,"type":"course"},{"id":"engr2211","code":"ENGR 2211","title":"Introduction to Mechanics","units":4,"type":"support"},{"id":"math2263","code":"MATH 2263","title":"Calculus III","units":3,"type":"support"},{"id":"phys1143","code":"PHYS 1143","title":"General Physics II","units":4,"type":"support"},{"id":"ge3a","title":"GE — Area 3A","units":3,"type":"ge"}]},{"year":2,"term":"Spring","slots":[{"id":"me2212","code":"ME 2212","title":"Engineering Dynamics","units":3,"type":"course"},{"id":"ee2115","code":"EE 2115 & 2115L","title":"Circuits & Electronics for Non-Majors and Lab","units":4,"type":"support"},{"id":"mate1220","code":"MATE 1220 & 1215","title":"Materials Engineering for Non-Majors + Lab","units":3,"type":"support"},{"id":"math2341","code":"MATH 2341","title":"Linear Analysis","units":4,"type":"support"},{"id":"ge4a","title":"GE — Area 4A","units":3,"type":"ge"}]},{"year":3,"term":"Fall","slots":[{"id":"me3234","code":"ME 3234","title":"Design Thinking and Creativity","units":3,"type":"course"},{"id":"me3236","code":"ME 3236","title":"Engineering Measurement and Data Analysis","units":3,"type":"course"},{"id":"me3302","code":"ME 3302","title":"Thermodynamics","units":3,"type":"course"},{"id":"me3328","code":"ME 3328","title":"Design for Strength and Stiffness","units":4,"type":"course"},{"id":"ge3b","title":"GE — Area 3B","units":3,"type":"ge"}]},{"year":3,"term":"Spring","slots":[{"id":"me3317","code":"ME 3317","title":"Vibrations and System Modeling","units":4,"type":"course"},{"id":"me3329","code":"ME 3329","title":"Mechanical Systems Design","units":3,"type":"course"},{"id":"me3341","code":"ME 3341 & 3342","title":"Fluid Mechanics and Lab","units":4,"type":"course"},{"id":"bio","title":"Biology/Life Science elective (GE 5B)","units":3,"type":"choice","options":["BIO 1111","BIO 2213"]},{"id":"ge4b","title":"GE — Area 4B","units":3,"type":"ge"}]},{"year":4,"term":"Fall","slots":[{"id":"me3343","code":"ME 3343","title":"Heat Transfer","units":4,"type":"course"},{"id":"me4417","code":"ME 4417","title":"Mechanical Controls and Implementations","units":3,"type":"course"},{"id":"me4460","code":"ME 4460","title":"Senior Design Project I","units":2,"type":"course"},{"id":"te1","title":"Technical Elective (ME 3000+)","units":3,"type":"elective"},{"id":"te2","title":"Technical Elective (ME 3000+)","units":3,"type":"elective"},{"id":"ge6","title":"GE — Area 6","units":3,"type":"ge"}]},{"year":4,"term":"Spring","slots":[{"id":"me4440","code":"ME 4440","title":"Thermal System Design","units":3,"type":"course"},{"id":"me4461","code":"ME 4461","title":"Senior Design Project II","units":2,"type":"course"},{"id":"te3","title":"Technical Elective","units":3,"type":"elective"},{"id":"te4","title":"Technical Elective","units":[2,3],"type":"elective"},{"id":"geud3","title":"GE — UD Area 3","units":3,"type":"ge"}]}]},"cosm-biological-sciences":{"id":"cosm-biological-sciences","name":"Biological Sciences","degree":"BS","college":"Bailey College of Science and Mathematics","conc":"General Curriculum in Biology","terms":[{"year":1,"term":"Fall","slots":[{"id":"bio1150","code":"BIO 1150","title":"Life: History and Diversity","units":4,"type":"course","note":"GE Area 5B & 5C"},{"id":"chem1120","code":"CHEM 1120","title":"Fundamentals of Chemical Structure and Properties","units":4,"type":"course","note":"GE Area 5A"},{"id":"stat1110","code":"STAT 1110","title":"Applied Statistical Concepts and Methods","units":3,"type":"course"},{"id":"ge-1a","title":"GE — Area 1A","units":3,"type":"ge"}]},{"year":1,"term":"Spring","slots":[{"id":"bio1151","code":"BIO 1151","title":"Life: Molecules and Cells","units":4,"type":"course","note":"BIO 1150"},{"id":"chem1122","code":"CHEM 1122","title":"Fundamentals of Chemical Reactivity","units":4,"type":"course","note":"CHEM 1120"},{"id":"math1264","code":"MATH 1264","title":"Calculus for Data Science I","units":4,"type":"course","note":"GE Area 2"},{"id":"ge-1b","title":"GE — Area 1B","units":3,"type":"ge"}]},{"year":2,"term":"Fall","slots":[{"id":"bio2253","code":"BIO 2253","title":"Principles of Ecology and Evolution","units":4,"type":"course","note":"BIO 1150, 1151"},{"id":"chem-org","title":"Organic Chemistry (CHEM 2240 or 2242)","units":[3,5],"type":"choice","options":["CHEM 2240","CHEM 2242"]},{"id":"phys-i","title":"College/General Physics I","units":4,"type":"choice","options":["PHYS 1121","PHYS 1141"]},{"id":"ge-1c","title":"GE — Area 1C","units":3,"type":"ge"}]},{"year":2,"term":"Spring","slots":[{"id":"bio3351","code":"BIO 3351","title":"Principles of Genetics","units":3,"type":"course","note":"BIO 1151"},{"id":"bio3352","code":"BIO 3352","title":"Principles of Animal Physiology","units":4,"type":"course","note":"BIO 1151"},{"id":"tech-elec","title":"Technical Elective","units":[3,4],"type":"elective"},{"id":"ge-1","title":"GE","units":3,"type":"ge"}]},{"year":3,"term":"Fall","slots":[{"id":"biosci-elec1","title":"Bioscience Elective","units":4,"type":"elective"},{"id":"appr-elec1","title":"Approved Elective","units":4,"type":"elective"},{"id":"ge-2","title":"GE","units":3,"type":"ge"},{"id":"ge-3","title":"GE","units":3,"type":"ge"},{"id":"free-elec1","title":"Free Elective","units":[1,2],"type":"elective"}]},{"year":3,"term":"Spring","slots":[{"id":"lvl4-elec1","title":"4000-level Elective","units":3,"type":"elective"},{"id":"biosci-elec2","title":"Bioscience Elective","units":4,"type":"elective"},{"id":"appr-elec2","title":"Approved Elective","units":3,"type":"elective"},{"id":"ge-4","title":"GE","units":3,"type":"ge"},{"id":"ge-5","title":"GE","units":3,"type":"ge"}]},{"year":4,"term":"Fall","slots":[{"id":"lvl4-elec2","title":"4000-level Elective","units":4,"type":"elective"},{"id":"lvl4-elec3","title":"4000-level Elective","units":3,"type":"elective"},{"id":"appr-elec3","title":"Approved Elective","units":3,"type":"elective"},{"id":"ge-6","title":"GE","units":3,"type":"ge"},{"id":"ge-7","title":"GE","units":3,"type":"ge"}]},{"year":4,"term":"Spring","slots":[{"id":"senior-proj","title":"Senior Project (BIO 4461/4462/4463)","units":2,"type":"choice","options":["BIO 4461","BIO 4462","BIO 4463"],"note":"senior standing"},{"id":"appr-elec4","title":"Approved Elective","units":3,"type":"elective"},{"id":"appr-elec5","title":"Approved Elective","units":3,"type":"elective"},{"id":"ge-8","title":"GE","units":3,"type":"ge"},{"id":"free-elec2","title":"Free Elective","units":4,"type":"elective"}]}]},"cla-psychology":{"id":"cla-psychology","name":"Psychology","degree":"BS","college":"College of Liberal Arts","conc":null,"terms":[{"year":1,"term":"Fall","slots":[{"id":"psy1102","code":"PSY 1102","title":"Orientation to the Psychology Major","units":2,"type":"course"},{"id":"psy2201","code":"PSY 2201","title":"Introductory Psychology","units":3,"type":"course","note":"GE Area 4B"},{"id":"stat1110","code":"STAT 1110","title":"Applied Statistical Concepts and Methods","units":2,"type":"support","note":"GE Area 2"},{"id":"ge-1a","title":"GE — Area 1A","units":3,"type":"ge"},{"id":"ge-1c","title":"GE — Area 1C","units":3,"type":"ge"}]},{"year":1,"term":"Spring","slots":[{"id":"psy-intro-area","title":"Intro Breadth: PSY 2205 / 2252 / 2256","units":3,"type":"choice","options":["PSY 2205","PSY 2252","PSY 2256"]},{"id":"psy2240","code":"PSY 2240","title":"Biopsychology","units":3,"type":"course","note":"GE Area 5B"},{"id":"psy2229","code":"PSY 2229","title":"Research Methods in Psychology","units":3,"type":"course"},{"id":"ge-1b","title":"GE — Area 1B","units":3,"type":"ge"},{"id":"ge-y1s","title":"GE","units":3,"type":"ge"}]},{"year":2,"term":"Fall","slots":[{"id":"psy-social-pers","title":"Breadth: Social & Personality area","units":4,"type":"choice","options":["PSY 3302","PSY 3324","PSY 3360"]},{"id":"psy3372","code":"PSY 3372","title":"Multicultural Psychology","units":4,"type":"course","note":"USCP"},{"id":"ge-y2f-1","title":"GE","units":3,"type":"ge"},{"id":"ge-y2f-2","title":"GE — activity","units":1,"type":"ge"},{"id":"ge-y2f-3","title":"GE","units":3,"type":"ge"}]},{"year":2,"term":"Spring","slots":[{"id":"psy-health","title":"Breadth: Mental & Physical Health area","units":4,"type":"choice","options":["PSY 3320","PSY 3370","PSY 4405"]},{"id":"psy3333","code":"PSY 3333","title":"Advanced Research Methods","units":4,"type":"course","note":"PSY 2229, STAT 1110"},{"id":"ge-y2s-1","title":"GE","units":3,"type":"ge"},{"id":"ge-y2s-2","title":"GE","units":3,"type":"ge"}]},{"year":3,"term":"Fall","slots":[{"id":"psy-cognitive","title":"Breadth: Cognitive area","units":4,"type":"choice","options":["PSY 3357","PSY 4440","PSY 4480"]},{"id":"dei-ud","title":"DEI Course (Upper-Division)","units":[3,4],"type":"support"},{"id":"prof-skills","title":"Professional Skills Support Course","units":3,"type":"support"},{"id":"elec-y3f-1","title":"Free Elective","units":3,"type":"elective"},{"id":"elec-y3f-2","title":"Free Elective","units":3,"type":"elective"}]},{"year":3,"term":"Spring","slots":[{"id":"psy-elec-y3s","title":"PSY Elective (3000–4000 level)","units":4,"type":"elective"},{"id":"ud-science","title":"Upper-Division Science Course","units":[3,4],"type":"support"},{"id":"ge-y3s","title":"GE — upper division","units":3,"type":"ge"},{"id":"elec-y3s-1","title":"Free Elective","units":3,"type":"elective"},{"id":"elec-y3s-2","title":"Free Elective","units":3,"type":"elective"}]},{"year":4,"term":"Fall","slots":[{"id":"psy-intern-1","title":"Internship I (PSY 4448 or 4453)","units":3,"type":"choice","options":["PSY 4448","PSY 4453"]},{"id":"psy4461","code":"PSY 4461","title":"Senior Project Seminar","units":2,"type":"course"},{"id":"elec-y4f-1","title":"Free Elective","units":3,"type":"elective"},{"id":"elec-y4f-2","title":"Free Elective","units":3,"type":"elective"},{"id":"elec-y4f-3","title":"Free Elective","units":3,"type":"elective"}]},{"year":4,"term":"Spring","slots":[{"id":"psy-intern-2","title":"Internship II (PSY 4449 or 4454)","units":3,"type":"choice","options":["PSY 4449","PSY 4454"]},{"id":"psy4462","code":"PSY 4462","title":"Senior Project","units":2,"type":"course"},{"id":"psy-elec-y4s","title":"PSY Elective (3000–4000 level)","units":4,"type":"elective"},{"id":"elec-y4s-1","title":"Free Elective","units":3,"type":"elective"},{"id":"elec-y4s-2","title":"Free Elective","units":3,"type":"elective"}]}]},"cosm-kinesiology":{"id":"cosm-kinesiology","name":"Kinesiology","degree":"BS","college":"Bailey College of Science and Mathematics","conc":null,"terms":[{"year":1,"term":"Fall","slots":[{"id":"hlth1","title":"HLTH 1155 or 1160","units":3,"type":"choice","options":["HLTH 1155","HLTH 1160"]},{"id":"kine1180","code":"KINE 1180","title":"Introduction to Kinesiology","units":1,"type":"course"},{"id":"bio1151","code":"BIO 1151","title":"Life: Molecules and Cells","units":4,"type":"course"},{"id":"chem1120","code":"CHEM 1120","title":"Fundamentals of Chemical Structure","units":4,"type":"course"},{"id":"math1","title":"MATH 1007 or MATH 1261","units":[3,4],"type":"choice","options":["MATH 1007","MATH 1261"]}]},{"year":1,"term":"Spring","slots":[{"id":"phys1121","code":"PHYS 1121","title":"College Physics I","units":4,"type":"course"},{"id":"stat1110","code":"STAT 1110","title":"Applied Statistical Concepts","units":3,"type":"course"},{"id":"ge1a","title":"GE — Area 1A","units":3,"type":"ge"},{"id":"ge1c","title":"GE — Area 1C","units":3,"type":"ge"},{"id":"elec1","title":"Free Elective","units":3,"type":"elective"}]},{"year":2,"term":"Fall","slots":[{"id":"kine2266","code":"KINE 2266","title":"Sport and Performance Psychology","units":3,"type":"course"},{"id":"kine3312","code":"KINE 3312","title":"Motor Learning","units":3,"type":"course"},{"id":"bio2231","code":"BIO 2231","title":"Human Anatomy and Physiology I","units":4,"type":"course"},{"id":"ge1b","title":"GE — Area 1B","units":3,"type":"ge"},{"id":"ge3a","title":"GE — Area 3A","units":3,"type":"ge"}]},{"year":2,"term":"Spring","slots":[{"id":"kine3319","code":"KINE 3319","title":"Introduction to Research Methods in Kinesiology","units":4,"type":"course"},{"id":"bio2232","code":"BIO 2232","title":"Human Anatomy and Physiology II","units":4,"type":"course"},{"id":"ge3b","title":"GE — Area 3B","units":3,"type":"ge"},{"id":"ge4a","title":"GE — Area 4A","units":3,"type":"ge"},{"id":"elec2","title":"Free Elective","units":3,"type":"elective"}]},{"year":3,"term":"Fall","slots":[{"id":"kine3303","code":"KINE 3303","title":"Physiology of Exercise","units":4,"type":"course"},{"id":"kine332x","title":"KINE 3323 / 3324 / 3325","units":[2,3],"type":"choice","options":["KINE 3323","KINE 3324","KINE 3325"]},{"id":"ge6","title":"GE — Area 6","units":3,"type":"ge"},{"id":"elec3","title":"Free Elective","units":3,"type":"elective"}]},{"year":3,"term":"Spring","slots":[{"id":"kine3307","code":"KINE 3307","title":"Adapted Physical Activity","units":3,"type":"course"},{"id":"conc1","title":"Concentration Course","units":3,"type":"concentration"},{"id":"conc2","title":"Concentration Course","units":3,"type":"concentration"},{"id":"geud25","title":"GE — UD Area 2 or 5","units":3,"type":"ge"},{"id":"geud3","title":"GE — UD Area 3","units":3,"type":"ge"}]},{"year":4,"term":"Fall","slots":[{"id":"kine4403","code":"KINE 4403","title":"Biomechanics","units":4,"type":"course"},{"id":"kine4412","code":"KINE 4412","title":"Physical Activity and Public Health","units":3,"type":"course"},{"id":"conc3","title":"Concentration Course","units":3,"type":"concentration"},{"id":"conc4","title":"Concentration Course","units":[2,3],"type":"concentration"},{"id":"elec4","title":"Free Elective","units":3,"type":"elective"}]},{"year":4,"term":"Spring","slots":[{"id":"kine4451","code":"KINE 4451","title":"Nutrition for Fitness and Sport","units":4,"type":"course"},{"id":"srproj","title":"Senior Project Course","units":2,"type":"course","note":"senior standing"},{"id":"conc5","title":"Concentration Course","units":3,"type":"concentration"},{"id":"conc6","title":"Concentration Course","units":3,"type":"concentration"},{"id":"geud4","title":"GE — UD Area 4","units":3,"type":"ge"}]}]},"ceng-civil-engineering":{"id":"ceng-civil-engineering","name":"Civil Engineering","degree":"BS","college":"College of Engineering","conc":null,"terms":[{"year":1,"term":"Fall","slots":[{"id":"ce1111","code":"CE 1111","title":"Introduction to Civil Engineering","units":1,"type":"course"},{"id":"chem1120","code":"CHEM 1120","title":"Fundamentals of Chemical Structure and Properties","units":4,"type":"course","note":"GE 5A & 5C"},{"id":"math1261","code":"MATH 1261","title":"Calculus I","units":4,"type":"course","note":"GE Area 2"},{"id":"phys1141","code":"PHYS 1141","title":"General Physics I","units":4,"type":"course"},{"id":"ge1a","title":"GE — Area 1A","units":3,"type":"ge"}]},{"year":1,"term":"Spring","slots":[{"id":"ce1112","code":"CE/ENVE 1112","title":"Spatial Visualization and Drawing","units":3,"type":"course"},{"id":"math1262","code":"MATH 1262","title":"Calculus II","units":4,"type":"course"},{"id":"phys1143","code":"PHYS 1143","title":"General Physics II","units":4,"type":"course"},{"id":"ge1b","title":"GE — Area 1B","units":3,"type":"ge"},{"id":"ge1c","title":"GE — Area 1C","units":3,"type":"ge"}]},{"year":2,"term":"Fall","slots":[{"id":"ce2251","code":"CE 2251","title":"Computational Applications in CE/ENVE","units":2,"type":"course"},{"id":"engr2211","code":"ENGR 2211","title":"Introduction to Mechanics","units":4,"type":"course"},{"id":"math2263","code":"MATH 2263","title":"Calculus III","units":3,"type":"course"},{"id":"ge3a","title":"GE — Area 3A","units":3,"type":"ge"},{"id":"ge3b","title":"GE — Area 3B","units":3,"type":"ge"}]},{"year":2,"term":"Spring","slots":[{"id":"ce2259","code":"CE 2259","title":"Civil Engineering Materials","units":3,"type":"course"},{"id":"engr2212","code":"ENGR 2212","title":"Introduction to Engineering Dynamics","units":2,"type":"course"},{"id":"geol2240","code":"GEOL 2240","title":"Physical Geology","units":3,"type":"course"},{"id":"math2341","code":"MATH 2341","title":"Linear Analysis","units":4,"type":"course"},{"id":"ge4a","title":"GE — Area 4A","units":3,"type":"ge"}]},{"year":3,"term":"Fall","slots":[{"id":"ce3321","code":"CE 3321","title":"Fundamentals of Transportation Engineering","units":4,"type":"course"},{"id":"ce3336","code":"CE/ENVE 3336","title":"Environmental Fluid Mechanics & Hydraulic Systems","units":4,"type":"course"},{"id":"ce3352","code":"CE 3352","title":"Structural Analysis","units":4,"type":"course"},{"id":"stat3210","code":"STAT 3210","title":"Engineering Statistics","units":3,"type":"course","note":"UD GE Area 2/5"},{"id":"ge4b","title":"GE — Area 4B","units":3,"type":"ge"}]},{"year":3,"term":"Spring","slots":[{"id":"ce3337","code":"CE/ENVE 3337","title":"Water Resources & Environmental Engineering","units":4,"type":"course"},{"id":"ce3355","code":"CE 3355","title":"Reinforced Concrete Design","units":3,"type":"course"},{"id":"ce3381","code":"CE 3381","title":"Geotechnical Engineering","units":4,"type":"course"},{"id":"ce3465","code":"CE/ENVE 3465","title":"Infrastructure Systems","units":2,"type":"course"},{"id":"ge5b","title":"GE — Area 5B","units":3,"type":"ge"}]},{"year":4,"term":"Fall","slots":[{"id":"ce3375","code":"CE 3375","title":"Fundamentals of Construction Engineering & Management","units":4,"type":"course"},{"id":"ce4466","code":"CE 4466","title":"Senior Design Project I","units":1,"type":"course"},{"id":"te1","title":"Technical Elective","units":3,"type":"elective"},{"id":"te2","title":"Technical Elective","units":3,"type":"elective"},{"id":"te3","title":"Technical Elective","units":3,"type":"elective"},{"id":"ge6","title":"GE — Area 6","units":3,"type":"ge"}]},{"year":4,"term":"Spring","slots":[{"id":"ce4467","code":"CE 4467","title":"Senior Design Project II","units":3,"type":"course"},{"id":"te4","title":"Technical Elective","units":3,"type":"elective"},{"id":"te5","title":"Technical Elective","units":3,"type":"elective"},{"id":"te6","title":"Technical Elective","units":3,"type":"elective"},{"id":"geud3","title":"GE — UD Area 3","units":3,"type":"ge"},{"id":"geud4","title":"GE — UD Area 4","units":3,"type":"ge"}]}]},"ceng-aerospace-engineering":{"id":"ceng-aerospace-engineering","name":"Aerospace Engineering","degree":"BS","college":"College of Engineering","conc":"Aeronautics","terms":[{"year":1,"term":"Fall","slots":[{"id":"aero1121","code":"AERO 1121","title":"Aerospace Fundamentals","units":2,"type":"course"},{"id":"ime1143","code":"IME 1143 & 1140","title":"Intro to Design & Manufacturing + Technical Graphics","units":3,"type":"course"},{"id":"math1261","code":"MATH 1261","title":"Calculus I","units":4,"type":"course"},{"id":"phys1141","code":"PHYS 1141","title":"General Physics I","units":4,"type":"course"},{"id":"ge1a","title":"GE — Area 1A","units":3,"type":"ge"}]},{"year":1,"term":"Spring","slots":[{"id":"chem1120","code":"CHEM 1120","title":"Fundamentals of Chemical Structure and Properties","units":4,"type":"course"},{"id":"math1262","code":"MATH 1262","title":"Calculus II","units":4,"type":"course"},{"id":"phys1143","code":"PHYS 1143","title":"General Physics II","units":4,"type":"course"},{"id":"ge1b","title":"GE — Area 1B","units":3,"type":"ge"},{"id":"ge3a","title":"GE — Area 3A","units":3,"type":"ge"}]},{"year":2,"term":"Fall","slots":[{"id":"engr2211","code":"ENGR 2211","title":"Introduction to Mechanics","units":4,"type":"course"},{"id":"mate1220","code":"MATE 1220","title":"Materials Engineering for Non-Majors","units":2,"type":"course"},{"id":"math2263","code":"MATH 2263","title":"Calculus III","units":3,"type":"course"},{"id":"ge1c","title":"GE — Area 1C","units":3,"type":"ge"},{"id":"ge6","title":"GE — Area 6","units":3,"type":"ge"}]},{"year":2,"term":"Spring","slots":[{"id":"aero2220","code":"AERO 2220","title":"Aerospace Engineering Dynamics","units":3,"type":"course"},{"id":"math2341","code":"MATH 2341","title":"Linear Analysis","units":4,"type":"course"},{"id":"ge3b","title":"GE — Area 3B","units":3,"type":"ge"},{"id":"ge4a","title":"GE — Area 4A","units":3,"type":"ge"},{"id":"ge4b","title":"GE — Area 4B","units":3,"type":"ge"}]},{"year":3,"term":"Fall","slots":[{"id":"aero3300","code":"AERO 3300","title":"Engineering Numerical Analysis","units":4,"type":"course"},{"id":"aero3301","code":"AERO 3301","title":"Thermo Fluid Dynamics","units":4,"type":"course"},{"id":"aero3302","code":"AERO 3302","title":"Thermo Fluids Laboratory","units":1,"type":"course"},{"id":"aero3331","code":"AERO 3331","title":"Aerospace Structural Analysis I","units":4,"type":"course"},{"id":"aero3460","code":"AERO 3460","title":"Aerospace Engineering Professional Preparation","units":1,"type":"course"},{"id":"ge5b","title":"GE — Area 5B","units":3,"type":"ge"}]},{"year":3,"term":"Spring","slots":[{"id":"aero3303","code":"AERO 3303","title":"Heat and Mass Transfer","units":2,"type":"course"},{"id":"aero3304","code":"AERO 3304","title":"Aerospace Propulsion Systems","units":3,"type":"course"},{"id":"aero3305","code":"AERO 3305","title":"Introduction to Aerodynamics","units":3,"type":"course"},{"id":"aero3320","code":"AERO 3320","title":"System Dynamics","units":3,"type":"course"},{"id":"aero4431","code":"AERO 4431","title":"Aerospace Structural Analysis II","units":3,"type":"course"},{"id":"aero4433","code":"AERO 4433","title":"Experimental Stress Analysis","units":1,"type":"course"}]},{"year":4,"term":"Fall","slots":[{"id":"aero4401","code":"AERO 4401","title":"Ground to Space Propulsion","units":2,"type":"course"},{"id":"aero4403","code":"AERO 4403","title":"Propulsion Laboratory","units":1,"type":"course"},{"id":"aero4405","code":"AERO 4405","title":"Advanced Aerodynamics","units":3,"type":"course"},{"id":"aero4406","code":"AERO 4406","title":"Experimental Aerodynamics","units":1,"type":"course"},{"id":"aero4420","code":"AERO 4420","title":"Aircraft Dynamics and Control","units":3,"type":"course"},{"id":"aero4461","code":"AERO 4461","title":"Aircraft Design Senior Project I","units":3,"type":"course"},{"id":"tech1","title":"Concentration Technical Elective","units":3,"type":"elective"}]},{"year":4,"term":"Spring","slots":[{"id":"aero4462","code":"AERO 4462","title":"Aircraft Design Senior Project II","units":3,"type":"course"},{"id":"tech2","title":"Concentration Technical Elective","units":3,"type":"elective"},{"id":"tech3","title":"Concentration Technical Elective","units":3,"type":"elective"},{"id":"geud3","title":"GE — UD Area 3","units":3,"type":"ge"},{"id":"geud4","title":"GE — UD Area 4","units":3,"type":"ge"}]}]},"ocob-business-administration":{"id":"ocob-business-administration","name":"Business Administration","degree":"BS","college":"Orfalea College of Business","conc":"Core (concentration courses shown as slots)","terms":[{"year":1,"term":"Fall","slots":[{"id":"ba1","code":"BUS 1100","title":"Career Readiness I","units":1,"type":"course"},{"id":"ba2","code":"BUS 2214","title":"Financial Accounting","units":3,"type":"course"},{"id":"ba3","code":"ECON 2001","title":"Survey of Economics","units":4,"type":"course"},{"id":"ba4","code":"STAT 1210","title":"Business Statistics I","units":3,"type":"course"},{"id":"ge1","title":"GE — Area 1A","units":3,"type":"ge"}]},{"year":1,"term":"Spring","slots":[{"id":"ba5","code":"BUS 2207","title":"Legal Responsibilities of Business","units":3,"type":"course"},{"id":"ba6","code":"BUS 2215","title":"Managerial Accounting","units":3,"type":"course","note":"BUS 2214"},{"id":"ba7","title":"Calculus (MATH 1264 or 1267)","units":[3,4],"type":"choice","options":["MATH 1264","MATH 1267"]},{"id":"ba8","code":"STAT 1220","title":"Business Statistics II","units":3,"type":"course","note":"STAT 1210"},{"id":"ge2","title":"GE — Area 1C","units":3,"type":"ge"}]},{"year":2,"term":"Fall","slots":[{"id":"ba9","title":"BUS 1342 or BUS 3343","units":3,"type":"choice","options":["BUS 1342","BUS 3343"]},{"id":"ba10","code":"BUS 2206","title":"Career Readiness II","units":1,"type":"course","note":"BUS 1100"},{"id":"ba11","code":"BUS 3391","title":"Information Systems","units":3,"type":"course"},{"id":"ge3","title":"GE — Area 1B","units":3,"type":"ge"},{"id":"ge4","title":"GE — Area 3A","units":3,"type":"ge"},{"id":"ge5","title":"GE — Area 4A","units":3,"type":"ge"}]},{"year":2,"term":"Spring","slots":[{"id":"ba12","code":"BUS 3346","title":"Principles of Marketing","units":3,"type":"course"},{"id":"ba13","code":"BUS 3387","title":"Organizational Behavior","units":3,"type":"course"},{"id":"ba14","title":"Technology Management course","units":3,"type":"support"},{"id":"ge6","title":"GE — Area 3B","units":3,"type":"ge"},{"id":"ge7","title":"GE — Area 4B","units":3,"type":"ge"}]},{"year":3,"term":"Fall","slots":[{"id":"ba15","code":"BUS 3306","title":"Career Readiness III","units":1,"type":"course","note":"BUS 2206"},{"id":"ba16","title":"International Business course","units":[3,4],"type":"support"},{"id":"conc1","title":"Concentration course","units":3,"type":"concentration"},{"id":"conc2","title":"Concentration course","units":3,"type":"concentration"},{"id":"ge8","title":"GE — Area 6","units":3,"type":"ge"},{"id":"el1","title":"Free Elective","units":3,"type":"elective"}]},{"year":3,"term":"Spring","slots":[{"id":"ba17","code":"BUS 4404","title":"Law, Governmental, and Social Influences on Business","units":3,"type":"course"},{"id":"conc3","title":"Concentration course","units":3,"type":"concentration"},{"id":"conc4","title":"Concentration course","units":3,"type":"concentration"},{"id":"ge9","title":"GE — Area 5A","units":3,"type":"ge"},{"id":"ge10","title":"GE — Area 5C","units":1,"type":"ge"},{"id":"ge11","title":"GE — UD Area 4","units":3,"type":"ge"}]},{"year":4,"term":"Fall","slots":[{"id":"ba18","title":"Senior Project course","units":[3,4],"type":"support","note":"senior standing"},{"id":"conc5","title":"Concentration course","units":[3,4],"type":"concentration"},{"id":"conc6","title":"Concentration course","units":[3,4],"type":"concentration"},{"id":"ge12","title":"GE — UD Area 2/5","units":3,"type":"ge"},{"id":"ge13","title":"GE — Area 5B","units":3,"type":"ge"}]},{"year":4,"term":"Spring","slots":[{"id":"ba19","code":"BUS 4401","title":"Strategic Management","units":3,"type":"course","note":"with BUS 4411; senior standing"},{"id":"ba20","code":"BUS 4411","title":"Strategic Management Assessment","units":0,"type":"course","note":"co-req BUS 4401"},{"id":"conc7","title":"Concentration course","units":[3,4],"type":"concentration"},{"id":"ge14","title":"GE — UD Area 3","units":3,"type":"ge"},{"id":"el2","title":"Free Electives","units":[2,7],"type":"elective"}]}]},"cla-communication-studies":{"id":"cla-communication-studies","name":"Communication Studies","degree":"BA","college":"College of Liberal Arts","conc":null,"terms":[{"year":1,"term":"Fall","slots":[{"id":"coms1100","code":"COMS 1100","title":"Introduction to the Communication Studies Major","units":2,"type":"course"},{"id":"coms-pubspeak","title":"Public Speaking (COMS 1101 or 1102)","units":3,"type":"choice","note":"GE Area 1C"},{"id":"ge-1a","title":"GE — Area 1A","units":3,"type":"ge"},{"id":"ge-f1","title":"GE","units":3,"type":"ge"},{"id":"ge-f2","title":"GE","units":3,"type":"ge"}]},{"year":1,"term":"Spring","slots":[{"id":"coms2205","code":"COMS 2205","title":"Rhetorical Studies","units":3,"type":"course"},{"id":"coms2206","code":"COMS 2206","title":"Communication Theory","units":3,"type":"course"},{"id":"stat1110","code":"STAT 1110","title":"Applied Statistical Concepts and Methods","units":3,"type":"support","note":"GE Area 2"},{"id":"ge-1b","title":"GE — Area 1B","units":3,"type":"ge"},{"id":"free-s1","title":"Free Elective","units":3,"type":"elective"}]},{"year":2,"term":"Fall","slots":[{"id":"coms-context1","title":"Communication Contexts course (COMS 2211/2213/2215/2217)","units":3,"type":"choice"},{"id":"coms-perf","title":"COMS 2250 or 2208","units":3,"type":"choice"},{"id":"ge-y2f1","title":"GE","units":3,"type":"ge"},{"id":"ge-y2f2","title":"GE","units":3,"type":"ge"},{"id":"ge-y2f3","title":"GE","units":3,"type":"ge"},{"id":"ge-y2f4","title":"GE — Area 1 (1 unit)","units":1,"type":"ge"}]},{"year":2,"term":"Spring","slots":[{"id":"coms-context2","title":"Communication Contexts course (COMS 2211/2213/2215/2217)","units":3,"type":"choice"},{"id":"focus-y2s","title":"Focus Area Course","units":3,"type":"elective"},{"id":"ge-y2s1","title":"GE","units":3,"type":"ge"},{"id":"ge-y2s2","title":"GE","units":3,"type":"ge"},{"id":"free-y2s","title":"Free Elective","units":3,"type":"elective"}]},{"year":3,"term":"Fall","slots":[{"id":"coms-methods","title":"Research Methods (COMS 3312 or 3313)","units":3,"type":"choice"},{"id":"coms3316","code":"COMS 3316","title":"Intercultural Communication","units":3,"type":"course","note":"UD GE Area 4, USCP"},{"id":"focus-y3f","title":"Focus Area Course","units":3,"type":"elective"},{"id":"ge-y3f","title":"GE","units":3,"type":"ge"},{"id":"free-y3f","title":"Free Elective","units":3,"type":"elective"}]},{"year":3,"term":"Spring","slots":[{"id":"coms-crit","title":"Rhetorical or Media Criticism (COMS 3332 or 3385)","units":3,"type":"choice","note":"COMS 3332 satisfies GWR"},{"id":"focus-y3s1","title":"Focus Area Course","units":3,"type":"elective"},{"id":"focus-y3s2","title":"Focus Area Course","units":3,"type":"elective"},{"id":"coms-elec-y3s","title":"COMS Elective","units":3,"type":"elective"},{"id":"free-y3s","title":"Free Elective","units":3,"type":"elective"}]},{"year":4,"term":"Fall","slots":[{"id":"coms4460","code":"COMS 4460","title":"Undergraduate Seminar","units":1,"type":"course"},{"id":"focus-y4f1","title":"Focus Area Course","units":3,"type":"elective"},{"id":"focus-y4f2","title":"Focus Area Course","units":3,"type":"elective"},{"id":"ge-y4f","title":"GE","units":3,"type":"ge"},{"id":"free-y4f1","title":"Free Elective","units":3,"type":"elective"},{"id":"free-y4f2","title":"Free Elective","units":3,"type":"elective"}]},{"year":4,"term":"Spring","slots":[{"id":"coms4461","code":"COMS 4461","title":"Senior Project","units":2,"type":"course"},{"id":"coms-elec-y4s","title":"COMS Elective","units":3,"type":"elective"},{"id":"free-y4s1","title":"Free Elective","units":3,"type":"elective"},{"id":"free-y4s2","title":"Free Elective","units":3,"type":"elective"},{"id":"free-y4s3","title":"Free Elective","units":3,"type":"elective"}]}]},"cla-english":{"id":"cla-english","name":"English","degree":"BA","college":"College of Liberal Arts","conc":null,"terms":[{"year":1,"term":"Fall","slots":[{"id":"engl1101","code":"ENGL 1101","title":"Introduction to English Studies","units":4,"type":"course"},{"id":"wlang","title":"World Languages Support Elective","units":4,"type":"support"},{"id":"ge1a","title":"GE — Area 1A","units":3,"type":"ge"},{"id":"ge1c","title":"GE — Area 1C","units":3,"type":"ge"}]},{"year":1,"term":"Spring","slots":[{"id":"engl2k1","title":"2000-level ENGL Elective","units":4,"type":"elective"},{"id":"ge3b","title":"GE — Area 3B (Literature)","units":3,"type":"ge"},{"id":"ge1b","title":"GE — Area 1B","units":3,"type":"ge"},{"id":"ge2","title":"GE — Area 2","units":3,"type":"ge"},{"id":"free1","title":"Free Elective","units":3,"type":"elective"}]},{"year":2,"term":"Fall","slots":[{"id":"engl2k2","title":"2000-level ENGL Elective","units":4,"type":"elective"},{"id":"ge-a","title":"GE","units":3,"type":"ge"},{"id":"ge-b","title":"GE","units":3,"type":"ge"},{"id":"ge-c","title":"GE","units":3,"type":"ge"},{"id":"ge-d","title":"GE","units":3,"type":"ge"}]},{"year":2,"term":"Spring","slots":[{"id":"englthemes","title":"Literary Themes (ENGL 3611/3618/3625/3626)","units":4,"type":"choice"},{"id":"engl2k3","title":"2000-level ENGL Elective","units":4,"type":"elective"},{"id":"ge-e","title":"GE","units":3,"type":"ge"},{"id":"ge-f","title":"GE","units":3,"type":"ge"},{"id":"ge-g","title":"GE (1 unit)","units":1,"type":"ge"}]},{"year":3,"term":"Fall","slots":[{"id":"engl3k1","title":"3000-level ENGL Elective","units":4,"type":"elective"},{"id":"engl3k2","title":"3000-level ENGL Elective","units":4,"type":"elective"},{"id":"free2","title":"Free Elective","units":3,"type":"elective"},{"id":"free3","title":"Free Elective","units":3,"type":"elective"}]},{"year":3,"term":"Spring","slots":[{"id":"engl3k3","title":"3000-level ENGL Elective","units":4,"type":"elective"},{"id":"engl4k1","title":"4000-level ENGL Elective","units":4,"type":"elective"},{"id":"engl4kdiv","title":"4000-level ENGL Diversity Elective","units":[3,4],"type":"elective"},{"id":"ge-h","title":"GE","units":3,"type":"ge"}]},{"year":4,"term":"Fall","slots":[{"id":"engl4k2","title":"4000-level ENGL Elective","units":4,"type":"elective"},{"id":"engl4k3","title":"4000-level ENGL Elective","units":4,"type":"elective"},{"id":"ge-i","title":"GE","units":3,"type":"ge"},{"id":"free4","title":"Free Elective","units":4,"type":"elective"}]},{"year":4,"term":"Spring","slots":[{"id":"engl4461","code":"ENGL 4461","title":"Senior Project","units":4,"type":"course"},{"id":"engl4k4","title":"4000-level ENGL Elective","units":4,"type":"elective"},{"id":"free5","title":"Free Elective","units":3,"type":"elective"},{"id":"free6","title":"Free Elective","units":4,"type":"elective"}]}]},"cla-political-science":{"id":"cla-political-science","name":"Political Science","degree":"BA","college":"College of Liberal Arts","conc":null,"terms":[{"year":1,"term":"Fall","slots":[{"id":"pols1112","code":"POLS 1112","title":"U.S. and California Government","units":4,"type":"course"},{"id":"pols1180","code":"POLS 1180","title":"Political Inquiry","units":3,"type":"course"},{"id":"pols2229","code":"POLS 2229","title":"Introduction to Comparative Politics","units":3,"type":"course"},{"id":"ge1a","title":"GE — Area 1A","units":3,"type":"ge"},{"id":"ge1c","title":"GE — Area 1C","units":3,"type":"ge"}]},{"year":1,"term":"Spring","slots":[{"id":"pols2225","code":"POLS 2225","title":"Introduction to International Relations","units":3,"type":"course"},{"id":"pols2230","code":"POLS 2230","title":"Basic Concepts of Political Thought","units":3,"type":"course"},{"id":"socsci-choice","title":"Social Science Requirement (ANT 2201/GEOG 1150/HIST 2222/2223/SOC 1110)","units":3,"type":"choice"},{"id":"ge1b","title":"GE — Area 1B","units":3,"type":"ge"},{"id":"ge2","title":"GE","units":3,"type":"ge"}]},{"year":2,"term":"Fall","slots":[{"id":"stat1110","code":"STAT 1110","title":"Applied Statistical Concepts and Methods","units":3,"type":"support"},{"id":"polselec1","title":"3000-4000 level POLS Elective","units":3,"type":"elective"},{"id":"ge3","title":"GE","units":3,"type":"ge"},{"id":"ge4","title":"GE","units":3,"type":"ge"},{"id":"ge5","title":"GE","units":3,"type":"ge"}]},{"year":2,"term":"Spring","slots":[{"id":"polselec2","title":"3000-4000 level POLS Elective","units":3,"type":"elective"},{"id":"polselec3","title":"3000-4000 level POLS Elective","units":3,"type":"elective"},{"id":"ge6","title":"GE","units":3,"type":"ge"},{"id":"ge7","title":"GE","units":3,"type":"ge"},{"id":"ge8","title":"GE (1 unit)","units":1,"type":"ge"},{"id":"free1","title":"Free Elective","units":3,"type":"elective"}]},{"year":3,"term":"Fall","slots":[{"id":"pols3359","code":"POLS 3359","title":"Research Design","units":3,"type":"course"},{"id":"polsdei","title":"POLS DEI Elective","units":3,"type":"elective"},{"id":"conc1","title":"Concentration Course or Elective","units":3,"type":"concentration"},{"id":"conc2","title":"Concentration Course or Elective","units":3,"type":"concentration"},{"id":"ge9","title":"GE","units":3,"type":"ge"}]},{"year":3,"term":"Spring","slots":[{"id":"pols3361","code":"POLS 3361","title":"Data Analysis in Political Science","units":3,"type":"course"},{"id":"polselec4","title":"3000-4000 level POLS Elective","units":3,"type":"elective"},{"id":"conc3","title":"Concentration Course or Elective","units":3,"type":"concentration"},{"id":"conc4","title":"Concentration Course or Elective","units":3,"type":"concentration"},{"id":"ge10","title":"GE","units":3,"type":"ge"}]},{"year":4,"term":"Fall","slots":[{"id":"pols4461","code":"POLS 4461","title":"Senior Project I","units":2,"type":"course"},{"id":"conc5","title":"Concentration Course or Elective","units":3,"type":"concentration"},{"id":"conc6","title":"Concentration Course or Elective","units":3,"type":"concentration"},{"id":"free2","title":"Free Elective","units":3,"type":"elective"},{"id":"free3","title":"Free Elective","units":3,"type":"elective"}]},{"year":4,"term":"Spring","slots":[{"id":"pols4462","code":"POLS 4462","title":"Senior Project II","units":2,"type":"course"},{"id":"conc7","title":"Concentration Course or Elective","units":3,"type":"concentration"},{"id":"free4","title":"Free Elective","units":3,"type":"elective"},{"id":"free5","title":"Free Elective","units":3,"type":"elective"},{"id":"free6","title":"Free Elective","units":4,"type":"elective"}]}]},"ceng-electrical-engineering":{"id":"ceng-electrical-engineering","name":"Electrical Engineering","degree":"BS","college":"College of Engineering","conc":null,"terms":[{"year":1,"term":"Fall","slots":[{"id":"ee1111","code":"EE 1111 & 1111L","title":"Introduction to Electrical Engineering + Lab","units":2,"type":"course"},{"id":"math1261","code":"MATH 1261","title":"Calculus I","units":4,"type":"support"},{"id":"phys1141","code":"PHYS 1141","title":"General Physics I","units":4,"type":"support"},{"id":"ge1a","title":"GE — Area 1A","units":3,"type":"ge"},{"id":"ge6","title":"GE — Area 6","units":3,"type":"ge"}]},{"year":1,"term":"Spring","slots":[{"id":"csc1001","code":"CSC 1001 & 1001L","title":"Fundamentals of Computer Science + Lab","units":4,"type":"support"},{"id":"math1262","code":"MATH 1262","title":"Calculus II","units":4,"type":"support"},{"id":"phys1143","code":"PHYS 1143","title":"General Physics II","units":4,"type":"support"},{"id":"ge1b","title":"GE — Area 1B","units":3,"type":"ge"}]},{"year":2,"term":"Fall","slots":[{"id":"ee2211","code":"EE 2211","title":"Electric Circuit Analysis I","units":3,"type":"course"},{"id":"ee2241","code":"EE 2241","title":"Electric Circuit Analysis Laboratory I","units":1,"type":"course"},{"id":"bio2213","code":"BIO 2213","title":"Life Science for Engineers","units":3,"type":"support"},{"id":"cpe2300","code":"CPE 2300","title":"Introduction to Computer Systems","units":3,"type":"course"},{"id":"cpe2301","code":"CPE 2301","title":"Intro to HDL and Digital Design Lab","units":1,"type":"course"},{"id":"math2341","code":"MATH 2341","title":"Linear Analysis","units":4,"type":"support"},{"id":"ge1c","title":"GE — Area 1C","units":3,"type":"ge"}]},{"year":2,"term":"Spring","slots":[{"id":"ee2212","code":"EE 2212","title":"Electric Circuit Analysis II","units":3,"type":"course"},{"id":"ee2328","code":"EE 2328","title":"Signals and Systems","units":4,"type":"course"},{"id":"math2263","code":"MATH 2263","title":"Calculus III","units":3,"type":"support"},{"id":"ge3b","title":"GE — Area 3B","units":3,"type":"ge"},{"id":"ge4a","title":"GE — Area 4A","units":3,"type":"ge"}]},{"year":3,"term":"Fall","slots":[{"id":"ee3302","code":"EE 3302 & 3302L","title":"Classical Control Systems + Lab","units":4,"type":"course"},{"id":"ee3306","code":"EE 3306 & 3306L","title":"Electronics I + Lab","units":4,"type":"course"},{"id":"ee3335","code":"EE 3335 & 3335L","title":"Electromagnetic Fields and Transmission + Lab","units":4,"type":"course"},{"id":"ge3a","title":"GE — Area 3A","units":3,"type":"ge"},{"id":"ge4b","title":"GE — Area 4B","units":3,"type":"ge"}]},{"year":3,"term":"Spring","slots":[{"id":"ee3255","code":"EE 3255 & 3255L","title":"Electric Machines and Power Systems + Lab","units":4,"type":"course"},{"id":"ee3308","code":"EE 3308 & 3308L","title":"Electronics II + Lab","units":4,"type":"course"},{"id":"ee3329","code":"EE 3329","title":"Cyber-Physical Systems","units":4,"type":"course"},{"id":"geud4","title":"GE — UD Area 4","units":3,"type":"ge"}]},{"year":4,"term":"Fall","slots":[{"id":"ee4314","code":"EE 4314 & 4314L","title":"Communication Systems + Lab","units":4,"type":"course"},{"id":"ee4459","code":"EE 4459","title":"EE Fundamentals of Engineering Exam","units":1,"type":"course"},{"id":"ee4461","code":"EE 4461","title":"Senior Project I","units":1,"type":"course"},{"id":"srproj1","title":"Senior Project Design Lab I (EE 4463 or 4465)","units":1,"type":"choice"},{"id":"stat3310","code":"STAT 3310","title":"Probability and Random Processes for Engineers","units":3,"type":"support"},{"id":"techelec1","title":"Technical Elective","units":4,"type":"elective"}]},{"year":4,"term":"Spring","slots":[{"id":"ee4462","code":"EE 4462","title":"Senior Project II","units":1,"type":"course"},{"id":"srproj2","title":"Senior Project Design Lab II (EE 4464 or 4466)","units":1,"type":"choice"},{"id":"techelec2","title":"Technical Elective","units":4,"type":"elective"},{"id":"ldelec1","title":"Lower-Division or Technical Elective","units":4,"type":"elective"},{"id":"ldelec2","title":"Lower-Division or Technical Elective","units":3,"type":"elective"},{"id":"geud3","title":"GE — UD Area 3","units":3,"type":"ge"}]}]},"ceng-computer-engineering":{"id":"ceng-computer-engineering","name":"Computer Engineering","degree":"BS","college":"College of Engineering","conc":null,"terms":[{"year":1,"term":"Fall","slots":[{"id":"cpe1000","code":"CPE/CSC 1000","title":"Computing Majors Orientation","units":1,"type":"course"},{"id":"cpe1024","code":"CPE/CSC 1024","title":"Introduction to Computing","units":2,"type":"course"},{"id":"biochoice","title":"Life Science (BIO 1111/2213/BOT 1121/MCRO 2221)","units":[3,4],"type":"choice"},{"id":"math1261","code":"MATH 1261","title":"Calculus I","units":4,"type":"course"},{"id":"ge1a","title":"GE — Area 1A","units":3,"type":"ge"},{"id":"ge3a","title":"GE — Area 3A","units":3,"type":"ge"}]},{"year":1,"term":"Spring","slots":[{"id":"csc1001","code":"CSC 1001 & 1001L","title":"Fundamentals of Computer Science + Lab","units":4,"type":"course"},{"id":"math1262","code":"MATH 1262","title":"Calculus II","units":4,"type":"course"},{"id":"phys1141","code":"PHYS 1141","title":"General Physics I","units":4,"type":"course"},{"id":"ge1b","title":"GE — Area 1B","units":3,"type":"ge"}]},{"year":2,"term":"Fall","slots":[{"id":"cpe2300","code":"CPE 2300","title":"Introduction to Computer Systems","units":3,"type":"course"},{"id":"cpe2301","code":"CPE 2301","title":"Intro to HDL and Digital Design Lab","units":1,"type":"course"},{"id":"csc2001","code":"CSC 2001 & 2001L","title":"Data Structures + Lab","units":4,"type":"course"},{"id":"math2031","code":"MATH 2031","title":"Transition to Advanced Mathematics","units":3,"type":"course"},{"id":"phys1143","code":"PHYS 1143","title":"General Physics II","units":4,"type":"course"},{"id":"ge1c","title":"GE — Area 1C","units":3,"type":"ge"}]},{"year":2,"term":"Spring","slots":[{"id":"cpe2050","code":"CPE/CSC 2050","title":"System Software Mechanics","units":3,"type":"course"},{"id":"ee2211","code":"EE 2211 & 2241","title":"Electric Circuit Analysis I + Lab","units":4,"type":"course"},{"id":"linalg","title":"Linear Algebra/Analysis (MATH 1151 or 2341)","units":3,"type":"choice"},{"id":"ge3b","title":"GE — Area 3B","units":3,"type":"ge"},{"id":"ge4a","title":"GE — Area 4A","units":3,"type":"ge"}]},{"year":3,"term":"Fall","slots":[{"id":"cpe3201","code":"CPE/CSC 3201","title":"Introduction to Computer Security","units":3,"type":"course"},{"id":"cpe3300","code":"CPE 3300","title":"Computer Architecture","units":4,"type":"course"},{"id":"cpe4553","code":"CPE/CSC 4553","title":"Introduction to Operating Systems","units":3,"type":"course"},{"id":"phil3323","code":"PHIL 3323","title":"Ethics, Science, and Technology","units":3,"type":"course","note":"UD Area 3"},{"id":"ge4b","title":"GE — Area 4B","units":3,"type":"ge"}]},{"year":3,"term":"Spring","slots":[{"id":"cpe3160","code":"CPE 3160","title":"Microcontrollers and Embedded Applications","units":3,"type":"course"},{"id":"cpe4464","code":"CPE 4464","title":"Introduction to Computer Networks","units":3,"type":"course"},{"id":"eechoice","title":"EE 3306 (Electronics I) or EE 2328 (Signals)","units":4,"type":"choice"},{"id":"statchoice","title":"Engineering Statistics (STAT 3210 or 3310)","units":[2,3],"type":"choice"},{"id":"ge6","title":"GE — Area 6","units":3,"type":"ge"}]},{"year":4,"term":"Fall","slots":[{"id":"wgqschoice","title":"WGQS 3350 or 3351","units":4,"type":"choice"},{"id":"mssupport","title":"Math/Science Support Elective","units":3,"type":"support"},{"id":"srproj1","title":"Senior Project","units":[2,3],"type":"course"},{"id":"tech1","title":"Technical Elective","units":3,"type":"elective"},{"id":"tech2","title":"Technical Elective","units":3,"type":"elective"}]},{"year":4,"term":"Spring","slots":[{"id":"srproj2","title":"Senior Project","units":[2,3],"type":"course"},{"id":"tech3","title":"Technical Elective","units":4,"type":"elective"},{"id":"tech4","title":"Technical Elective","units":4,"type":"elective"},{"id":"geud4","title":"GE — UD Area 4","units":3,"type":"ge"}]}]},"ceng-software-engineering":{"id":"ceng-software-engineering","name":"Software Engineering","degree":"BS","college":"College of Engineering","conc":null,"terms":[{"year":1,"term":"Fall","slots":[{"id":"csc1000","code":"CSC 1000","title":"Computing Majors Orientation","units":1,"type":"course"},{"id":"csc1024","code":"CSC 1024","title":"Introduction to Computing","units":2,"type":"course"},{"id":"calc1","title":"Calculus I (MATH 1261 or 1264)","units":[3,4],"type":"choice"},{"id":"lifesci","title":"Life Science Support Elective (Area 5B)","units":[3,4],"type":"elective"},{"id":"ge1a","title":"GE — Area 1A","units":3,"type":"ge"}]},{"year":1,"term":"Spring","slots":[{"id":"csc1001","code":"CSC 1001 & 1001L","title":"Fundamentals of Computer Science + Lab","units":4,"type":"course"},{"id":"calc2","title":"Calculus II (MATH 1262 or 1265)","units":4,"type":"choice"},{"id":"physchem","title":"General Physics I or Chemistry (PHYS 1141 or CHEM 1120)","units":[3,4],"type":"choice"},{"id":"ge1c","title":"GE — Area 1C","units":3,"type":"ge"}]},{"year":2,"term":"Fall","slots":[{"id":"csc2001","code":"CSC 2001 & 2001L","title":"Data Structures + Lab","units":4,"type":"course"},{"id":"math1151","code":"MATH 1151","title":"Linear Algebra","units":3,"type":"support"},{"id":"psy2201","code":"PSY 2201","title":"Introductory Psychology","units":3,"type":"support","note":"Area 4B"},{"id":"ge1b","title":"GE — Area 1B","units":3,"type":"ge"}]},{"year":2,"term":"Spring","slots":[{"id":"csc2050","code":"CSC 2050","title":"System Software Mechanics","units":3,"type":"course"},{"id":"teamwork","title":"COMS 2217 or PSY 3350 (Teamwork)","units":[3,4],"type":"choice"},{"id":"math2031","code":"MATH 2031","title":"Transition to Advanced Mathematics","units":3,"type":"support"},{"id":"ge3a","title":"GE — Area 3A","units":3,"type":"ge"},{"id":"ge4a","title":"GE — Area 4A","units":3,"type":"ge"}]},{"year":3,"term":"Fall","slots":[{"id":"csc3001","code":"CSC 3001","title":"Modern Application Development","units":4,"type":"course"},{"id":"csc3100","code":"CSC 3100","title":"Software Engineering","units":4,"type":"course"},{"id":"csc3201","code":"CSC 3201","title":"Introduction to Computer Security","units":3,"type":"course"},{"id":"ge3b","title":"GE — Area 3B","units":3,"type":"ge"},{"id":"ge6","title":"GE — Area 6","units":3,"type":"ge"}]},{"year":3,"term":"Spring","slots":[{"id":"csc3449","code":"CSC 3449","title":"Algorithms and Complexity","units":4,"type":"course"},{"id":"database","title":"Databases (CSC 3660 or 3665)","units":[2,4],"type":"choice"},{"id":"stat3210","code":"STAT 3210","title":"Engineering Statistics","units":3,"type":"support","note":"UD Area 2/5"},{"id":"seelec1","title":"Software Engineering Elective","units":[2,4],"type":"elective"},{"id":"geud4","title":"GE — UD Area 4","units":3,"type":"ge"}]},{"year":4,"term":"Fall","slots":[{"id":"csc3300","code":"CSC 3300","title":"Programming Languages","units":3,"type":"course"},{"id":"csc4160","code":"CSC 4160","title":"Software Engineering Capstone I","units":4,"type":"course"},{"id":"phil3323","code":"PHIL 3323","title":"Ethics, Science, and Technology","units":3,"type":"support","note":"UD Area 3"},{"id":"wgqs","title":"WGQS 3350 or 3351","units":4,"type":"choice"},{"id":"mathsci1","title":"Approved Math/Stat/Science Elective","units":3,"type":"elective"}]},{"year":4,"term":"Spring","slots":[{"id":"csc4161","code":"CSC 4161","title":"Senior Project - Capstone II","units":4,"type":"course"},{"id":"mathsci2","title":"Approved Math/Stat/Science Elective","units":3,"type":"elective"},{"id":"techelec1","title":"Technical Elective","units":[2,3],"type":"elective"},{"id":"techelec2","title":"Technical Elective","units":[0,4],"type":"elective"}]}]},"cafes-nutrition":{"id":"cafes-nutrition","name":"Nutrition","degree":"BS","college":"College of Agriculture, Food and Environmental Sciences","conc":null,"terms":[{"year":1,"term":"Fall","slots":[{"id":"nutr1101","code":"NUTR 1101","title":"Orientation to the Nutrition Major","units":1,"type":"course"},{"id":"chem1120","code":"CHEM 1120","title":"Fundamentals of Chemical Structure and Properties","units":4,"type":"support"},{"id":"fsn2202","code":"FSN 2202","title":"Introduction to Human Nutrition","units":3,"type":"course"},{"id":"ge1a","title":"GE — Area 1A","units":3,"type":"ge"},{"id":"ge1c","title":"GE — Area 1C","units":3,"type":"ge"}]},{"year":1,"term":"Spring","slots":[{"id":"fsn1121","code":"FSN 1121","title":"Fundamentals of Food","units":3,"type":"course"},{"id":"bio1151","code":"BIO 1151","title":"Life: Molecules and Cells","units":4,"type":"support"},{"id":"stat1110","code":"STAT 1110","title":"Applied Statistical Concepts and Methods","units":3,"type":"support"},{"id":"ge1b","title":"GE — Area 1B","units":3,"type":"ge"},{"id":"ge-y1s","title":"GE","units":3,"type":"ge"}]},{"year":2,"term":"Fall","slots":[{"id":"nutr3315","code":"NUTR 3315","title":"Nutrition in Aging","units":2,"type":"course"},{"id":"chem2240","code":"CHEM 2240","title":"Organic Chemistry: Fundamentals and Applications","units":4,"type":"support"},{"id":"mcro","title":"Microbiology (MCRO 2224 or 2221)","units":4,"type":"choice"},{"id":"ge-y2f1","title":"GE","units":3,"type":"ge"},{"id":"ge-y2f2","title":"GE","units":3,"type":"ge"}]},{"year":2,"term":"Spring","slots":[{"id":"nutr3310","code":"NUTR 3310","title":"Maternal and Child Nutrition","units":3,"type":"course"},{"id":"fsn2250","code":"FSN 2250","title":"Food and Nutrition: Culture and Customs","units":3,"type":"course"},{"id":"bio2231","code":"BIO 2231","title":"Human Anatomy and Physiology I","units":4,"type":"support"},{"id":"chem3350","code":"CHEM 3350","title":"Biochemistry: Fundamentals and Applications","units":4,"type":"support"}]},{"year":3,"term":"Fall","slots":[{"id":"fsn3305","code":"FSN 3305","title":"Nutrition and Exercise for Health","units":3,"type":"course"},{"id":"nutr3331","code":"NUTR 3331","title":"Macronutrient Metabolism","units":3,"type":"course"},{"id":"bio2232","code":"BIO 2232","title":"Human Anatomy and Physiology II","units":4,"type":"support"},{"id":"conc-y3f","title":"Concentration Course","units":3,"type":"concentration"},{"id":"ge-y3f","title":"GE","units":3,"type":"ge"}]},{"year":3,"term":"Spring","slots":[{"id":"nutr3332","code":"NUTR 3332","title":"Micronutrient Metabolism","units":3,"type":"course"},{"id":"nutr3333","code":"NUTR 3333","title":"Nutrient Metabolism Lab","units":1,"type":"course"},{"id":"conc-y3s","title":"Concentration Course","units":3,"type":"concentration"},{"id":"ge-y3s","title":"GE","units":3,"type":"ge"},{"id":"free-y3s","title":"Free Elective","units":3,"type":"elective"}]},{"year":4,"term":"Fall","slots":[{"id":"nutr4415","code":"NUTR 4415","title":"Nutrition Counseling & Education","units":3,"type":"course"},{"id":"nutr4431","code":"NUTR 4431","title":"Medical Nutrition Therapy I","units":4,"type":"course"},{"id":"conc-y4f","title":"Concentration Course","units":3,"type":"concentration"},{"id":"ge-y4f","title":"GE","units":3,"type":"ge"},{"id":"free-y4f","title":"Free Elective","units":3,"type":"elective"}]},{"year":4,"term":"Spring","slots":[{"id":"nutr4416","code":"NUTR 4416","title":"Community Nutrition","units":3,"type":"course"},{"id":"nutr4432","code":"NUTR 4432","title":"Medical Nutrition Therapy II","units":4,"type":"course"},{"id":"srproj","title":"Senior Project (NUTR 4460/4461/4462)","units":2,"type":"choice"},{"id":"conc-y4s","title":"Concentration Course","units":3,"type":"concentration"},{"id":"ge-y4s","title":"GE","units":3,"type":"ge"}]}]},"cafes-animal-science":{"id":"cafes-animal-science","name":"Animal Science","degree":"BS","college":"College of Agriculture, Food and Environmental Sciences","conc":null,"terms":[{"year":1,"term":"Fall","slots":[{"id":"asci1100","code":"ASCI 1100","title":"Introduction to the Animal Sciences","units":1,"type":"course"},{"id":"asci1101","code":"ASCI 1101","title":"Principles of Animal Physiology","units":3,"type":"course"},{"id":"math1006","code":"MATH 1006","title":"College Algebra","units":3,"type":"support"},{"id":"ge1a","title":"GE — Area 1A","units":3,"type":"ge"},{"id":"ge1c","title":"GE — Area 1C","units":3,"type":"ge"},{"id":"ge-ld1","title":"GE","units":3,"type":"ge"}]},{"year":1,"term":"Spring","slots":[{"id":"asci1102","code":"ASCI 1102","title":"Animal Management Systems","units":3,"type":"course"},{"id":"asci1103","code":"ASCI 1103","title":"Animal Science Laboratory","units":1,"type":"course"},{"id":"bio1151","code":"BIO 1151","title":"Life: Molecules and Cells","units":4,"type":"support"},{"id":"chem1120","code":"CHEM 1120","title":"Fundamentals of Chemical Structure and Properties","units":4,"type":"support"},{"id":"ge1b","title":"GE — Area 1B","units":3,"type":"ge"}]},{"year":2,"term":"Fall","slots":[{"id":"asci2210","code":"ASCI 2210 & 2211","title":"Meat Science + Lab","units":3,"type":"course"},{"id":"stat1110","code":"STAT 1110","title":"Applied Statistical Concepts and Methods","units":3,"type":"support"},{"id":"anmgt1","title":"Animal Management Elective (ASCI 2230-2233)","units":3,"type":"choice"},{"id":"ge-ld2","title":"GE","units":3,"type":"ge"},{"id":"ge-ld3","title":"GE","units":3,"type":"ge"}]},{"year":2,"term":"Spring","slots":[{"id":"asci2220","code":"ASCI 2220","title":"Animal Nutrition and Feeding","units":3,"type":"course"},{"id":"asci2229","code":"ASCI 2229","title":"Anatomy and Physiology of Farm Animals","units":3,"type":"course"},{"id":"anmgt2","title":"Animal Management Elective (ASCI 2230-2233)","units":3,"type":"choice"},{"id":"enterprise1","title":"Enterprise Experience Elective","units":3,"type":"elective"},{"id":"free1","title":"Free Elective","units":3,"type":"elective"}]},{"year":3,"term":"Fall","slots":[{"id":"asci3302","code":"ASCI 3302","title":"Animal Genetics","units":3,"type":"course"},{"id":"chem2240","code":"CHEM 2240","title":"Organic Chemistry","units":4,"type":"support"},{"id":"approved1","title":"Approved Elective","units":3,"type":"elective"},{"id":"free2","title":"Free Elective","units":[3,4],"type":"elective"},{"id":"ge-ld4","title":"GE","units":3,"type":"ge"}]},{"year":3,"term":"Spring","slots":[{"id":"asci3304","code":"ASCI 3304","title":"Animal Genomics","units":2,"type":"course"},{"id":"asci3340","code":"ASCI 3340","title":"Animal Welfare and Ethics","units":3,"type":"course"},{"id":"asci3351","code":"ASCI 3351","title":"Hormone Action and Reproductive Physiology","units":3,"type":"course"},{"id":"asci3363","code":"ASCI 3363","title":"Professional Development in the Animal Sciences","units":1,"type":"course"},{"id":"ge-ud3","title":"GE — Upper-Division","units":3,"type":"ge"},{"id":"free3","title":"Free Elective","units":4,"type":"elective"}]},{"year":4,"term":"Fall","slots":[{"id":"nutrition1","title":"Nutrition Elective (ASCI 3346/3350/3355/4419)","units":3,"type":"choice"},{"id":"physiology1","title":"Physiology Elective (ASCI 4403/4405/4406/4438/...)","units":[3,4],"type":"choice"},{"id":"approved2","title":"Approved Elective","units":3,"type":"elective"},{"id":"approved3","title":"Approved Elective","units":3,"type":"elective"},{"id":"ge-ud4","title":"GE — Upper-Division","units":3,"type":"ge"}]},{"year":4,"term":"Spring","slots":[{"id":"seniorproj","title":"Senior Project (ASCI 4477/4478/4479)","units":2,"type":"choice"},{"id":"biochem1","title":"Biochemistry Elective (ASCI 3319/CHEM 3350/3352)","units":[3,4],"type":"choice"},{"id":"approved4","title":"Approved Elective","units":3,"type":"elective"},{"id":"ge-ld5","title":"GE","units":3,"type":"ge"}]}]},"cosm-public-health":{"id":"cosm-public-health","name":"Public Health","degree":"BS","college":"Bailey College of Science and Mathematics","conc":null,"terms":[{"year":1,"term":"Fall","slots":[{"id":"hlth1101","code":"HLTH 1101","title":"Introduction to Public Health","units":3,"type":"course"},{"id":"hlth1155","title":"HLTH 1155 or 1160","units":3,"type":"choice"},{"id":"ant2201","title":"ANT 2201 or SOC 1110","units":3,"type":"choice"},{"id":"bio1151","code":"BIO 1151","title":"Life: Molecules and Cells","units":4,"type":"support"},{"id":"ge1a","title":"GE — Area 1A","units":3,"type":"ge"}]},{"year":1,"term":"Spring","slots":[{"id":"hlth2261","code":"HLTH 2261","title":"Social Determinants of Health","units":3,"type":"course"},{"id":"chem1120","code":"CHEM 1120","title":"Fundamentals of Chemical Structure and Properties","units":4,"type":"support"},{"id":"psy2201","code":"PSY 2201","title":"Introductory Psychology","units":3,"type":"support"},{"id":"stat1110","code":"STAT 1110","title":"Applied Statistical Concepts and Methods","units":3,"type":"support"},{"id":"ge1c","title":"GE — Area 1C","units":3,"type":"ge"}]},{"year":2,"term":"Fall","slots":[{"id":"bio2231","code":"BIO 2231","title":"Human Anatomy and Physiology I","units":4,"type":"support"},{"id":"stat3520","code":"STAT 3520","title":"Statistics II","units":3,"type":"support"},{"id":"ge1b","title":"GE — Area 1B","units":3,"type":"ge"},{"id":"ge-y2f","title":"GE","units":3,"type":"ge"}]},{"year":2,"term":"Spring","slots":[{"id":"hlth3316","code":"HLTH 3316","title":"Environmental Health","units":3,"type":"course"},{"id":"bio2232","code":"BIO 2232","title":"Human Anatomy and Physiology II","units":4,"type":"support"},{"id":"fsn2202","code":"FSN 2202","title":"Introduction to Human Nutrition","units":3,"type":"support"},{"id":"mcro2221","code":"MCRO 2221","title":"Introduction to Microbiology","units":4,"type":"support"}]},{"year":3,"term":"Fall","slots":[{"id":"hlth3318","code":"HLTH 3318","title":"Applied Epidemiology","units":4,"type":"course"},{"id":"hlth3322","code":"HLTH 3322","title":"Public Health Policy and Advocacy","units":3,"type":"course"},{"id":"conc1","title":"Concentration Course","units":3,"type":"concentration"},{"id":"ge-y3f1","title":"GE","units":3,"type":"ge"},{"id":"ge-y3f2","title":"GE","units":3,"type":"ge"}]},{"year":3,"term":"Spring","slots":[{"id":"hlth3344","code":"HLTH 3344","title":"Health Care Systems","units":3,"type":"course"},{"id":"conc2","title":"Concentration Course","units":3,"type":"concentration"},{"id":"ge-y3s1","title":"GE","units":3,"type":"ge"},{"id":"ge-y3s2","title":"GE","units":3,"type":"ge"},{"id":"elec1","title":"Free Elective","units":4,"type":"elective"}]},{"year":4,"term":"Fall","slots":[{"id":"hlth4402","code":"HLTH 4402","title":"Research Methods in Public Health Settings","units":4,"type":"course"},{"id":"hlth4434","code":"HLTH 4434","title":"Health Promotion Program Planning","units":4,"type":"course"},{"id":"conc3","title":"Concentration Course","units":3,"type":"concentration"},{"id":"conc4","title":"Concentration Course","units":3,"type":"concentration"}]},{"year":4,"term":"Spring","slots":[{"id":"hlth4410","code":"HLTH 4410","title":"Global Health","units":3,"type":"course"},{"id":"hlth4435","code":"HLTH 4435","title":"Health Promotion Program Implementation and Evaluation","units":3,"type":"course"},{"id":"senior-project","title":"Senior Project (HLTH 4460-4463)","units":2,"type":"choice"},{"id":"ge-y4s","title":"GE","units":3,"type":"ge"},{"id":"elec2","title":"Free Elective","units":4,"type":"elective"}]}]},"caed-architecture":{"id":"caed-architecture","name":"Architecture","degree":"BArch","college":"College of Architecture and Environmental Design","conc":null,"terms":[{"year":1,"term":"Fall","slots":[{"id":"arch1101","code":"ARCH 1101","title":"Architectural Design I","units":4,"type":"course"},{"id":"arch1131","code":"ARCH 1131","title":"Architectural Representation I","units":2,"type":"course"},{"id":"edes1123","code":"EDES 1123","title":"Place, People, and the Built Environment","units":3,"type":"course"},{"id":"math1","title":"Math (MATH 1007 or 1261)","units":[3,4],"type":"choice"},{"id":"ge1a","title":"GE — Area 1A","units":3,"type":"ge"}]},{"year":1,"term":"Spring","slots":[{"id":"arch1102","code":"ARCH 1102","title":"Architectural Design II","units":4,"type":"course"},{"id":"arch1121","code":"ARCH 1121","title":"Equity, Social Justice, and Architecture","units":3,"type":"course"},{"id":"arch1132","code":"ARCH 1132","title":"Architectural Representation II","units":2,"type":"course"},{"id":"phys1","title":"Physics (PHYS 1121 or 1141)","units":4,"type":"choice"},{"id":"ge1c","title":"GE — Area 1C","units":3,"type":"ge"}]},{"year":2,"term":"Fall","slots":[{"id":"arch2201","code":"ARCH 2201","title":"Architectural Design III","units":5,"type":"course"},{"id":"arch2221","code":"ARCH 2221","title":"History of World Architecture I","units":3,"type":"course"},{"id":"arch2231","code":"ARCH 2231","title":"Architectural Representation III","units":1,"type":"course"},{"id":"arch2241","code":"ARCH 2241","title":"Architectural Technology Fundamentals I","units":4,"type":"course"},{"id":"arce1121","code":"ARCE 1121","title":"Structural Principles I","units":3,"type":"support"}]},{"year":2,"term":"Spring","slots":[{"id":"arch2202","code":"ARCH 2202","title":"Architectural Design IV","units":5,"type":"course"},{"id":"arch2222","code":"ARCH 2222","title":"History of World Architecture II","units":3,"type":"course"},{"id":"arch2232","code":"ARCH 2232","title":"Architectural Representation IV","units":1,"type":"course"},{"id":"arch2242","code":"ARCH 2242","title":"Architectural Technology Fundamentals II","units":4,"type":"course"},{"id":"arce3301","code":"ARCE 3301","title":"Introduction to Structural Systems","units":4,"type":"support"}]},{"year":3,"term":"Fall","slots":[{"id":"arch3331","code":"ARCH 3331","title":"Building Information Modeling","units":2,"type":"course"},{"id":"arch3341","code":"ARCH 3341","title":"Architectural Systems Integration I","units":4,"type":"course"},{"id":"arch4401a","code":"ARCH 4401","title":"Advanced Architectural Design","units":5,"type":"course"},{"id":"ge1b","title":"GE — Area 1B","units":3,"type":"ge"},{"id":"ge_y3f","title":"GE","units":3,"type":"ge"}]},{"year":3,"term":"Spring","slots":[{"id":"arch3301","code":"ARCH 3301","title":"Integrated Architectural Design","units":5,"type":"course"},{"id":"arch3342","code":"ARCH 3342","title":"Architectural Systems Integration II","units":5,"type":"course"},{"id":"arch4425","code":"ARCH 4425","title":"Seminar in Architectural History, Theory and Criticism","units":3,"type":"course"},{"id":"ge_y3s","title":"GE","units":3,"type":"ge"}]},{"year":4,"term":"Fall","slots":[{"id":"arch4401b","code":"ARCH 4401","title":"Advanced Architectural Design","units":5,"type":"course"},{"id":"pe_y4f1","title":"Professional Elective","units":3,"type":"elective"},{"id":"pe_y4f2","title":"Professional Elective","units":3,"type":"elective"},{"id":"ge_y4f","title":"GE","units":3,"type":"ge"}]},{"year":4,"term":"Spring","slots":[{"id":"arch4401c","code":"ARCH 4401","title":"Advanced Architectural Design","units":5,"type":"course"},{"id":"pe_y4s1","title":"Professional Elective","units":3,"type":"elective"},{"id":"pe_y4s2","title":"Professional Elective","units":2,"type":"elective"},{"id":"ge_y4s","title":"GE","units":3,"type":"ge"}]},{"year":5,"term":"Fall","slots":[{"id":"arch4460","code":"ARCH 4460","title":"Senior Architectural Thesis Theory and Research Seminar","units":3,"type":"course"},{"id":"arch4461","code":"ARCH 4461","title":"Senior Project: Architectural Thesis I","units":5,"type":"course"},{"id":"ge_y5f1","title":"GE","units":3,"type":"ge"},{"id":"ge_y5f2","title":"GE","units":3,"type":"ge"}]},{"year":5,"term":"Spring","slots":[{"id":"arch4441","code":"ARCH 4441","title":"Issues in Contemporary Professional Practice","units":4,"type":"course"},{"id":"arch4462","code":"ARCH 4462","title":"Senior Project: Architectural Thesis II","units":5,"type":"course"},{"id":"ge_y5s","title":"GE","units":3,"type":"ge"}]}]},"caed-construction-management":{"id":"caed-construction-management","name":"Construction Management","degree":"BS","college":"College of Architecture and Environmental Design","conc":null,"terms":[{"year":1,"term":"Fall","slots":[{"id":"cm1113","code":"CM 1113","title":"Construction Materials and Assemblies","units":2,"type":"course"},{"id":"edes1123","code":"EDES 1123","title":"Place, People, and the Built Environment","units":3,"type":"support"},{"id":"math1261","code":"MATH 1261","title":"Calculus I","units":2,"type":"support"},{"id":"ge1a","title":"GE — Area 1A","units":3,"type":"ge"},{"id":"ge1c","title":"GE — Area 1C","units":3,"type":"ge"}]},{"year":1,"term":"Spring","slots":[{"id":"cm1114","code":"CM 1114","title":"MEP Construction Materials and Assemblies","units":2,"type":"course"},{"id":"cm1115","code":"CM 1115","title":"Fundamentals of Construction Management","units":4,"type":"course"},{"id":"cm1413","code":"CM 1413","title":"Jobsite Construction Management","units":3,"type":"course"},{"id":"phys1141","code":"PHYS 1141","title":"General Physics I","units":4,"type":"support"},{"id":"ge1b","title":"GE — Area 1B","units":3,"type":"ge"}]},{"year":2,"term":"Fall","slots":[{"id":"cm2113","code":"CM 2113","title":"Soil Analysis & Foundations","units":2,"type":"course"},{"id":"cm2114","code":"CM 2114","title":"Principles of MEP Building Systems","units":2,"type":"course"},{"id":"arce1121","code":"ARCE 1121","title":"Structural Principles I","units":3,"type":"support"},{"id":"ge-y2f-1","title":"GE","units":3,"type":"ge"},{"id":"ge-y2f-2","title":"GE","units":3,"type":"ge"},{"id":"ge-y2f-3","title":"GE","units":3,"type":"ge"}]},{"year":2,"term":"Spring","slots":[{"id":"cm1280","code":"CM 1280","title":"Fundamentals of Virtual Design and Construction","units":3,"type":"course"},{"id":"arce3301","code":"ARCE 3301","title":"Introduction to Structural Systems","units":4,"type":"support"},{"id":"econ2001","code":"ECON 2001","title":"Survey of Economics","units":3,"type":"support","note":"GE 4B"},{"id":"ge-y2s-1","title":"GE","units":3,"type":"ge"},{"id":"ge-y2s-2","title":"GE","units":3,"type":"ge"}]},{"year":3,"term":"Fall","slots":[{"id":"cm2239","code":"CM 2239","title":"Construction Surveying","units":3,"type":"course"},{"id":"cm3214","code":"CM 3214","title":"Residential Construction Management","units":4,"type":"course"},{"id":"cm3334","code":"CM 3334","title":"Construction Law","units":2,"type":"course"},{"id":"bus2207","code":"BUS 2207","title":"Legal Responsibilities of Business","units":3,"type":"support"},{"id":"acct-choice","title":"Financial Accounting (BUS 2212 or 2214)","units":3,"type":"choice"}]},{"year":3,"term":"Spring","slots":[{"id":"cm3313","code":"CM 3313","title":"Commercial Construction Management","units":4,"type":"course"},{"id":"cm3314","code":"CM 3314","title":"Heavy Civil Construction Management","units":4,"type":"course"},{"id":"cm3317","code":"CM 3317","title":"Sustainability and the Built Environment","units":3,"type":"course","note":"UD GE 2/5"},{"id":"cm3335","code":"CM 3335","title":"Construction Economics, Finance, and Accounting","units":3,"type":"course"},{"id":"cm4420a","code":"CM 4420","title":"Professional Preparation","units":2,"type":"course"}]},{"year":4,"term":"Fall","slots":[{"id":"cm3318","code":"CM 3318","title":"Housing and Communities","units":3,"type":"course","note":"UD GE 4"},{"id":"cm4411","code":"CM 4411","title":"Specialty Contracting Construction Management","units":4,"type":"course"},{"id":"cm4443","code":"CM 4443","title":"Management of the Construction Firm","units":2,"type":"course"},{"id":"cm4461","code":"CM 4461","title":"Senior Project I","units":3,"type":"course"},{"id":"ge-y4f-1","title":"GE","units":3,"type":"ge"}]},{"year":4,"term":"Spring","slots":[{"id":"cm4420b","code":"CM 4420","title":"Professional Preparation","units":2,"type":"course"},{"id":"cm4450","code":"CM 4450","title":"Integrated Facility Development","units":3,"type":"course"},{"id":"cm4462","code":"CM 4462","title":"Senior Project II","units":3,"type":"course"},{"id":"bus-choice","title":"Managerial Accounting or UD BUS elective","units":3,"type":"choice"},{"id":"major-elective","title":"Major Elective (ARCH, CM, CRP, or LA)","units":3,"type":"elective"}]}]}};
+window.SCHED_COMING=[["College of Liberal Arts","Anthropology-Geography","Art & Design","Graphic Communication","History","Journalism","Music","Philosophy","Sociology","Spanish","Theatre Arts"],["College of Engineering","Biomedical Engineering"],["Orfalea College of Business","Economics","Industrial Technology and Packaging"],["College of Agriculture, Food & Environmental Sciences","Agricultural Business","Food Science","Wine and Viticulture","Environmental Management and Protection"],["Bailey College of Science & Mathematics","Biochemistry","Chemistry","Mathematics","Statistics"],["College of Architecture & Environmental Design","City and Regional Planning"]];
+/* ===== Professify next-semester planner (Schedule page) ===== */
+(function(){
+  function u(x){return Array.isArray(x)?x[0]:x;}
+  function uHi(x){return Array.isArray(x)?x[1]:x;}
+  function uLabel(x){return Array.isArray(x)?(x[0]+'–'+x[1]):(''+x);}
+  var completed={}, curKey=null;
+
+  function typeTag(t){
+    if(t==='course'||t==='choice')return '<span class="sp-tag req">MAJOR</span>';
+    if(t==='ge')return '<span class="sp-tag ge">GE</span>';
+    return '<span class="sp-tag flex">FLEX</span>';
+  }
+  function termUnits(t){var lo=0,hi=0;t.slots.forEach(function(s){lo+=u(s.units);hi+=uHi(s.units);});return hi>lo?(lo+'–'+hi):(''+lo);}
+
+  function renderChecklist(key){
+    var m=SCHED_MAJORS[key]; completed={}; curKey=key;
+    var cl=document.getElementById('schChecklist'); cl.innerHTML='';
+    m.terms.forEach(function(t){
+      var blk=document.createElement('div'); blk.className='sp-termblk';
+      blk.innerHTML='<div class="sp-th">Year '+t.year+' <span class="yr">· '+t.term+'</span><span class="un">'+termUnits(t)+' units</span></div>';
+      t.slots.forEach(function(s){
+        var el=document.createElement('div'); el.className='sp-slot'; el.setAttribute('data-id',s.id); el.setAttribute('data-yr',t.year);
+        var head=s.code?('<b>'+s.code+'</b> '+s.title):s.title;
+        el.innerHTML='<div class="sp-box"><svg width="11" height="11" viewBox="0 0 12 12"><path d="M2 6l2.5 2.5L10 3" fill="none" stroke="#0b0f0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>'+
+          '<div class="b"><div class="t">'+head+typeTag(s.type)+'</div>'+(s.note?'<div class="s">'+s.note+'</div>':'')+'</div>'+
+          '<div class="sp-u">'+uLabel(s.units)+'</div>';
+        el.onclick=function(){ if(completed[s.id]){delete completed[s.id];el.classList.remove('done');}else{completed[s.id]=true;el.classList.add('done');} };
+        blk.appendChild(el);
+      });
+      cl.appendChild(blk);
+    });
+  }
+
+  function build(){
+    var key=document.getElementById('schMajorSel').value; if(!SCHED_MAJORS[key])return;
+    var m=SCHED_MAJORS[key], target=+document.getElementById('schUnitSel').value, upcoming=document.getElementById('schTermSel').value;
+    var remaining=[];
+    m.terms.forEach(function(t){t.slots.forEach(function(s){if(!completed[s.id])remaining.push(Object.assign({},s,{_term:t.term}));});});
+    var card=document.getElementById('schResultCard'), list=document.getElementById('schResultList');
+    card.classList.remove('sp-hidden');
+    document.getElementById('schResultHd').textContent='Your suggested '+upcoming+' semester';
+    if(!remaining.length){ list.innerHTML='<div style="padding:14px 4px;color:#c3c9d0">You’ve checked off everything — you’re set to graduate. 🎓</div>'; document.getElementById('schResultUnits').textContent='0'; document.getElementById('schProfNote').classList.add('sp-hidden'); card.scrollIntoView({behavior:'smooth',block:'nearest'}); return; }
+    document.getElementById('schProfNote').classList.remove('sp-hidden');
+    var pick=[], units=0;
+    remaining.forEach(function(s){if(units>=target)return;if(s._term===upcoming){pick.push(s);units+=u(s.units);}});
+    if(units<target-2){remaining.forEach(function(s){if(units>=target)return;if(pick.indexOf(s)<0){pick.push(s);units+=u(s.units);}});}
+    pick.sort(function(a,b){return remaining.indexOf(a)-remaining.indexOf(b);});
+    list.innerHTML='';
+    var tot=0,totHi=0;
+    pick.forEach(function(s,i){
+      tot+=u(s.units); totHi+=uHi(s.units);
+      var head=s.code?(s.code+' — '+s.title):s.title;
+      var fixed=(s.type==='course');
+      var row=document.createElement('div'); row.className='sp-rslot';
+      row.innerHTML='<div class="sp-rnum">'+(i+1)+'</div><div style="min-width:0"><div class="t">'+head+'</div>'+(s.note?'<div class="s">'+s.note+'</div>':'')+(fixed?'<div class="p">★ Best professor shown once offerings post</div>':'<div class="p">You choose the specific course for this slot</div>')+'</div><div class="u">'+uLabel(s.units)+'</div>';
+      list.appendChild(row);
+    });
+    document.getElementById('schResultUnits').textContent=(totHi>tot?(tot+'–'+totHi):(''+tot))+' units';
+    card.scrollIntoView({behavior:'smooth',block:'nearest'});
+  }
+
+  window.schToggleFull=function(){
+    var out=document.getElementById('schFullOut'), tog=document.getElementById('schFullToggle');
+    if(!out.classList.contains('sp-hidden')){ out.classList.add('sp-hidden'); tog.innerHTML='See my full 4-year plan ▾'; return; }
+    var key=document.getElementById('schMajorSel').value, m=SCHED_MAJORS[key];
+    if(!m){return;}
+    var byYear={}; m.terms.forEach(function(t){(byYear[t.year]=byYear[t.year]||[]).push(t);});
+    var html='';
+    Object.keys(byYear).forEach(function(y){
+      html+='<div class="sp-fullyear"><h4>Year '+y+'</h4>';
+      byYear[y].forEach(function(t){
+        html+='<div class="sp-fullterm"><div class="ft-h">'+t.term+'<span class="u">'+termUnits(t)+' units</span></div>';
+        t.slots.forEach(function(s){ html+='<div class="ft-c">'+(s.code?(s.code+' — '):'')+s.title+' ('+uLabel(s.units)+')</div>'; });
+        html+='</div>';
+      });
+      html+='</div>';
+    });
+    out.innerHTML=html; out.classList.remove('sp-hidden'); tog.innerHTML='Hide full plan ▴';
+    out.scrollIntoView({behavior:'smooth',block:'nearest'});
+  };
+
+  function onMajor(){
+    var sel=document.getElementById('schMajorSel'), opt=sel.options[sel.selectedIndex];
+    document.getElementById('schResultCard').classList.add('sp-hidden');
+    document.getElementById('schFullOut').classList.add('sp-hidden');
+    document.getElementById('schFullToggle').innerHTML='See my full 4-year plan ▾';
+    var nd=document.getElementById('schNoData');
+    if(opt&&opt.getAttribute('data-coming')){
+      document.getElementById('schCheckCard').classList.add('sp-hidden');
+      document.getElementById('schFullToggle').classList.add('sp-hidden');
+      nd.classList.remove('sp-hidden');
+      nd.textContent='“'+opt.textContent+'” — its spot is reserved. Its term-by-term plan is being loaded from the Cal Poly catalog. 21 majors are live right now so you can try the planner.';
+      return;
+    }
+    nd.classList.add('sp-hidden');
+    document.getElementById('schFullToggle').classList.remove('sp-hidden');
+    if(SCHED_MAJORS[sel.value]){ renderChecklist(sel.value); document.getElementById('schCheckCard').classList.remove('sp-hidden'); }
+  }
+
+  window.schInit=function(){
+    var sel=document.getElementById('schMajorSel'); if(!sel||sel._done)return; sel._done=true;
+    sel.innerHTML='';
+    var og=document.createElement('optgroup'); og.label='— Ready to plan —';
+    Object.keys(SCHED_MAJORS).forEach(function(k){var o=document.createElement('option');o.value=k;o.textContent=SCHED_MAJORS[k].name+' ('+SCHED_MAJORS[k].degree+')';og.appendChild(o);});
+    sel.appendChild(og);
+    (window.SCHED_COMING||[]).forEach(function(g){var gg=document.createElement('optgroup');gg.label=g[0]+' (loading)';for(var i=1;i<g.length;i++){var o=document.createElement('option');o.value='coming';o.textContent=g[i];o.setAttribute('data-coming','1');gg.appendChild(o);}sel.appendChild(gg);});
+    sel.onchange=onMajor;
+    document.getElementById('schBuildBtn').onclick=build;
+    document.getElementById('schQNone').onclick=function(){completed={};var s=document.querySelectorAll('#schChecklist .sp-slot');for(var i=0;i<s.length;i++)s[i].classList.remove('done');};
+    var qb=document.querySelectorAll('#schCheckCard .sp-quick button[data-yr]');
+    qb.forEach(function(b){b.onclick=function(){var yr=+b.getAttribute('data-yr');var slots=document.querySelectorAll('#schChecklist .sp-slot');slots.forEach(function(e){var id=e.getAttribute('data-id');if(+e.getAttribute('data-yr')<=yr){completed[id]=true;e.classList.add('done');}else{delete completed[id];e.classList.remove('done');}});};});
+    // preselect student's major if it matches one we have
+    var sm=''; try{ sm=(window.student&&student.major)||''; }catch(e){}
+    var match=Object.keys(SCHED_MAJORS).find(function(k){return SCHED_MAJORS[k].name.toLowerCase()===sm.toLowerCase();});
+    sel.value=match||Object.keys(SCHED_MAJORS)[0];
+    // default upcoming term from app if available
+    try{ if(typeof planningTerm==='function' && /spring/i.test(planningTerm())) document.getElementById('schTermSel').value='Spring'; }catch(e){}
+    onMajor();
+  };
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',window.schInit);}else{window.schInit();}
+})();
+
 </script>
 </body>
 </html>
