@@ -1,16 +1,39 @@
 name: Update Cal Poly seats (daily)
 
-# 14:00 UTC = 7:00 AM Pacific. Change the hour to shift the run time.
-# This job ONLY writes seat data to Supabase — it never commits to the repo,
-# so it can't interfere with anyone's app work or pull requests.
+# Parallel "lanes": each matrix entry is a group of subjects scraped by one
+# runner, all at the same time, so a big pull finishes in minutes instead of
+# hours. Every lane ONLY writes seat data to Supabase — never commits to the
+# repo — so it can't interfere with anyone's app work or pull requests.
 on:
   schedule:
-    - cron: '0 14 * * *'
-  workflow_dispatch: {}          # lets you run it manually from the Actions tab
+    - cron: '0 14 * * *'          # 14:00 UTC = 7:00 AM Pacific
+  workflow_dispatch:
+    inputs:
+      details:
+        description: '1 = full seat counts + real times (slower). 0 = discovery/list-only (fast, validates subjects).'
+        default: '1'
+        type: choice
+        options: ['1', '0']
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false            # one bad lane never cancels the others
+      max-parallel: 10            # public-repo concurrency headroom is ~20
+      matrix:
+        lane:
+          # ~big subject balanced with smaller ones so lanes finish evenly.
+          - 'BUS,GEOL,ES'
+          - 'MATH,STAT,ANT'
+          - 'ENGL,PHIL,ART'
+          - 'CHEM,HIST,MU'
+          - 'PHYS,SOC,GEOG'
+          - 'BIO,KINE'
+          - 'PSY,COMS'
+          - 'CSC,ME'
+          - 'CE,EE,AERO'
+          - 'ASCI,ARCH,ECON,POLS'
     steps:
       - uses: actions/checkout@v4
 
@@ -24,21 +47,21 @@ jobs:
           npm install
           npx playwright install --with-deps chromium
 
-      - name: Scrape seats -> Supabase
+      - name: Scrape lane -> Supabase
         working-directory: seats
         env:
           SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          CP_TERM:              ${{ vars.CP_TERM || '2268' }}      # Fall 2026
-          CP_SUBJECTS:          ${{ vars.CP_SUBJECTS || 'BUS' }}   # comma-separated, e.g. 'BUS,CSC,MATH'
-          CP_FETCH_DETAILS:     '1'                                # 1 = capacity/enrolled/available/waitlist
+          CP_TERM:              ${{ vars.CP_TERM || '2268' }}          # Fall 2026
+          CP_SUBJECTS:          ${{ matrix.lane }}
+          CP_FETCH_DETAILS:     ${{ github.event.inputs.details || '1' }}
         run: node scrape-seats.mjs
 
       - name: Upload diagnostics (screenshots + page text)
-        if: always()                     # runs even when the scrape exits non-zero
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: scraper-diagnostics
+          name: diag-lane-${{ strategy.job-index }}
           path: |
             seats/diag-*.png
             seats/diag-*.txt
