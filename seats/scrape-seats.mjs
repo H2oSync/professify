@@ -7,14 +7,18 @@
  *   -> (optional) open each section's detail page for capacity/enrolled/
  *   available/waitlist -> upsert into Supabase.
  *
- * Every selector below was confirmed live on cmsweb.pscs.calpoly.edu.
- * Runs on GitHub Actions (which can reach Cal Poly). Local run works too
- * from any machine on a normal network.
+ * v2 — hardened for unattended GitHub Actions runs:
+ *   • Field IDs found by PREFIX (PeopleSoft's $N$ indices differ per session).
+ *   • Every set verifies the value actually stuck, and retries if not.
+ *   • After Search, waits for EITHER a results list OR a known message.
+ *   • On zero results it writes diagnostics (screenshot + page text) so the
+ *     workflow artifact shows exactly what the runner saw.
  *
  *   npm i && npx playwright install --with-deps chromium
  *   CP_SUBJECTS=BUS CP_FETCH_DETAILS=1 SUPABASE_URL=... SUPABASE_SERVICE_KEY=... node scrape-seats.mjs
  */
 import { chromium } from 'playwright';
+import { writeFile } from 'node:fs/promises';
 
 const CFG = {
   URL: 'https://cmsweb.pscs.calpoly.edu/psc/CSLOPRD/EMPLOYEE/SA/c/COMMUNITY_ACCESS.CLASS_SEARCH.GBL',
@@ -26,8 +30,17 @@ const CFG = {
   SUPABASE_URL: process.env.SUPABASE_URL || '',
   SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY || '',
 };
-const sel = id => `[id="${id}"]`;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// ---- in-page helpers (run inside the browser) --------------------------------
+// Find a field by exact id OR by id-prefix (PeopleSoft appends $N$ that varies).
+const PAGE_HELPERS = () => {
+  window.__pf_find = function (idOrPrefix) {
+    let el = document.getElementById(idOrPrefix);
+    if (el) return el;
+    return document.querySelector('[id^="' + idOrPrefix + '"]') || null;
+  };
+};
 
 // Fire an action and wait for the PeopleSoft postback (POST to the .GBL) to land.
 async function postback(page, action) {
@@ -35,23 +48,77 @@ async function postback(page, action) {
     page.waitForResponse(r => r.url().includes('CLASS_SEARCH') && r.request().method() === 'POST', { timeout: 25000 }).catch(() => {}),
     action(),
   ]);
-  await sleep(350);
+  await sleep(450);
 }
-// Set a <select>/text field value the way PeopleSoft needs (real change event) and wait for its postback.
-async function setField(page, id, value) {
-  await postback(page, () => page.evaluate(({ id, value }) => {
-    const el = document.getElementById(id); if (!el) return;
-    el.value = value; el.dispatchEvent(new Event('change', { bubbles: true }));
-  }, { id, value }));
+
+// Read a field's current value (by id or prefix).
+function readField(page, idOrPrefix) {
+  return page.evaluate(p => { const el = window.__pf_find(p); return el ? (el.value ?? '') : null; }, idOrPrefix);
 }
+
+// Set a field the way PeopleSoft needs (real change event), verify it stuck, retry.
+async function setField(page, idOrPrefix, value, label) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const found = await postback(page, () => page.evaluate(({ p, value }) => {
+      const el = window.__pf_find(p); if (!el) return false;
+      el.focus && el.focus();
+      el.value = value;
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      el.dispatchEvent(new Event('blur', { bubbles: true }));
+      return true;
+    }, { p: idOrPrefix, value })).then(() => true).catch(() => false);
+    const now = await readField(page, idOrPrefix);
+    if (now != null && String(now).trim() === String(value).trim()) return true;
+    console.log(`    · ${label || idOrPrefix}: set "${value}" attempt ${attempt} -> now "${now}" (retrying)`);
+    await sleep(500);
+  }
+  const now = await readField(page, idOrPrefix);
+  console.log(`    · ${label || idOrPrefix}: value is "${now}" after 3 tries (wanted "${value}")`);
+  return false;
+}
+
 async function dismissOversize(page) {
-  if (/would you like to continue/i.test(await page.evaluate(() => document.body.innerText))) {
+  const txt = await page.evaluate(() => document.body.innerText);
+  if (/would you like to continue|more than \d+ (classes|results)|return more than/i.test(txt)) {
+    console.log('    · oversize prompt detected — clicking OK');
     await postback(page, () => page.evaluate(() => {
       const ok = [...document.querySelectorAll('input[type="button"],input[type="submit"],a,button')]
         .find(e => /^OK$/i.test((e.value || e.textContent || '').trim()));
       if (ok) ok.click();
     }));
   }
+}
+
+// Detect a "nothing here" / error state after a search, for logging + diagnostics.
+async function searchOutcome(page) {
+  return page.evaluate(() => {
+    const t = document.body.innerText || '';
+    const has = re => re.test(t);
+    const results = !!document.querySelector('a[id^="MTG_CLASS_NBR$"]');
+    let msg = '';
+    if (has(/no classes found|search returns no results|did not return any/i)) msg = 'no-results';
+    else if (has(/at least \d+ search criteria|enter (at least|any) .*criteria|Please enter/i)) msg = 'need-criteria';
+    else if (has(/is a required field/i)) msg = 'required-field';
+    else if (has(/would you like to continue|return more than/i)) msg = 'oversize-prompt';
+    return { results, msg, title: document.title };
+  });
+}
+
+async function dumpDiag(page, tag) {
+  try {
+    await page.screenshot({ path: `diag-${tag}.png`, fullPage: true }).catch(() => {});
+    const info = await page.evaluate(() => ({
+      title: document.title, url: location.href,
+      text: (document.body.innerText || '').slice(0, 8000),
+      inst: (window.__pf_find && window.__pf_find('CLASS_SRCH_WRK2_INSTITUTION') || {}).value,
+      strm: (window.__pf_find && window.__pf_find('SLO_SS_DERIVED_STRM') || {}).value,
+      subj: (window.__pf_find && window.__pf_find('SSR_CLSRCH_WRK_SUBJECT_SRCH') || {}).value,
+      hasSearchBtn: !!(window.__pf_find && window.__pf_find('CLASS_SRCH_WRK2_SSR_PB_CLASS_SRCH')),
+    }));
+    await writeFile(`diag-${tag}.txt`,
+      `title: ${info.title}\nurl: ${info.url}\ninstitution: ${info.inst}\nterm(strm): ${info.strm}\nsubject: ${info.subj}\nsearchBtnPresent: ${info.hasSearchBtn}\n\n----- page text (first 8k) -----\n${info.text}\n`);
+    console.log(`    · wrote diag-${tag}.png / diag-${tag}.txt  (inst=${info.inst} strm=${info.strm} subj=${info.subj} searchBtn=${info.hasSearchBtn})`);
+  } catch (e) { console.log('    · diag dump failed:', e.message.split('\n')[0]); }
 }
 
 function parseList(page, subject) {
@@ -82,7 +149,6 @@ function parseList(page, subject) {
 }
 
 async function fetchDetail(page, index) {
-  // click the class number -> detail page -> read counts -> back to list
   await page.evaluate(i => { const a = document.getElementById('MTG_CLASS_NBR$' + i); if (a) a.click(); }, index);
   await page.waitForFunction(() => /Class Capacity|Enrollment Total/i.test(document.body.innerText) && document.getElementById('CLASS_SRCH_WRK2_SSR_PB_BACK'), null, { timeout: 12000 }).catch(() => {});
   const c = await page.evaluate(() => {
@@ -99,13 +165,28 @@ async function fetchDetail(page, index) {
 const statusBadge = s => { s = (s || '').toLowerCase(); return s.includes('wait') ? 'Waitlist' : s.includes('open') ? 'Open' : s.includes('clos') ? 'Closed' : null; };
 
 async function run() {
-  console.log(`Professify seat scraper — term ${CFG.TERM}, subjects [${CFG.SUBJECTS.join(', ')}], counts=${CFG.FETCH_DETAILS ? 'on' : 'off'}`);
+  console.log(`Professify seat scraper v2 — term ${CFG.TERM}, subjects [${CFG.SUBJECTS.join(', ')}], counts=${CFG.FETCH_DETAILS ? 'on' : 'off'}, headless=${CFG.HEADLESS}`);
   const browser = await chromium.launch({ headless: CFG.HEADLESS });
-  const page = await browser.newPage();
+  const ctx = await browser.newContext({
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+    viewport: { width: 1366, height: 900 }, locale: 'en-US',
+  });
+  const page = await ctx.newPage();
+  page.on('dialog', d => d.dismiss().catch(() => {}));
+
   await page.goto(CFG.URL, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector(sel('CLASS_SRCH_WRK2_INSTITUTION$31$'), { timeout: 30000 });
-  await setField(page, 'CLASS_SRCH_WRK2_INSTITUTION$31$', CFG.INSTITUTION);   // populates subjects
-  await setField(page, 'SLO_SS_DERIVED_STRM', CFG.TERM);                       // validates term
+  await page.addInitScript(PAGE_HELPERS);                 // for future navigations
+  await page.evaluate(PAGE_HELPERS);                      // and this page
+  // Wait for the search FORM (institution field, any $N$ index) to render.
+  await page.waitForFunction(() => !!document.querySelector('[id^="CLASS_SRCH_WRK2_INSTITUTION"]'), null, { timeout: 45000 })
+    .catch(() => {});
+  const gotForm = await page.evaluate(() => !!document.querySelector('[id^="CLASS_SRCH_WRK2_INSTITUTION"]'));
+  console.log(`• Loaded search form: ${gotForm ? 'yes' : 'NO'}  (title="${await page.title()}")`);
+  if (!gotForm) { await dumpDiag(page, 'noform'); }
+
+  await setField(page, 'CLASS_SRCH_WRK2_INSTITUTION', CFG.INSTITUTION, 'institution'); // populates subjects
+  await setField(page, 'SLO_SS_DERIVED_STRM', CFG.TERM, 'term');                        // validates term
+  console.log(`• After setup — institution="${await readField(page, 'CLASS_SRCH_WRK2_INSTITUTION')}" term="${await readField(page, 'SLO_SS_DERIVED_STRM')}"`);
 
   const all = [];
   for (let s = 0; s < CFG.SUBJECTS.length; s++) {
@@ -114,14 +195,24 @@ async function run() {
       if (s > 0) {
         const modify = page.locator('input[value="Modify Search"], a:has-text("Modify Search")').first();
         if (await modify.count()) await postback(page, () => modify.click());
+        await page.evaluate(PAGE_HELPERS);
       }
-      await setField(page, 'SSR_CLSRCH_WRK_SUBJECT_SRCH$1', subj);
-      await page.evaluate(() => { const o = document.getElementById('SSR_CLSRCH_WRK_SSR_OPEN_ONLY$4'); if (o) o.checked = false; });
-      await postback(page, () => page.evaluate(() => document.getElementById('CLASS_SRCH_WRK2_SSR_PB_CLASS_SRCH').click()));
+      await setField(page, 'SSR_CLSRCH_WRK_SUBJECT_SRCH', subj, 'subject');
+      await page.evaluate(() => { const o = window.__pf_find('SSR_CLSRCH_WRK_SSR_OPEN_ONLY'); if (o) { o.checked = false; o.dispatchEvent(new Event('click', { bubbles: true })); } });
+      await postback(page, () => page.evaluate(() => { const b = window.__pf_find('CLASS_SRCH_WRK2_SSR_PB_CLASS_SRCH'); if (b) b.click(); }));
       await dismissOversize(page);
 
+      // Wait for results OR a message, up to 30s.
+      await page.waitForFunction(() =>
+        !!document.querySelector('a[id^="MTG_CLASS_NBR$"]') ||
+        /no classes found|search returns no results|did not return any|search criteria|is a required field/i.test(document.body.innerText),
+        null, { timeout: 30000 }).catch(() => {});
+
+      const outcome = await searchOutcome(page);
       const list = await parseList(page, subj);
-      console.log(`  ${subj}: ${list.length} sections${CFG.FETCH_DETAILS ? ' — fetching counts…' : ''}`);
+      console.log(`  ${subj}: ${list.length} sections  (msg=${outcome.msg || 'none'}, title="${outcome.title}")${CFG.FETCH_DETAILS && list.length ? ' — fetching counts…' : ''}`);
+      if (list.length === 0) await dumpDiag(page, subj.toLowerCase());
+
       if (CFG.FETCH_DETAILS) {
         for (let i = 0; i < list.length; i++) {
           const c = await fetchDetail(page, i);
@@ -131,15 +222,17 @@ async function run() {
       }
       list.forEach(r => { r.status = statusBadge(r.status_raw); r.term = CFG.TERM; r.updated_at = new Date().toISOString(); });
       all.push(...list);
-    } catch (e) { console.error(`  ${subj}: ERROR — ${e.message.split('\n')[0]}`); }
+    } catch (e) {
+      console.error(`  ${subj}: ERROR — ${e.message.split('\n')[0]}`);
+      await dumpDiag(page, subj.toLowerCase() + '-error');
+    }
   }
   await browser.close();
 
-  const { writeFile } = await import('node:fs/promises');
   await writeFile('seats.json', JSON.stringify({ term: CFG.TERM, generated_at: new Date().toISOString(), count: all.length, sections: all }, null, 2));
   console.log(`• Wrote seats.json (${all.length} sections).`);
   await upsertSupabase(all);
-  if (!all.length) { console.log('\n⚠  Zero sections — run with CP_HEADLESS=0 to watch where it breaks.'); process.exit(2); }
+  if (!all.length) { console.log('\n⚠  Zero sections — see the uploaded diag-*.png / diag-*.txt artifact to see what the runner saw.'); process.exit(2); }
 }
 
 async function upsertSupabase(rows) {
