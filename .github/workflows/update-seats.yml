@@ -1,0 +1,35 @@
+name: Update Cal Poly seats (daily)
+
+# 14:00 UTC = 7:00 AM Pacific. Change the hour to shift the run time.
+# This job ONLY writes seat data to Supabase — it never commits to the repo,
+# so it can't interfere with anyone's app work or pull requests.
+on:
+  schedule:
+    - cron: '0 14 * * *'
+  workflow_dispatch: {}          # lets you run it manually from the Actions tab
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install deps + Chromium
+        working-directory: seats
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+
+      - name: Scrape seats -> Supabase
+        working-directory: seats
+        env:
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          CP_TERM:              ${{ vars.CP_TERM || '2268' }}      # Fall 2026
+          CP_SUBJECTS:          ${{ vars.CP_SUBJECTS || 'BUS' }}   # comma-separated, e.g. 'BUS,CSC,MATH'
+          CP_FETCH_DETAILS:     '1'                                # 1 = capacity/enrolled/available/waitlist
+        run: node scrape-seats.mjs
