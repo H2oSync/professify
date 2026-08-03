@@ -151,22 +151,15 @@ function parseList(page, subject) {
 async function fetchDetail(page, index) {
   await page.evaluate(i => { const a = document.getElementById('MTG_CLASS_NBR$' + i); if (a) a.click(); }, index);
   await page.waitForFunction(() => /Class Capacity|Enrollment Total/i.test(document.body.innerText) && document.getElementById('CLASS_SRCH_WRK2_SSR_PB_BACK'), null, { timeout: 12000 }).catch(() => {});
+  // NOTE: real meeting day/time AND instructor already come from the fast LIST page
+  // (parseList -> cells[2]/cells[4]); they're verified correct, so we do NOT touch them
+  // here — the detail page is opened ONLY for the numeric seat counts.
   const c = await page.evaluate(() => {
     const t = document.body.innerText;
     const g = l => { const m = t.match(new RegExp(l + '\\s*([0-9]+)', 'i')); return m ? +m[1] : null; };
-    // REAL meeting day+time — only accept a genuine day-code + start/end clock pattern.
-    // Cal Poly detail page shows e.g. "MoWeFr 1:10PM - 2:00PM" or "TuTh 3:40PM - 5:00PM".
-    let days = '';
-    const dm = t.match(/\b((?:Mo|Tu|We|Th|Fr|Sa|Su){1,7})\s+(\d{1,2}:\d{2}\s*[AP]M)\s*(?:-|–|to)\s*(\d{1,2}:\d{2}\s*[AP]M)/i);
-    if (dm) days = (dm[1] + ' ' + dm[2].replace(/\s+/g, '') + '–' + dm[3].replace(/\s+/g, '')).trim();
-    // Instructor from the detail page (skip Staff / To be Announced so matching stays clean).
-    let instructor = '';
-    const im = t.match(/Instructor[:\s]*\n?\s*([A-Z][A-Za-z.''\-]+(?:,?\s+[A-Z][A-Za-z.''\-]+){0,3})/);
-    if (im) { const nm = im[1].trim(); if (!/^(staff|to be announced|tba|the staff)$/i.test(nm)) instructor = nm; }
     return {
       capacity: g('Class Capacity') ?? g('Enrollment Capacity'), enrolled: g('Enrollment Total'),
       available: g('Available Seats'), waitlist_capacity: g('Wait List Capacity'), waitlist_total: g('Wait List Total'),
-      days, instructor,
     };
   });
   await page.evaluate(() => { const b = document.getElementById('CLASS_SRCH_WRK2_SSR_PB_BACK'); if (b) b.click(); });
