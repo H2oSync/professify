@@ -1252,7 +1252,7 @@ const MAJOR_CATALOG={
 
 /* ============ ALL CAL POLY MAJORS (by college) ============ */
 const COLLEGES={
-  'College of Agriculture, Food & Environmental Sciences':['Plant Sciences','Agricultural Business','Agricultural Communication','Agricultural Science','Agricultural Systems Management','Animal Science','BioResource & Agricultural Engineering','Dairy Science','Environmental Earth & Soil Sciences','Environmental Management & Protection','Food Science','Forest and Fire Sciences','Nutrition','Recreation, Parks & Tourism Administration','Wine & Viticulture'],
+  'College of Agriculture, Food & Environmental Sciences':['Agricultural Business','Agricultural Communication','Agricultural Science','Agricultural Systems Management','Animal Science','BioResource & Agricultural Engineering','Dairy Science','Environmental Earth & Soil Sciences','Environmental Management & Protection','Food Science','Forest and Fire Sciences','Nutrition','Plant Sciences','Recreation, Parks & Tourism Administration','Wine & Viticulture'],
   'College of Architecture & Environmental Design':['Architectural Engineering','Architecture','City & Regional Planning','Construction Management','Landscape Architecture'],
   'Orfalea College of Business':['Business Administration','Economics','Industrial Technology & Packaging'],
   'College of Engineering':['Aerospace Engineering','Biomedical Engineering','Civil Engineering','Computer Engineering','Computer Science','Electrical Engineering','Environmental Engineering','General Engineering','Industrial Engineering','Manufacturing Engineering','Materials Engineering','Mechanical Engineering','Software Engineering'],
@@ -2897,8 +2897,9 @@ function setExMode(m){
 }
 function onExSearch(){exQuery=document.getElementById('exQuery').value.toLowerCase();renderExplore();}
 /* Unify departments: seeded faculty use full names, live PolyRatings use prefix codes. Map to one code. */
-const DEPT_CODE={'Computer Science':'CSC','Statistics':'STAT','Mathematics':'MATH','Physics':'PHYS','Chemistry & Biochemistry':'CHEM','Biological Sciences':'BIO','Psychology & Child Development':'PSY','Political Science':'POLS','History':'HIST','Music':'MU','Communication Studies':'COMS','English':'ENGL','Philosophy':'PHIL','Kinesiology & Public Health':'KINE','Economics':'ECON','Finance':'BUS','Accounting':'BUS','Accounting & Law':'BUS','Business':'BUS','Business Law':'BUS','Marketing':'BUS','Management':'BUS','Management & Information Systems':'BUS','Orfalea College of Business':'BUS','Industrial Technology & Packaging':'ITP','Social Sciences':'SOC'};
-function pdept(p){if(!p)return '';return p.live?(p.dept||''):(DEPT_CODE[p.dept]||p.dept||'');}
+const DEPT_NORM={'Chemistry & Biochemistry':'Chemistry','Psychology & Child Development':'Psychology','Kinesiology & Public Health':'Kinesiology','Accounting & Law':'Business','Accounting':'Business','Business Law':'Business','Finance':'Business','Management & Information Systems':'Business','Management':'Business','Marketing':'Business'};
+const DEPT_COLLEGE={'Astronomy':'Bailey College of Science & Mathematics','Biological Sciences':'Bailey College of Science & Mathematics','Business':'Orfalea College of Business','Chemistry':'Bailey College of Science & Mathematics','Communication Studies':'College of Liberal Arts','Computer Science':'College of Engineering','Economics':'Orfalea College of Business','English':'College of Liberal Arts','History':'College of Liberal Arts','Industrial Technology & Packaging':'Orfalea College of Business','Kinesiology':'Bailey College of Science & Mathematics','Mathematics':'Bailey College of Science & Mathematics','Music':'College of Liberal Arts','Philosophy':'College of Liberal Arts','Physics':'Bailey College of Science & Mathematics','Political Science':'College of Liberal Arts','Psychology':'College of Liberal Arts','Social Sciences':'College of Liberal Arts','Statistics':'Bailey College of Science & Mathematics'};
+function pdept(p){if(!p)return '';const d=p.dept||'';return DEPT_NORM[d]||d;}
 function renderExContext(){
   const el=document.getElementById('exContext');
   if(!schoolLive()){const sc=schoolCourses();if(sc){const subs=['All',...new Set(sc.map(c=>c.subj))];el.innerHTML=`<div class="areas">${subs.map(d=>`<button class="area-chip ${d===exDept?'active':''}" onclick="setExDept('${d}')">${d}</button>`).join('')}</div>`;}else{el.innerHTML='';}return;}
@@ -2913,11 +2914,23 @@ function renderExContext(){
     </div>`;
   }else{
     const counts={};Object.values(PROFESSORS).forEach(p=>{const d=pdept(p);if(d&&p.rating!=null)counts[d]=(counts[d]||0)+1;});
-    const depts=['All',...Object.keys(counts).sort((a,b)=>counts[b]-counts[a]).slice(0,18)];
+    const byCollege={};
+    Object.keys(counts).forEach(d=>{const col=DEPT_COLLEGE[d]||'Other';(byCollege[col]=byCollege[col]||[]).push(d);});
+    const collegeNames=Object.keys(COLLEGES).sort((a,b)=>a.localeCompare(b));
     const fits=['All','Project-based','Discussion','Lecture','Light workload'];
-    el.innerHTML=`<div style="display:flex;flex-direction:column;gap:10px">
-      <div class="areas">${depts.map(d=>`<button class="area-chip ${d===exDept?'active':''}" onclick="setExDept('${d}')">${d}</button>`).join('')}</div>
-      <div class="areas">${fits.map(f=>`<button class="area-chip ${f===exFit?'active':''}" onclick="setExFit('${f}')">${f==='All'?'Any style':f}</button>`).join('')}</div>
+    el.innerHTML=`<div style="display:flex;flex-direction:column;gap:8px;max-width:340px">
+      <button class="area-chip ${exDept==='All'?'active':''}" style="align-self:flex-start" onclick="setExDept('All')">All departments</button>
+      ${collegeNames.map(col=>{
+        const list=(byCollege[col]||[]).slice().sort((a,b)=>a.localeCompare(b));
+        if(!list.length)return `<div class="selwrap"><select disabled style="opacity:.45;cursor:not-allowed">
+          <option>${col} — no professors yet</option>
+        </select></div>`;
+        return `<div class="selwrap"><select onchange="setExDept(this.value)">
+          <option value="" ${!list.includes(exDept)?'selected':''} disabled>${col}</option>
+          ${list.map(d=>`<option ${d===exDept?'selected':''}>${d}</option>`).join('')}
+        </select></div>`;
+      }).join('')}
+      <div class="areas" style="margin-top:2px">${fits.map(f=>`<button class="area-chip ${f===exFit?'active':''}" onclick="setExFit('${f}')">${f==='All'?'Any style':f}</button>`).join('')}</div>
     </div>`;
   }
 }
