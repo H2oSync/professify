@@ -1,0 +1,13 @@
+{
+  "name": "professify-seats",
+  "private": true,
+  "type": "module",
+  "description": "Daily Cal Poly seat scraper for Professify (Playwright).",
+  "scripts": {
+    "scrape": "node scrape-seats.mjs",
+    "probe": "node scrape-seats.mjs --probe"
+  },
+  "dependencies": {
+    "playwright": "^1.47.0"
+  }
+}
