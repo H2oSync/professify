@@ -342,6 +342,8 @@ window.PROFESSIFY_CONFIG = {
   .mback{position:fixed;inset:0;background:rgba(6,7,9,.66);backdrop-filter:blur(6px);z-index:100;display:none;align-items:flex-start;justify-content:center;padding:44px 18px;overflow-y:auto}
   .mback.open{display:flex}
   .modal{background:var(--panel);border:1px solid var(--line);border-radius:22px;max-width:680px;width:100%;overflow:hidden;animation:pop .4s var(--ease);box-shadow:0 30px 80px rgba(0,0,0,.55)}
+  .modal.modal-wide{max-width:960px}
+  .modal.modal-wide .pp-facts{grid-template-columns:repeat(4,1fr)}
   @keyframes pop{from{opacity:0;transform:translateY(18px) scale(.985)}to{opacity:1;transform:none}}
   .mhero{padding:30px 32px 26px;border-bottom:1px solid var(--line-soft);position:relative}
   .mclose{position:absolute;top:22px;right:22px;width:32px;height:32px;border-radius:9px;background:transparent;border:1px solid var(--line);color:var(--muted);cursor:pointer;font-size:16px;line-height:1;transition:.2s}
@@ -371,7 +373,7 @@ window.PROFESSIFY_CONFIG = {
   .pp-ringmeta .label{font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;font-weight:600}
   .pp-ringmeta .count{font-size:13px;color:var(--muted)}
   .pp-ringmeta .count b{color:var(--text-2);font-weight:600}
-  .pp-facts{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}
+  .pp-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-top:14px}
   .pp-fact{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 12px}
   .pp-fact .k{font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;font-weight:600}
   .pp-fact .v{font-size:15px;color:var(--text);font-weight:500}
@@ -3096,6 +3098,7 @@ function studentAvg(p){const rv=profReviews(p);if(!rv.length)return null;return 
 function startRate(id){currentProf=id;rateErrMsg='';if(!eduVerified){renderVerify(id);return;}rateDraft={course:'',score:0,difficulty:0,teach:0,hours:'',format:'',again:null,chips:new Set(),text:''};renderRateForm(id);}
 function renderVerify(id){
   modalMode='rate';
+  document.getElementById('modal').classList.remove('modal-wide');
   const p=PROFESSORS[id];
   document.getElementById('modal').innerHTML=`<div class="rate-wrap"><button class="mclose" onclick="renderModal()">&times;</button><div class="rate-step">
     <div class="rate-kicker">Verify you're a student</div>
@@ -3122,6 +3125,7 @@ async function doVerify(id){
 }
 function renderCodeStep(id,email){
   modalMode='rate';
+  document.getElementById('modal').classList.remove('modal-wide');
   document.getElementById('modal').innerHTML=`<div class="rate-wrap"><button class="mclose" onclick="renderModal()">&times;</button><div class="rate-step">
     <div class="rate-kicker">Check your inbox</div>
     <h2 class="rate-h">Enter your code</h2>
@@ -3149,6 +3153,7 @@ async function verifyCode(id,email){
 }
 function renderRateForm(id){
   modalMode='rate';
+  document.getElementById('modal').classList.remove('modal-wide');
   const p=PROFESSORS[id];
   const d=rateDraft||(rateDraft={course:'',score:0,difficulty:0,teach:0,hours:'',format:'',again:null,chips:new Set(),text:''});
   const courses=wlCourses(p);
@@ -3242,6 +3247,7 @@ async function submitRate(id){
 }
 function renderThanks(id){
   modalMode='rate';
+  document.getElementById('modal').classList.remove('modal-wide');
   const p=PROFESSORS[id];
   document.getElementById('modal').innerHTML=`<div class="rate-wrap"><div class="rate-step center">
     <div class="thx-badge">${CHECK}</div>
@@ -3252,6 +3258,7 @@ function renderThanks(id){
 }
 function renderModal(){
   modalMode='profile';
+  document.getElementById('modal').classList.add('modal-wide');
   const p=PROFESSORS[currentProf];
   const hasR=p.rating!=null;
   const sAvg=studentAvg(p);
@@ -3296,6 +3303,7 @@ function renderModal(){
         <div class="pp-fact"><div class="k">Would take again</div><div class="v ${againPct==null?'empty':''}">${againPct!=null?againPct+'%':'No reviews yet'}</div></div>
         <div class="pp-fact"><div class="k">Hrs / week (most common)</div><div class="v ${topHours?'':'empty'}">${topHours?topHours+' hrs':'No reviews yet'}</div></div>
         <div class="pp-fact"><div class="k">Years at Cal Poly</div><div class="v ${yrsAtCP?'':'empty'}">${yrsAtCP?yrsAtCP+' yrs':'Not on file'}</div></div>
+        ${p.edu?`<div class="pp-fact"><div class="k">Education</div><div class="v">${p.edu}</div></div>`:''}
       </div>
     </div>
     <div class="mbody">
@@ -3303,19 +3311,6 @@ function renderModal(){
         <button class="btn primary rate-open" onclick="startRate('${currentProf}')">Rate this professor</button>
       </div>
       <button class="wl-btn wl-modalbtn ${isWatched(currentProf)?'on':''}" onclick="toggleWatch('${currentProf}',event)">${isWatched(currentProf)?WL_ON:WL_OFF}<span>${isWatched(currentProf)?'On your watchlist':'Add to watchlist'}</span></button>
-      <div class="msec"><h4>About &amp; background</h4>
-        ${(p.since||p.field||p.edu)?`<div class="bio-grid">
-          ${p.since?`<div class="bio-cell"><span class="bio-k">At Cal Poly</span><span class="bio-v">Since ${p.since} · ${2026-p.since} yrs</span></div>`:''}
-          ${p.field?`<div class="bio-cell"><span class="bio-k">Field of study</span><span class="bio-v">${p.field}</span></div>`:''}
-          ${p.edu?`<div class="bio-cell"><span class="bio-k">Education</span><span class="bio-v">${p.edu}</span></div>`:''}
-        </div>
-        <p class="bio-src">Background from Cal Poly's public course catalog.</p>`:`<p class="bio-empty">Confirmed instructor for ${p.dept} this term. We don't have their years teaching or education on file yet — if it's you, claim your profile to add it.</p>`}
-        <button class="claimbtn" onclick="claimProfile()">Are you ${p.name.split(' ')[0]}? Claim this profile</button>
-        <div id="claimNote"></div>
-      </div>
-      ${p.strong?`<div class="msec"><h4>Strong suits</h4><div class="chips">${p.strong.map(s=>`<span class="c">${s}</span>`).join('')}</div></div>`:''}
-      ${p.style?`<div class="msec"><h4>Teaching style — does it fit you?</h4><div class="sbars">${Object.entries(p.style).map(([k,v])=>`<div class="sbar"><div class="st"><span>${k}</span><span class="v">${v}%</span></div><div class="track"><i style="width:${v}%"></i></div></div>`).join('')}</div></div>`:''}
-      ${p.track?`<div class="msec"><h4>Track record — where they've taught</h4><div class="rows">${p.track.map(t=>`<div class="trow ${t[2]?'cur':''}"><span class="dash"></span><span>${t[0]}</span><span class="yr">${t[1]}</span></div>`).join('')}</div></div>`:''}
       ${''/* Grade distributions intentionally omitted — Cal Poly doesn't publish real per-professor grade data in a usable feed, so we show nothing rather than a fabricated chart. */}
       ${modalRevs.length?`<div class="msec"><div class="revhead"><h4>Reviews · ${modalRevs.length}</h4><div class="revsort"><button class="${revSort==='helpful'?'active':''}" onclick="setRevSort('helpful')">Most helpful</button><button class="${revSort==='recent'?'active':''}" onclick="setRevSort('recent')">Most recent</button></div></div>${revs.map(r=>`<div class="review"><div class="rtop"><span class="rc">${r.course}</span><span class="rt">${r.term}</span>${r.verified?`<span class="ver">${CHECK} Verified enrolled</span>`:''}${r._i===topIdx?`<span class="best">Most helpful for ${r.course}</span>`:''}<span class="rs" style="color:${scoreColor(r.score)}"><span class="rd" style="width:6px;height:6px;border-radius:50%;background:${scoreColor(r.score)};display:inline-block"></span>${Number(r.score).toFixed(1)}</span></div>${rfMeta(r)}<p class="rtext">${r.text}</p><div class="rtags">${r.tags.map(t=>`<span class="t">${t}</span>`).join('')}</div><div class="rfoot"><button class="hbtn ${r._v?'on':''}" onclick="voteHelpful(${r._i})">${THUMB} Helpful</button><span class="hcount">${r.helpful} found this helpful</span></div></div>`).join('')}</div>`:`<div class="msec"><h4>Reviews</h4><div class="norev"><p>No reviews yet.</p><button class="btn primary rate-open" onclick="startRate('${currentProf}')">Be the first to rate</button></div></div>`}
     </div>`;
