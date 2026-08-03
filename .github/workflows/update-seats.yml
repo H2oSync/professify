@@ -23,17 +23,18 @@ jobs:
       max-parallel: 10            # public-repo concurrency headroom is ~20
       matrix:
         lane:
-          # ~big subject balanced with smaller ones so lanes finish evenly.
-          - 'BUS,GEOL,ES'
-          - 'MATH,STAT,ANT'
-          - 'ENGL,PHIL,ART'
-          - 'CHEM,HIST,MU'
-          - 'PHYS,SOC,GEOG'
-          - 'BIO,KINE'
-          - 'PSY,COMS'
-          - 'CSC,ME'
-          - 'CE,EE,AERO'
-          - 'ASCI,ARCH,ECON,POLS'
+          # Balanced to ~220 sections/lane from measured discovery counts, so every
+          # lane finishes in ~13 min and none lags. CSC (233) rides solo.
+          - 'CSC'                       # 233
+          - 'MATH,SOC'                  # 169+49
+          - 'BUS,PSY,ANT'               # 157+49+22
+          - 'ME,COMS,GEOG'              # 149+61+19
+          - 'KINE,ARCH,ES'              # 130+66+28
+          - 'CE,PHIL,HIST'              # 117+69+42
+          - 'POLS,ASCI,ECON,GEOL'       # 115+76+23+9
+          - 'EE,PHYS,CHEM'              # 107+78+42
+          - 'ENGL,STAT,AERO'            # 100+81+42
+          - 'BIO,MU,ART'                # 87+86+45
     steps:
       - uses: actions/checkout@v4
 
