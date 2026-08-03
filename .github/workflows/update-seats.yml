@@ -33,3 +33,15 @@ jobs:
           CP_SUBJECTS:          ${{ vars.CP_SUBJECTS || 'BUS' }}   # comma-separated, e.g. 'BUS,CSC,MATH'
           CP_FETCH_DETAILS:     '1'                                # 1 = capacity/enrolled/available/waitlist
         run: node scrape-seats.mjs
+
+      - name: Upload diagnostics (screenshots + page text)
+        if: always()                     # runs even when the scrape exits non-zero
+        uses: actions/upload-artifact@v4
+        with:
+          name: scraper-diagnostics
+          path: |
+            seats/diag-*.png
+            seats/diag-*.txt
+            seats/seats.json
+          if-no-files-found: ignore
+          retention-days: 7
