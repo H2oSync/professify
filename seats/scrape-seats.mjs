@@ -134,12 +134,17 @@ function parseList(page, subject) {
         const cells = [...tr.querySelectorAll('td')].map(td => (td.innerText || '').trim().replace(/\s+/g, ' '));
         const img = tr.querySelector('img[alt]');
         const tm = title.match(/^([A-Z]{2,6})\s+(\d+\w*)\s+-\s+(.+)$/);
+        // Meeting time is normally the 3rd cell, but the column can shift; pick whichever
+        // cell actually looks like a meeting pattern, else fall back to cells[2].
+        const looksTime = v => /(?:Mo|Tu|We|Th|Fr|Sa|Su)/.test(v || '') || /\d{1,2}:\d{2}\s*[AP]M/i.test(v || '') || /\b(?:TBA|TBD|Arranged|ARR)\b/i.test(v || '');
+        let days = cells[2] || '';
+        if (!looksTime(days)) { const hit = cells.find(looksTime); if (hit) days = hit; }
         out.push({
           subject, index: out.length,
           course_code: tm ? (tm[1] + ' ' + tm[2]) : '',
           title: tm ? tm[3] : title,
           class_nbr: (el.innerText || '').trim(),
-          section: cells[1] || '', instructor: cells[4] || '', days: cells[2] || '', dates: cells[5] || '',
+          section: cells[1] || '', instructor: cells[4] || '', days: days, dates: cells[5] || '',
           status_raw: img ? img.getAttribute('alt') : '',
         });
       }
@@ -157,9 +162,15 @@ async function fetchDetail(page, index) {
   const c = await page.evaluate(() => {
     const t = document.body.innerText;
     const g = l => { const m = t.match(new RegExp(l + '\\s*([0-9]+)', 'i')); return m ? +m[1] : null; };
+    // Meeting day/time from the detail page's Meeting Information — used only as a fallback
+    // when the list-page cell was blank, so sections that DO have a time stop showing TBA.
+    let days_detail = '';
+    const mm = t.match(/((?:Mo|Tu|We|Th|Fr|Sa|Su)+)\s+(\d{1,2}:\d{2}\s*[AP]M)\s*[-–to]+\s*(\d{1,2}:\d{2}\s*[AP]M)/i);
+    if (mm) days_detail = (mm[1] + ' ' + mm[2] + '-' + mm[3]).replace(/\s+/g, ' ').trim();
     return {
       capacity: g('Class Capacity') ?? g('Enrollment Capacity'), enrolled: g('Enrollment Total'),
       available: g('Available Seats'), waitlist_capacity: g('Wait List Capacity'), waitlist_total: g('Wait List Total'),
+      days_detail,
     };
   });
   await page.evaluate(() => { const b = document.getElementById('CLASS_SRCH_WRK2_SSR_PB_BACK'); if (b) b.click(); });
@@ -223,6 +234,7 @@ async function run() {
         for (let i = 0; i < list.length; i++) {
           const c = await fetchDetail(page, i);
           Object.assign(list[i], c);
+          if (!String(list[i].days || '').trim() && c.days_detail) list[i].days = c.days_detail;  // detail-page fallback
           if (i === 0) console.log(`    ↳ sample: ${list[0].course_code} — seats cap=${list[0].capacity} avail=${list[0].available} · time="${list[0].days || 'none'}" · instr="${list[0].instructor || 'none'}"`);
           if ((i + 1) % 25 === 0) console.log(`    …${i + 1}/${list.length}`);
         }
