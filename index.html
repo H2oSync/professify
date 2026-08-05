@@ -6070,6 +6070,35 @@ function normCode(s){
 }
 function tookLabel(t){return `${t.term} ${t.year}`;}
 
+
+/* ==== friend onclick handlers missed in merge (byte-copied from Sage) ==== */
+async function searchByPhone(){
+  const errEl=document.getElementById('frPhoneErr');
+  const v=document.getElementById('frSearchPhone').value||'';
+  const h=await hashPhone(v);
+  if(!h){errEl.textContent='Enter a phone number first.';return;}
+  try{
+    const {data,error}=await sb.rpc('find_profiles_by_phone_hashes',{hashes:[h]});
+    if(error)throw error;
+    if(!data||!data.length){errEl.textContent='No one with that number has joined Professify yet.';return;}
+    await sendFriendRequest(data[0].id);
+    document.getElementById('frSearchPhone').value='';errEl.textContent='';
+  }catch(e){errEl.textContent=(e&&e.message)||'Search failed. Try again.';}
+}
+async function addByHandle(){
+  const handle=(document.getElementById('frSearchHandle').value||'').trim().replace(/^@/,'');
+  const errEl=document.getElementById('frHandleErr');
+  if(!handle){errEl.textContent='Enter a handle first.';return;}
+  try{
+    const {data,error}=await sb.rpc('find_profile_by_handle',{handle});
+    if(error)throw error;
+    if(!data||!data.length){errEl.textContent='No one with that handle has joined Professify yet.';return;}
+    await sendFriendRequest(data[0].id);
+    document.getElementById('frSearchHandle').value='';
+    errEl.textContent='';
+  }catch(e){errEl.textContent=(e&&e.message)||'Search failed. Try again.';}
+}
+
 loadSeats();  // pull real seat status from Supabase on load
 </script>
 </body>
