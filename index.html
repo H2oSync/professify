@@ -111,8 +111,10 @@ window.toggleTheme = toggleTheme;
   .demo-ribbon b{color:var(--accent);font-weight:600}
   header.nav{position:sticky;top:0;z-index:60;background:var(--nav-bg);backdrop-filter:blur(14px);border-bottom:1px solid var(--line-soft)}
   .nav-inner{display:flex;align-items:center;height:64px}
-  .brand{display:flex;align-items:center;gap:11px;cursor:pointer;font-weight:600;font-size:16px;letter-spacing:-.02em}
-  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 14px rgba(var(--accent-rgb),.7)}
+  .brand{display:inline-flex;align-items:center;cursor:pointer;background:none;border:0;padding:4px 8px;margin-left:-8px;border-radius:10px;font-family:inherit;color:inherit;transition:opacity .18s ease}
+  .brand:hover{opacity:.7}
+  .brand:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .brand .brand-name{font-weight:700;font-size:24px;letter-spacing:-.03em;color:var(--text)}
   .brand .beta{font-size:10px;font-weight:600;letter-spacing:.14em;color:var(--faint);text-transform:uppercase;margin-left:3px}
   nav.tabs{margin-left:auto;display:flex;gap:2px}
   nav.tabs button{background:transparent;border:0;color:var(--muted);font-weight:500;font-size:14px;padding:8px 16px;border-radius:10px;cursor:pointer;font-family:inherit;transition:color .2s,background .2s;letter-spacing:-.01em}
@@ -125,6 +127,20 @@ window.toggleTheme = toggleTheme;
   .auth-btn:hover{filter:brightness(1.06)}
   .auth-btn.in{background:var(--panel-2);color:var(--text);display:inline-flex;align-items:center;gap:8px;padding:6px 12px 6px 7px}
   .auth-ava{width:24px;height:24px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex:none}
+  .prof-wrap{position:relative;margin-left:12px;flex:0 0 auto}
+  .prof-wrap .auth-btn{margin-left:0}
+  .prof-menu{position:absolute;top:calc(100% + 8px);right:0;min-width:250px;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 16px 44px rgba(0,0,0,.22);padding:7px;z-index:120;animation:pop .16s var(--ease)}
+  .prof-menu .pm-item{white-space:nowrap}
+  .prof-menu[hidden]{display:none}
+  .pm-head{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);padding:8px 10px 6px}
+  .pm-item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:0;color:var(--text);font:600 14px inherit;padding:10px 11px;border-radius:9px;cursor:pointer}
+  .pm-item:hover{background:var(--panel-2)}
+  .pm-ico{font-size:15px;width:20px;text-align:center;flex:none}
+  .pm-hint{margin-left:auto;font-size:11px;font-weight:500;color:var(--faint)}
+  .pm-badge{margin-left:auto;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--good);color:#0b0d10;font-size:11px;font-weight:800;display:inline-flex;align-items:center;justify-content:center}
+  .pm-sep{height:1px;background:var(--line);margin:6px 4px}
+  .pm-danger{color:#d9695d}
+  .pm-danger:hover{background:rgba(217,105,93,.1)}
   .auth-back{position:fixed;inset:0;z-index:130;background:rgba(6,7,9,.62);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:24px}
   .auth-back.open{display:flex;animation:rise .3s var(--ease)}
   .auth-panel{width:100%;max-width:400px;background:var(--bg);border:1px solid var(--line);border-radius:18px;padding:28px 24px 24px;position:relative;box-shadow:0 30px 80px rgba(0,0,0,.55)}
@@ -541,7 +557,7 @@ window.toggleTheme = toggleTheme;
     /* nav: brand row + full-width scrollable tabs */
     header.nav{position:sticky}
     .nav-inner{height:auto;flex-wrap:wrap;padding:9px 0 7px;gap:6px}
-    .brand{font-size:15px}
+    .brand .brand-name{font-size:19px}
     .brand .beta{display:none}
     nav.tabs{margin-left:0;width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;gap:4px;padding-bottom:2px;scrollbar-width:none}
     nav.tabs::-webkit-scrollbar{display:none}
@@ -632,17 +648,27 @@ window.toggleTheme = toggleTheme;
 
 <header class="nav">
   <div class="wrap nav-inner">
-    <div class="brand" onclick="show('home')">
-      <span class="dot"></span>
-      <span>Professify</span>
-    </div>
+    <button type="button" class="brand" onclick="show('home')" aria-label="Professify — go to home">
+      <span class="brand-name">Professify</span>
+    </button>
     <nav class="tabs">
       <button id="tab-home" class="active" onclick="show('home')">Home</button>
       <button id="tab-sched" onclick="show('sched')">Schedule</button>
       <button id="tab-explore" onclick="show('explore')">Explore</button>
       <button id="tab-watch" onclick="show('watch')">Watchlist<span id="watchCount" class="wl-navbadge" hidden>0</span></button>
     </nav>
-    <button id="authBtn" class="auth-btn" onclick="openAuth()">Log in · Sign up</button>
+    <div class="prof-wrap">
+      <button id="authBtn" class="auth-btn" onclick="onAuthBtn(event)">Log in · Sign up</button>
+      <div id="profMenu" class="prof-menu" hidden>
+        <div class="pm-head" id="profMenuHead">Your profile</div>
+        <button class="pm-item" onclick="profGo('mine')"><span class="pm-ico">📚</span>My Classes<span class="pm-hint">calendar &amp; list</span></button>
+        <button class="pm-item" onclick="profGo('past')"><span class="pm-ico">🎓</span>Past Classes<span class="pm-hint">leave reviews</span></button>
+        <button class="pm-item" onclick="profGo('friends')"><span class="pm-ico">👥</span>Friends<span id="friendsNavBadge" class="pm-badge" hidden>0</span></button>
+        <div class="pm-sep"></div>
+        <button class="pm-item" onclick="closeProfMenu();openSettings()"><span class="pm-ico">⚙️</span>Settings</button>
+        <button class="pm-item pm-danger" onclick="closeProfMenu();authSignOut()"><span class="pm-ico">↩︎</span>Sign out</button>
+      </div>
+    </div>
     <button id="settingsBtn" class="theme-toggle" onclick="openSettings()" title="Settings" aria-label="Settings">
       <span id="navAvatar" class="nav-avatar" style="display:none"></span>
       <svg id="navGear" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.5-2-3.5-2.4 1a7.6 7.6 0 0 0-1.7-1l-.4-2.5h-4l-.4 2.5a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a7.6 7.6 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7.6 7.6 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7.6 7.6 0 0 0 1.7-1l2.4 1 2-3.5z"/></svg>
@@ -727,7 +753,9 @@ window.toggleTheme = toggleTheme;
     </div>
 
 <style>
-.sp-wrap{max-width:660px;margin:0 auto}
+#view-sched .phead{margin:0 auto;text-align:center;padding:52px 0 22px}
+#view-sched .phead p{max-width:56ch;margin-left:auto;margin-right:auto}
+.sp-wrap{max-width:none;margin:0 auto}
 .sp-card{background:var(--panel);border:1px solid rgba(var(--fg-rgb),.09);border-radius:15px;padding:18px;margin-bottom:14px}
 .sp-step{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-weight:700;margin-bottom:11px}
 .sp-lab{display:block;font-size:12.5px;color:var(--muted);margin-bottom:6px}
@@ -934,15 +962,36 @@ window.toggleTheme = toggleTheme;
 .mc-seat.none{color:var(--muted);background:rgba(var(--fg-rgb),.06)}
 .mc-x{flex:none;background:none;border:0;color:var(--faint);font-size:20px;cursor:pointer;line-height:1;padding:0 4px}
 .mc-x:hover{color:#e0847a}
+.mc-headr{display:inline-flex;align-items:center;gap:14px}
+.mc-viewtog{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.mc-viewtog button{background:var(--panel);border:0;color:var(--muted);font:600 12.5px inherit;padding:6px 14px;cursor:pointer}
+.mc-viewtog button.on{background:var(--panel-2);color:var(--text)}
+.mc-card.clash{border-color:rgba(224,132,122,.55);background:rgba(224,132,122,.05)}
+.mc-clash{display:inline-block;margin-left:8px;font-size:10.5px;font-weight:700;color:#e0847a;background:rgba(224,132,122,.14);padding:2px 7px;border-radius:6px;vertical-align:middle}
+.mc-conflict{border:1px solid rgba(224,132,122,.4);background:rgba(224,132,122,.08);color:var(--text-2);border-radius:11px;padding:11px 14px;margin-bottom:14px;font-size:13px;line-height:1.55}
+.mc-conflict b{color:#d9695d}
+.cal-wrap{display:flex;border:1px solid rgba(var(--fg-rgb),.1);border-radius:14px;overflow:hidden;background:var(--panel)}
+.cal-times{flex:none;width:52px;border-right:1px solid rgba(var(--fg-rgb),.08)}
+.cal-timecol{position:relative}
+.cal-hr{position:absolute;right:8px;transform:translateY(-50%);font-size:10.5px;color:var(--faint);white-space:nowrap}
+.cal-col{flex:1;min-width:0;border-right:1px solid rgba(var(--fg-rgb),.06)}
+.cal-col:last-child{border-right:0}
+.cal-dh{height:30px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid rgba(var(--fg-rgb),.08);background:var(--panel-2)}
+.cal-day{position:relative;background:repeating-linear-gradient(to bottom,transparent,transparent 47px,rgba(var(--fg-rgb),.05) 47px,rgba(var(--fg-rgb),.05) 48px)}
+.cal-block{position:absolute;left:3px;right:3px;background:rgba(var(--accent-rgb),.9);color:#fff;border-radius:7px;padding:4px 6px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.15);display:flex;flex-direction:column;gap:1px}
+.cal-block.bad{background:#d9695d;outline:2px solid rgba(217,105,93,.4)}
+.cal-block .cb-code{font-size:11px;font-weight:800;line-height:1.1}
+.cal-block .cb-nm{font-size:10px;opacity:.92;line-height:1.15}
+.cal-tba{margin-top:10px;font-size:12px;color:var(--muted)}
 .wl-scroll{overflow-x:auto;border:1px solid rgba(var(--fg-rgb),.08);border-radius:14px}
 table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
 .wl-table th,.wl-table td{padding:13px 15px;text-align:left;vertical-align:top;border-bottom:1px solid rgba(var(--fg-rgb),.06)}
 .wl-table tbody tr:last-child td{border-bottom:none}
 .wl-table thead th{position:sticky;top:0;background:var(--panel);z-index:2}
-.wl-table .wl-attr{position:sticky;left:0;background:#111317;z-index:1;font-size:11.5px;letter-spacing:.03em;text-transform:uppercase;color:var(--faint);font-weight:600;width:150px;min-width:132px}
+.wl-table .wl-attr{position:sticky;left:0;background:var(--panel);z-index:1;font-size:11.5px;letter-spacing:.03em;text-transform:uppercase;color:var(--faint);font-weight:600;width:150px;min-width:132px}
 .wl-table thead .wl-attr{z-index:3;background:var(--panel)}
 .wl-table tbody tr:nth-child(even) td{background:rgba(var(--fg-rgb),.016)}
-.wl-table tbody tr:nth-child(even) .wl-attr{background:#131519}
+.wl-table tbody tr:nth-child(even) .wl-attr{background:var(--panel-2)}
 .wl-phead{min-width:150px}
 .wl-phead .pn{font-size:15px;font-weight:600;color:var(--text);display:block;margin-bottom:2px}
 .wl-phead .pn:hover{color:var(--good-2)}
@@ -975,6 +1024,252 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
     <div id="watchMineOut" style="display:none"></div>
   </div>
 </main>
+
+<main class="view" id="view-friends">
+  <div class="wrap">
+    <div class="phead">
+      <p class="eyebrow">Friends</p>
+      <h2>See who's in your classes</h2>
+      <p>Add friends by their Instagram handle, or sync your contacts to get matched with classmates who've also joined — no public directory, no browsing strangers. Schedules only become visible once a friend request is accepted.</p>
+    </div>
+
+    <div id="frGate" class="fr-gate">
+      <div class="rate-kicker">Verify you're a student</div>
+      <h3 style="margin:6px 0 8px">Sign in to add friends</h3>
+      <p class="rate-sub" style="margin-bottom:14px">Same .edu verification as rating a professor — one account, no password.</p>
+      <div id="frGoogleWrap" style="display:none;margin-bottom:14px">
+        <button class="btn primary rate-submit" style="background:#fff;color:#1f1f1f" onclick="signInWithGoogle()">Continue with Google (@calpoly.edu)</button>
+        <div style="text-align:center;font-size:11.5px;color:var(--faint);margin:10px 0">or use your email directly</div>
+      </div>
+      <div id="frAuthStep1">
+        <input id="frAuthEmail" class="rate-input" type="email" autocomplete="off" placeholder="you@calpoly.edu" oninput="frCheckEdu()">
+        <div id="frAuthErr" class="rate-err"></div>
+        <button id="frAuthBtn" class="btn primary rate-submit" disabled onclick="frDoVerify()">Email me a code</button>
+      </div>
+      <div id="frAuthStep2" style="display:none">
+        <input id="frAuthCode" class="rate-input" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="Enter code" style="letter-spacing:5px;text-align:center;font-size:22px;font-weight:700" oninput="frCheckCode()">
+        <div id="frAuthCodeErr" class="rate-err"></div>
+        <button id="frAuthCodeBtn" class="btn primary rate-submit" disabled onclick="frVerifyCode()">Verify &amp; continue</button>
+      </div>
+    </div>
+
+    <div id="frSignedIn" style="display:none">
+      <!-- ===== the main event: people ===== -->
+      <div id="frRequestsSec" class="fr-section" style="display:none">
+        <div class="grouphead">Requests</div>
+        <div id="frRequestsOut" class="fr-grid"></div>
+      </div>
+
+      <div class="fr-section">
+        <div class="fr-listhead">
+          <div class="grouphead" style="margin:0">Your friends</div>
+          <button class="fr-addtoggle" onclick="openSetup('add')">+ Add friends</button>
+        </div>
+        <div id="frFriendsOut" class="fr-list"></div>
+      </div>
+
+      <div id="frSuggestedSec" class="fr-section" style="display:none">
+        <div class="grouphead">Classmates you might know</div>
+        <div id="frSuggestedOut" class="fr-grid"></div>
+      </div>
+
+      <div id="frMatchesSec" class="fr-section" style="display:none">
+        <div class="grouphead">Found from your contacts</div>
+        <div id="frMatchesOut" class="fr-grid"></div>
+      </div>
+
+      <!-- ===== everything else, tucked away ===== -->
+      <div class="fr-setup">
+        <button class="fr-setup-toggle" id="frSetupToggle" onclick="toggleSetup()" aria-expanded="false">
+          <span class="fst-l"><b>Your profile &amp; setup</b><span class="fst-sub">Name, handle, add friends, classes you've taken</span></span>
+          <span class="fst-caret">▾</span>
+        </button>
+        <div id="frSetupBody" class="fr-setup-body" hidden>
+      <div class="fr-profile">
+        <div><label>Your name</label><input id="frName" class="rate-input" style="margin:0" placeholder="Full name"></div>
+        <div><label>Instagram handle</label><input id="frHandle" class="rate-input" style="margin:0" placeholder="@yourhandle"></div>
+        <div><label>Phone <span style="text-transform:none;font-weight:400">(for contact matching)</span></label><input id="frPhone" class="rate-input" style="margin:0" placeholder="(555) 555-5555"></div>
+        <button class="btn primary" id="frProfileSaveBtn" onclick="saveMyProfile()" style="height:44px">Save</button>
+      </div>
+      <div id="frProfileErr" class="rate-err" style="margin:-14px 0 16px"></div>
+
+      <div class="fr-connect-grid">
+        <div class="fr-connect-card">
+          <div class="fr-cc-top">
+            <div class="fr-cc-icon ig">IG</div>
+            <div class="fr-cc-body"><h3>Add by Instagram</h3><p>Type a friend's @handle to send a request.</p></div>
+          </div>
+          <div class="fr-cc-row">
+            <input id="frSearchHandle" class="rate-input" style="margin:0" placeholder="@theirhandle" oninput="document.getElementById('frHandleErr').textContent=''">
+            <button class="btn primary fr-cc-btn" onclick="addByHandle()">Add</button>
+          </div>
+          <div id="frHandleErr" class="rate-err" style="min-height:0"></div>
+        </div>
+        <div class="fr-connect-card">
+          <div class="fr-cc-top">
+            <div class="fr-cc-icon ct">@</div>
+            <div class="fr-cc-body"><h3>Contacts</h3><p id="ctConnectDesc">Match classmates already saved in your phone.</p></div>
+            <button class="btn primary fr-cc-btn" id="ctConnectBtn" onclick="connectContacts()">Sync contacts</button>
+          </div>
+          <div id="frManualPhoneWrap" style="display:none" class="fr-cc-row">
+            <input id="frSearchPhone" class="rate-input" style="margin:0" placeholder="Friend's phone number" oninput="document.getElementById('frPhoneErr').textContent=''">
+            <button class="btn primary fr-cc-btn" onclick="searchByPhone()">Find</button>
+          </div>
+          <div id="frPhoneErr" class="rate-err" style="min-height:0"></div>
+        </div>
+      </div>
+      <p class="fr-privacy">We only match on a hashed version of phone numbers / the handle you type — never a public directory, and your schedule is invisible until a request is accepted.</p>
+
+      <div class="fr-connect-card" style="margin-bottom:22px">
+        <div class="fr-cc-top">
+          <div class="fr-cc-icon" style="background:linear-gradient(135deg,#5f8fce,#7a4fd6)">▦</div>
+          <div class="fr-cc-body"><h3>Add in person</h3><p>Show your code or scan a friend's — instant add, no typing.</p></div>
+        </div>
+        <div class="fr-cc-row">
+          <button class="btn primary fr-cc-btn" onclick="showMyQR()" style="flex:1">Show my QR</button>
+          <button class="btn primary fr-cc-btn" onclick="startScanQR()" style="flex:1">Scan a friend's QR</button>
+        </div>
+        <div id="frQrArea" style="display:none"></div>
+      </div>
+
+        </div><!-- /frSetupBody -->
+      </div><!-- /fr-setup -->
+    </div>
+  </div>
+</main>
+
+<!-- ============ PAST CLASSES (under your profile) ============ -->
+<main class="view" id="view-past">
+  <div class="wrap">
+    <div class="phead">
+      <p class="eyebrow">Your profile</p>
+      <h2>Classes you've already taken</h2>
+      <p>Add the classes you've finished so you can leave reviews for the professors, and your friends can see what you've been through when they're picking classes.</p>
+    </div>
+    <div id="pastGate" class="fr-gate" style="display:none">
+      <div class="rate-kicker">Verify you're a student</div>
+      <h3 style="margin:6px 0 8px">Sign in to track your past classes</h3>
+      <p class="rate-sub" style="margin-bottom:14px">Same .edu verification as rating a professor — one account, no password.</p>
+      <button class="btn primary rate-submit" onclick="openAuth()">Log in / Sign up</button>
+    </div>
+    <div id="pastSignedIn">
+      <div class="fr-connect-card">
+        <div class="fr-cc-top">
+          <div class="fr-cc-icon" style="background:linear-gradient(135deg,#c0674f,#d6a24a)">✓</div>
+          <div class="fr-cc-body"><h3>Add a class you've taken</h3><p>Add the professor and we'll link it so you can leave them a review — friends see your past classes on your profile.</p></div>
+        </div>
+        <div class="fr-hist-row">
+          <div class="fh-f fh-code"><label>Class</label><input id="histCode" class="rate-input" style="margin:0" placeholder="BUS 2050"></div>
+          <div class="fh-f"><label>Term</label><select id="histTerm" class="rate-input" style="margin:0"><option>Fall</option><option>Winter</option><option>Spring</option><option>Summer</option></select></div>
+          <div class="fh-f"><label>Year</label><input id="histYear" class="rate-input" style="margin:0" type="number" placeholder="2025" min="2015" max="2100"></div>
+          <div class="fh-f fh-prof"><label>Professor <span style="text-transform:none;font-weight:400">(optional)</span></label><input id="histProf" class="rate-input" style="margin:0" placeholder="Who taught it"></div>
+          <button class="btn primary fh-add" onclick="addPastClass()">Add</button>
+        </div>
+        <p id="histErr" class="fr-err"></p>
+        <div id="histOut" class="fr-hist-list" style="margin-top:14px"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<style>
+  .fr-chip{display:flex;align-items:center;gap:7px;margin-top:8px}
+  .fr-avs{display:flex}
+  .fr-av{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:8.5px;font-weight:700;color:#fff;border:2px solid var(--panel);margin-left:-7px}
+  .fr-avs .fr-av:first-child{margin-left:0}
+  .fr-txt{font-size:12px;color:var(--text-2);font-weight:600;white-space:nowrap}
+  .fr-chip-hot{background:rgba(111,158,106,.10);border:1px solid rgba(111,158,106,.35);border-radius:10px;padding:5px 10px 5px 6px;margin-top:8px;white-space:normal}
+  .fr-chip-hot .fr-txt{color:#6f9e6a;white-space:normal}
+  .fr-groupme-link{display:inline-block;margin-top:8px;background:transparent;border:none;padding:0;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer}
+  .fr-groupme-link:hover{text-decoration:underline}
+.fr-connect-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:10px}
+.fr-connect-card{display:flex;flex-direction:column;gap:10px;padding:16px 18px;border:1px solid var(--line);border-radius:14px;background:var(--panel)}
+.fr-cc-top{display:flex;align-items:center;gap:14px}
+.fr-cc-icon{width:42px;height:42px;border-radius:12px;flex:none;display:grid;place-items:center;font-size:15px;font-weight:700;color:#fff}
+.fr-cc-icon.ig{background:linear-gradient(135deg,#f5a24a,#d6386f 55%,#7a4fd6)}
+.fr-cc-icon.ct{background:var(--accent);color:var(--accent-ink)}
+.fr-cc-body{flex:1;min-width:0}
+.fr-cc-body h3{margin:0 0 3px;font-size:15px}
+.fr-cc-body p{margin:0;font-size:12.5px;color:var(--muted);line-height:1.4}
+.fr-cc-btn{flex:none;white-space:nowrap}
+.fr-cc-btn.done{background:var(--panel-3);color:#6f9e6a;border:1px solid rgba(111,158,106,.4)}
+.fr-cc-row{display:flex;gap:8px}
+.fr-cc-row input{flex:1;min-width:0}
+.fr-privacy{font-size:12.5px;color:var(--faint);line-height:1.5;margin:2px 2px 26px}
+.fr-section{margin-bottom:8px}
+.fr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.fr-card{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--panel)}
+.fr-card .ini{width:38px;height:38px;border-radius:11px;flex:none;display:grid;place-items:center;font-size:13px;font-weight:700;color:#fff}
+.fr-main{flex:1;min-width:0}
+.fr-main h4{margin:0 0 3px;font-size:14px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.fr-src{font-size:10px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:2px 7px;border-radius:999px;color:var(--text-2);border:1px solid var(--line)}
+.fr-src.instagram{color:#d6386f;border-color:rgba(214,56,111,.35)}
+.fr-src.contacts{color:var(--accent);border-color:rgba(var(--accent-rgb),.35)}
+.fr-mut{font-size:12px;color:var(--faint);margin-bottom:8px}
+.fr-classes{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.fr-shared{font-size:11px;font-weight:700;color:#6f9e6a;margin-right:2px}
+.fr-add{flex:none;padding:8px 13px;font-size:12.5px}
+.fr-rm{flex:none;color:var(--faint)}
+.fr-rm:hover{color:#d98a7a}
+.fr-reqrow{display:flex;gap:8px;margin-top:2px}
+.fr-profile{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:end;padding:16px 18px;border:1px solid var(--line);border-radius:14px;background:var(--panel);margin-bottom:22px}
+/* ==== friend CSS rules missed in first pass (byte-copied) ==== */
+.fr-profile label{display:block;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);margin-bottom:6px;font-weight:600}
+.fr-gate{max-width:420px;padding:20px;border:1px solid var(--line);border-radius:14px;background:var(--panel)}
+.fr-qr-wrap{display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px;margin-top:12px;border:1px dashed var(--line);border-radius:12px}
+.fr-qr-wrap video{width:260px;max-width:100%;border-radius:12px;background:#000;aspect-ratio:1/1;object-fit:cover}
+.fr-qr-wrap canvas{border-radius:10px;background:#fff;padding:8px;max-width:100%}
+.fr-hist-row{display:grid;grid-template-columns:1.3fr .9fr .7fr 1.3fr auto;gap:10px;align-items:end}
+.fr-hist-row input,.fr-hist-row select{min-width:0;width:100%}
+.fh-f{min-width:0}
+.fh-f label{display:block;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);margin-bottom:6px;font-weight:600}
+.fh-add{height:44px;white-space:nowrap}
+.fr-hist-list{margin-top:14px;display:flex;flex-direction:column;gap:12px}
+.fh-year{display:flex;gap:12px;align-items:flex-start}
+.fh-ylabel{flex:none;width:46px;padding-top:6px;font-size:12px;font-weight:700;color:var(--faint);letter-spacing:.04em}
+.fh-items{display:flex;flex-wrap:wrap;gap:8px;flex:1}
+.fr-hist-item{display:flex;align-items:center;gap:8px;padding:6px 6px 6px 12px;border:1px solid var(--line);border-radius:999px;background:var(--panel-3);font-size:12.5px}
+.fr-hist-item .hc{font-weight:700}
+.fr-hist-item .ht{color:var(--muted)}
+.fr-hist-item .hp{color:var(--faint);font-style:italic;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fr-hist-item .fr-rm{padding:0 3px;line-height:1}
+.fh-review{margin-left:auto;background:rgba(var(--accent-rgb),.12);border:1px solid rgba(var(--accent-rgb),.4);color:var(--good-2);font:700 11.5px inherit;padding:5px 11px;border-radius:999px;cursor:pointer;white-space:nowrap;transition:background .15s}
+.fh-review:hover{background:rgba(var(--accent-rgb),.2)}
+.fr-hist-item{flex-wrap:wrap}
+.fr-err{font-size:12.5px;color:#d98a7a;margin:10px 0 0;min-height:1em}
+.fr-setup{margin-top:30px;border-top:1px solid var(--line);padding-top:8px}
+.fr-setup-toggle{display:flex;width:100%;align-items:center;gap:12px;padding:15px 4px;background:transparent;border:none;cursor:pointer;text-align:left;color:var(--text-2)}
+.fr-setup-toggle:hover{color:var(--text)}
+.fst-l{flex:1;display:flex;flex-direction:column;gap:3px}
+.fst-l b{font-size:14.5px}
+.fst-sub{font-size:12.5px;color:var(--faint);font-weight:400}
+.fst-caret{flex:none;font-size:14px;color:var(--faint);transition:transform .18s ease}
+.fr-setup-toggle.open .fst-caret{transform:rotate(180deg)}
+.fr-setup-body{padding-top:6px}
+.fr-setup-body>.fr-connect-card{margin-bottom:22px}
+.fr-listhead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.fr-addtoggle{background:transparent;border:1px solid var(--line);color:var(--text-2);border-radius:999px;padding:7px 14px;font-size:12.5px;font-weight:600;cursor:pointer}
+.fr-addtoggle:hover{border-color:var(--accent);color:var(--text)}
+.fr-list{display:flex;flex-direction:column;gap:10px}
+.fr-row{display:flex;align-items:flex-start;gap:14px;padding:15px 17px;border:1px solid var(--line);border-radius:15px;background:var(--panel)}
+.fr-row .ini{width:42px;height:42px;border-radius:12px;flex:none;display:grid;place-items:center;font-size:14px;font-weight:700;color:#fff}
+.fr-rowmain{flex:1;min-width:0}
+.fr-rowtop{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.fr-rowtop h4{margin:0;font-size:14.5px}
+.fr-rowtop .fr-src{text-decoration:none}
+.fr-rowtop .fr-src:hover{filter:brightness(1.25)}
+.fr-rowtop .fr-mut,.fr-rowtop .fr-shared{margin:0;font-size:12px}
+.fr-rowsecs{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.fr-rowsec{display:flex;gap:10px;align-items:baseline}
+.fr-empty{padding:30px 24px;text-align:center;border:1px dashed var(--line);border-radius:15px;background:var(--panel)}
+.fr-empty h3{margin:0 0 6px;font-size:15px}
+.fr-empty p{margin:0 auto 16px;font-size:13px;color:var(--faint);max-width:420px;line-height:1.5}
+.fr-chip-took{border-color:rgba(192,103,79,.4);background:rgba(192,103,79,.10)}
+.fr-chip-took .fr-txt{color:#d69a72}
+.fr-qr-img svg{width:200px;height:200px;background:#fff;padding:8px;border-radius:10px;display:block}
+.fh-prof,.fh-add{grid-column:1/-1}
+</style>
+
 
 <!-- ============ ONBOARDING (account wizard) ============ -->
 <div class="ob-back" id="onboard" style="display:none">
@@ -1075,7 +1370,9 @@ const BOOKF='<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" 
 /* ============ HELPERS ============ */
 function initials(n){return n.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();}
 function scoreColor(v){return v==null?'var(--faint)':v>=3.3?'var(--good)':v>=2.5?'var(--mid)':'var(--low)';}
-function rateHtml(v){if(v==null)return `<span class="rate norate">No ratings yet</span>`;return `<span class="rate" style="color:${scoreColor(v)}"><span class="rd" style="background:${scoreColor(v)}"></span>${v.toFixed(1)}</span>`;}
+/* Ratings stored on native 0–4 PolyRatings scale; to5() rescales for display so everything reads out of 5. */
+function to5(v){return v==null?null:Math.round((v/4*5)*100)/100;}
+function rateHtml(v){if(v==null)return `<span class="rate norate">No ratings yet</span>`;return `<span class="rate" style="color:${scoreColor(v)}"><span class="rd" style="background:${scoreColor(v)}"></span>${to5(v).toFixed(1)}<span style="opacity:.5;font-weight:500;font-size:.85em">/5</span></span>`;}
 
 /* ============ PROFESSOR DATA ============ */
 const PROFESSORS = {
@@ -3180,9 +3477,11 @@ function show(v){
   document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
   document.getElementById('view-'+v).classList.add('active');
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
-  const map={home:'tab-home',sched:'tab-sched',explore:'tab-explore',watch:'tab-watch'};
-  if(map[v])document.getElementById(map[v]).classList.add('active');
+  const map={home:'tab-home',sched:'tab-sched',explore:'tab-explore',watch:'tab-watch',friends:'tab-friends'};
+  if(map[v]){var _tb=document.getElementById(map[v]);if(_tb)_tb.classList.add('active');}
   if(v==='watch')renderWatch();
+  if(v==='friends'&&typeof renderFriends==='function')renderFriends();
+  if(v==='past'){var si=(typeof sbUser!=='undefined'&&sbUser);var pg=document.getElementById('pastGate'),ps=document.getElementById('pastSignedIn');if(pg)pg.style.display=si?'none':'';if(ps)ps.style.display=si?'':'none';if(si&&typeof loadMyHistory==='function'){loadMyHistory().then(function(){if(typeof renderMyHistory==='function')renderMyHistory();});}else if(typeof renderMyHistory==='function'){renderMyHistory();}}
   if(v==='sched'&&window.schSyncToStudent){try{window.schSyncToStudent();}catch(e){}}
   window.scrollTo({top:0,behavior:'smooth'});
 }
@@ -3239,6 +3538,7 @@ function clsRow(c){
     <div class="cls-info">
       <div class="ct"><span class="code">${c.code}</span><span class="nm">${c.name}</span><span class="ttag ${c.type==='Core'?'core':''}">${c.type}</span></div>
       <div class="cls-sub"><span class="cls-units">${c.units} units</span><span class="classno">Class #${no}</span><button class="copybtn" onclick="copyClassNo(event,'${no}')">Copy for registration</button></div>
+      ${typeof friendChipHtml==='function'?friendChipHtml(c.code,(c.prof&&c.prof!=='__tbd'&&PROFESSORS[c.prof])?PROFESSORS[c.prof].name:null):''}${typeof tookChipHtml==='function'?tookChipHtml(c.code):''}
     </div>
     <div class="cls-right">${profHtml}<button class="save-ico ${sv?'on':''}" title="Save class" onclick="toggleSaveClass('${c.code}')">${sv?BOOKF:BOOK}</button></div>
   </div>`;
@@ -3278,12 +3578,12 @@ function optimizeSchedule(){
 function renderBestScheduleHtml(){
   const s=optimizeSchedule();if(!s||!s.picks.length)return '<p class="emptyq">Pick your major to build a schedule.</p>';
   const sorted=[...s.picks].sort((a,b)=>((b.rating??-1)-(a.rating??-1)));
-  const avgTxt=s.avg!=null?s.avg.toFixed(2):'—';
+  const avgTxt=s.avg!=null?to5(s.avg).toFixed(2):'—';
   return `<div class="best-head">
     <button class="area-chip" onclick="hideBestSchedule()">← Back to classes</button>
     <div class="best-hero">
       <div><div class="best-k">Your best-professor schedule</div><div class="best-sub">${exMajor}${exConc&&exConc!=='General / Open'?' · '+exConc:''} — the highest-rated instructor we can find teaching each required class.</div></div>
-      <div class="best-avg"><span class="best-num" style="color:${scoreColor(s.avg)}">${avgTxt}</span><span class="best-max">/4</span><span class="best-cnt">avg · ${s.ratedCount}/${s.total} rated</span></div>
+      <div class="best-avg"><span class="best-num" style="color:${scoreColor(s.avg)}">${avgTxt}</span><span class="best-max">/5</span><span class="best-cnt">avg · ${s.ratedCount}/${s.total} rated</span></div>
     </div>
     <div class="best-tip">Ranked by professor rating. Where a class has more than one instructor, we picked the highest-rated. Check the live class schedule for exact section times before you register.</div>
   </div>
@@ -3301,8 +3601,7 @@ function renderExplore(){
     if(!cat){out.innerHTML=`<div class="cat"><span class="lab">Coming soon</span><span class="desc">We're still building the class list for <b style="color:var(--text-2)">${exMajor}</b>. In the meantime, switch to <b style="color:var(--text-2)">Professors</b> above — it covers every department.</span></div>`;return;}
     if(exBest){out.innerHTML=renderBestScheduleHtml();return;}
     const conc=cat.concentrations[exConc]||cat.concentrations[Object.keys(cat.concentrations)[0]];
-    let html=`<div class="cat"><span class="lab">${exConc}</span><span class="desc">${conc.desc}</span></div>
-      <button class="btn primary best-open" onclick="showBestSchedule()">★ Build my best-professor schedule</button>`;
+    let html='';
     const core=cat.core.filter(clsMatch);
     const ce=conc.classes.map(a=>({code:a[0],name:a[1],prof:a[2],units:a[3],type:'Elective'})).filter(clsMatch);
     if(core.length)html+=`<div class="grouphead">Major core &amp; support</div><div class="cls-list">${core.map(clsRow).join('')}</div>`;
@@ -3364,9 +3663,9 @@ async function initBackend(){
   try{
     sb=window.supabase.createClient(c.SUPABASE_URL,c.SUPABASE_ANON_KEY);
     const {data}=await sb.auth.getSession();
-    if(data&&data.session){sbUser=data.session.user;eduVerified=true;}
+    if(data&&data.session){sbUser=data.session.user;eduVerified=true;if(typeof frOnSignedIn==='function')frOnSignedIn();}
     if(typeof updateAuthUI==='function')updateAuthUI();
-    sb.auth.onAuthStateChange((_e,session)=>{sbUser=session?session.user:null;eduVerified=!!sbUser;if(typeof updateAuthUI==='function')updateAuthUI();if(typeof renderAccountSection==='function'&&document.getElementById('setAccount'))renderAccountSection();if(sbUser&&awaitingLink&&currentProf!=null){awaitingLink=false;startRate(currentProf);}});
+    sb.auth.onAuthStateChange((_e,session)=>{sbUser=session?session.user:null;eduVerified=!!sbUser;if(typeof updateAuthUI==='function')updateAuthUI();if(typeof renderAccountSection==='function'&&document.getElementById('setAccount'))renderAccountSection();if(sbUser&&awaitingLink&&currentProf!=null){awaitingLink=false;startRate(currentProf);}if(sbUser&&typeof frOnSignedIn==='function'){frOnSignedIn();}if(!sbUser){try{FRIENDS=[];myProfile=null;friendsList=[];incomingRequests=[];outgoingRequests=[];if(typeof renderFriends==='function')renderFriends();if(typeof updateFriendsBadge==='function')updateFriendsBadge();}catch(e){}}});
   }catch(e){sb=null;}
 }
 async function loadReviews(id){
@@ -3491,9 +3790,15 @@ function authSignedInView(){
 async function authSignOut(){ try{ if(sb&&sb.auth)await sb.auth.signOut(); }catch(e){} sbUser=null; eduVerified=false; updateAuthUI(); if(typeof renderAccountSection==='function')renderAccountSection(); closeAuth(); }
 function updateAuthUI(){
   var btn=document.getElementById('authBtn'); if(!btn)return;
-  if(typeof sbUser!=='undefined'&&sbUser){ var em=sbUser.email||''; btn.className='auth-btn in'; btn.innerHTML='<span class="auth-ava">'+escapeHtml((em[0]||'?').toUpperCase())+'</span><span>'+escapeHtml(em.split('@')[0])+'</span>'; }
-  else { btn.className='auth-btn'; btn.textContent='Log in \u00b7 Sign up'; }
+  if(typeof sbUser!=='undefined'&&sbUser){ var em=sbUser.email||''; btn.className='auth-btn in'; btn.innerHTML='<span class="auth-ava">'+escapeHtml((em[0]||'?').toUpperCase())+'</span><span>'+escapeHtml(em.split('@')[0])+'</span>'; var h=document.getElementById('profMenuHead'); if(h)h.textContent=em.split('@')[0]; }
+  else { btn.className='auth-btn'; btn.textContent='Log in \u00b7 Sign up'; closeProfMenu(); }
 }
+/* Profile dropdown under the account chip: My Classes + Friends live here when signed in. */
+function onAuthBtn(ev){ if(ev){ev.stopPropagation();} if(typeof sbUser!=='undefined'&&sbUser){ toggleProfMenu(); } else { openAuth(); } }
+function toggleProfMenu(){ var m=document.getElementById('profMenu'); if(!m)return; if(m.hidden){m.hidden=false;setTimeout(function(){document.addEventListener('click',profMenuOutside);},0);} else {closeProfMenu();} }
+function closeProfMenu(){ var m=document.getElementById('profMenu'); if(m&&!m.hidden){m.hidden=true;document.removeEventListener('click',profMenuOutside);} }
+function profMenuOutside(e){ var w=document.querySelector('.prof-wrap'); if(w&&!w.contains(e.target))closeProfMenu(); }
+function profGo(target){ closeProfMenu(); if(target==='mine'){ show('watch'); if(typeof setWatchTab==='function')setWatchTab('mine'); } else if(target==='friends'){ show('friends'); } else if(target==='past'){ show('past'); } }
 function renderRateForm(id){
   modalMode='rate';
   const p=PROFESSORS[id];
@@ -3616,6 +3921,89 @@ function renderThanks(id){
     <button class="btn primary rate-submit" onclick="renderModal()">See the updated profile</button>
     <button class="rate-skip" onclick="closeModal()">Done</button></div></div>`;
 }
+
+/* ==== Sean's cream-card helpers (byte-copied) ==== */
+const PFC={cream:'#f2e6c9',panel:'#fffdf6',line:'#ddd0ab',ink:'#211d12',ink2:'#5c5540',green:'#155c2c',greenInk:'#f2e6c9',greenTint:'#dbe6dc',blue:'#1a78ad',blueTint:'#d7e6ee'};
+function pfStars(pct,color){pct=Math.max(0,Math.min(100,pct||0));return `<span style="position:relative;display:inline-block;font-size:26px;letter-spacing:4px;line-height:1"><span style="color:${PFC.line}">&#9733;&#9733;&#9733;&#9733;&#9733;</span><span style="position:absolute;top:0;left:0;width:${pct}%;overflow:hidden;white-space:nowrap;color:${color}">&#9733;&#9733;&#9733;&#9733;&#9733;</span></span>`;}
+function pfMode(arr){if(!arr.length)return null;const c={};arr.forEach(v=>{if(v)c[v]=(c[v]||0)+1;});const k=Object.keys(c).sort((a,b)=>c[b]-c[a]);return k.length?k[0]:null;}
+function pfPrimaryCourse(revs){if(!revs.length)return null;const c={};revs.forEach(r=>{if(r.course)c[r.course]=(c[r.course]||0)+1;});const k=Object.keys(c).sort((a,b)=>c[b]-c[a]);return k.length?k[0]:null;}
+function pfFormatBadges(revs){const c={};revs.forEach(r=>{if(r.format)c[r.format]=(c[r.format]||0)+1;});const k=Object.keys(c).sort((a,b)=>c[b]-c[a]);return k;}
+function pfTopTags(revs,n){const c={};revs.forEach(r=>(r.tags||[]).forEach(t=>{c[t]=(c[t]||0)+1;}));return Object.keys(c).sort((a,b)=>c[b]-c[a]).slice(0,n||2);}
+function pfCoursesTaught(p){const out=[];if(typeof CONFIRMED_SECTIONS!=='undefined'){Object.keys(CONFIRMED_SECTIONS).forEach(code=>{const sec=CONFIRMED_SECTIONS[code];if(sec.profs&&sec.profs.indexOf(p.name)>=0)out.push({code:code,name:sec.name});});}return out;}
+function pfCourseInfo(p,revs){
+  const revCode=pfPrimaryCourse(revs);
+  if(revCode)return {code:revCode,name:(typeof fp_name==='function'?fp_name(revCode):'')||''};
+  const taught=pfCoursesTaught(p);
+  if(taught.length)return taught[0];
+  const wl=wlCourses(p);
+  if(wl.length)return {code:wl[0],name:(typeof fp_name==='function'?fp_name(wl[0]):'')||''};
+  return null;
+}
+function renderReviewLanding(){
+  if(!rlMajor)rlMajor=student.major||Object.keys(MAJOR_CATALOG)[0];
+  if(!rlPrefix)rlPrefix=majorPrefix(rlMajor)||'';
+  let list=Object.entries(PROFESSORS).filter(([id,p])=>{
+    if(p.rating==null)return false;
+    if(rlPrefix&&pdept(p)!==rlPrefix)return false;
+    if(rlNum){const codes=pfCoursesTaught(p).map(c=>c.code).concat(wlCourses(p));if(!codes.some(c=>c.includes(rlNum)))return false;}
+    return true;
+  });
+  list.sort((a,b)=>(b[1].rating??-1)-(a[1].rating??-1));
+  const shown=list.slice(0,12);
+  const majorLine=rlMajorLocked
+    ?`<div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:16px;font-weight:500">${rlMajor}</span><a href="#" onclick="rlUnlockMajor(event)" style="font-size:12px;color:${PFC.blue};font-style:italic;text-decoration:underline;text-underline-offset:2px">change</a></div>`
+    :`<div class="selwrap"><select onchange="rlPickMajor(this.value)">${majorOptionsHtml(rlMajor)}</select></div>`;
+  document.getElementById('rlModal').innerHTML=`
+    <div style="background:${PFC.cream};border-radius:16px;padding:20px;font-family:'Inter',-apple-system,system-ui,sans-serif;color:${PFC.ink};position:relative">
+      <button onclick="closeReviewLanding()" style="position:absolute;top:14px;right:14px;color:${PFC.ink2};border-color:${PFC.line};background:transparent;border:1px solid ${PFC.line};border-radius:9px;width:32px;height:32px;cursor:pointer">&times;</button>
+      <div style="font-size:17px;font-weight:500;margin-bottom:2px">Review a professor</div>
+      <div style="font-size:13px;color:${PFC.ink2};font-style:italic;margin-bottom:18px">Find who you had, or search by course</div>
+      <div style="margin-bottom:14px">
+        <div style="font-size:12px;color:${PFC.ink2};margin-bottom:6px">YOUR MAJOR</div>
+        ${majorLine}
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:20px">
+        <div style="flex:1">
+          <div style="font-size:11px;color:${PFC.ink2};margin-bottom:5px">COURSE PREFIX</div>
+          <input value="${escapeHtml(rlPrefix)}" oninput="rlSetPrefix(this.value)" placeholder="e.g. PSY" style="width:100%;background:${PFC.panel};border:1px solid ${PFC.line};border-radius:8px;padding:8px 10px;font-size:13px;color:${PFC.ink};box-sizing:border-box">
+        </div>
+        <div style="flex:1">
+          <div style="font-size:11px;color:${PFC.ink2};margin-bottom:5px">COURSE NUMBER</div>
+          <input value="${escapeHtml(rlNum)}" oninput="rlSetNum(this.value)" placeholder="e.g. 254" style="width:100%;background:${PFC.panel};border:1px solid ${PFC.line};border-radius:8px;padding:8px 10px;font-size:13px;color:${PFC.ink};box-sizing:border-box">
+        </div>
+      </div>
+      <div style="font-size:12px;color:${PFC.ink2};letter-spacing:.5px;margin-bottom:10px">TOP RATED IN ${escapeHtml(rlMajor).toUpperCase()}</div>
+      ${shown.length?shown.map(([id,p])=>{
+        const t=ratingToTen(p.rating);
+        const courses=pfCoursesTaught(p).map(c=>c.code).concat(wlCourses(p)).filter((v,i,a)=>a.indexOf(v)===i).slice(0,2).join(', ');
+        return `<div onclick="rlOpenProf('${id}')" style="display:flex;align-items:center;justify-content:space-between;background:${PFC.panel};border:1px solid ${PFC.line};border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer">
+          <div style="display:flex;align-items:center;gap:10px;min-width:0">
+            <div style="width:36px;height:36px;border-radius:8px;background:${PFC.greenTint};display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;color:${PFC.green};flex:none">${initials(p.name)}</div>
+            <div style="min-width:0">
+              <div style="font-size:14px;font-weight:500">${p.name}</div>
+              <div style="font-size:12px;color:${PFC.ink2};font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${courses||p.dept}</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;flex:none">
+            <span style="width:30px;text-align:center;background:${PFC.green};color:${PFC.greenInk};font-size:13px;font-weight:600;padding:4px 0;border-radius:7px">${letterGrade(t)}</span>
+            <span style="width:52px;text-align:center;background:${PFC.blueTint};color:${PFC.blue};font-size:12px;font-weight:500;padding:4px 0;border-radius:7px">${to5(p.rating).toFixed(1)}/5</span>
+          </div>
+        </div>`;
+      }).join(''):`<div style="font-size:13px;color:${PFC.ink2};font-style:italic;text-align:center;padding:20px 0">No rated professors match yet — try a different course number or prefix.</div>`}
+    </div>`;
+}
+function ratingToTen(r){return r==null?null:Math.round((r/4*10)*10)/10;}
+function letterGrade(t){
+  if(t==null)return '—';
+  if(t>=9.7)return 'A+'; if(t>=9.3)return 'A'; if(t>=9.0)return 'A-';
+  if(t>=8.7)return 'B+'; if(t>=8.3)return 'B'; if(t>=8.0)return 'B-';
+  if(t>=7.7)return 'C+'; if(t>=7.3)return 'C'; if(t>=7.0)return 'C-';
+  if(t>=6.7)return 'D+'; if(t>=6.3)return 'D'; if(t>=6.0)return 'D-';
+  return 'F';
+}
+function gbRow(r){const t=ratingToTen(r);if(t==null)return `<span class="gb-empty">No ratings</span>`;return `<div class="gb-row"><span class="gb-letter">${letterGrade(t)}</span><span class="gb-score">${to5(r).toFixed(1)}/5</span></div>`;}
+function difficultyLabel(d){if(d==null)return '';const d5=d/4*5;if(d5<=2.5)return 'Relatively easy';if(d5<=3.5)return 'Moderate';return 'Challenging';}
+
 function renderModal(){
   modalMode='profile';
   const p=PROFESSORS[currentProf];
@@ -3626,45 +4014,66 @@ function renderModal(){
   let revs=modalRevs.map((r,i)=>({...r,_i:i}));
   if(revSort==='helpful')revs.sort((a,b)=>b.helpful-a.helpful);else revs.sort((a,b)=>(b.term||'').localeCompare(a.term||''));
   const topIdx=modalRevs.length?modalRevs.map((r,i)=>[i,r.helpful]).sort((a,b)=>b[1]-a[1])[0][0]:-1;
-  document.getElementById('modal').innerHTML=`
-    <div class="mhero">
-      <button class="mclose" onclick="closeModal()">&times;</button>
-      <div class="mtop">
-        <div class="ini">${initials(p.name)}</div>
+
+  const scoreFive=hasR?to5(p.rating):(sAvg!=null?Math.round(sAvg*10)/10:null);
+  const ratingsCount=hasR?p.evals:modalRevs.length;
+  const courseInfo=pfCourseInfo(p,modalRevs);
+  const badges=pfFormatBadges(modalRevs);
+  const highlightTags=pfTopTags(modalRevs,2);
+  const insightTags=pfTopTags(modalRevs,4).slice(2,4);
+  const hrsMode=pfMode(modalRevs.map(r=>r.hours));
+  const topRev=(function(){const t=modalRevs.map((r,i)=>[i,r.helpful||0]).sort((a,b)=>b[1]-a[1])[0];return t?modalRevs[t[0]]:null;})();
+
+  const pfCard=`
+    <div style="background:${PFC.cream};border-radius:16px;padding:20px;font-family:'Inter',-apple-system,system-ui,sans-serif;color:${PFC.ink};position:relative">
+      <button class="mclose" onclick="closeModal()" style="position:absolute;top:14px;right:14px;color:${PFC.ink2};border-color:${PFC.line};background:transparent">&times;</button>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+        <div style="width:48px;height:48px;border-radius:10px;background:${PFC.green};display:flex;align-items:center;justify-content:center;font-weight:600;font-size:18px;color:${PFC.greenInk};flex:none">${initials(p.name)}</div>
         <div>
-          <h2>${p.name}</h2>
-          <div class="dept">${p.dept} · Cal Poly, San Luis Obispo</div>
-          ${hasR&&matchesStudent(p)?'<div style="margin-top:9px"><span class="fitbadge" style="margin-left:0">✓ Fits your learning style</span></div>':''}
+          <div style="font-size:17px;font-weight:500">${p.name}</div>
+          <div style="font-size:13px;color:${PFC.ink2};font-style:italic">${p.dept} · Cal Poly, San Luis Obispo</div>
         </div>
       </div>
-      ${hasR?`<div class="pr-rate">
-        <div class="pr-num" style="color:${scoreColor(p.rating)}">${p.rating.toFixed(2)}<span class="pr-max">/4</span></div>
-        <div class="pr-info"><div class="pr-evals">${p.evals} student ${p.evals===1?'rating':'ratings'}</div><div class="pr-credit">via <b>PolyRatings</b></div></div>
-      </div>`:sAvg!=null?`<div class="pr-rate">
-        <div class="pr-num" style="color:${scoreColor(sAvg/5*4)}">${sAvg.toFixed(1)}<span class="pr-max">/5</span></div>
-        <div class="pr-info"><div class="pr-evals">${modalRevs.length} student ${modalRevs.length===1?'review':'reviews'}</div><div class="pr-credit">on <b>Professify</b></div></div>
-      </div>`:`<div class="norate-banner">No ratings yet — be the first to review.</div>`}
-    </div>
+      <div style="display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap">${badges.length?badges.slice(0,2).map((b,i)=>`<span style="background:${i===0?PFC.greenTint:PFC.blueTint};color:${i===0?PFC.green:PFC.blue};font-size:11px;padding:4px 10px;border-radius:20px">${i===0?b.toLowerCase():'also teaches '+b.toLowerCase()}</span>`).join(''):`<span style="background:${PFC.panel};border:1px solid ${PFC.line};color:${PFC.ink2};font-size:11px;padding:4px 10px;border-radius:20px;font-style:italic">Format not reported yet</span>`}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 4px 20px;margin-bottom:14px;border-bottom:1px solid ${PFC.line};flex-wrap:wrap;gap:14px">
+        <div style="display:flex;flex-direction:column;align-items:flex-start">
+          <div style="font-size:12px;color:${PFC.ink2}">RATED FOR</div>
+          <div style="font-size:24px;font-weight:600;color:${PFC.green};line-height:1.2;margin-top:4px">${courseInfo?courseInfo.code:'No course on file yet'}</div>
+          <div style="font-size:13px;color:${PFC.ink2};font-style:italic;margin-top:2px">${courseInfo&&courseInfo.name?courseInfo.name:(courseInfo?p.dept:'Check back once a section is confirmed')}</div>
+          ${p.difficulty!=null?`<div style="margin-top:10px;background:${PFC.panel};border:1px solid ${PFC.line};border-radius:8px;padding:5px 10px;display:flex;align-items:center;gap:7px">${pfStars((p.difficulty/4)*100,PFC.green).replace('font-size:26px','font-size:15px').replace('letter-spacing:4px','letter-spacing:2px')}<span style="font-size:11px;color:${PFC.ink2};font-style:italic">${difficultyLabel(p.difficulty)} difficulty</span></div>`:`<div style="margin-top:10px;background:${PFC.panel};border:1px solid ${PFC.line};border-radius:8px;padding:5px 10px;display:inline-flex;align-items:center"><span style="font-size:11px;color:${PFC.ink2};font-style:italic">Difficulty not yet rated</span></div>`}
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end">
+          ${scoreFive!=null?`${pfStars((scoreFive/5)*100,PFC.blue)}<div style="font-size:20px;font-weight:500;color:${PFC.blue};margin-top:7px">${scoreFive.toFixed(1)}<span style="font-size:13px;color:${PFC.ink2};font-weight:400"> / 5</span></div><div style="font-size:12px;color:${PFC.ink2};font-style:italic;margin-top:2px">${ratingsCount} student ${ratingsCount===1?'rating':'ratings'}</div>`:`<div style="font-size:13px;color:${PFC.ink2};font-style:italic;max-width:180px;text-align:right">No ratings yet — be the first to review</div>`}
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:10px">${highlightTags.length?highlightTags.map(t=>`<span style="flex:1;background:${PFC.panel};border:1px solid ${PFC.line};border-radius:10px;padding:12px;text-align:center;font-size:14px;font-weight:500;color:${PFC.green}">${t}</span>`).join(''):`<span style="flex:1;background:${PFC.panel};border:1px solid ${PFC.line};border-radius:10px;padding:12px;text-align:center;font-size:13px;font-style:italic;color:${PFC.ink2}">Not enough reviews yet to surface highlights</span>`}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;margin-top:10px">
+        <div style="background:${PFC.panel};border:1px solid ${PFC.line};border-radius:10px;padding:12px"><div style="font-size:11px;color:${PFC.ink2}">WOULD TAKE AGAIN</div><div style="font-size:14px;margin-top:4px">${p.again!=null?p.again+'%':'—'}</div></div>
+        <div style="background:${PFC.panel};border:1px solid ${PFC.line};border-radius:10px;padding:12px"><div style="font-size:11px;color:${PFC.ink2}">AVG HRS / WEEK</div><div style="font-size:14px;margin-top:4px">${hrsMode||'—'}</div></div>
+        <div style="background:${PFC.panel};border:1px solid ${PFC.line};border-radius:10px;padding:12px"><div style="font-size:11px;color:${PFC.ink2}">TYPICAL CLASS SIZE</div><div style="font-size:14px;margin-top:4px">—</div></div>
+        <div style="background:${PFC.panel};border:1px solid ${PFC.line};border-radius:10px;padding:12px"><div style="font-size:11px;color:${PFC.ink2}">YEARS AT CAL POLY</div><div style="font-size:14px;margin-top:4px">${p.since?(2026-p.since)+' yrs':'—'}</div></div>
+      </div>
+      ${p.edu?`<div style="background:${PFC.panel};border:1px solid ${PFC.line};border-radius:10px;padding:12px;margin-bottom:10px"><div style="font-size:11px;color:${PFC.ink2};margin-bottom:6px">EDUCATION</div><div style="font-size:13px;font-style:italic;line-height:1.6">${p.edu}</div></div>`:''}
+      <button class="rate-open" onclick="startRate('${currentProf}')" style="width:100%;background:${PFC.green};color:${PFC.greenInk};border:none;border-radius:10px;padding:13px;font-size:14px;font-weight:500;margin-bottom:20px;cursor:pointer">Leave a review</button>
+      <div style="font-size:12px;color:${PFC.ink2};letter-spacing:.5px;margin-bottom:10px">KEY INSIGHTS</div>
+      <div style="background:${PFC.panel};border:1px solid ${PFC.line};border-radius:10px;padding:12px">
+        ${insightTags.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">${insightTags.map((t,i)=>`<span style="background:${i%2===0?PFC.greenTint:PFC.blueTint};color:${i%2===0?PFC.green:PFC.blue};font-size:11px;padding:3px 9px;border-radius:20px">${t}</span>`).join('')}</div>`:''}
+        ${topRev&&topRev.text?`<div style="font-size:13px;line-height:1.5;font-style:italic">"${topRev.text}"</div>`:`<div style="font-size:13px;line-height:1.5;font-style:italic;color:${PFC.ink2}">No reviews yet — be the first to share what this class was like.</div>`}
+      </div>
+    </div>`;
+
+  document.getElementById('modal').innerHTML=`
+    <div class="mhero" style="padding:20px 20px 0">${pfCard}</div>
     <div class="mbody">
-      <div class="modal-actions">
-        <button class="btn primary rate-open" onclick="startRate('${currentProf}')">Rate this professor</button>
-      </div>
       <button class="wl-btn wl-modalbtn ${isWatched(currentProf)?'on':''}" onclick="toggleWatch('${currentProf}',event)">${isWatched(currentProf)?WL_ON:WL_OFF}<span>${isWatched(currentProf)?'On your watchlist':'Add to watchlist'}</span></button>
-      <div class="msec"><h4>About &amp; background</h4>
-        ${(p.since||p.field||p.edu)?`<div class="bio-grid">
-          ${p.since?`<div class="bio-cell"><span class="bio-k">At Cal Poly</span><span class="bio-v">Since ${p.since} · ${2026-p.since} yrs</span></div>`:''}
-          ${p.field?`<div class="bio-cell"><span class="bio-k">Field of study</span><span class="bio-v">${p.field}</span></div>`:''}
-          ${p.edu?`<div class="bio-cell"><span class="bio-k">Education</span><span class="bio-v">${p.edu}</span></div>`:''}
-        </div>
-        <p class="bio-src">Background from Cal Poly's public course catalog.</p>`:`<p class="bio-empty">Confirmed instructor for ${p.dept} this term. We don't have their years teaching or education on file yet — if it's you, claim your profile to add it.</p>`}
+      <div class="msec">
+        ${p.field?`<div class="bio-grid"><div class="bio-cell"><span class="bio-k">Field of study</span><span class="bio-v">${p.field}</span></div></div>`:''}
         <button class="claimbtn" onclick="claimProfile()">Are you ${p.name.split(' ')[0]}? Claim this profile</button>
         <div id="claimNote"></div>
       </div>
-      ${p.strong?`<div class="msec"><h4>Strong suits</h4><div class="chips">${p.strong.map(s=>`<span class="c">${s}</span>`).join('')}</div></div>`:''}
       ${p.style?`<div class="msec"><h4>Teaching style — does it fit you?</h4><div class="sbars">${Object.entries(p.style).map(([k,v])=>`<div class="sbar"><div class="st"><span>${k}</span><span class="v">${v}%</span></div><div class="track"><i style="width:${v}%"></i></div></div>`).join('')}</div></div>`:''}
       ${p.track?`<div class="msec"><h4>Track record — where they've taught</h4><div class="rows">${p.track.map(t=>`<div class="trow ${t[2]?'cur':''}"><span class="dash"></span><span>${t[0]}</span><span class="yr">${t[1]}</span></div>`).join('')}</div></div>`:''}
-      ${''/* Grade distributions intentionally omitted — Cal Poly doesn't publish real per-professor grade data in a usable feed, so we show nothing rather than a fabricated chart. */}
-      ${modalRevs.length?`<div class="msec"><div class="revhead"><h4>Reviews · ${modalRevs.length}</h4><div class="revsort"><button class="${revSort==='helpful'?'active':''}" onclick="setRevSort('helpful')">Most helpful</button><button class="${revSort==='recent'?'active':''}" onclick="setRevSort('recent')">Most recent</button></div></div>${revs.map(r=>`<div class="review"><div class="rtop"><span class="rc">${r.course}</span><span class="rt">${r.term}</span>${r.verified?`<span class="ver">${CHECK} Verified enrolled</span>`:''}${r._i===topIdx?`<span class="best">Most helpful for ${r.course}</span>`:''}<span class="rs" style="color:${scoreColor(r.score)}"><span class="rd" style="width:6px;height:6px;border-radius:50%;background:${scoreColor(r.score)};display:inline-block"></span>${Number(r.score).toFixed(1)}</span></div>${rfMeta(r)}<p class="rtext">${r.text}</p><div class="rtags">${r.tags.map(t=>`<span class="t">${t}</span>`).join('')}</div><div class="rfoot"><button class="hbtn ${r._v?'on':''}" onclick="voteHelpful(${r._i})">${THUMB} Helpful</button><span class="hcount">${r.helpful} found this helpful</span></div></div>`).join('')}</div>`:`<div class="msec"><h4>Reviews</h4><div class="norev"><p>No reviews yet.</p><button class="btn primary rate-open" onclick="startRate('${currentProf}')">Be the first to rate</button></div></div>`}
+      ${modalRevs.length?`<div class="msec"><div class="revhead"><h4>Reviews · ${modalRevs.length}</h4><div class="revsort"><button class="${revSort==='helpful'?'active':''}" onclick="setRevSort('helpful')">Most helpful</button><button class="${revSort==='recent'?'active':''}" onclick="setRevSort('recent')">Most recent</button></div></div>${revs.map(r=>`<div class="review"><div class="rtop"><span class="rc">${r.course}</span><span class="rt">${r.term}</span>${r.verified?`<span class="ver">${CHECK} Verified enrolled</span>`:''}${r._i===topIdx?`<span class="best">Most helpful for ${r.course}</span>`:''}<span class="rs" style="color:${scoreColor(r.score)}"><span class="rd" style="width:6px;height:6px;border-radius:50%;background:${scoreColor(r.score)};display:inline-block"></span>${Number(r.score).toFixed(1)}</span></div>${rfMeta(r)}<p class="rtext">${r.text}</p><div class="rtags">${r.tags.map(t=>`<span class="t">${t}</span>`).join('')}</div><div class="rfoot"><button class="hbtn ${r._v?'on':''}" onclick="voteHelpful(${r._i})">${THUMB} Helpful</button><span class="hcount">${r.helpful} found this helpful</span></div></div>`).join('')}</div>`:`<div class="msec"><h4>Reviews</h4><div class="norev"><p>No reviews yet.</p><button class="btn primary rate-open" onclick="startRate('${currentProf}')">Be the first to review</button></div></div>`}
     </div>`;
 }
 
@@ -3706,7 +4115,7 @@ function renderWatch(){
     insight=`<div class="wl-insight">No overlapping classes among these professors — based on what they've taught they cover <span class="ov">different courses</span>, so you could potentially take several of them in one term.</div>`;
   }
   const rows=[
-    {k:'Rating · PolyRatings', raw:profs.map(({p})=>p.rating!=null?p.rating.toFixed(2):'—'), cell:profs.map(({p})=>p.rating!=null?`<span class="prb" style="color:${scoreColor(p.rating)}">${p.rating.toFixed(2)}<small> /4</small></span>`:'<span class="wl-val" style="color:var(--faint)">No rating yet</span>')},
+    {k:'Rating · PolyRatings', raw:profs.map(({p})=>p.rating!=null?p.rating.toFixed(2):'—'), cell:profs.map(({p})=>p.rating!=null?`<span class="prb" style="color:${scoreColor(p.rating)}">${to5(p.rating).toFixed(2)}<small> /5</small></span>`:'<span class="wl-val" style="color:var(--faint)">No rating yet</span>')},
     {k:'# of ratings', raw:profs.map(({p})=>String(p.evals||0)), cell:profs.map(({p})=>`<span class="wl-val">${p.evals?p.evals.toLocaleString():'—'}</span>`)},
     {k:'Student reviews', raw:profs.map(({p})=>{const c=profReviews(p).length;const a=studentAvg(p);return c?a.toFixed(1)+'·'+c:'0';}), cell:profs.map(({p})=>{const c=profReviews(p).length;const a=studentAvg(p);return c?`<span class="wl-val"><b style="color:${scoreColor(a/5*4)}">${a.toFixed(1)}</b>/5 · ${c}</span>`:'<span class="wl-val" style="color:var(--faint)">None yet</span>';})},
     {k:'Department', raw:profs.map(({p})=>pdept(p)||p.dept||'—'), cell:profs.map(({p})=>`<span class="wl-val">${pdept(p)||p.dept||'—'}</span>`)},
@@ -3715,7 +4124,7 @@ function renderWatch(){
     {k:'Classes taught', raw:profs.map(({p})=>wlCourses(p).slice(0,6).join(',')), cell:profs.map(({p})=>{const c=wlCourses(p).slice(0,6);return c.length?c.map(x=>`<span class="wl-chip">${x}</span>`).join(''):'<span class="wl-val" style="color:var(--faint)">—</span>';})}
   ];
   const visRows=wlDiffOnly?rows.filter(r=>new Set(r.raw).size>1):rows;
-  const thead=`<tr><th class="wl-attr"></th>${profs.map(({id,p})=>`<th class="wl-phead"><span class="pn" onclick="openProf('${id}')" style="cursor:pointer">${p.name}</span><span class="pdp">${pdept(p)||p.dept||''}</span>${p.rating!=null?`<span class="prb" style="color:${scoreColor(p.rating)}">${p.rating.toFixed(2)}<small>/4</small></span>`:'<span class="pdp">No rating</span>'}<br><button class="wl-rm" title="Remove from watchlist" onclick="toggleWatch('${id}')">Remove ✕</button></th>`).join('')}</tr>`;
+  const thead=`<tr><th class="wl-attr"></th>${profs.map(({id,p})=>`<th class="wl-phead"><span class="pn" onclick="openProf('${id}')" style="cursor:pointer">${p.name}</span><span class="pdp">${pdept(p)||p.dept||''}</span>${p.rating!=null?`<span class="prb" style="color:${scoreColor(p.rating)}">${to5(p.rating).toFixed(2)}<small>/5</small></span>`:'<span class="pdp">No rating</span>'}<br><button class="wl-rm" title="Remove from watchlist" onclick="toggleWatch('${id}')">Remove ✕</button></th>`).join('')}</tr>`;
   const tbody=visRows.length?visRows.map(r=>`<tr><td class="wl-attr">${r.k}</td>${r.cell.map(c=>`<td>${c}</td>`).join('')}</tr>`).join(''):`<tr><td class="wl-attr"></td><td colspan="${profs.length}" style="color:var(--faint)">These professors are identical on every tracked attribute.</td></tr>`;
   const over=profs.length>5?`<p class="wl-note">Comparison is easiest with 5 or fewer — you're comparing ${profs.length}. On a phone, scroll sideways to see them all.</p>`:'';
   out.innerHTML=`
@@ -3786,23 +4195,108 @@ let myClasses=[];
 try{const _mc=JSON.parse(localStorage.getItem('professify_my_classes')||'[]');if(Array.isArray(_mc))myClasses=_mc;}catch(e){}
 function saveMyClasses(){try{localStorage.setItem('professify_my_classes',JSON.stringify(myClasses));}catch(e){}}
 function isMyClass(code){return myClasses.indexOf(code)>=0;}
-function toggleMyClass(code,ev){if(ev){ev.stopPropagation();}const i=myClasses.indexOf(code);if(i>=0){myClasses.splice(i,1);}else{myClasses.push(code);if(watchClasses.indexOf(code)<0){watchClasses.push(code);saveWatchClasses();}}saveMyClasses();if(typeof updateSavedCount==='function')updateSavedCount();updateWatchUI();}
-function clearMyClasses(){myClasses=[];saveMyClasses();if(typeof updateSavedCount==='function')updateSavedCount();updateWatchUI();}
+function toggleMyClass(code,ev){if(ev){ev.stopPropagation();}const i=myClasses.indexOf(code);var added;if(i>=0){myClasses.splice(i,1);added=false;}else{myClasses.push(code);added=true;if(watchClasses.indexOf(code)<0){watchClasses.push(code);saveWatchClasses();}}saveMyClasses();try{frSyncSaved&&frSyncSaved();}catch(e){}try{if(typeof pushMyClassToDb==='function')pushMyClassToDb(code,added);}catch(e){}if(typeof updateSavedCount==='function')updateSavedCount();updateWatchUI();}
+function clearMyClasses(){myClasses=[];saveMyClasses();try{frSyncSaved&&frSyncSaved();}catch(e){}if(typeof updateSavedCount==='function')updateSavedCount();updateWatchUI();}
+
+/* ---- Section time captured when a class is added from a specific section (e.g. the compare screen) ---- */
+let myClassMeta={};
+try{const _mcm=JSON.parse(localStorage.getItem('professify_my_class_meta')||'{}');if(_mcm&&typeof _mcm==='object')myClassMeta=_mcm;}catch(e){}
+function saveMyClassMeta(){try{localStorage.setItem('professify_my_class_meta',JSON.stringify(myClassMeta));}catch(e){}}
+
+/* Parse a meeting string like "TuTh 9:00AM–10:20AM" or "MoWe 6:00PM–7:20PM" into {days:['Tu','Th'],start,end} in minutes. Returns null if it can't (e.g. "Time TBA"). */
+const DAY_ORDER=['Mo','Tu','We','Th','Fr','Sa','Su'];
+const DAY_LABEL={Mo:'Mon',Tu:'Tue',We:'Wed',Th:'Thu',Fr:'Fri',Sa:'Sat',Su:'Sun'};
+function parseMeet(str){
+  if(!str)return null; str=String(str).trim();
+  if(/tba/i.test(str))return null;
+  var dm=str.match(/^((?:Mo|Tu|We|Th|Fr|Sa|Su)+)/);
+  if(!dm)return null;
+  var days=[],re=/Mo|Tu|We|Th|Fr|Sa|Su/g,m; while((m=re.exec(dm[1])))days.push(m[0]);
+  var tm=str.match(/(\d{1,2}):(\d{2})\s*([AaPp][Mm])\s*[–—-]\s*(\d{1,2}):(\d{2})\s*([AaPp][Mm])/);
+  if(!tm||!days.length)return null;
+  function to24(h,mi,ap){h=+h;mi=+mi;ap=ap.toUpperCase();if(ap==='PM'&&h!==12)h+=12;if(ap==='AM'&&h===12)h=0;return h*60+mi;}
+  var start=to24(tm[1],tm[2],tm[3]),end=to24(tm[4],tm[5],tm[6]);
+  if(end<=start)return null;
+  return {days:days,start:start,end:end};
+}
+/* the section time we know for a My-Classes code: the one captured from compare, else the first live section */
+function myClassTime(code){
+  if(myClassMeta[code]&&myClassMeta[code].time)return myClassMeta[code].time;
+  var ci=classInfo(code); return ci.times&&ci.times.length?ci.times[0]:'';
+}
+function meetsOverlap(a,b){
+  if(!a||!b)return false;
+  var shared=a.days.some(function(d){return b.days.indexOf(d)>=0;});
+  return shared&&a.start<b.end&&b.start<a.end;
+}
+/* returns {conflictCodes:Set-ish object, pairs:[[codeA,codeB],...]} for the given codes */
+function myClassConflicts(codes){
+  var meets=codes.map(function(c){return {code:c,meet:parseMeet(myClassTime(c))};});
+  var bad={},pairs=[];
+  for(var i=0;i<meets.length;i++)for(var j=i+1;j<meets.length;j++){
+    if(meetsOverlap(meets[i].meet,meets[j].meet)){bad[meets[i].code]=1;bad[meets[j].code]=1;pairs.push([meets[i].code,meets[j].code]);}
+  }
+  return {bad:bad,pairs:pairs,meets:meets};
+}
+let myClassesView='list';
+function setMyClassesView(v){myClassesView=v;renderMyClasses();}
+
 function renderMyClasses(){
   var out=document.getElementById('watchMineOut');if(!out)return;
   var codes=myClasses.slice();
   if(!codes.length){ out.innerHTML='<div class="wl-empty"><h3>You haven’t picked your classes yet</h3><p>In the <b style="color:var(--text-2)">Classes</b> tab, hit <b style="color:var(--text-2)">Taking this</b> on the ones you’re actually going to take. They collect here as your class list — and this is the part your friends will see once friends launches.</p><button class="btn primary" onclick="setWatchTab(\'classes\')">Go to Classes →</button></div>'; return; }
   var infos=codes.map(classInfo);
+  var conf=myClassConflicts(codes);
   var cards=infos.map(function(i){
     var seat=i.agg?('<span class="mc-seat '+(i.agg.open>0?'open':(i.agg.wait>0?'wait':'full'))+'">'+(i.agg.open>0?(i.agg.seats+' of '+i.agg.cap+' open · live'):(i.agg.wait>0?('Waitlist '+Math.max(0,(i.agg.wlcap||99)-(i.agg.wl||0))+'/'+(i.agg.wlcap||99)):'Full'))+'</span>'):'<span class="mc-seat none">Check schedule</span>';
-    var prof=i.best?(escAcc(i.best.name)+' · '+i.best.rating.toFixed(1)):(i.instrs[0]?escAcc(i.instrs[0].name):'Instructor TBA');
-    var time=i.times.length?escAcc(i.times[0]):'Time TBA';
-    return '<div class="mc-card"><div class="mc-main"><div class="mc-code">'+escAcc(i.code)+(i.units!=null?' · '+i.units+' units':'')+'</div><div class="mc-name">'+escAcc(i.name||'')+'</div><div class="mc-sub">'+prof+' · '+time+'</div></div>'+seat+'<button class="mc-x" title="Remove" onclick="toggleMyClass(\''+i.code+'\')">&times;</button></div>';
+    var prof=(myClassMeta[i.code]&&myClassMeta[i.code].prof)?escAcc(myClassMeta[i.code].prof):(i.best?(escAcc(i.best.name)+' · '+i.best.rating.toFixed(1)):(i.instrs[0]?escAcc(i.instrs[0].name):'Instructor TBA'));
+    var timeStr=myClassTime(i.code); var time=timeStr?escAcc(timeStr):'Time TBA';
+    var clash=conf.bad[i.code]?'<span class="mc-clash" title="Overlaps another class time">⚠ Time clash</span>':'';
+    return '<div class="mc-card'+(conf.bad[i.code]?' clash':'')+'"><div class="mc-main"><div class="mc-code">'+escAcc(i.code)+(i.units!=null?' · '+i.units+' units':'')+clash+'</div><div class="mc-name">'+escAcc(i.name||'')+'</div><div class="mc-sub">'+prof+' · '+time+'</div></div>'+seat+'<button class="mc-x" title="Remove" onclick="toggleMyClass(\''+i.code+'\')">&times;</button></div>';
   }).join('');
   var units=infos.reduce(function(s,i){return s+(i.units||0);},0);
-  out.innerHTML='<div class="mc-head"><div><b>'+codes.length+' class'+(codes.length===1?'':'es')+'</b> · ~'+units+' units — what you’re planning to take</div><button class="wl-clear" onclick="clearMyClasses()">Clear</button></div>'
-    +'<div class="mc-list">'+cards+'</div>'
+  var banner='';
+  if(conf.pairs.length){
+    var lines=conf.pairs.map(function(p){return escAcc(p[0])+' ↔ '+escAcc(p[1]);}).join(', ');
+    banner='<div class="mc-conflict"><b>⚠ '+conf.pairs.length+' time '+(conf.pairs.length===1?'conflict':'conflicts')+'</b> — these overlap: '+lines+'. Swap one for a different section to clear it.</div>';
+  }
+  var toggle='<div class="mc-viewtog"><button class="'+(myClassesView==='list'?'on':'')+'" onclick="setMyClassesView(\'list\')">List</button><button class="'+(myClassesView==='calendar'?'on':'')+'" onclick="setMyClassesView(\'calendar\')">Calendar</button></div>';
+  var body=myClassesView==='calendar'?renderMyCalendar(codes,conf):('<div class="mc-list">'+cards+'</div>');
+  out.innerHTML='<div class="mc-head"><div><b>'+codes.length+' class'+(codes.length===1?'':'es')+'</b> · ~'+units+' units — what you’re planning to take</div><div class="mc-headr">'+toggle+'<button class="wl-clear" onclick="clearMyClasses()">Clear</button></div></div>'
+    +banner+body
     +'<div class="wl-insight" style="margin-top:16px">This is your class list. When friends launches, this is what your friends will be able to see — so you can find the classes you’re both taking. Seats and times are live from Cal Poly; nothing is estimated.</div>';
+}
+/* Weekly Mon–Fri calendar grid of My Classes. Blocks placed by parsed start/end; conflicting blocks flagged red. */
+function renderMyCalendar(codes,conf){
+  var DAYS=['Mo','Tu','We','Th','Fr'];
+  var meets=codes.map(function(c){var ci=classInfo(c);return {code:c,name:ci.name,meet:parseMeet(myClassTime(c))};});
+  var placed=meets.filter(function(m){return m.meet;});
+  var noTime=meets.filter(function(m){return !m.meet;});
+  var lo=8*60,hi=21*60; // default 8AM–9PM window, expand to fit
+  placed.forEach(function(m){lo=Math.min(lo,m.meet.start);hi=Math.max(hi,m.meet.end);});
+  lo=Math.floor(lo/60)*60; hi=Math.ceil(hi/60)*60;
+  var PPM=0.8, gridH=(hi-lo)*PPM;
+  var hourRows=''; for(var t=lo;t<=hi;t+=60){var top=(t-lo)*PPM;var hr=t/60;var lab=(hr%12===0?12:hr%12)+(hr<12||hr===24?'AM':'PM');hourRows+='<div class="cal-hr" style="top:'+top+'px">'+lab+'</div>';}
+  var cols=DAYS.map(function(d){
+    var day=placed.filter(function(m){return m.meet.days.indexOf(d)>=0;}).sort(function(a,b){return a.meet.start-b.meet.start||a.meet.end-b.meet.end;});
+    // split overlapping blocks into side-by-side lanes, cluster by cluster
+    var i=0,html='';
+    while(i<day.length){
+      var cluster=[day[i]],maxEnd=day[i].meet.end,j=i+1;
+      while(j<day.length&&day[j].meet.start<maxEnd){cluster.push(day[j]);maxEnd=Math.max(maxEnd,day[j].meet.end);j++;}
+      var lanes=[]; cluster.forEach(function(m){var L=0;for(;L<lanes.length;L++){if(lanes[L]<=m.meet.start)break;}m._lane=L;lanes[L]=m.meet.end;});
+      var nLanes=lanes.length;
+      cluster.forEach(function(m){
+        var top=(m.meet.start-lo)*PPM,h=(m.meet.end-m.meet.start)*PPM,bad=!!conf.bad[m.code];
+        var w=100/nLanes,left=m._lane*w;
+        html+='<div class="cal-block'+(bad?' bad':'')+'" style="top:'+top+'px;height:'+Math.max(h,20)+'px;left:calc('+left+'% + 3px);width:calc('+w+'% - 6px)" title="'+escAcc(m.code+' · '+m.name)+'"><span class="cb-code">'+escAcc(m.code)+'</span><span class="cb-nm">'+escAcc(String(m.name||'').slice(0,26))+'</span></div>';
+      });
+      i=j;
+    }
+    return '<div class="cal-col"><div class="cal-dh">'+DAY_LABEL[d]+'</div><div class="cal-day" style="height:'+gridH+'px">'+html+'</div></div>';
+  }).join('');
+  var tbaNote=noTime.length?('<div class="cal-tba">No set meeting time yet: '+noTime.map(function(m){return escAcc(m.code);}).join(', ')+' — check the class schedule.</div>'):'';
+  return '<div class="cal-wrap"><div class="cal-times"><div class="cal-dh">&nbsp;</div><div class="cal-timecol" style="height:'+gridH+'px">'+hourRows+'</div></div>'+cols+'</div>'+tbaNote;
 }
 updateWatchBadge();
 
@@ -4546,6 +5040,9 @@ Object.assign(window.SCHED_MAJORS, {
 .fp-ct th{background:var(--panel);color:var(--text);font-size:12.5px}
 .fp-ct td.win{color:var(--good);font-weight:700}
 .fp-ct .rl{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em;font-weight:700}
+.fp-addmc{width:100%;border:1px solid rgba(var(--accent-rgb),.5);background:rgba(var(--accent-rgb),.1);color:var(--good-2);font:700 12px inherit;padding:7px 8px;border-radius:8px;cursor:pointer;white-space:nowrap;transition:background .15s,border-color .15s}
+.fp-addmc:hover{background:rgba(var(--accent-rgb),.18)}
+.fp-addmc.on{background:var(--accent);border-color:var(--accent);color:#fff}
 </style>
 
 <div class="fp-back" id="fpBack">
@@ -4952,11 +5449,627 @@ function openFpCompare(){
     +'<tr><td class="rl">Fits your style</td>'+cols.map(function(c){var f=c.p&&typeof matchesStudent==='function'&&matchesStudent(c.p);return '<td'+(f?' class="win"':'')+'>'+(f?'✓ Yes':'—')+'</td>';}).join('')+'</tr>'
     +'<tr><td class="rl">Section time</td>'+cols.map(function(c){return '<td>'+(c.time?fpEsc(c.time):'Time TBA')+'</td>';}).join('')+'</tr>'
     +'<tr><td class="rl">Seats / waitlist</td>'+cols.map(function(c){return '<td>'+fpEsc(seatBadge(c.seat))+'</td>';}).join('')+'</tr>'
+    +'<tr><td class="rl">Add</td>'+cols.map(function(c,i){var on=typeof isMyClass==='function'&&isMyClass(c.code);return '<td><button class="fp-addmc'+(on?' on':'')+'" data-i="'+i+'" onclick="fpCmpAdd('+i+')">'+(on?'✓ In my classes':'+ My classes')+'</button></td>';}).join('')+'</tr>'
     +'</table>';
+  window._fpCmpCols=cols;
   document.getElementById('fpCmpBody').innerHTML=html;
   document.getElementById('fpCmpBack').classList.add('open');
 }
+/* Promote a compared option into My Classes, capturing its specific section time + professor so conflicts and the calendar use the real section. */
+function fpCmpAdd(i){
+  var c=(window._fpCmpCols||[])[i]; if(!c)return;
+  var was=typeof isMyClass==='function'&&isMyClass(c.code);
+  if(!was){ myClassMeta[c.code]={time:c.time||'',prof:c.p?c.p.name:''}; saveMyClassMeta(); }
+  else { delete myClassMeta[c.code]; saveMyClassMeta(); }
+  toggleMyClass(c.code);
+  var on=isMyClass(c.code);
+  var btn=document.querySelector('.fp-addmc[data-i="'+i+'"]');
+  if(btn){btn.classList.toggle('on',on);btn.textContent=on?'✓ In my classes':'+ My classes';}
+}
 function closeFpCompare(){document.getElementById('fpCmpBack').classList.remove('open');}
+
+/* ==== FRIENDS bundle (raw JS, main-script scope) ==== */
+/* ============ FRIENDS (Supabase-backed) — grafted from Sage's build ============ */
+let FRIENDS=[];
+let myProfile=null;
+let friendsList=[];
+let incomingRequests=[];
+let outgoingRequests=[];
+let contactMatches=[];
+let classmateSuggestions=[];
+let frBusy=false;
+const FR_COLORS=['#c0674f','#6f9e6a','#7a8fd6','#d6a24a','#c06f9e','#4fa6a0','#a06fd6','#5f8fce','#ce7a5f','#8fce6a'];
+const FR_HOT=3;
+function frSyncSaved(){try{if(typeof savedClasses!=='undefined'){savedClasses=new Set((typeof myClasses!=='undefined'?myClasses:[]));}}catch(e){}}
+function enforceEduDomain(){
+  if(sbUser&&!eduOk(sbUser.email||'')){
+    const bad=sbUser.email;
+    try{sb.auth.signOut();}catch(e){}
+    sbUser=null;eduVerified=false;
+    alert('Please sign in with your school .edu email'+(bad?` — "${bad}" isn't one.`:'.'));
+    return false;
+  }
+  return true;
+}
+
+function colorForId(id){let h=0;const s=String(id||'');for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return FR_COLORS[h%FR_COLORS.length];}
+
+
+function friendsInClass(code){return FRIENDS.filter(f=>f.classes.includes(code));}
+
+function friendChipHtml(code,profName){
+  const fr=friendsInClass(code);
+  if(!fr.length)return '';
+  const avs=fr.slice(0,3).map(f=>`<span class="fr-av" style="background:${f.color}">${f.ini}</span>`).join('');
+  const names=fr.map(f=>f.name).join(', ');
+  const n=fr.length,hot=n>=FR_HOT;
+  const label=hot
+    ? (profName?`${n} friends have ${escapeHtml(profName)} — consider taking this one`:`${n} friends are in this class — consider taking it`)
+    : `${n} friend${n>1?'s':''} in this class`;
+  return `<div class="fr-chip${hot?' fr-chip-hot':''}" title="${escapeHtml(names)}"><span class="fr-avs">${avs}</span><span class="fr-txt">${label}</span></div>`;
+}
+
+function friendsWhoTook(code){
+  return FRIENDS
+    .map(f=>{const h=(f.history||[]).find(x=>x.code===code);return h?{...f,took:h}:null;})
+    .filter(Boolean)
+    .sort((a,b)=>(b.took.year-a.took.year)||((TERM_ORDER[b.took.term]??0)-(TERM_ORDER[a.took.term]??0)));
+}
+
+function tookChipHtml(code){
+  const fr=friendsWhoTook(code);
+  if(!fr.length)return '';
+  const avs=fr.slice(0,3).map(f=>`<span class="fr-av" style="background:${f.color}">${f.ini}</span>`).join('');
+  let label;
+  if(fr.length===1){
+    const f=fr[0];
+    label=`${escapeHtml(f.name)} took this ${tookLabel(f.took)}${f.took.professor?` with ${escapeHtml(f.took.professor)}`:''}`;
+  }else{
+    const first=fr[0];
+    label=`${escapeHtml(first.name)} +${fr.length-1} other${fr.length>2?'s':''} already took this — most recently ${tookLabel(first.took)}`;
+  }
+  const title=fr.map(f=>`${f.name} — ${tookLabel(f.took)}${f.took.professor?' ('+f.took.professor+')':''}`).join('\n');
+  return `<div class="fr-chip fr-chip-took" title="${escapeHtml(title)}"><span class="fr-avs">${avs}</span><span class="fr-txt">${label}</span></div>`;
+}
+
+function frCheckEdu(){const v=(document.getElementById('frAuthEmail').value||'').trim();document.getElementById('frAuthBtn').disabled=!eduOk(v);}
+
+async function frDoVerify(){
+  const email=(document.getElementById('frAuthEmail').value||'').trim();
+  if(!eduOk(email)){document.getElementById('frAuthErr').textContent='Use your school .edu email.';return;}
+  if(!backendReady()){document.getElementById('frAuthErr').textContent='Live accounts aren\'t configured for this deployment yet.';return;}
+  if(frBusy)return;frBusy=true;
+  const btn=document.getElementById('frAuthBtn');btn.disabled=true;btn.textContent='Sending…';
+  try{
+    const {error}=await sb.auth.signInWithOtp({email,options:{shouldCreateUser:true}});
+    if(error)throw error;
+    document.getElementById('frAuthStep1').style.display='none';
+    document.getElementById('frAuthStep2').style.display='';
+    document.getElementById('frAuthStep2').dataset.email=email;
+    setTimeout(()=>{const c=document.getElementById('frAuthCode');if(c)c.focus();},60);
+  }catch(e){document.getElementById('frAuthErr').textContent=(e&&e.message)||'Could not send the code. Try again.';btn.disabled=false;btn.textContent='Email me a code';}
+  frBusy=false;
+}
+
+function frCheckCode(){const v=(document.getElementById('frAuthCode').value||'').replace(/\D/g,'');const el=document.getElementById('frAuthCode');if(el.value!==v)el.value=v;document.getElementById('frAuthCodeBtn').disabled=v.length<6;}
+
+async function frVerifyCode(){
+  const email=document.getElementById('frAuthStep2').dataset.email;
+  const code=(document.getElementById('frAuthCode').value||'').replace(/\D/g,'');
+  if(code.length<6){document.getElementById('frAuthCodeErr').textContent='Enter the code from your email.';return;}
+  if(frBusy)return;frBusy=true;
+  const btn=document.getElementById('frAuthCodeBtn');btn.disabled=true;btn.textContent='Verifying…';
+  try{
+    const {data,error}=await sb.auth.verifyOtp({email,token:code,type:'email'});
+    if(error)throw error;
+    if(data&&data.session){sbUser=data.session.user;eduVerified=true;await frOnSignedIn();}
+    else throw new Error('Could not verify. Try again.');
+  }catch(e){document.getElementById('frAuthCodeErr').textContent=(e&&e.message)||'That code was wrong or expired.';btn.disabled=false;btn.textContent='Verify & continue';}
+  frBusy=false;
+}
+
+async function ensureProfile(){
+  if(!backendReady()||!sbUser)return;
+  const {data}=await sb.from('profiles').select('*').eq('id',sbUser.id).maybeSingle();
+  if(data){myProfile=data;return;}
+  const name=(sbUser.email||'').split('@')[0].replace(/[._]/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+  const row={id:sbUser.id,edu_email:sbUser.email,display_name:name};
+  const {error}=await sb.from('profiles').insert(row);
+  myProfile=error?{...row}:row;
+}
+
+async function applyPendingContactInfo(){
+  if(!backendReady()||!sbUser)return;
+  const handle=localStorage.getItem('professify_pending_handle');
+  const phone=localStorage.getItem('professify_pending_phone');
+  if(!handle&&!phone)return;
+  const patch={};
+  if(handle)patch.instagram_handle=handle;
+  try{
+    if(phone)patch.phone_hash=await hashPhone(phone);
+    const {error}=await sb.from('profiles').update(patch).eq('id',sbUser.id);
+    if(!error){Object.assign(myProfile,patch);localStorage.removeItem('professify_pending_handle');localStorage.removeItem('professify_pending_phone');}
+  }catch(e){}
+}
+
+async function loadFriendsData(){
+  if(!backendReady()||!sbUser){friendsList=[];incomingRequests=[];outgoingRequests=[];FRIENDS=[];return;}
+  const {data:reqs}=await sb.from('friend_requests').select('*').or(`from_user.eq.${sbUser.id},to_user.eq.${sbUser.id}`);
+  const all=reqs||[];
+  const accepted=all.filter(r=>r.status==='accepted');
+  incomingRequests=all.filter(r=>r.status==='pending'&&r.to_user===sbUser.id);
+  outgoingRequests=all.filter(r=>r.status==='pending'&&r.from_user===sbUser.id);
+  const friendIds=accepted.map(r=>r.from_user===sbUser.id?r.to_user:r.from_user);
+  const otherIds=[...new Set([...friendIds,...incomingRequests.map(r=>r.from_user),...outgoingRequests.map(r=>r.to_user)])];
+  let profMap={};
+  if(otherIds.length){
+    const {data:profs}=await sb.from('profiles').select('id,display_name,instagram_handle').in('id',otherIds);
+    (profs||[]).forEach(p=>profMap[p.id]=p);
+  }
+  let classMap={},histMap={};
+  if(friendIds.length){
+    const {data:classes}=await sb.from('saved_classes').select('user_id,code').in('user_id',friendIds);
+    (classes||[]).forEach(c=>{(classMap[c.user_id]=classMap[c.user_id]||[]).push(c.code);});
+    // classes friends have already completed (see class_history_migration.sql)
+    const {data:hist,error:histErr}=await sb.from('class_history').select('user_id,code,term,year,professor').in('user_id',friendIds);
+    if(histErr)console.error('[professify] class_history read failed:',histErr.message);
+    (hist||[]).forEach(h=>{(histMap[h.user_id]=histMap[h.user_id]||[]).push({code:h.code,term:h.term,year:h.year,professor:h.professor||''});});
+  }
+  friendsList=friendIds.map(id=>({id,name:(profMap[id]&&profMap[id].display_name)||'Classmate',handle:(profMap[id]&&profMap[id].instagram_handle)||'',classes:classMap[id]||[],history:histMap[id]||[]}));
+  FRIENDS=friendsList.map(f=>({id:f.id,name:f.name,ini:initials(f.name),color:colorForId(f.id),classes:f.classes,history:f.history}));
+  incomingRequests=incomingRequests.map(r=>({...r,name:(profMap[r.from_user]&&profMap[r.from_user].display_name)||'A classmate'}));
+  outgoingRequests=outgoingRequests.map(r=>({...r,name:(profMap[r.to_user]&&profMap[r.to_user].display_name)||'A classmate'}));
+}
+
+async function frOnSignedIn(){
+  await ensureProfile();
+  await applyPendingContactInfo();
+  await loadMySavedClasses();
+  await loadMyHistory();
+  await loadFriendsData();
+  await loadClassmateSuggestions();
+  renderExplore();
+  renderFriends();
+  renderCampusBanner();
+  await processPendingAdd();
+}
+
+async function loadClassmateSuggestions(){
+  if(!backendReady()||!sbUser){classmateSuggestions=[];return;}
+  try{
+    const {data,error}=await sb.rpc('suggest_classmates');
+    if(error)throw error;
+    classmateSuggestions=data||[];
+  }catch(e){classmateSuggestions=[];}
+}
+
+async function saveMyProfile(){
+  if(!backendReady()||!sbUser)return;
+  const name=(document.getElementById('frName').value||'').trim();
+  const handle=(document.getElementById('frHandle').value||'').trim().replace(/^@/,'');
+  const phone=(document.getElementById('frPhone').value||'').trim();
+  const patch={};
+  if(name)patch.display_name=name;
+  if(handle)patch.instagram_handle=handle;
+  const btn=document.getElementById('frProfileSaveBtn');btn.disabled=true;btn.textContent='Saving…';
+  try{
+    if(phone)patch.phone_hash=await hashPhone(phone);
+    const {error}=await sb.from('profiles').update(patch).eq('id',sbUser.id);
+    if(error)throw error;
+    Object.assign(myProfile,patch);
+    document.getElementById('frProfileErr').textContent='';
+    renderFriends();
+  }catch(e){document.getElementById('frProfileErr').textContent=(e&&e.message&&e.message.includes('duplicate'))?'That Instagram handle is already taken.':((e&&e.message)||'Could not save. Try again.');}
+  btn.disabled=false;btn.textContent='Save';
+}
+
+async function loadMyHistory(){
+  if(!backendReady()||!sbUser){myHistory=[];return;}
+  const {data,error}=await sb.from('class_history').select('code,term,year,professor').eq('user_id',sbUser.id);
+  if(error){console.error('[professify] class_history load failed:',error.message);myHistory=[];return;}
+  myHistory=(data||[]).sort((a,b)=>(b.year-a.year)||((TERM_ORDER[b.term]??0)-(TERM_ORDER[a.term]??0)));
+}
+
+async function addPastClass(){
+  const err=document.getElementById('histErr');err.textContent='';
+  if(!backendReady()||!sbUser){err.textContent='Sign in first.';return;}
+  const code=normCode(document.getElementById('histCode').value);
+  const term=document.getElementById('histTerm').value;
+  const year=parseInt(document.getElementById('histYear').value,10);
+  const professor=(document.getElementById('histProf').value||'').trim();
+  if(!code){err.textContent='Enter a class code.';return;}
+  const thisYear=new Date().getFullYear();
+  if(!year||year<2015||year>thisYear+1){err.textContent=`Enter a year between 2015 and ${thisYear+1}.`;return;}
+  const {error}=await sb.from('class_history').upsert({user_id:sbUser.id,code,term,year,professor:professor||null});
+  if(error){err.textContent='Could not save: '+error.message;console.error('[professify] class_history save failed:',error.message);return;}
+  document.getElementById('histCode').value='';
+  document.getElementById('histYear').value='';
+  document.getElementById('histProf').value='';
+  await loadMyHistory();renderMyHistory();renderExplore();
+}
+
+async function removePastClass(code){
+  if(!backendReady()||!sbUser)return;
+  const {error}=await sb.from('class_history').delete().eq('user_id',sbUser.id).eq('code',code);
+  if(error){document.getElementById('histErr').textContent='Could not remove: '+error.message;return;}
+  await loadMyHistory();renderMyHistory();renderExplore();
+}
+
+async function connectContacts(){
+  const desc=document.getElementById('ctConnectDesc');
+  // The Contact Picker API only exists on Android Chrome. Everywhere else
+  // (desktop, iPhone, Safari) there is no way for a web page to read contacts —
+  // that's a browser limitation, not a bug. Fall back to phone lookup.
+  if(!('contacts' in navigator && 'ContactsManager' in window)){
+    const wrap=document.getElementById('frManualPhoneWrap');
+    if(wrap)wrap.style.display='';
+    desc.innerHTML='Your browser can\'t share contacts — only Android Chrome supports that. <b style="color:var(--text-2)">Search by phone number below instead.</b>';
+    const inp=document.getElementById('frSearchPhone');if(inp)inp.focus();
+    return;
+  }
+  const btn=document.getElementById('ctConnectBtn');
+  let stage='opening the contact picker';
+  try{
+    btn.disabled=true;btn.textContent='Syncing…';
+    const picked=await navigator.contacts.select(['name','tel'],{multiple:true});
+    if(!picked||!picked.length){btn.disabled=false;btn.textContent='Sync contacts';desc.textContent='No contacts were selected.';return;}
+    stage='hashing phone numbers';
+    const nums=picked.flatMap(c=>c.tel||[]);
+    const hashes=[...new Set((await Promise.all(nums.map(hashPhone))).filter(Boolean))];
+    btn.disabled=false;btn.textContent='Sync contacts';
+    if(!hashes.length){desc.textContent='Those contacts had no phone numbers saved.';return;}
+    stage='looking them up';
+    const {data,error}=await sb.rpc('find_profiles_by_phone_hashes',{hashes});
+    if(error)throw error;
+    const already=new Set([...FRIENDS.map(f=>f.id),...incomingRequests.map(r=>r.from_user),...outgoingRequests.map(r=>r.to_user)]);
+    contactMatches=(data||[]).filter(p=>!already.has(p.id));
+    desc.textContent=contactMatches.length?`Found ${contactMatches.length} classmate${contactMatches.length>1?'s':''} already on Professify.`:'None of your contacts are on Professify yet.';
+    renderFriends();
+  }catch(e){
+    btn.disabled=false;btn.textContent='Sync contacts';
+    // Don't claim "cancelled" for what might be a real backend error.
+    const msg=(e&&e.message)||'';
+    console.error('[professify] contact sync failed while '+stage+':',e);
+    desc.textContent=/abort|cancel/i.test(msg)||e&&e.name==='AbortError'
+      ? 'Contact sync was cancelled.'
+      : `Contact sync failed while ${stage}${msg?': '+msg:'.'}`;
+  }
+}
+
+function qrPayloadFor(id){
+  const base=(cfg().SITE_URL||'').replace(/\/+$/,'');
+  // Without a hosted URL there's nothing sensible for a camera app to open, so
+  // fall back to the raw-token form — our own scanner still handles it.
+  return base?`${base}/?add=${encodeURIComponent(id)}`:`professify:add:${id}`;
+}
+
+function parseQrPayload(text){
+  const s=String(text||'').trim();
+  if(!s)return null;
+  let id=null;
+  const m=s.match(/^professify:add:(.+)$/i);
+  if(m){id=m[1].trim();}
+  else if(/^https?:\/\//i.test(s)){
+    try{id=new URL(s).searchParams.get('add');}catch(e){}
+  }else{
+    try{const o=JSON.parse(s);if(o&&o.t==='professify_friend')id=o.id;}catch(e){}
+  }
+  return (id&&UUID_RE.test(id))?id:null;   // ignore anything that isn't one of ours
+}
+
+function stopScanQR(){if(qrRAF)cancelAnimationFrame(qrRAF);qrRAF=null;if(qrStream){qrStream.getTracks().forEach(t=>t.stop());qrStream=null;}}
+
+function closeQrArea(){
+  stopScanQR();
+  const area=document.getElementById('frQrArea');if(area){area.style.display='none';area.innerHTML='';}
+}
+
+function showMyQR(){
+  if(!backendReady()||!sbUser)return;
+  stopScanQR();
+  const area=document.getElementById('frQrArea');
+  area.style.display='';
+  // Encode a real URL, not raw text. A phone's built-in camera app can't do
+  // anything with arbitrary text except web-search it (which sends people to
+  // random sites) — but it will happily open a https:// link.
+  const payload=qrPayloadFor(sbUser.id);
+  // Always render a typeable fallback underneath: if the QR library is blocked
+  // (offline, ad blocker, strict network) a friend can still add you by handle.
+  const handle=(myProfile&&myProfile.instagram_handle)?'@'+escapeHtml(myProfile.instagram_handle):null;
+  const fallback=handle
+    ? `<p class="fr-mut">Or have them add you by handle: <b style="color:var(--text-2)">${handle}</b></p>`
+    : `<p class="fr-mut">Tip: set your Instagram handle above so friends can also add you by name.</p>`;
+  let qrHtml='';
+  try{
+    if(typeof qrcode!=='function')throw new Error('QR library did not load');
+    const qr=qrcode(0,'M');          // 0 = auto-pick the smallest size that fits
+    qr.addData(payload);
+    qr.make();
+    qrHtml=`<div class="fr-qr-img">${qr.createSvgTag({cellSize:5,margin:2,scalable:true})}</div>`;
+  }catch(e){
+    console.error('[professify] QR generation failed:',e);
+    qrHtml=`<p class="fr-mut" style="color:#d98a7a">Couldn't draw the QR code (${escapeHtml((e&&e.message)||'unknown error')}). Use the handle below instead.</p>`;
+  }
+  const hosted=!!(cfg().SITE_URL||'').trim();
+  const how=hosted
+    ? `<p class="fr-mut">Your friend can scan this with their phone's normal camera — it opens Professify and sends the request. Or they can use "Scan a friend's QR" in the app.</p>`
+    : `<p class="fr-mut">Have your friend open Professify and hit <b style="color:var(--text-2)">"Scan a friend's QR"</b> — a phone's built-in camera app won't understand this code until the site is hosted at a real web address.</p>`;
+  area.innerHTML=`<div class="fr-qr-wrap">${qrHtml}${how}${fallback}<button class="save-ico" title="Close" onclick="closeQrArea()">&times;</button></div>`;
+}
+
+async function startScanQR(){
+  if(!backendReady()||!sbUser)return;
+  stopScanQR();
+  const area=document.getElementById('frQrArea');
+  area.style.display='';
+  area.innerHTML=`<div class="fr-qr-wrap"><video id="frQrVideo" playsinline muted></video><div id="frQrStatus" class="fr-mut">Point the camera at your friend's QR code…</div><button class="save-ico" title="Cancel" onclick="closeQrArea()">&times;</button></div>`;
+  if(!window.jsQR){document.getElementById('frQrStatus').textContent='QR scanner failed to load — check your connection.';return;}
+  try{
+    qrStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+  }catch(e){document.getElementById('frQrStatus').textContent='Camera access was blocked or unavailable.';return;}
+  const video=document.getElementById('frQrVideo');
+  video.srcObject=qrStream;
+  try{await video.play();}catch(e){}
+  qrCanvas=qrCanvas||document.createElement('canvas');qrCtx=qrCanvas.getContext('2d');
+  const tick=async()=>{
+    if(!qrStream)return;
+    if(video.readyState===video.HAVE_ENOUGH_DATA){
+      qrCanvas.width=video.videoWidth;qrCanvas.height=video.videoHeight;
+      qrCtx.drawImage(video,0,0,qrCanvas.width,qrCanvas.height);
+      const img=qrCtx.getImageData(0,0,qrCanvas.width,qrCanvas.height);
+      const code=jsQR(img.data,img.width,img.height);
+      if(code&&code.data){
+        const scannedId=parseQrPayload(code.data);
+        if(scannedId&&scannedId!==sbUser.id){
+          const st=document.getElementById('frQrStatus');if(st)st.textContent='Found — sending request…';
+          stopScanQR();
+          await sendFriendRequest(payload.id);
+          const area2=document.getElementById('frQrArea');
+          if(area2)area2.innerHTML='<p class="fr-mut" style="color:#6f9e6a;text-align:center;padding:14px">Friend request sent ✓</p>';
+          setTimeout(closeQrArea,1600);
+          return;
+        }
+      }
+    }
+    qrRAF=requestAnimationFrame(tick);
+  };
+  qrRAF=requestAnimationFrame(tick);
+}
+
+async function sendFriendRequest(targetId){
+  try{
+    const {error}=await sb.from('friend_requests').insert({from_user:sbUser.id,to_user:targetId,status:'pending'});
+    if(error&&!/duplicate/i.test(error.message||''))throw error;
+    contactMatches=contactMatches.filter(p=>p.id!==targetId);
+    classmateSuggestions=classmateSuggestions.filter(p=>p.id!==targetId);
+    await loadFriendsData();renderFriends();
+  }catch(e){}
+}
+
+async function acceptRequest(id){await sb.from('friend_requests').update({status:'accepted'}).eq('id',id);await loadFriendsData();renderExplore();renderFriends();}
+
+async function declineRequest(id){await sb.from('friend_requests').delete().eq('id',id);await loadFriendsData();renderFriends();}
+
+async function cancelRequest(id){await sb.from('friend_requests').delete().eq('id',id);await loadFriendsData();renderFriends();}
+
+async function removeFriend(id){
+  await sb.from('friend_requests').delete().or(`and(from_user.eq.${sbUser.id},to_user.eq.${id}),and(from_user.eq.${id},to_user.eq.${sbUser.id})`);
+  await loadFriendsData();renderExplore();renderFriends();
+}
+
+
+function friendClassChipsHtml(f){
+  const shared=savedClasses.size?f.classes.filter(c=>savedClasses.has(c)):[];
+  const list=(shared.length?shared:f.classes).slice(0,3);
+  const label=shared.length?`${shared.length} class${shared.length>1?'es':''} with you`:(f.classes.length?null:'No saved classes yet');
+  return `<div class="fr-classes">${label?`<span class="${shared.length?'fr-shared':'fr-mut'}">${label}</span>`:''}${list.map(c=>`<span class="wl-chip">${c}</span>`).join('')}</div>`;
+}
+
+function openSetup(focus){
+  toggleSetup(true);
+  const el=document.getElementById(focus==='add'?'frSearchHandle':'frName');
+  if(el){el.scrollIntoView({block:'center',behavior:'smooth'});setTimeout(()=>el.focus(),250);}
+}
+
+function friendRowHtml(f){
+  const shared=savedClasses.size?f.classes.filter(c=>savedClasses.has(c)):[];
+  const others=f.classes.filter(c=>!shared.includes(c));
+  const hist=(f.history||[]).slice().sort((a,b)=>(b.year-a.year)||((TERM_ORDER[b.term]??0)-(TERM_ORDER[a.term]??0)));
+  const line=shared.length
+    ? `<span class="fr-shared">${shared.length} class${shared.length>1?'es':''} with you</span>`
+    : (f.classes.length?`<span class="fr-mut">${f.classes.length} class${f.classes.length>1?'es':''} saved</span>`:`<span class="fr-mut">No classes saved yet</span>`);
+  const blocks=[];
+  if(shared.length)blocks.push(`<div class="fr-rowsec"><span class="frs-k">Together</span><span class="frs-v">${shared.map(c=>`<span class="wl-chip on">${escapeHtml(c)}</span>`).join('')}</span></div>`);
+  if(others.length)blocks.push(`<div class="fr-rowsec"><span class="frs-k">Planning</span><span class="frs-v">${others.slice(0,6).map(c=>`<span class="wl-chip">${escapeHtml(c)}</span>`).join('')}${others.length>6?`<span class="fr-mut">+${others.length-6}</span>`:''}</span></div>`);
+  if(hist.length)blocks.push(`<div class="fr-rowsec"><span class="frs-k">Took</span><span class="frs-v">${hist.slice(0,6).map(h=>`<span class="wl-chip took" title="${escapeHtml(h.term+' '+h.year+(h.professor?' · '+h.professor:''))}">${escapeHtml(h.code)} <em>${escapeHtml(h.term.slice(0,2))}${String(h.year).slice(2)}</em></span>`).join('')}${hist.length>6?`<span class="fr-mut">+${hist.length-6}</span>`:''}</span></div>`);
+  return `<div class="fr-row">
+    <div class="ini" style="background:${f.color||colorForId(f.id)}">${initials(f.name)}</div>
+    <div class="fr-rowmain">
+      <div class="fr-rowtop">
+        <h4>${escapeHtml(f.name)}</h4>
+        ${f.handle?`<a class="fr-src instagram" href="https://instagram.com/${encodeURIComponent(f.handle)}" target="_blank" rel="noopener noreferrer">@${escapeHtml(f.handle)}</a>`:''}
+        ${line}
+      </div>
+      ${blocks.length?`<div class="fr-rowsecs">${blocks.join('')}</div>`:''}
+    </div>
+    <button class="save-ico fr-rm" title="Remove friend" onclick="removeFriend('${f.id}')">&times;</button>
+  </div>`;
+}
+
+function updateFriendsBadge(){
+  const b=document.getElementById('friendsNavBadge');if(!b)return;
+  const n=incomingRequests.length;
+  b.textContent=n;b.hidden=n===0;
+}
+
+function renderFriends(){
+  updateFriendsBadge();
+  const signedIn=backendReady()&&!!sbUser;
+  const gate=document.getElementById('frGate'),body=document.getElementById('frSignedIn');
+  if(gate)gate.style.display=signedIn?'none':'';
+  if(body)body.style.display=signedIn?'':'none';
+  const gw=document.getElementById('frGoogleWrap');if(gw)gw.style.display=cfg().GOOGLE_SIGNIN_ENABLED?'':'none';
+  if(!signedIn)return;
+
+  renderMyHistory();
+  const nameEl=document.getElementById('frName');if(nameEl&&document.activeElement!==nameEl)nameEl.value=(myProfile&&myProfile.display_name)||'';
+  const handleEl=document.getElementById('frHandle');if(handleEl&&document.activeElement!==handleEl)handleEl.value=(myProfile&&myProfile.instagram_handle)||'';
+
+  const sugSec=document.getElementById('frSuggestedSec'),sugOut=document.getElementById('frSuggestedOut');
+  if(sugSec)sugSec.style.display=classmateSuggestions.length?'':'none';
+  if(sugOut)sugOut.innerHTML=classmateSuggestions.map(p=>`<div class="fr-card">
+      <div class="ini" style="background:${colorForId(p.id)}">${initials(p.display_name||'?')}</div>
+      <div class="fr-main"><h4>${escapeHtml(p.display_name||'Classmate')}</h4><div class="fr-mut">${p.overlap} class${p.overlap>1?'es':''} in common</div></div>
+      <button class="btn primary fr-add" onclick="sendFriendRequest('${p.id}')">Send request</button>
+    </div>`).join('');
+
+  const matSec=document.getElementById('frMatchesSec'),matOut=document.getElementById('frMatchesOut');
+  if(matSec)matSec.style.display=contactMatches.length?'':'none';
+  if(matOut)matOut.innerHTML=contactMatches.map(p=>`<div class="fr-card">
+      <div class="ini" style="background:${colorForId(p.id)}">${initials(p.display_name||'?')}</div>
+      <div class="fr-main"><h4>${escapeHtml(p.display_name||'Classmate')}<span class="fr-src contacts">Contacts</span></h4>${p.instagram_handle?`<div class="fr-mut">@${escapeHtml(p.instagram_handle)}</div>`:''}</div>
+      <button class="btn primary fr-add" onclick="sendFriendRequest('${p.id}')">Send request</button>
+    </div>`).join('');
+
+  const reqSec=document.getElementById('frRequestsSec'),reqOut=document.getElementById('frRequestsOut');
+  const hasReqs=incomingRequests.length||outgoingRequests.length;
+  if(reqSec)reqSec.style.display=hasReqs?'':'none';
+  if(reqOut)reqOut.innerHTML=
+    incomingRequests.map(r=>`<div class="fr-card">
+      <div class="ini" style="background:${colorForId(r.from_user)}">${initials(r.name)}</div>
+      <div class="fr-main"><h4>${escapeHtml(r.name)}</h4><div class="fr-mut">Wants to be friends</div>
+        <div class="fr-reqrow"><button class="btn primary fr-add" onclick="acceptRequest('${r.id}')">Accept</button><button class="save-ico fr-rm" title="Decline" onclick="declineRequest('${r.id}')">&times;</button></div>
+      </div></div>`).join('')
+    +outgoingRequests.map(r=>`<div class="fr-card">
+      <div class="ini" style="background:${colorForId(r.to_user)}">${initials(r.name)}</div>
+      <div class="fr-main"><h4>${escapeHtml(r.name)}</h4><div class="fr-mut">Request sent — waiting</div></div>
+      <button class="save-ico fr-rm" title="Cancel request" onclick="cancelRequest('${r.id}')">&times;</button>
+    </div>`).join('');
+
+  const out=document.getElementById('frFriendsOut');
+  if(out){
+    if(!friendsList.length){
+      out.innerHTML=`<div class="fr-empty">
+        <h3>No friends yet</h3>
+        <p>Add a classmate by their Instagram handle, scan a QR in person, or sync your contacts — then you'll see which classes you overlap on.</p>
+        <button class="btn primary" onclick="openSetup('add')">Add your first friend</button>
+      </div>`;
+    }else{
+      out.innerHTML=friendsList.map(friendRowHtml).join('');
+    }
+  }
+}
+
+async function signInWithGoogle(){
+  if(!backendReady())return;
+  if(!cfg().GOOGLE_SIGNIN_ENABLED){
+    alert('Google sign-in isn\'t turned on for this deployment yet — use the email code below instead.');
+    return;
+  }
+  try{await sb.auth.signInWithOAuth({provider:'google',options:{hd:'calpoly.edu',redirectTo:window.location.href}});}catch(e){}
+}
+frSyncSaved();
+if(typeof updateFriendsBadge==='function')updateFriendsBadge();
+
+
+/* ==== friend-support functions (async-preserved byte copy) ==== */
+function toggleSetup(force){
+  const body=document.getElementById('frSetupBody'),btn=document.getElementById('frSetupToggle');
+  if(!body||!btn)return;
+  const open=(typeof force==='boolean')?force:body.hidden;
+  body.hidden=!open;
+  btn.setAttribute('aria-expanded',String(open));
+  btn.classList.toggle('open',open);
+}
+function renderMyHistory(){
+  const out=document.getElementById('histOut');if(!out)return;
+  if(!myHistory.length){out.innerHTML='<p class="fr-mut" style="margin:10px 0 0">Nothing added yet — start with a class you finished last quarter.</p>';return;}
+  // Group by year so a few years of history stays readable.
+  const byYear={};myHistory.forEach(h=>{(byYear[h.year]=byYear[h.year]||[]).push(h);});
+  const years=Object.keys(byYear).sort((a,b)=>b-a);
+  out.innerHTML=years.map(y=>`<div class="fh-year">
+    <div class="fh-ylabel">${y}</div>
+    <div class="fh-items">${byYear[y].map(h=>{var pid=(h.professor&&typeof matchProfId==='function')?matchProfId(h.professor):null;return `<div class="fr-hist-item">
+      <span class="hc">${escapeHtml(h.code)}</span>
+      <span class="ht">${escapeHtml(h.term)}</span>
+      ${h.professor?`<span class="hp">${escapeHtml(h.professor)}</span>`:''}
+      ${pid?`<button class="fh-review" onclick="startRate('${pid}')">Leave a review</button>`:''}
+      <button class="save-ico fr-rm" title="Remove ${escapeHtml(h.code)}" onclick="removePastClass('${escapeHtml(h.code)}')">&times;</button>
+    </div>`;}).join('')}</div>
+  </div>`).join('');
+}
+async function processPendingAdd(){
+  if(!backendReady()||!sbUser)return;
+  let id=null;
+  try{id=sessionStorage.getItem('professify_pending_add');}catch(e){}
+  if(!id||!UUID_RE.test(id)||id===sbUser.id){
+    try{sessionStorage.removeItem('professify_pending_add');}catch(e){}
+    return;
+  }
+  try{sessionStorage.removeItem('professify_pending_add');}catch(e){}
+  await sendFriendRequest(id);
+  show('friends');
+  const area=document.getElementById('frQrArea');
+  if(area){area.style.display='';area.innerHTML='<p class="fr-mut" style="color:#6f9e6a;text-align:center;padding:14px">Friend request sent ✓</p>';setTimeout(closeQrArea,2500);}
+}
+function renderCampusBanner(){
+  const el=document.getElementById('campusBanner');if(!el)return;
+  const c=cfg();
+  const regIn=daysUntil(c.REGISTRATION_OPENS);
+  const qtrIn=daysUntil(c.QUARTER_END);
+  let html='';
+  if(regIn!=null&&regIn>=0&&regIn<=7){
+    const key='reg_'+c.REGISTRATION_OPENS;
+    if(!campusBannerDismissed(key)){
+      const when=regIn===0?'today':regIn===1?'tomorrow':`in ${regIn} days`;
+      html=`<div class="campus-banner"><span>📅</span><span><b>Priority registration opens ${when}.</b> Build your schedule now and see which of your friends are already locking in classes.</span><button class="btn primary" style="flex:none" onclick="show('sched')">Build schedule</button><button class="cb-x" title="Dismiss" onclick="dismissCampusBanner('${key}')">&times;</button></div>`;
+    }
+  }else if(qtrIn!=null&&qtrIn<=7&&qtrIn>=-7){
+    const key='qtr_'+c.QUARTER_END;
+    if(!campusBannerDismissed(key)&&backendReady()&&sbUser){
+      html=`<div class="campus-banner"><span>✍️</span><span><b>Finals week — rate this quarter's professors.</b> Takes 20 seconds and helps next quarter's students pick well.</span><button class="btn primary" style="flex:none" onclick="openRate()">Rate a professor</button><button class="cb-x" title="Dismiss" onclick="dismissCampusBanner('${key}')">&times;</button></div>`;
+    }
+  }
+  el.innerHTML=html;
+}
+function dismissCampusBanner(key){try{localStorage.setItem('professify_dismiss_'+key,'1');}catch(e){}document.getElementById('campusBanner').innerHTML='';}
+function campusBannerDismissed(key){try{return localStorage.getItem('professify_dismiss_'+key)==='1';}catch(e){return false;}}
+function daysUntil(dateStr){
+  if(!dateStr)return null;
+  const target=new Date(dateStr+'T00:00:00');if(isNaN(target))return null;
+  const now=new Date();const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  return Math.round((target-today)/86400000);
+}
+async function loadMySavedClasses(){
+  if(!backendReady()||!sbUser)return;
+  // My Classes is the ONLY thing friends see. Make saved_classes exactly mirror myClasses (add + remove), and hydrate myClasses from the DB across devices.
+  const {data}=await sb.from('saved_classes').select('code').eq('user_id',sbUser.id);
+  const dbCodes=(data||[]).map(r=>r.code);
+  dbCodes.forEach(c=>{ if(myClasses.indexOf(c)<0)myClasses.push(c); }); // hydrate this device from other devices
+  saveMyClasses();
+  const cur=new Set(myClasses);
+  for(const c of cur){try{await sb.from('saved_classes').upsert({user_id:sbUser.id,code:c});}catch(e){}}
+  for(const c of dbCodes){ if(!cur.has(c)){try{await sb.from('saved_classes').delete().eq('user_id',sbUser.id).eq('code',c);}catch(e){}} } // drop anything no longer in My Classes
+  frSyncSaved();updateSavedCount();updateWatchBadge();
+  const vw=document.getElementById('view-watch');if(vw&&vw.classList.contains('active'))renderWatchClasses();
+}
+/* Push a single My-Classes add/remove to what friends see, live. */
+async function pushMyClassToDb(code,add){ if(!backendReady()||typeof sbUser==='undefined'||!sbUser)return; try{ if(add)await sb.from('saved_classes').upsert({user_id:sbUser.id,code}); else await sb.from('saved_classes').delete().eq('user_id',sbUser.id).eq('code',code); }catch(e){} }
+async function hashPhone(raw){
+  const digits=(raw||'').replace(/\D/g,'');
+  if(!digits)return '';
+  const norm=digits.length===10?('1'+digits):digits;
+  const enc=new TextEncoder().encode('professify_v1_'+norm);
+  const buf=await crypto.subtle.digest('SHA-256',enc);
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function normCode(s){
+  // Accept "bus2050", "BUS 2050", "bus-2050" → "BUS 2050"
+  const m=String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'').match(/^([A-Z]{2,5})(\d{3,4})$/);
+  return m?`${m[1]} ${m[2]}`:String(s||'').toUpperCase().trim();
+}
+function tookLabel(t){return `${t.term} ${t.year}`;}
+
 loadSeats();  // pull real seat status from Supabase on load
 </script>
 </body>
