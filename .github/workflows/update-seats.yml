@@ -20,21 +20,34 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false            # one bad lane never cancels the others
-      max-parallel: 10            # public-repo concurrency headroom is ~20
+      max-parallel: 20            # public-repo concurrency headroom is ~20
       matrix:
         lane:
-          # Balanced to ~220 sections/lane from measured discovery counts, so every
-          # lane finishes in ~13 min and none lags. CSC (233) rides solo.
-          - 'CSC'                       # 233
-          - 'MATH,SOC'                  # 169+49
-          - 'BUS,PSY,ANT'               # 157+49+22
-          - 'ME,COMS,GEOG'              # 149+61+19
-          - 'KINE,ARCH,ES'              # 130+66+28
-          - 'CE,PHIL,HIST'              # 117+69+42
-          - 'POLS,ASCI,ECON,GEOL'       # 115+76+23+9
-          - 'EE,PHYS,CHEM'              # 107+78+42
-          - 'ENGL,STAT,AERO'            # 100+81+42
-          - 'BIO,MU,ART'                # 87+86+45
+          # FULL Cal Poly subject coverage — all majors, every GE, and all
+          # concentration courses (concentrations live inside their subject, so
+          # covering the subject covers them). ~84 subjects balanced to ~185
+          # sections/lane so every lane still finishes in ~13 min. Any subject
+          # with no sections this term simply returns nothing — harmless.
+          - 'CSC'
+          - 'AERO,CHEM,CRP,GSA,RELS,CPE'
+          - 'PSY,AGB,BOT,GER,NR,ENVE'
+          - 'PHYS,BIO,FR,MSL,HLTH'
+          - 'EE,FPE,MSCI,ANT'
+          - 'ASCI,ASTR,ESM,MGT,ECON'
+          - 'MATH,GEOG'
+          - 'POLS,ISLA,SCM,NUTR'
+          - 'ART,ITP,DANC,HNRS,SPAN,FSN'
+          - 'KINE,MCRO,CD'
+          - 'PHIL,ARCE,EDUC,LAES,ES'
+          - 'SOC,IME,CHIN,GSB,PSC,FDSC'
+          - 'STAT,BRAE,GRC,PLSC,BMED'
+          - 'ARCH,AGED,EDES,LA,WVIT'
+          - 'MU,DATA,ITAL,SPED,GEOL'
+          - 'ENGL,ERSC,LS,MATE'
+          - 'BUS,CM'
+          - 'COMS,AGC,DSCI,JPNS,WLC'
+          - 'ME,WGQS'
+          - 'CE,JOUR,TH'
     steps:
       - uses: actions/checkout@v4
 
