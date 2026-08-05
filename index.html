@@ -3627,10 +3627,22 @@ function renderExplore(){
       const ratingOk = q ? true : (p.rating!=null);
       return inDept&&ratingOk&&profFit(p)&&nameHit(p);
     });
-    if(!list.length){out.innerHTML=`<p class="emptyq">No professors match “${document.getElementById('exQuery').value}”.</p>`;return;}
     list.sort((a,b)=>(b[1].rating??-1)-(a[1].rating??-1));
     const CAP=60;const shown=list.slice(0,CAP);const more=list.length-shown.length;
-    out.innerHTML=(more>0?`<p class="emptyq" style="text-align:left;margin:0 0 14px">Showing the ${CAP} top-rated of ${list.length} professors${exQuery?` matching “${escapeHtml(document.getElementById('exQuery').value)}”`:''} — type a name or department to narrow it down.</p>`:'')+`<div class="pgrid">${shown.map(([id,p])=>`
+    // Instructors teaching THIS term who aren't in PolyRatings yet (no score) — surface them
+    // too, each linked to the classes they teach, so "a professor I currently have" is findable.
+    // Only when searching or a department is chosen, so the default browse stays top-rated.
+    let scraped=[];
+    if(typeof scrapedProfPool==='function' && (q || exDept!=='All')){
+      scraped=scrapedProfPool().filter(sp=>{
+        const inDept=exDept==='All'||sp.subjects.indexOf(exDept)>=0;
+        return inDept && nameHit(sp);
+      }).slice(0,40);
+    }
+    window._scrapedShown=scraped;
+    if(!list.length && !scraped.length){out.innerHTML=`<p class="emptyq">No professors match “${document.getElementById('exQuery').value}”.</p>`;return;}
+    const header=(more>0?`<p class="emptyq" style="text-align:left;margin:0 0 14px">Showing the ${CAP} top-rated of ${list.length} professors${exQuery?` matching “${escapeHtml(document.getElementById('exQuery').value)}”`:''} — type a name or department to narrow it down.</p>`:'');
+    const ratedGrid=shown.length?`<div class="pgrid">${shown.map(([id,p])=>`
       <div class="pcard" onclick="openProf('${id}')">${watchBtn(id)}
         <div class="ini">${initials(p.name)}</div>
         <div style="flex:1;min-width:0">
@@ -3639,7 +3651,18 @@ function renderExplore(){
           <div class="pmeta">${rateHtml(p.rating)}${p.evals?`<span style="color:var(--faint);font-size:12.5px">${p.evals} ratings · PolyRatings</span>`:''}</div>
           <div class="pchips">${(p.strong?p.strong.slice(0,2):(p.field?[p.field]:[])).map(s=>`<span class="c">${s}</span>`).join('')}</div>
         </div>
-      </div>`).join('')}</div>`;
+      </div>`).join('')}</div>`:'';
+    const scrapedGrid=scraped.length?`<div class="grouphead" style="margin-top:${shown.length?'20px':'0'}">Teaching this term · not rated yet</div><div class="pgrid">${scraped.map((sp,i)=>`
+      <div class="pcard" onclick="openScrapedProf(${i})">
+        <div class="ini">${initials(sp.name)}</div>
+        <div style="flex:1;min-width:0">
+          <h3>${escapeHtml(sp.name)}</h3>
+          <div class="pd">${escapeHtml(sp.subjects.join(', '))}</div>
+          <div class="pmeta"><span style="color:var(--faint);font-size:12.5px">No ratings yet · teaches ${sp.teaches.length} ${sp.teaches.length===1?'class':'classes'} this term</span></div>
+          <div class="pchips"><span class="c">Be the first to review</span></div>
+        </div>
+      </div>`).join('')}</div>`:'';
+    out.innerHTML=header+ratedGrid+scrapedGrid;
   }
 }
 
@@ -5108,7 +5131,7 @@ async function loadSeats(){
       (sec[code]||(sec[code]=[])).push(r);
     });
     PROFESSIFY_SEATS=idx; SEAT_SECTIONS=sec;
-    window._fpGe=null; window._fpAll=null; _profByName=null;   // rebuild pools/matcher with real sections
+    window._fpGe=null; window._fpAll=null; _profByName=null; window._scrapedProfs=null;   // rebuild pools/matcher with real sections
     // if the Find-Professors panel is already open, refresh it with real data
     if(document.getElementById('fpBack')&&document.getElementById('fpBack').classList.contains('open')&&typeof openFindProf==='function'){try{openFindProf();}catch(e){}}
   }catch(e){}
@@ -5177,6 +5200,67 @@ function fp_name(code){
     for(var i=0;i<SEAT_SECTIONS[code].length;i++){var ti=(SEAT_SECTIONS[code][i].title||'').trim(); if(ti)return ti;}
   }
   return '';
+}
+/* ===== Instructors teaching THIS term who aren't in the PolyRatings roster =====
+   Built from the live seat feed so a current professor with no rating yet is still
+   findable in search, linked to the exact classes they teach. Cached; invalidated
+   in loadSeats() whenever the seat feed reloads. */
+function scrapedProfPool(){
+  if(window._scrapedProfs)return window._scrapedProfs;
+  var by={};
+  if(SEAT_SECTIONS){
+    for(var code in SEAT_SECTIONS){
+      SEAT_SECTIONS[code].forEach(function(r){
+        var raw=(r.instructor||'').trim(); if(!raw)return;
+        raw.split(/\s*,\s*/).forEach(function(nm){
+          nm=nm.trim(); if(!nm||/^staff$/i.test(nm))return;
+          if(matchProfId(nm))return;                       // already a rated prof — skip
+          var key=nm.toLowerCase();
+          var e=by[key]||(by[key]={id:key,name:nm,subjects:[],teaches:[],_seen:{}});
+          var subj=(code.split(/\s+/)[0]||'').trim(); if(subj&&e.subjects.indexOf(subj)<0)e.subjects.push(subj);
+          var tk=code+'|'+(r.section||r.class_nbr||'');
+          if(e._seen[tk])return; e._seen[tk]=1;
+          e.teaches.push({code:code,name:(fp_name(code)||r.title||''),days:prettyTime(r.days),seat:secSeat(r)});
+        });
+      });
+    }
+  }
+  var arr=Object.keys(by).map(function(k){var e=by[k];delete e._seen;e.subjects.sort();e.teaches.sort(function(a,b){return a.code.localeCompare(b.code);});return e;});
+  arr.sort(function(a,b){return a.name.localeCompare(b.name);});
+  window._scrapedProfs=arr; return arr;
+}
+/* Modal for an unrated current instructor: name + the classes they teach this term
+   (real time + real seat status), and a path to leave the first review. Self-contained
+   so it doesn't touch the rated-professor review modal. */
+function openScrapedProf(i){
+  var sp=(window._scrapedShown||[])[i]; if(!sp)return;
+  window._scrapedCurrent=sp;
+  var rows=sp.teaches.map(function(t){
+    return '<div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;padding:10px 0;border-bottom:1px solid '+PFC.line+'">'
+      +'<div style="min-width:0"><div style="font-weight:600;color:'+PFC.green+'">'+escapeHtml(t.code)+(t.name?' · <span style="font-weight:400;color:'+PFC.ink+'">'+escapeHtml(t.name)+'</span>':'')+'</div>'
+      +'<div style="font-size:12.5px;color:'+PFC.ink2+';font-style:italic;margin-top:2px">'+escapeHtml(t.days||'Time to be arranged')+'</div></div>'
+      +'<div style="flex:none;font-size:12px;color:'+PFC.ink2+';text-align:right;max-width:130px">'+escapeHtml(seatBadge(t.seat))+'</div></div>';
+  }).join('');
+  document.getElementById('modal').innerHTML='<div style="background:'+PFC.cream+';border-radius:16px;padding:20px;font-family:\'Inter\',-apple-system,system-ui,sans-serif;color:'+PFC.ink+';position:relative">'
+    +'<button class="mclose" onclick="closeModal()" style="position:absolute;top:14px;right:14px;color:'+PFC.ink2+';border-color:'+PFC.line+';background:transparent">&times;</button>'
+    +'<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">'
+    +'<div style="width:48px;height:48px;border-radius:10px;background:'+PFC.green+';display:flex;align-items:center;justify-content:center;font-weight:600;font-size:18px;color:'+PFC.greenInk+';flex:none">'+initials(sp.name)+'</div>'
+    +'<div><div style="font-size:17px;font-weight:500">'+escapeHtml(sp.name)+'</div>'
+    +'<div style="font-size:13px;color:'+PFC.ink2+';font-style:italic">'+escapeHtml(sp.subjects.join(', '))+' · Cal Poly, San Luis Obispo</div></div></div>'
+    +'<div style="background:'+PFC.panel+';border:1px solid '+PFC.line+';border-radius:10px;padding:12px;margin-bottom:16px;font-size:13px;color:'+PFC.ink2+';font-style:italic">No student ratings yet — be the first to review this professor.</div>'
+    +'<div style="font-size:12px;color:'+PFC.ink2+';letter-spacing:.5px;margin-bottom:6px">CLASSES THIS TERM ('+sp.teaches.length+')</div>'
+    +'<div style="margin-bottom:16px">'+(rows||'<div style="font-size:13px;color:'+PFC.ink2+';font-style:italic;padding:10px 0">No sections on the schedule right now.</div>')+'</div>'
+    +'<button class="rate-open" onclick="reviewScrapedProf()" style="width:100%;background:'+PFC.green+';color:'+PFC.greenInk+';border:none;border-radius:10px;padding:13px;font-size:14px;font-weight:500;cursor:pointer">Be the first to review</button>'
+    +'</div>';
+  document.getElementById('mback').classList.add('open'); document.body.style.overflow='hidden';
+}
+function reviewScrapedProf(){
+  var sp=window._scrapedCurrent; if(!sp)return;
+  var id='sp:'+sp.id;
+  if(typeof PROFESSORS!=='undefined' && !PROFESSORS[id]){
+    PROFESSORS[id]={name:sp.name,dept:(sp.subjects[0]||''),rating:null,evals:null,reviews:null,scraped:true};
+  }
+  if(typeof startRate==='function')startRate(id);
 }
 function fp_courseProfs(code){ var ids=(confirmedProfs(code)||[]); if(!ids.length)ids=(pickProfs(code,5)||[]); return ids.filter(function(id){return PROFESSORS[id];}); }
 function fp_expand(codes,nm,am){
