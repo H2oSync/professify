@@ -263,15 +263,24 @@ async function upsertSupabase(rows) {
     capacity: r.capacity ?? null, enrolled: r.enrolled ?? null, available: r.available ?? null,
     waitlist_total: r.waitlist_total ?? null, waitlist_capacity: r.waitlist_capacity ?? null, updated_at: r.updated_at,
   }));
-  for (let i = 0; i < clean.length; i += 500) {
+  // Dedupe by (term, class_nbr): a cross-listed course can appear under two
+  // subjects in the same lane with the same class number. Postgres rejects an
+  // upsert that affects the same row twice in one command ("ON CONFLICT DO
+  // UPDATE command cannot affect row a second time"), which would reject the
+  // whole lane's write. Collapse to one row per class number (last wins).
+  const byKey = new Map();
+  for (const r of clean) byKey.set(r.term + '|' + r.class_nbr, r);
+  const deduped = [...byKey.values()];
+  if (deduped.length !== clean.length) console.log(`• Collapsed ${clean.length - deduped.length} cross-listed duplicate class number(s) before upsert.`);
+  for (let i = 0; i < deduped.length; i += 500) {
     const res = await fetch(url, {
       method: 'POST',
       headers: { apikey: CFG.SUPABASE_SERVICE_KEY, Authorization: `Bearer ${CFG.SUPABASE_SERVICE_KEY}`, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify(clean.slice(i, i + 500)),
+      body: JSON.stringify(deduped.slice(i, i + 500)),
     });
     if (!res.ok) throw new Error(`Supabase upsert failed: HTTP ${res.status}\n${(await res.text()).slice(0, 300)}`);
   }
-  console.log(`• Upserted ${clean.length} rows into Supabase.`);
+  console.log(`• Upserted ${deduped.length} rows into Supabase.`);
 }
 
 run().catch(e => { console.error('FATAL:', e.message); process.exit(1); });
