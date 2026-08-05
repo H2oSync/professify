@@ -215,18 +215,21 @@ async function run() {
         await page.evaluate(PAGE_HELPERS);
       }
       await setField(page, 'SSR_CLSRCH_WRK_SUBJECT_SRCH', subj, 'subject');
-      // Turn OFF "Show Open Classes Only" so FULL / WAITLISTED sections are included.
-      // BUG (fixed): the old code set checked=false and then dispatched a *click*, but a
-      // click on a checkbox toggles it — flipping it right back to checked=true. That made
-      // the search silently return ONLY open classes and drop full/waitlisted courses
-      // (e.g. a waitlisted BUS 3431). Set the state and fire *change* (no toggle), then log.
-      const openOnlyState = await page.evaluate(() => {
-        const o = window.__pf_find('SSR_CLSRCH_WRK_SSR_OPEN_ONLY');
-        if (!o) return 'absent';
-        o.checked = false;
-        o.dispatchEvent(new Event('change', { bubbles: true }));
-        return o.checked ? 'STILL-ON' : 'off';
-      });
+      // Turn OFF "Show Open Classes Only" so FULL / WAITLISTED / CLOSED sections are
+      // included. PeopleSoft applies this filter SERVER-SIDE via the checkbox's own
+      // postback — so just setting checked=false (or firing 'change') is NOT enough: the
+      // search still runs open-only and drops full/closed sections (we saw 0 Closed). If
+      // the box is on, click it NATIVELY (fires PeopleSoft's onclick postback) and wait,
+      // then re-set the subject in case the postback blanked it. Log before->after state.
+      const ooBefore = await page.evaluate(() => { const o = window.__pf_find('SSR_CLSRCH_WRK_SSR_OPEN_ONLY'); return o ? (o.checked ? 'on' : 'off') : 'absent'; });
+      if (ooBefore === 'on') {
+        await postback(page, () => page.evaluate(() => { const o = window.__pf_find('SSR_CLSRCH_WRK_SSR_OPEN_ONLY'); if (o && o.checked) o.click(); }));
+        await page.evaluate(PAGE_HELPERS);
+        const subjNow = await readField(page, 'SSR_CLSRCH_WRK_SUBJECT_SRCH');
+        if (!subjNow || String(subjNow).toUpperCase() !== subj.toUpperCase()) await setField(page, 'SSR_CLSRCH_WRK_SUBJECT_SRCH', subj, 'subject(re)');
+      }
+      const ooAfter = await page.evaluate(() => { const o = window.__pf_find('SSR_CLSRCH_WRK_SSR_OPEN_ONLY'); return o ? (o.checked ? 'on' : 'off') : 'absent'; });
+      const openOnlyState = ooBefore + '->' + ooAfter;
       await postback(page, () => page.evaluate(() => { const b = window.__pf_find('CLASS_SRCH_WRK2_SSR_PB_CLASS_SRCH'); if (b) b.click(); }));
       await dismissOversize(page);
 
@@ -238,12 +241,19 @@ async function run() {
 
       const outcome = await searchOutcome(page);
       const list = await parseList(page, subj);
-      // Diagnostics: distinct courses captured, status mix (all-Open ⇒ open-only filter is
-      // still on), and any blank-code sections (⇒ course-header parse gap).
+      // Diagnostics: raw section-links on the page (rawLinks) vs parsed rows tells us
+      // truncation vs parse gaps; status mix (all-Open ⇒ open-only filter still on);
+      // blank-code sections (⇒ course-header parse gap); and whether the page mentions any
+      // "oversize/limit" note (⇒ results were capped). Probe a known-missing course too.
       const codeSet = new Set(list.map(r => r.course_code).filter(Boolean));
       const blanks = list.filter(r => !r.course_code).length;
       const statusMix = list.reduce((m, r) => { const st = statusBadge(r.status_raw) || 'null'; m[st] = (m[st] || 0) + 1; return m; }, {});
-      console.log(`  ${subj}: ${list.length} sections / ${codeSet.size} courses  (open-only=${openOnlyState}, statuses=${JSON.stringify(statusMix)}${blanks ? `, ${blanks} BLANK-code` : ''}, msg=${outcome.msg || 'none'})${CFG.FETCH_DETAILS && list.length ? ' — fetching counts…' : ''}`);
+      const diag = await page.evaluate(() => ({
+        rawLinks: document.querySelectorAll('a[id^="MTG_CLASS_NBR$"]').length,
+        capNote: /(only the first|maximum number|more than \d+|has been limited|limited to \d+|exceeds the maximum)/i.test(document.body.innerText || ''),
+        has3431: /3431\s*-/.test(document.body.innerText || ''),
+      }));
+      console.log(`  ${subj}: ${list.length} sections (raw links=${diag.rawLinks}) / ${codeSet.size} courses  (open-only=${openOnlyState}, statuses=${JSON.stringify(statusMix)}${blanks ? `, ${blanks} BLANK-code` : ''}${diag.capNote ? ', CAP-NOTE!' : ''}${subj === 'BUS' ? `, has3431=${diag.has3431}` : ''}, msg=${outcome.msg || 'none'})${CFG.FETCH_DETAILS && list.length ? ' — fetching counts…' : ''}`);
       if (list.length === 0) await dumpDiag(page, subj.toLowerCase());
 
       if (CFG.FETCH_DETAILS) {
