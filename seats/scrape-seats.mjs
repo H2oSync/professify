@@ -215,7 +215,18 @@ async function run() {
         await page.evaluate(PAGE_HELPERS);
       }
       await setField(page, 'SSR_CLSRCH_WRK_SUBJECT_SRCH', subj, 'subject');
-      await page.evaluate(() => { const o = window.__pf_find('SSR_CLSRCH_WRK_SSR_OPEN_ONLY'); if (o) { o.checked = false; o.dispatchEvent(new Event('click', { bubbles: true })); } });
+      // Turn OFF "Show Open Classes Only" so FULL / WAITLISTED sections are included.
+      // BUG (fixed): the old code set checked=false and then dispatched a *click*, but a
+      // click on a checkbox toggles it — flipping it right back to checked=true. That made
+      // the search silently return ONLY open classes and drop full/waitlisted courses
+      // (e.g. a waitlisted BUS 3431). Set the state and fire *change* (no toggle), then log.
+      const openOnlyState = await page.evaluate(() => {
+        const o = window.__pf_find('SSR_CLSRCH_WRK_SSR_OPEN_ONLY');
+        if (!o) return 'absent';
+        o.checked = false;
+        o.dispatchEvent(new Event('change', { bubbles: true }));
+        return o.checked ? 'STILL-ON' : 'off';
+      });
       await postback(page, () => page.evaluate(() => { const b = window.__pf_find('CLASS_SRCH_WRK2_SSR_PB_CLASS_SRCH'); if (b) b.click(); }));
       await dismissOversize(page);
 
@@ -227,7 +238,12 @@ async function run() {
 
       const outcome = await searchOutcome(page);
       const list = await parseList(page, subj);
-      console.log(`  ${subj}: ${list.length} sections  (msg=${outcome.msg || 'none'}, title="${outcome.title}")${CFG.FETCH_DETAILS && list.length ? ' — fetching counts…' : ''}`);
+      // Diagnostics: distinct courses captured, status mix (all-Open ⇒ open-only filter is
+      // still on), and any blank-code sections (⇒ course-header parse gap).
+      const codeSet = new Set(list.map(r => r.course_code).filter(Boolean));
+      const blanks = list.filter(r => !r.course_code).length;
+      const statusMix = list.reduce((m, r) => { const st = statusBadge(r.status_raw) || 'null'; m[st] = (m[st] || 0) + 1; return m; }, {});
+      console.log(`  ${subj}: ${list.length} sections / ${codeSet.size} courses  (open-only=${openOnlyState}, statuses=${JSON.stringify(statusMix)}${blanks ? `, ${blanks} BLANK-code` : ''}, msg=${outcome.msg || 'none'})${CFG.FETCH_DETAILS && list.length ? ' — fetching counts…' : ''}`);
       if (list.length === 0) await dumpDiag(page, subj.toLowerCase());
 
       if (CFG.FETCH_DETAILS) {
