@@ -3609,9 +3609,23 @@ function renderExplore(){
     if(!core.length&&!ce.length)html+=`<p class="emptyq">No classes match “${document.getElementById('exQuery').value}”.</p>`;
     out.innerHTML=html;
   }else{
+    const q=(exQuery||'').trim();
+    // Name matcher that tolerates real-world variation: "Last, First", middle names,
+    // reordered tokens, and partial/prefix typing — not just a raw substring on "First Last".
+    const nameHit=(p)=>{
+      if(!q)return true;
+      const hay=((p.name||'')+' '+(p.dept||'')).toLowerCase();
+      if(hay.includes(q))return true;
+      const nmTok=(p.name||'').toLowerCase().replace(/[.,]/g,' ').split(/\s+/).filter(Boolean);
+      const qTok=q.replace(/[.,]/g,' ').split(/\s+/).filter(Boolean);
+      return qTok.length>0 && qTok.every(qt=>nmTok.some(nt=>nt.startsWith(qt)));
+    };
     let list=Object.entries(PROFESSORS).filter(([id,p])=>{
       const inDept=exDept==='All'||pdept(p)===exDept;
-      return inDept&&p.rating!=null&&profFit(p)&&(p.name+' '+p.dept).toLowerCase().includes(exQuery);
+      // When someone is actively searching a name, don't hide professors just because
+      // PolyRatings has no score for them yet — an exact name should always surface.
+      const ratingOk = q ? true : (p.rating!=null);
+      return inDept&&ratingOk&&profFit(p)&&nameHit(p);
     });
     if(!list.length){out.innerHTML=`<p class="emptyq">No professors match “${document.getElementById('exQuery').value}”.</p>`;return;}
     list.sort((a,b)=>(b[1].rating??-1)-(a[1].rating??-1));
@@ -5067,10 +5081,24 @@ async function loadSeats(){
   try{
     var c=window.PROFESSIFY_CONFIG||{};
     if(!c.SUPABASE_URL||!c.SUPABASE_ANON_KEY)return;
-    var url=c.SUPABASE_URL.replace(/\/$/,'')+'/rest/v1/course_seats?term=eq.2268&select=course_code,title,section,instructor,days,status,capacity,enrolled,available,waitlist_total,waitlist_capacity,class_nbr&limit=8000';
-    var res=await fetch(url,{headers:{apikey:c.SUPABASE_ANON_KEY,Authorization:'Bearer '+c.SUPABASE_ANON_KEY}});
-    if(!res.ok)return;
-    var rows=await res.json(), idx={}, sec={};
+    // Supabase caps every REST response at 1000 rows, so we MUST page through the full
+    // term (≈3.8k sections) — otherwise the app only ever sees an arbitrary 1000 and most
+    // classes show "Time TBA / check class schedule" even though we have their real data.
+    var base=c.SUPABASE_URL.replace(/\/$/,'');
+    var sel='course_code,title,section,instructor,days,status,capacity,enrolled,available,waitlist_total,waitlist_capacity,class_nbr';
+    var hdr={apikey:c.SUPABASE_ANON_KEY,Authorization:'Bearer '+c.SUPABASE_ANON_KEY};
+    var rows=[]; var PAGE=1000;
+    for(var off=0; off<40000; off+=PAGE){
+      var url=base+'/rest/v1/course_seats?term=eq.2268&select='+sel+'&order=course_code&limit='+PAGE+'&offset='+off;
+      var res=await fetch(url,{headers:hdr});
+      if(!res.ok)break;
+      var part=await res.json();
+      if(!Array.isArray(part)||!part.length)break;
+      rows=rows.concat(part);
+      if(part.length<PAGE)break;   // last page reached
+    }
+    if(!rows.length)return;
+    var idx={}, sec={};
     rows.forEach(function(r){
       var code=(r.course_code||'').trim(); if(!code)return;
       var a=idx[code]||(idx[code]={open:0,wait:0,closed:0,seats:0,wl:0,cap:0,wlcap:0});
@@ -5201,7 +5229,7 @@ function fp_card(o){
     +watchBtnHtml
     +'</div>'
     +'<div class="fp-cmeta"><div class="fp-cn">'+fpEsc(o.code)+' · '+fpEsc(pname)+(fit?'<span class="fp-fit">Fits you</span>':'')+'</div>'
-    +'<div class="fp-cs">'+(o.name?fpEsc(o.name)+' · ':'')+(o.time?fpEsc(o.time):'Time TBA · check class schedule')+'</div></div>'
+    +'<div class="fp-cs">'+(o.name?fpEsc(o.name)+' · ':'')+(o.time?fpEsc(o.time):(o.real?'Time to be arranged (async / by arrangement)':'Time TBA · check class schedule'))+'</div></div>'
     +'<div class="fp-cstat">'+(typeof rateHtml==='function'?rateHtml(o.p?o.p.rating:null):(o.p&&o.p.rating!=null?o.p.rating:'—'))+'</div>'
     +'<div class="fp-seat '+s.cls+'" title="'+(s.real?'Live from Cal Poly class search — open seats, class size, and waitlist depth':'Not posted yet — check the official class schedule')+'">'+fpEsc(seatBadge(s))+'</div>'
     +'</div>'+backup;
