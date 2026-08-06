@@ -167,10 +167,22 @@ async function fetchDetail(page, index) {
     let days_detail = '';
     const mm = t.match(/((?:Mo|Tu|We|Th|Fr|Sa|Su)+)\s+(\d{1,2}:\d{2}\s*[AP]M)\s*[-–to]+\s*(\d{1,2}:\d{2}\s*[AP]M)/i);
     if (mm) days_detail = (mm[1] + ' ' + mm[2] + '-' + mm[3]).replace(/\s+/g, ' ').trim();
+    // CATALOG (static per course) — prerequisites + description, both on this same detail page.
+    // Captured here for free (no extra page load). Stored in a separate course_catalog table so
+    // it NEVER touches the seat upsert. `grab` slices the text between a start label and the next
+    // section header. Prereqs also appear in prose inside Description, giving a natural fallback.
+    const grab = (startRe, stopRe) => {
+      const i = t.search(startRe); if (i < 0) return '';
+      const rest = t.slice(i).replace(startRe, '');
+      const e = rest.search(stopRe);
+      return (e < 0 ? rest : rest.slice(0, e)).replace(/\s+/g, ' ').trim();
+    };
+    const prereq = grab(/Enrollment Requirements/i, /(Class Availability|Class Capacity|Description|Textbook|View Search Results)/i).slice(0, 700);
+    const description = grab(/\bDescription\b/i, /(Textbook\s*\/?\s*Other|Special Instructions|Course Materials|View Search Results)/i).slice(0, 1500);
     return {
       capacity: g('Class Capacity') ?? g('Enrollment Capacity'), enrolled: g('Enrollment Total'),
       available: g('Available Seats'), waitlist_capacity: g('Wait List Capacity'), waitlist_total: g('Wait List Total'),
-      days_detail,
+      days_detail, prereq, description,
     };
   });
   await page.evaluate(() => { const b = document.getElementById('CLASS_SRCH_WRK2_SSR_PB_BACK'); if (b) b.click(); });
@@ -307,7 +319,51 @@ async function run() {
   await writeFile('seats.json', JSON.stringify({ term: CFG.TERM, generated_at: new Date().toISOString(), count: all.length, sections: all }, null, 2));
   console.log(`• Wrote seats.json (${all.length} sections).`);
   await upsertSupabase(all);
+  // Prereqs/description are STATIC per course, so collapse to one row per course_code (first
+  // section that has the text wins) and write them to their own table. This is wrapped so a
+  // missing table or any error here can NEVER affect the seat upsert above.
+  const catByCourse = new Map();
+  for (const r of all) {
+    if (!r.course_code) continue;
+    const existing = catByCourse.get(r.course_code);
+    if (!existing || (!existing.prereqs && r.prereq) || (!existing.description && r.description)) {
+      catByCourse.set(r.course_code, {
+        course_code: r.course_code, subject: r.subject, title: r.title,
+        prereqs: r.prereq || (existing && existing.prereqs) || null,
+        description: r.description || (existing && existing.description) || null,
+        updated_at: r.updated_at,
+      });
+    }
+  }
+  await upsertCatalog([...catByCourse.values()]);
   if (!all.length) { console.log('\n⚠  Zero sections — see the uploaded diag-*.png / diag-*.txt artifact to see what the runner saw.'); process.exit(2); }
+}
+
+// Write per-course prerequisites + description to a SEPARATE table (course_catalog). Fully
+// isolated: if the table doesn't exist yet or the request fails, we log and return WITHOUT
+// throwing, so the critical seat pipeline is never impacted. Create the table once (SQL in the
+// deploy notes) to start collecting this data.
+async function upsertCatalog(rows) {
+  if (!CFG.SUPABASE_URL || !CFG.SUPABASE_SERVICE_KEY) return;
+  const withText = rows.filter(r => r.prereqs || r.description);
+  if (!withText.length) { console.log('• No prereq/description text captured this lane.'); return; }
+  const url = `${CFG.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/course_catalog?on_conflict=course_code`;
+  try {
+    for (let i = 0; i < withText.length; i += 500) {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { apikey: CFG.SUPABASE_SERVICE_KEY, Authorization: `Bearer ${CFG.SUPABASE_SERVICE_KEY}`, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify(withText.slice(i, i + 500)),
+      });
+      if (!res.ok) {
+        console.log(`• Prereq/catalog upsert skipped (non-fatal): HTTP ${res.status} — ${(await res.text()).slice(0, 160)}  [create the course_catalog table to enable]`);
+        return;
+      }
+    }
+    console.log(`• Upserted ${withText.length} course prereq/catalog rows.`);
+  } catch (e) {
+    console.log('• Prereq/catalog upsert error (non-fatal):', e.message.split('\n')[0]);
+  }
 }
 
 async function upsertSupabase(rows) {
