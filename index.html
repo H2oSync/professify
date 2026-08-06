@@ -21,7 +21,7 @@ window.PROFESSIFY_CONFIG = {
   SUPABASE_URL: 'https://rqkndeqbcahozidniesn.supabase.co',
   SUPABASE_ANON_KEY: 'sb_publishable_h7Hllays0O3KRORIKfRdzg_iMBVInrD', // publishable key — safe to expose
   SITE_URL: 'https://professify.app', // used to build shareable invite links + QR codes
-  EMAIL_DOMAIN: ''       // optional: lock sign-in to one domain, e.g. 'calpoly.edu'. Blank = any .edu
+  EMAIL_DOMAIN: 'calpoly.edu'  // lock sign-in/sign-up to Cal Poly SLO only. Blank = any .edu
 };
 </script>
 <script>
@@ -132,7 +132,7 @@ window.toggleTheme = toggleTheme;
   :root[data-theme="cream"] .rate{color:var(--accent)!important}
   :root[data-theme="cream"] .pcard,
   :root[data-theme="cream"] .prof-row,
-  :root[data-theme="cream"] .cls-list{border-color:var(--line);box-shadow:none}
+  :root[data-theme="cream"] .cls-row{border-color:var(--line);box-shadow:none}
   /*__THEME_END__*/
   *{box-sizing:border-box}
   html,body{margin:0;padding:0}
@@ -424,18 +424,48 @@ window.toggleTheme = toggleTheme;
   .cat .lab{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);font-weight:600;white-space:nowrap}
   .cat .desc{font-size:14px;color:var(--muted);max-width:64ch}
   .grouphead{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600;margin:28px 0 12px}
-  .cls-list{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
-  .cls-row{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:center;padding:14px 20px;border-top:1px solid var(--line-soft);transition:background .2s}
-  .cls-row:first-child{border-top:0}
-  .cls-row:hover{background:var(--panel-2)}
-  .cls-info .ct{display:flex;align-items:center;gap:11px;flex-wrap:wrap}
-  .cls-info .code{font-size:14.5px;font-weight:600}
-  .cls-info .nm{font-size:14px;color:var(--muted)}
+  .cls-list{display:flex;flex-direction:column;gap:7px}
+  /* Option-3 "labeled stats" card — compact. Each row is ONE class; Meets/Seats
+     reflect the shown professor's single section, expandable to compare all sections. */
+  .cls-row{display:block;padding:11px 18px;background:var(--panel);border:1px solid var(--line);border-radius:14px;transition:background .2s,border-color .2s}
+  .cls-row.expandable{cursor:pointer}
+  .cls-row.expandable:hover{background:var(--panel-2)}
+  .cls-top{display:flex;align-items:center;justify-content:space-between;gap:16px}
+  .cls-left{min-width:0}
+  .cls-info .ct,.cls-left .ct{display:flex;align-items:center;gap:11px;flex-wrap:wrap}
+  .cls-info .code,.cls-left .code{font-size:14.5px;font-weight:600}
+  .cls-info .nm,.cls-left .nm{font-size:14px;color:var(--muted)}
   .ttag{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;padding:3px 8px;border-radius:999px;border:1px solid var(--line);color:var(--faint);font-weight:600}
   .ttag.core{color:var(--accent);border-color:rgba(var(--accent-rgb),.32)}
+  .cls-prof{display:flex;align-items:center;gap:14px;flex:none}
   .cls-right{display:flex;align-items:center;gap:18px;justify-content:flex-end}
   .cls-right .pm{min-width:190px}
   .cls-units{font-size:12.5px;color:var(--faint);white-space:nowrap;min-width:52px;text-align:right}
+  .cls-stats{display:flex;gap:22px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line-soft);flex-wrap:wrap}
+  .cls-st .k{font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);font-weight:600}
+  .cls-st .v{font-size:12.5px;color:var(--text-2);margin-top:2px;font-weight:500}
+  .cls-st .v.open{color:var(--good);font-weight:700}
+  .cls-st .v.wait{color:var(--mid);font-weight:700}
+  .cls-st .v.full{color:#e0847a;font-weight:700}
+  .cls-st.grow{margin-left:auto;text-align:right}
+  .cls-copy{margin-top:6px;background:transparent;border:1px solid var(--line);color:var(--muted);font-family:inherit;font-size:11px;padding:3px 9px;border-radius:7px;cursor:pointer}
+  .cls-copy:hover{color:var(--accent);border-color:rgba(var(--accent-rgb),.4)}
+  .cls-chev{display:inline-block;margin-left:6px;color:var(--faint);transition:transform .2s;font-size:11px}
+  .cls-row.open .cls-chev{transform:rotate(180deg)}
+  .cls-sections{display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--line-soft);cursor:default}
+  .cls-row.open .cls-sections{display:block;animation:fadeIn .2s ease}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+  .cs-head{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--faint);font-weight:600;margin-bottom:6px}
+  .cs-head .faint{text-transform:none;letter-spacing:0;font-weight:500}
+  .cs-row{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1.1fr) auto;gap:14px;align-items:center;padding:9px 4px;border-top:1px solid var(--line-soft);border-radius:8px}
+  .cs-row:first-of-type{border-top:0}
+  .cs-row[style*="cursor:pointer"]:hover{background:var(--panel-2)}
+  .cs-prof{display:flex;align-items:center;gap:8px;min-width:0}
+  .cs-prof .pn{font-size:13px;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cs-prof .rt{font-size:12px;font-weight:700;flex:none}
+  .cs-meets{font-size:12.5px;color:var(--muted);white-space:nowrap}
+  .cs-seat{font-size:11.5px;font-weight:600;white-space:nowrap;text-align:right}
+  .cs-seat.open{color:var(--good)}.cs-seat.wait{color:var(--mid)}.cs-seat.full{color:#e0847a}
   .pgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
   .pcard{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px;cursor:pointer;display:flex;gap:14px;transition:border-color .25s var(--ease),transform .25s var(--ease),background .25s}
   .pcard:hover{border-color:var(--line);transform:translateY(-2px);background:var(--panel-2)}
@@ -502,7 +532,17 @@ window.toggleTheme = toggleTheme;
   .classno{font-size:12.5px;color:var(--faint);font-variant-numeric:tabular-nums}
   .copybtn{background:transparent;border:1px solid var(--line);color:var(--muted);font-family:inherit;font-size:11.5px;padding:4px 10px;border-radius:8px;cursor:pointer;transition:.2s}
   .copybtn:hover{color:var(--text);border-color:var(--line)}
-  .cls-sub{display:flex;align-items:center;gap:12px;margin-top:8px}
+  .cls-sub{display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap}
+  .cls-time{font-size:12.5px;color:var(--muted);white-space:nowrap}
+  .cls-seat{font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:6px;white-space:nowrap}
+  .cls-seat.open{color:var(--good);background:rgba(var(--accent-rgb),.12)}
+  .cls-seat.wait{color:var(--mid);background:rgba(215,180,106,.14)}
+  .cls-seat.full{color:#e0847a;background:rgba(224,132,122,.14)}
+  .cls-seat.unknown{color:var(--faint);background:rgba(var(--fg-rgb),.05)}
+  .cls-profs{display:flex;align-items:center;gap:8px;min-width:0}
+  .cls-more{font-size:11px;color:var(--faint);white-space:nowrap}
+  .pm.nolink{cursor:default}
+  .pm.nolink:hover{background:none}
   .modal-save{display:flex;gap:10px;margin-bottom:26px}
   .saved-empty{color:var(--muted);font-size:14px;padding:16px 0 4px}
   .saved-group{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600;margin:18px 0 8px}
@@ -647,6 +687,15 @@ window.toggleTheme = toggleTheme;
     .cls-row{grid-template-columns:1fr;gap:10px}
     .cls-right{justify-content:flex-start;gap:14px}
     .cls-right .pm{min-width:0}
+    .cls-top{flex-direction:column;align-items:flex-start;gap:10px}
+    .cls-prof{gap:10px}
+    .cls-prof .pm{min-width:0}
+    .cls-stats{gap:16px 20px}
+    .cls-st.grow{margin-left:0;text-align:left}
+    .cs-row{grid-template-columns:1fr auto;gap:2px 12px}
+    .cs-prof{grid-column:1;grid-row:1}
+    .cs-seat{grid-column:2;grid-row:1;text-align:right}
+    .cs-meets{grid-column:1/-1;grid-row:2;text-align:left}
     .ge-row{grid-template-columns:26px 1fr;gap:11px}
     /* bigger, thumb-friendly tap targets */
     .planbtn{padding:8px 13px;font-size:12px}
@@ -795,6 +844,81 @@ window.toggleTheme = toggleTheme;
 .fr-pending-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#d6a24a;margin-right:6px;vertical-align:middle;animation:frpulse 1.8s ease-in-out infinite}
 .fr-loading{display:flex;align-items:center;justify-content:center;gap:10px;padding:30px 24px;border:1px solid var(--line);border-radius:15px;background:var(--panel);color:var(--faint);font-size:13px}
 .fr-spin{width:14px;height:14px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--accent);animation:frspin .7s linear infinite}
+</style>
+
+<!-- ============ MOBILE RESTRUCTURE (phones only — desktop untouched) ============ -->
+<style id="mobile-restructure">
+  .mtabbar{display:none}
+  @media(max-width:640px){
+    /* ---- slim top bar: brand + login/avatar on one row; tabs move to bottom ---- */
+    header.nav .nav-inner{flex-wrap:nowrap;height:auto;align-items:center;gap:10px;padding:11px 0}
+    header.nav nav.tabs{display:none!important}
+    .prof-wrap{margin-left:auto}
+    #authBtn{font-size:12.5px;padding:9px 13px;white-space:nowrap}
+    .brand .brand-name{font-size:20px}
+    .demo-ribbon{font-size:11px;padding:8px 13px;line-height:1.45}
+
+    /* ---- bottom tab bar ---- */
+    .mtabbar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:60;
+      background:var(--nav-bg);backdrop-filter:saturate(160%) blur(15px);-webkit-backdrop-filter:saturate(160%) blur(15px);
+      border-top:1px solid var(--line);padding:5px 2px calc(5px + env(safe-area-inset-bottom))}
+    .mtab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+      background:none;border:0;cursor:pointer;color:var(--faint);font:inherit;padding:5px 2px;min-height:50px;position:relative;transition:color .15s;-webkit-tap-highlight-color:transparent}
+    .mtab svg{width:23px;height:23px}
+    .mtab>span:last-child{font-size:10.5px;font-weight:600;letter-spacing:.01em}
+    .mtab.active{color:var(--accent)}
+    .mtab .mbadge{position:absolute;top:1px;left:calc(50% + 7px);min-width:16px;height:16px;border-radius:8px;background:var(--accent);color:var(--accent-ink);font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px;line-height:1}
+    .mtab .mbadge[hidden]{display:none}
+    body{padding-bottom:calc(66px + env(safe-area-inset-bottom))}
+    footer{margin-bottom:6px}
+
+    /* ---- heroes shrink so content is visible without scrolling ---- */
+    .home{padding:18px 0 28px}
+    .home h1{font-size:29px;line-height:1.1;margin-bottom:18px}
+    .ex-hero{margin-bottom:2px}
+    .ex-hero .eyebrow{margin-bottom:8px;font-size:11px}
+    .ex-hero h2{font-size:26px}
+    #view-explore .wrap{padding-top:10px}
+    .phead{padding:20px 0 12px!important}
+    .phead h2{font-size:24px;line-height:1.12}
+    .phead p{font-size:14px}
+    .ob-card h2{font-size:22px}
+
+    /* ---- explore search: full width, no text clipping ---- */
+    .ex-spot{margin-top:8px}
+    .ex-spot input,#exQuery{font-size:15px;text-overflow:ellipsis}
+    .ex-modes .seg,.seg{width:100%}
+    .ex-modes .seg button,.seg button{flex:1}
+
+    /* ---- card + row density ---- */
+    .lcard{padding:18px 18px 15px;min-height:0}
+    .lcard h3{font-size:20px;margin-bottom:6px}
+    .lcard .lc-sub{font-size:13.5px}
+    .lcard .corner{top:14px;right:14px;width:26px;height:26px;padding:6px}
+    .pcard{padding:14px}
+    .pcard h3{font-size:16px}
+    .pcard .ini{width:44px;height:44px}
+    .grouphead{font-size:12px}
+    .cls-row{padding:14px 16px}
+    .cls-info .code{font-size:15px}
+    .cls-info .nm{font-size:14px}
+    .fr-connect-card{padding:15px}
+    .fr-connect-grid{grid-template-columns:1fr}
+    .fr-section{margin-bottom:16px}
+    .friends-cta{padding:18px}
+
+    /* ---- thumb-friendly targets ---- */
+    .seg button,.area-chip,.copybtn,.save-ico,.wl-btn,.fr-addtoggle,.fr-cc-btn,.btn,.eye-btn{min-height:44px}
+    .copybtn{padding:9px 12px}
+
+    /* ---- modals become bottom sheets ---- */
+    .mback{align-items:flex-end;padding:0}
+    .mback .modal{width:100%;max-width:100%;max-height:92vh;overflow-y:auto;-webkit-overflow-scrolling:touch;border-radius:22px 22px 0 0}
+
+    /* ---- floating compare tray: only lift it above the bar when it's ACTIVE;
+           the hidden state keeps its default off-screen position so it can't peek ---- */
+    .fp-tray.on{bottom:calc(80px + env(safe-area-inset-bottom))!important}
+  }
 </style>
 </head>
 <body>
@@ -968,19 +1092,34 @@ window.toggleTheme = toggleTheme;
 .sp-fullterm .ft-h{font-size:11.5px;color:var(--muted);font-weight:700;margin-bottom:6px;display:flex}
 .sp-fullterm .ft-h .u{margin-left:auto;color:var(--faint)}
 .sp-fullterm .ft-c{font-size:12.5px;color:var(--text-2);padding:2px 0}
+/* Step 1 — live preview layout (controls right, preview left) */
+.sp-setup-grid{display:grid;grid-template-columns:1fr 1.05fr;gap:16px;align-items:stretch;margin-top:2px}
+.sp-preview{background:linear-gradient(168deg,rgba(var(--accent-rgb),.13),var(--panel-2));border:1px solid rgba(var(--accent-rgb),.28);border-radius:14px;padding:20px 22px;display:flex;flex-direction:column;justify-content:center;min-height:170px}
+.spv-kick{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--good);font-weight:700;margin:0 0 9px}
+.spv-term{font-size:29px;letter-spacing:-.02em;line-height:1.05;font-weight:700;margin:0 0 7px}
+.spv-sub{color:var(--muted);font-size:13.5px;line-height:1.5}
+.spv-stats{display:flex;gap:22px;margin-top:20px}
+.spv-stats>div b{display:block;font-size:23px;font-weight:800;letter-spacing:-.01em;line-height:1.1}
+.spv-stats>div span{font-size:11.5px;color:var(--muted)}
+.sp-controls{display:flex;flex-direction:column;gap:12px;justify-content:center}
+.sp-controls .sp-row-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:640px){.sp-setup-grid{grid-template-columns:1fr}.sp-preview{min-height:0;padding:18px}.spv-term{font-size:26px}}
 </style>
 
 <div class="sp-wrap">
   <div class="sp-card">
     <div class="sp-step">Step 1 · Your major</div>
     <div id="schProfile" class="sp-note sp-hidden" style="margin-bottom:12px;margin-top:0"></div>
-    <div class="sp-row">
-      <div><label class="sp-lab">Major</label><select id="schMajorSel" class="sp-sel"></select></div>
-      <div id="schConcWrap" class="sp-hidden"><label class="sp-lab">Concentration</label><select id="schConcSel" class="sp-sel"></select></div>
-    </div>
-    <div class="sp-row" style="margin-top:11px">
-      <div><label class="sp-lab">Upcoming term</label><select id="schTermSel" class="sp-sel"><option>Fall</option><option>Spring</option></select></div>
-      <div><label class="sp-lab">Target units</label><select id="schUnitSel" class="sp-sel"><option>12</option><option>13</option><option>14</option><option selected>15</option><option>16</option><option>17</option></select></div>
+    <div class="sp-setup-grid">
+      <div class="sp-preview" id="schPreview" aria-live="polite"></div>
+      <div class="sp-controls">
+        <div><label class="sp-lab">Major</label><select id="schMajorSel" class="sp-sel"></select></div>
+        <div id="schConcWrap" class="sp-hidden"><label class="sp-lab">Concentration</label><select id="schConcSel" class="sp-sel"></select></div>
+        <div class="sp-row-2">
+          <div><label class="sp-lab">Upcoming term</label><select id="schTermSel" class="sp-sel"><option>Fall</option><option>Spring</option></select></div>
+          <div><label class="sp-lab">Target units</label><select id="schUnitSel" class="sp-sel"><option>12</option><option>13</option><option>14</option><option selected>15</option><option>16</option><option>17</option></select></div>
+        </div>
+      </div>
     </div>
     <div id="schNoData" class="sp-note sp-hidden"></div>
   </div>
@@ -1132,6 +1271,26 @@ window.toggleTheme = toggleTheme;
 .mc-clash{display:inline-block;margin-left:8px;font-size:10.5px;font-weight:700;color:#e0847a;background:rgba(224,132,122,.14);padding:2px 7px;border-radius:6px;vertical-align:middle}
 .mc-conflict{border:1px solid rgba(224,132,122,.4);background:rgba(224,132,122,.08);color:var(--text-2);border-radius:11px;padding:11px 14px;margin-bottom:14px;font-size:13px;line-height:1.55}
 .mc-conflict b{color:#d9695d}
+/* watchlist classes — compare tray */
+.wc-card.incmp{border-color:rgba(var(--accent-rgb),.5);background:var(--accent-dim)}
+.wc-cmp{flex:none;background:none;border:1px solid var(--line);border-radius:9px;color:var(--text-2);font:600 12.5px inherit;padding:8px 12px;cursor:pointer;white-space:nowrap;transition:border-color .15s,color .15s,background .15s}
+.wc-cmp:hover{border-color:var(--accent);color:var(--accent)}
+.wc-cmp.on{background:var(--accent-dim);border-color:rgba(var(--accent-rgb),.5);color:var(--good-2)}
+.wc-hint{font-size:12.5px;color:var(--muted);margin:12px 2px 0}
+.wc-tray{position:sticky;bottom:10px;margin-top:12px;display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap;background:var(--panel-2);border:1px solid var(--line);border-radius:13px;padding:11px 14px;box-shadow:0 10px 30px rgba(0,0,0,.12)}
+.wc-chips{display:flex;gap:7px;flex-wrap:wrap}
+.wc-chip{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:4px 9px;font-size:12px;font-weight:700;color:var(--text-2);display:inline-flex;align-items:center;gap:6px}
+.wc-chip .rm{color:var(--faint);cursor:pointer;font-weight:600}
+.wc-chip .rm:hover{color:#e0847a}
+.wc-go{flex:none;appearance:none;border:0;border-radius:10px;background:var(--accent);color:var(--accent-ink);font:600 13.5px inherit;padding:10px 18px;cursor:pointer}
+.wc-go[disabled]{opacity:.45;cursor:not-allowed}
+.wc-cmphead{display:flex;align-items:center;gap:14px;margin-bottom:14px}
+.wc-back{background:none;border:1px solid var(--line);border-radius:9px;color:var(--text-2);font:600 13px inherit;padding:8px 13px;cursor:pointer}
+.wc-back:hover{border-color:var(--accent);color:var(--accent)}
+.wc-cmpn{font-size:13.5px;color:var(--muted);font-weight:600}
+.wp-rate{flex:none;font-size:15px;font-weight:800;white-space:nowrap;text-align:right;min-width:52px}
+.wp-rate small{font-size:11px;font-weight:600;color:var(--faint)}
+.wp-rate.none{font-size:12px;font-weight:600;color:var(--faint)}
 .cal-wrap{display:flex;border:1px solid rgba(var(--fg-rgb),.1);border-radius:14px;overflow:hidden;background:var(--panel)}
 .cal-times{flex:none;width:52px;border-right:1px solid rgba(var(--fg-rgb),.08)}
 .cal-timecol{position:relative}
@@ -4325,6 +4484,10 @@ function show(v){
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
   const map={home:'tab-home',sched:'tab-sched',explore:'tab-explore',watch:'tab-watch',friends:'tab-friends'};
   if(map[v]){var _tb=document.getElementById(map[v]);if(_tb)_tb.classList.add('active');}
+  // Mobile bottom tab bar: 'past' shows under Friends' area, keep Friends lit for it.
+  document.querySelectorAll('.mtab').forEach(b=>b.classList.remove('active'));
+  const mmap={home:'mtab-home',sched:'mtab-sched',explore:'mtab-explore',watch:'mtab-watch',friends:'mtab-friends',past:'mtab-friends'};
+  if(mmap[v]){var _mb=document.getElementById(mmap[v]);if(_mb)_mb.classList.add('active');}
   if(v==='watch')renderWatch();
   if(v==='friends'&&typeof renderFriends==='function')renderFriends();
   if(v==='past'){if(typeof initPastClassTypeahead==='function')initPastClassTypeahead();var si=(typeof sbUser!=='undefined'&&sbUser);var pg=document.getElementById('pastGate'),ps=document.getElementById('pastSignedIn');if(pg)pg.style.display=si?'none':'';if(ps)ps.style.display=si?'':'none';if(si&&typeof loadMyHistory==='function'){loadMyHistory().then(function(){if(typeof renderMyHistory==='function')renderMyHistory();});}else if(typeof renderMyHistory==='function'){renderMyHistory();}}
@@ -4483,30 +4646,115 @@ function setExMajor(m){exMajor=m;exConc=null;exBest=false;renderExContext();rend
 function setExConc(c){exConc=c;exBest=false;renderExplore();}
 function setExDept(d){exDept=d;renderExContext();renderExplore();}
 function clsMatch(c){const pn=(c.prof&&PROFESSORS[c.prof])?PROFESSORS[c.prof].name:'';return (c.code+' '+c.name+' '+pn).toLowerCase().includes(exQuery);}
+/* ===== Per-section data for a class (each row of a class is ONE section) ===== */
+var clsExpanded={};
+function clsSections(code){
+  var secs=(typeof SEAT_SECTIONS!=='undefined'&&SEAT_SECTIONS&&SEAT_SECTIONS[code])?SEAT_SECTIONS[code]:[];
+  return secs.map(function(r){
+    var nm=(r.instructor||'').trim();
+    var isStaff=!nm||/^(staff|tba|to be arranged)$/i.test(nm);
+    var pid=(!isStaff&&typeof matchProfId==='function')?matchProfId(nm):null;
+    return {
+      class_nbr:String((r.class_nbr||'')).trim(),
+      section:String((r.section||'')).trim(),
+      name:isStaff?'':nm,
+      pid:(pid&&PROFESSORS[pid])?pid:null,
+      rating:(pid&&PROFESSORS[pid])?PROFESSORS[pid].rating:null,
+      days:(typeof prettyTime==='function')?prettyTime(r.days):(r.days||''),
+      seat:(typeof secSeat==='function')?secSeat(r):null
+    };
+  });
+}
+function seatRank(s){ if(!s)return -1; if(s.cls==='open')return 1000+(s.n||0); if(s.cls==='wait')return 100; return 0; }
+/* The single section to headline the collapsed row — the shown professor's own
+   section (their most-open one if they teach several), never the aggregate. */
+function clsPrimarySection(code,pid,name,time){
+  var secs=clsSections(code); if(!secs.length)return null;
+  var pool=[];
+  if(pid) pool=secs.filter(function(s){return s.pid===pid;});
+  if(!pool.length&&name){ var nl=String(name).toLowerCase().split('·')[0].trim(); pool=secs.filter(function(s){return s.name&&(s.name.toLowerCase()===nl||nl.indexOf(s.name.toLowerCase())>=0||s.name.toLowerCase().indexOf(nl)>=0);}); }
+  if(!pool.length) pool=secs.slice();
+  // If we know the exact meeting time (e.g. the section a student added), pin to it.
+  if(time){ var tt=String(time).replace(/\s+/g,'').replace(/[–—]/g,'-').toLowerCase(); var byT=pool.filter(function(s){var sd=(s.days||'').replace(/\s+/g,'').replace(/[–—]/g,'-').toLowerCase(); return sd&&(tt===sd||tt.indexOf(sd)>=0||sd.indexOf(tt)>=0);}); if(byT.length)pool=byT; }
+  pool=pool.slice().sort(function(a,b){return seatRank(b.seat)-seatRank(a.seat);});
+  return pool[0];
+}
+/* mc-seat badge for ONE section (never the aggregate of every section). */
+function sectionSeatBadge(prim){
+  if(!prim||!prim.seat) return '<span class="mc-seat none">Check schedule</span>';
+  var s=prim.seat, cls=(s.cls==='open')?'open':((s.cls==='wait')?'wait':'full');
+  return '<span class="mc-seat '+cls+'">'+escapeHtml(seatBadge(s))+'</span>';
+}
+function clsToggleSections(code,ev){ if(ev){ev.stopPropagation();}
+  clsExpanded[code]=!clsExpanded[code];
+  var sel='.cls-row[data-code="'+((window.CSS&&CSS.escape)?CSS.escape(code):code)+'"]';
+  document.querySelectorAll(sel).forEach(function(r){r.classList.toggle('open',!!clsExpanded[code]);});
+}
+/* Copy a section's registration number without ever showing the number (toast confirms). */
+function clsCopySec(ev,nbr){ if(ev){ev.stopPropagation();}
+  try{ if(navigator.clipboard)navigator.clipboard.writeText(String(nbr)); }catch(_e){}
+  if(typeof frToast==='function')frToast('Copied class #'+nbr+' — paste it into the registration portal.');
+}
+function clsSectionRows(code){
+  var secs=clsSections(code);
+  secs.sort(function(a,b){var r=seatRank(b.seat)-seatRank(a.seat); if(r)return r; return (b.rating==null?-1:b.rating)-(a.rating==null?-1:a.rating);});
+  return secs.map(function(s){
+    var num=s.class_nbr||s.section||'';
+    var rt=s.rating!=null?'<span class="rt" style="color:'+scoreColor(s.rating)+'">'+to5(s.rating).toFixed(1)+'</span>':'';
+    var profCell=s.pid
+      ? '<div class="cs-prof" onclick="event.stopPropagation();openProf(\''+s.pid+'\')" style="cursor:pointer"><span class="pn">'+escapeHtml(s.name)+'</span>'+rt+'</div>'
+      : '<div class="cs-prof"><span class="pn">'+(s.name?escapeHtml(s.name):'Staff / TBA')+'</span></div>';
+    var seatCell=s.seat?'<span class="cs-seat '+s.seat.cls+'">'+escapeHtml(seatBadge(s.seat))+'</span>':'<span class="cs-seat">—</span>';
+    var copyAttr=num?' onclick="clsCopySec(event,\''+num+'\')" title="Tap to copy this section for registration" style="cursor:pointer"':'';
+    return '<div class="cs-row"'+copyAttr+'>'+profCell+'<span class="cs-meets">'+(s.days?escapeHtml(s.days):'Time TBA')+'</span>'+seatCell+'</div>';
+  }).join('');
+}
 function clsRow(c){
-  let profHtml;
-  if(!c.prof||c.prof==='__tbd')profHtml=`<span class="tbd">Instructor TBA</span>`;
-  else{const p=PROFESSORS[c.prof];profHtml=`<div class="pm" onclick="openProf('${c.prof}')"><div class="ini">${initials(p.name)}</div><span class="nm">${p.name}</span>${rateHtml(p.rating)}</div>`;}
-  const sv=isWatchedClass(c.code);
-  // Real registration numbers come from the live feed — one per section. Never a hash.
-  //   1 section  -> show "Class #<real>" and let Copy grab that exact number.
-  //   N sections -> show "N sections" (no single number to copy honestly).
-  //   0 (feed not in yet) -> show neither, rather than a made-up number.
-  let numHtml='';
-  const secs=(typeof SEAT_SECTIONS!=='undefined'&&SEAT_SECTIONS&&SEAT_SECTIONS[c.code])?SEAT_SECTIONS[c.code]:null;
-  if(secs){
-    const nums=[],ns={};
-    secs.forEach(r=>{const n=String((r&&r.class_nbr)||'').trim();if(n&&!ns[n]){ns[n]=1;nums.push(n);}});
-    if(nums.length===1)numHtml=`<span class="classno">Class #${nums[0]}</span><button class="copybtn" onclick="copyClassNo(event,'${nums[0]}')">Copy for registration</button>`;
-    else if(nums.length>1)numHtml=`<span class="classno">${nums.length} sections</span>`;
+  const ci=(typeof classInfo==='function')?classInfo(c.code):null;
+  const allSecs=clsSections(c.code);
+  const nSec=allSecs.length;
+  // Headline professor: prefer the curated/recommended prof IF they actually teach a
+  // section this term; otherwise the best-rated professor who IS teaching — so the
+  // professor, meeting time, and seats on the collapsed row all describe ONE real section.
+  let dispPid=null,dispName=null,dispRating=null;
+  const curatedPid=(c.prof&&c.prof!=='__tbd'&&PROFESSORS[c.prof])?c.prof:null;
+  const curatedTeaches=curatedPid&&allSecs.some(s=>s.pid===curatedPid);
+  if(curatedPid&&curatedTeaches){ dispPid=curatedPid; dispName=PROFESSORS[curatedPid].name; dispRating=PROFESSORS[curatedPid].rating; }
+  else{
+    const ratedSecs=allSecs.filter(s=>s.pid).sort((a,b)=>((b.rating==null?-1:b.rating)-(a.rating==null?-1:a.rating)));
+    if(ratedSecs.length){ dispPid=ratedSecs[0].pid; dispName=ratedSecs[0].name; dispRating=ratedSecs[0].rating; }
+    else if(nSec&&allSecs[0].name){ dispName=allSecs[0].name; }
+    else if(curatedPid){ dispPid=curatedPid; dispName=PROFESSORS[curatedPid].name; dispRating=PROFESSORS[curatedPid].rating; }
+    else{ const instrs=(ci&&ci.instrs)?ci.instrs.slice():[]; if(instrs.length){ instrs.sort((a,b)=>((b.rating==null?-1:b.rating)-(a.rating==null?-1:a.rating))); dispPid=instrs[0].pid; dispName=instrs[0].name; dispRating=instrs[0].rating; } }
   }
-  return `<div class="cls-row">
-    <div class="cls-info">
-      <div class="ct"><span class="code">${c.code}</span><span class="nm">${c.name}</span>${c.type?`<span class="ttag ${c.type==='Core'?'core':''}">${c.type}</span>`:''}</div>
-      <div class="cls-sub">${c.units!=null?`<span class="cls-units">${c.units} units</span>`:''}${numHtml}</div>
-      ${typeof friendChipHtml==='function'?friendChipHtml(c.code,(c.prof&&c.prof!=='__tbd'&&PROFESSORS[c.prof])?PROFESSORS[c.prof].name:null):''}${typeof tookChipHtml==='function'?tookChipHtml(c.code):''}
+  let profHtml;
+  if(dispName&&dispPid) profHtml=`<div class="pm" onclick="event.stopPropagation();openProf('${dispPid}')"><div class="ini">${initials(dispName)}</div><span class="nm">${escapeHtml(dispName)}</span>${rateHtml(dispRating)}</div>`;
+  else if(dispName) profHtml=`<div class="pm nolink" title="No rating yet"><div class="ini">${initials(dispName)}</div><span class="nm">${escapeHtml(dispName)}</span></div>`;
+  else profHtml=`<span class="tbd">Instructor TBA</span>`;
+  const sv=isWatchedClass(c.code);
+  const expandable=nSec>1;
+  const expanded=!!clsExpanded[c.code];
+  // Meets + Seats come from ONE section (the shown professor's), never the sum of all sections.
+  const prim=clsPrimarySection(c.code,dispPid,dispName);
+  const meets=(prim&&prim.days)?prim.days:((ci&&ci.times&&ci.times.length)?ci.times[0]:'');
+  const seatObj=(prim&&prim.seat)?prim.seat:((typeof realSeat==='function')?realSeat(c.code):null);
+  const seatVal=seatObj?`<div class="v ${seatObj.cls}">${escapeHtml(seatBadge(seatObj))}</div>`:`<div class="v faint">—</div>`;
+  const chips=`${typeof friendChipHtml==='function'?friendChipHtml(c.code,dispName||null):''}${typeof tookChipHtml==='function'?tookChipHtml(c.code):''}`;
+  return `<div class="cls-row${expandable?' expandable':''}${expanded?' open':''}" data-code="${escapeHtml(c.code)}"${expandable?` onclick="clsToggleSections('${c.code}',event)"`:''}>
+    <div class="cls-top">
+      <div class="cls-left">
+        <div class="ct"><span class="code">${c.code}</span><span class="nm">${c.name}</span>${c.type?`<span class="ttag ${c.type==='Core'?'core':''}">${c.type}</span>`:''}</div>
+        ${chips}
+      </div>
+      <div class="cls-prof">${profHtml}<button class="save-ico ${sv?'on':''}" title="Save class" onclick="event.stopPropagation();toggleSaveClass('${c.code}')">${sv?BOOKF:BOOK}</button></div>
     </div>
-    <div class="cls-right">${profHtml}<button class="save-ico ${sv?'on':''}" title="Save class" onclick="toggleSaveClass('${c.code}')">${sv?BOOKF:BOOK}</button></div>
+    <div class="cls-stats">
+      <div class="cls-st"><div class="k">Units</div><div class="v">${c.units!=null?c.units:'—'}</div></div>
+      <div class="cls-st"><div class="k">Sections</div><div class="v">${nSec||'—'}${expandable?`<span class="cls-chev">▾</span>`:''}</div></div>
+      <div class="cls-st"><div class="k">Meets</div><div class="v">${meets?escapeHtml(meets):'—'}</div></div>
+      <div class="cls-st grow"><div class="k">Seats</div>${seatVal}</div>
+    </div>
+    ${expandable?`<div class="cls-sections" onclick="event.stopPropagation()"><div class="cs-head">All ${nSec} sections · <span class="faint">tap a section to copy it · tap a professor for their profile</span></div>${clsSectionRows(c.code)}</div>`:''}
   </div>`;
 }
 /* ===== Best-professor schedule optimizer ===== */
@@ -4670,8 +4918,19 @@ function renderExplore(){
       // the major selected in the dropdown.
       const raw=document.getElementById('exQuery').value;
       const qcode=q0.replace(/\s+/g,'');
+      const qtok=q0.split(/\s+/).filter(Boolean);
       const seen={},res=[];
-      const add=(code,name,prof,units)=>{ if(!code||seen[code])return; const hay=(code+' '+(name||'')).toLowerCase(); if(hay.indexOf(q0)>=0||code.toLowerCase().replace(/\s+/g,'').indexOf(qcode)>=0){ seen[code]=1; res.push({code:code,name:name||'',prof:prof||'__tbd',units:(units!=null?units:null),type:'Class'}); } };
+      // Match on code, course name, AND the names of the professors teaching it —
+      // so you can find a class by typing an instructor ("chris carr") too.
+      const add=(code,name,prof,units)=>{
+        if(!code||seen[code])return;
+        var instrNames='';
+        try{ if(typeof SEAT_SECTIONS!=='undefined'&&SEAT_SECTIONS&&SEAT_SECTIONS[code]) instrNames=SEAT_SECTIONS[code].map(function(r){return r.instructor||'';}).join(' '); }catch(e){}
+        const hay=(code+' '+(name||'')+' '+instrNames).toLowerCase();
+        const codeHit=code.toLowerCase().replace(/\s+/g,'').indexOf(qcode)>=0;
+        const tokHit=qtok.length>0&&qtok.every(function(t){return hay.indexOf(t)>=0;});
+        if(hay.indexOf(q0)>=0||codeHit||tokHit){ seen[code]=1; res.push({code:code,name:name||'',prof:prof||'__tbd',units:(units!=null?units:null),type:'Class'}); }
+      };
       if(typeof CLASS_INDEX!=='undefined') Object.values(CLASS_INDEX).forEach(c=>add(c.code,c.name,c.prof,c.units));
       if(typeof SEAT_SECTIONS!=='undefined'&&SEAT_SECTIONS) Object.keys(SEAT_SECTIONS).forEach(code=>{ var s=SEAT_SECTIONS[code]; add(code,(s&&s[0]&&s[0].title)||''); });
       // Hide anything not actually offered this term — if you can't take it now, it shouldn't show.
@@ -4781,7 +5040,7 @@ function profReviews(p){return [...(dbReviews[profKey(p)]||[]),...((p&&p.revs)||
 function eduOk(email){
   const v=(email||'').trim().toLowerCase();
   const dom=(cfg().EMAIL_DOMAIN||'').trim().toLowerCase();
-  if(dom)return new RegExp('@'+dom.replace(/\./g,'\\.')+'$').test(v);
+  if(dom)return new RegExp('^[^@\\s]+@'+dom.replace(/\./g,'\\.')+'$').test(v);
   return /^[^@\s]+@[^@\s]+\.edu$/.test(v);
 }
 async function initBackend(){
@@ -4814,7 +5073,13 @@ async function initBackend(){
     // kickFriendsLoad() defers to the next tick, by which time every block has
     // been parsed. (This was the "only loads when I switch tabs" bug: the
     // visibilitychange handler lives in the later block, so it worked.)
-    if(data&&data.session){sbUser=data.session.user;eduVerified=true;kickFriendsLoad();}
+    // kickFriendsLoad lives in a LATER <script> block. At boot it may not be
+    // defined yet, and calling it unguarded threw a ReferenceError that the
+    // outer catch turned into sb=null — making a SIGNED-IN user see "accounts
+    // aren't switched on yet". Guard it, and defer a retry to the next tick by
+    // which time every block has parsed. (The onAuthStateChange initial event
+    // also covers the load.)
+    if(data&&data.session){sbUser=data.session.user;eduVerified=true;var _kick=function(){try{if(typeof kickFriendsLoad==='function')kickFriendsLoad();}catch(_e){}};_kick();setTimeout(_kick,0);}
     if(typeof updateAuthUI==='function')updateAuthUI();
     // supabase-js re-emits SIGNED_IN on every tab focus and TOKEN_REFRESHED
     // periodically. Only run the full data load when the signed-in user
@@ -4832,10 +5097,10 @@ async function initBackend(){
       if(sbUser&&awaitingLink&&currentProf!=null){awaitingLink=false;startRate(currentProf,(typeof pendingRateCourse!=='undefined'?pendingRateCourse:''));}
       const uid=sbUser?sbUser.id:null;
       const notLoaded=(typeof friendsLoaded==='undefined')||!friendsLoaded;
-      if(uid&&(uid!==lastAuthUid||notLoaded)){lastAuthUid=uid;kickFriendsLoad();}
+      if(uid&&(uid!==lastAuthUid||notLoaded)){lastAuthUid=uid;try{if(typeof kickFriendsLoad==='function')kickFriendsLoad();}catch(_e){}}
       if(!uid){lastAuthUid=null;try{FRIENDS=[];myProfile=null;friendsList=[];incomingRequests=[];outgoingRequests=[];if(typeof stopFriendRealtime==='function')stopFriendRealtime();if(typeof renderFriends==='function')renderFriends();if(typeof updateFriendsBadge==='function')updateFriendsBadge();}catch(e){}}
     });
-  }catch(e){sb=null;}
+  }catch(e){ console.warn('[professify] initBackend:',e&&e.message||e); /* keep sb if the client was created — a later, non-critical throw must not disable accounts */ if(!sb||!sb.auth)sb=null; }
 }
 async function loadReviews(id){
   const p=PROFESSORS[id];if(!p||!backendReady())return;
@@ -4855,7 +5120,7 @@ function openRate(){
   show('explore');setExMode('professors');setTimeout(()=>{const s=document.getElementById('exQuery');if(s){s.focus();s.scrollIntoView({block:'center'});}},60);
 }
 function studentAvg(p){const rv=profReviews(p);if(!rv.length)return null;return rv.reduce((a,r)=>a+(r.score||0),0)/rv.length;}
-function startRate(id){currentProf=id;rateErrMsg='';if(!eduVerified){renderVerify(id);return;}rateDraft={course:'',score:0,difficulty:0,teach:0,hours:'',format:'',again:null,chips:new Set(),badChips:new Set(),text:''};renderRateForm(id);}
+function startRate(id,course){currentProf=id;rateErrMsg='';pendingRateCourse=course||'';var _mb=document.getElementById('mback');if(_mb&&!_mb.classList.contains('open')){_mb.classList.add('open');document.body.style.overflow='hidden';}if(!eduVerified){renderVerify(id);return;}rateDraft={course:course||'',score:0,difficulty:0,teach:0,hours:'',format:'',again:null,chips:new Set(),badChips:new Set(),text:''};renderRateForm(id);}
 function renderVerify(id){
   modalMode='rate';
   const p=PROFESSORS[id];
@@ -4871,7 +5136,7 @@ function renderVerify(id){
 function checkEdu(){const v=(document.getElementById('eduEmail').value||'').trim();document.getElementById('eduBtn').disabled=!eduOk(v);}
 async function doVerify(id){
   const email=(document.getElementById('eduEmail').value||'').trim();
-  if(!eduOk(email)){const e=document.getElementById('eduErr');if(e)e.textContent='Use your school .edu email.';return;}
+  if(!eduOk(email)){const e=document.getElementById('eduErr');if(e)e.textContent='Use your @calpoly.edu email.';return;}
   if(!backendReady()){eduVerified=true;startRate(id);return;}   // demo mode: no backend configured
   if(sbBusy)return;sbBusy=true;
   const btn=document.getElementById('eduBtn');if(btn){btn.disabled=true;btn.textContent='Sending…';}
@@ -4927,7 +5192,7 @@ function authEmailStep(){
 function authCheckEmail(){ var v=(document.getElementById('authEmail').value||'').trim(); var b=document.getElementById('authSend'); if(b)b.disabled=!eduOk(v); }
 async function authSendCode(){
   var email=(document.getElementById('authEmail').value||'').trim();
-  if(!eduOk(email)){authErr('Use your school .edu email.');return;}
+  if(!eduOk(email)){authErr('Use your @calpoly.edu email.');return;}
   if(!backendReady()){authErr('Accounts aren\u2019t switched on yet \u2014 coming very soon.');return;}
   var btn=document.getElementById('authSend'); if(btn){btn.disabled=true;btn.textContent='Sending\u2026';}
   try{ var r=await sb.auth.signInWithOtp({email:email,options:{shouldCreateUser:true}}); if(r.error)throw r.error; authCodeStep(email); }
@@ -4978,6 +5243,7 @@ function renderRateForm(id){
   const p=PROFESSORS[id];
   const d=rateDraft||(rateDraft={course:'',score:0,difficulty:0,teach:0,hours:'',format:'',again:null,chips:new Set(),badChips:new Set(),text:''});
   const courses=wlCourses(p);
+  if(d.course&&courses.indexOf(d.course)<0)courses.unshift(d.course);
   const courseField=courses.length
     ? `<select id="rfCourse" class="rf-sel">${courses.map(c=>`<option ${d.course===c?'selected':''}>${c}</option>`).join('')}<option value="__other" ${(d.course&&courses.indexOf(d.course)<0)?'selected':''}>Other / not listed</option></select>`
     : `<input id="rfCourse" class="rf-sel" placeholder="e.g. CSC 2001" value="${escapeHtml(d.course)}">`;
@@ -5097,7 +5363,10 @@ function renderThanks(id){
 }
 
 /* ==== Sean's cream-card helpers (byte-copied) ==== */
-const PFC={cream:'#f2e6c9',panel:'#fffdf6',line:'#ddd0ab',ink:'#211d12',ink2:'#5c5540',green:'#155c2c',greenInk:'#f2e6c9',greenTint:'#dbe6dc',blue:'#1a78ad',blueTint:'#d7e6ee'};
+/* Themed palette for the profile / review-landing / scraped-prof modals.
+   Maps to CSS theme vars so these cards follow Light/Dark/Cream like the rest
+   of the app instead of a hardcoded cream that clashed with the current theme. */
+const PFC={cream:'var(--panel)',panel:'var(--panel-2)',line:'var(--line)',ink:'var(--text)',ink2:'var(--muted)',green:'var(--accent)',greenInk:'var(--accent-ink)',greenTint:'var(--accent-dim)',blue:'var(--accent)',blueTint:'var(--accent-dim)'};
 function pfStars(pct,color){pct=Math.max(0,Math.min(100,pct||0));return `<span style="position:relative;display:inline-block;font-size:26px;letter-spacing:4px;line-height:1"><span style="color:${PFC.line}">&#9733;&#9733;&#9733;&#9733;&#9733;</span><span style="position:absolute;top:0;left:0;width:${pct}%;overflow:hidden;white-space:nowrap;color:${color}">&#9733;&#9733;&#9733;&#9733;&#9733;</span></span>`;}
 function pfMode(arr){if(!arr.length)return null;const c={};arr.forEach(v=>{if(v)c[v]=(c[v]||0)+1;});const k=Object.keys(c).sort((a,b)=>c[b]-c[a]);return k.length?k[0]:null;}
 function pfPrimaryCourse(revs){if(!revs.length)return null;const c={};revs.forEach(r=>{if(r.course)c[r.course]=(c[r.course]||0)+1;});const k=Object.keys(c).sort((a,b)=>c[b]-c[a]);return k.length?k[0]:null;}
@@ -5227,6 +5496,7 @@ function renderModal(){
         <div style="background:${PFC.panel};border:1px solid ${PFC.line};border-radius:10px;padding:12px"><div style="font-size:11px;color:${PFC.ink2}">TYPICAL CLASS SIZE</div><div style="font-size:14px;margin-top:4px">—</div></div>
         <div style="background:${PFC.panel};border:1px solid ${PFC.line};border-radius:10px;padding:12px"><div style="font-size:11px;color:${PFC.ink2}">YEARS AT CAL POLY</div><div style="font-size:14px;margin-top:4px">${p.since?(2026-p.since)+' yrs':'—'}</div></div>
       </div>
+      ${typeof profTeachingBlock==='function'?profTeachingBlock(currentProf):''}
       ${p.edu?`<div style="background:${PFC.panel};border:1px solid ${PFC.line};border-radius:10px;padding:12px;margin-bottom:10px"><div style="font-size:11px;color:${PFC.ink2};margin-bottom:6px">EDUCATION</div><div style="font-size:13px;font-style:italic;line-height:1.6">${p.edu}</div></div>`:''}
       <button class="rate-open" onclick="startRate('${currentProf}')" style="width:100%;background:${PFC.green};color:${PFC.greenInk};border:none;border-radius:10px;padding:13px;font-size:14px;font-weight:500;margin-bottom:20px;cursor:pointer">Leave a review</button>
       <div style="font-size:12px;color:${PFC.ink2};letter-spacing:.5px;margin-bottom:10px">KEY INSIGHTS</div>
@@ -5262,7 +5532,7 @@ function isWatched(id){return watchlist.indexOf(id)>=0;}
 function watchBtn(id){const on=isWatched(id);return `<button class="wl-btn ${on?'on':''}" title="${on?'On your watchlist':'Add to watchlist'}" aria-label="Watchlist toggle" onclick="toggleWatch('${id}',event)">${on?WL_ON:WL_OFF}</button>`;}
 function toggleWatch(id,ev){if(ev){ev.stopPropagation();}const i=watchlist.indexOf(id);if(i>=0)watchlist.splice(i,1);else watchlist.push(id);saveWatch();updateWatchUI();}
 function clearWatch(){watchlist=[];saveWatch();updateWatchUI();}
-function updateWatchBadge(){const b=document.getElementById('watchCount');if(!b)return;var n=watchlist.length+watchClasses.length;b.textContent=n;b.hidden=n===0;}
+function updateWatchBadge(){var n=watchlist.length+watchClasses.length;var b=document.getElementById('watchCount');if(b){b.textContent=n;b.hidden=n===0;}var mb=document.getElementById('mWatchCount');if(mb){mb.textContent=n;mb.hidden=n===0;}}
 function updateWatchUI(){
   updateWatchBadge();
   const mb=document.getElementById('mback');
@@ -5272,13 +5542,17 @@ function updateWatchUI(){
 }
 function wlCourses(p){const a=(p&&(p.courses||p.prCourses))||[];return Array.isArray(a)?a.map(c=>String(c).toUpperCase().trim()).filter(Boolean):[];}
 function setWlDiff(cb){wlDiffOnly=cb.checked;renderWatch();}
-function renderWatch(){
-  const out=document.getElementById('watchOut');if(!out)return;
-  const profs=watchlist.filter(id=>PROFESSORS[id]).map(id=>({id,p:PROFESSORS[id]}));
-  if(!profs.length){
-    out.innerHTML=`<div class="wl-empty"><h3>Nothing on your watchlist yet</h3><p>When you spot a professor worth considering, hit <b style="color:var(--text-2)">Watch</b> on their card or profile. They'll collect here so you can compare them side by side — no commitment.</p><button class="btn primary" onclick="show('explore')">Find professors →</button></div>`;
-    return;
-  }
+/* ---- Professor watchlist: list-first, compare on demand (same tray pattern as Classes) ---- */
+var wpCompareSet=[];
+var wpMode='list';
+function wpInCompare(id){return wpCompareSet.indexOf(id)>=0;}
+function wpToggleCompare(id,ev){if(ev){ev.stopPropagation();}var i=wpCompareSet.indexOf(id);if(i>=0)wpCompareSet.splice(i,1);else wpCompareSet.push(id);renderWatch();}
+function wpClearCompare(){wpCompareSet=[];renderWatch();}
+function wpOpenCompare(){wpCompareSet=wpCompareSet.filter(function(id){return watchlist.indexOf(id)>=0&&PROFESSORS[id];});if(wpCompareSet.length<2)return;wpMode='compare';renderWatch();var box=document.getElementById('watchOut');if(box&&box.scrollIntoView)box.scrollIntoView({behavior:'smooth',block:'start'});}
+function wpBackToList(){wpMode='list';renderWatch();}
+/* The side-by-side professor table — now built only for the professors in the tray. */
+function wpCompareTable(ids){
+  const profs=ids.filter(id=>PROFESSORS[id]).map(id=>({id,p:PROFESSORS[id]}));
   const cmap={};
   profs.forEach(({p})=>{wlCourses(p).forEach(c=>{(cmap[c]=cmap[c]||new Set()).add(p.name);});});
   const shared=Object.entries(cmap).map(([c,s])=>[c,[...s]]).filter(x=>x[1].length>=2).sort((a,b)=>b[1].length-a[1].length);
@@ -5298,18 +5572,44 @@ function renderWatch(){
     {k:'Classes taught', raw:profs.map(({p})=>wlCourses(p).slice(0,6).join(',')), cell:profs.map(({p})=>{const c=wlCourses(p).slice(0,6);return c.length?c.map(x=>`<span class="wl-chip">${x}</span>`).join(''):'<span class="wl-val" style="color:var(--faint)">—</span>';})}
   ];
   const visRows=wlDiffOnly?rows.filter(r=>new Set(r.raw).size>1):rows;
-  const thead=`<tr><th class="wl-attr"></th>${profs.map(({id,p})=>`<th class="wl-phead"><span class="pn" onclick="openProf('${id}')" style="cursor:pointer">${p.name}</span><span class="pdp">${pdept(p)||p.dept||''}</span>${p.rating!=null?`<span class="prb" style="color:${scoreColor(p.rating)}">${to5(p.rating).toFixed(2)}<small>/5</small></span>`:'<span class="pdp">No rating</span>'}<br><button class="wl-rm" title="Remove from watchlist" onclick="toggleWatch('${id}')">Remove ✕</button></th>`).join('')}</tr>`;
+  const thead=`<tr><th class="wl-attr"></th>${profs.map(({id,p})=>`<th class="wl-phead"><span class="pn" onclick="openProf('${id}')" style="cursor:pointer">${p.name}</span><span class="pdp">${pdept(p)||p.dept||''}</span>${p.rating!=null?`<span class="prb" style="color:${scoreColor(p.rating)}">${to5(p.rating).toFixed(2)}<small>/5</small></span>`:'<span class="pdp">No rating</span>'}<br><button class="wl-rm" title="Remove from compare" onclick="wpToggleCompare('${id}',event)">Remove ✕</button></th>`).join('')}</tr>`;
   const tbody=visRows.length?visRows.map(r=>`<tr><td class="wl-attr">${r.k}</td>${r.cell.map(c=>`<td>${c}</td>`).join('')}</tr>`).join(''):`<tr><td class="wl-attr"></td><td colspan="${profs.length}" style="color:var(--faint)">These professors are identical on every tracked attribute.</td></tr>`;
-  const over=profs.length>5?`<p class="wl-note">Comparison is easiest with 5 or fewer — you're comparing ${profs.length}. On a phone, scroll sideways to see them all.</p>`:'';
-  out.innerHTML=`
-    <div class="wl-head">
-      <label class="wl-toggle"><input type="checkbox" ${wlDiffOnly?'checked':''} onchange="setWlDiff(this)">Only show differences</label>
-      <button class="wl-clear" onclick="clearWatch()">Clear watchlist</button>
-    </div>
-    ${insight}
-    <div class="wl-scroll"><table class="wl-table"><thead>${thead}</thead><tbody>${tbody}</tbody></table></div>
-    ${over}
-    <p class="wl-note">Tip: tap a professor's name to open their full profile and reviews. Add a handful, compare, then commit the winners to your schedule.</p>`;
+  return `<div class="wl-head"><label class="wl-toggle"><input type="checkbox" ${wlDiffOnly?'checked':''} onchange="setWlDiff(this)">Only show differences</label></div>${insight}<div class="wl-scroll"><table class="wl-table"><thead>${thead}</thead><tbody>${tbody}</tbody></table></div><p class="wl-note">Tip: tap a professor's name to open their full profile and reviews.</p>`;
+}
+function renderWatch(){
+  const out=document.getElementById('watchOut');if(!out)return;
+  const profs=watchlist.filter(id=>PROFESSORS[id]).map(id=>({id,p:PROFESSORS[id]}));
+  wpCompareSet=wpCompareSet.filter(id=>watchlist.indexOf(id)>=0&&PROFESSORS[id]);
+  if(!profs.length){
+    wpMode='list';
+    out.innerHTML=`<div class="wl-empty"><h3>Nothing on your watchlist yet</h3><p>When you spot a professor worth considering, hit <b style="color:var(--text-2)">Watch</b> on their card or profile. They'll collect here so you can compare them side by side — no commitment.</p><button class="btn primary" onclick="show('explore')">Find professors →</button></div>`;
+    return;
+  }
+  // Compare view — only the professors in the tray
+  if(wpMode==='compare'&&wpCompareSet.length>=2){
+    out.innerHTML=`<div class="wc-cmphead"><button class="wc-back" onclick="wpBackToList()">← Back to list</button><span class="wc-cmpn">Comparing ${wpCompareSet.length} professor${wpCompareSet.length===1?'':'s'}</span></div>`+wpCompareTable(wpCompareSet);
+    return;
+  }
+  wpMode='list';
+  // List of professor cards
+  const cards=profs.map(({id,p})=>{
+    const on=wpInCompare(id);
+    const rate=p.rating!=null?`<span class="wp-rate" style="color:${scoreColor(p.rating)}">${to5(p.rating).toFixed(2)}<small> /5</small></span>`:'<span class="wp-rate none">No rating</span>';
+    const nrev=p.evals?(p.evals.toLocaleString()+' rating'+(p.evals===1?'':'s')+' · PolyRatings'):'PolyRatings';
+    const fit=matchesStudent(p)?' · <span style="color:var(--good-2)">✓ Fits your style</span>':'';
+    return `<div class="mc-card wc-card${on?' incmp':''}"><div class="mc-main"><div class="mc-code" style="cursor:pointer" onclick="openProf('${id}')">${p.name}</div><div class="mc-name">${pdept(p)||p.dept||''}</div><div class="mc-sub">${nrev}${fit}</div></div>`
+      +`<button class="wc-cmp${on?' on':''}" onclick="wpToggleCompare('${id}',event)">${on?'✓ In compare':'⇄ Compare'}</button>`
+      +rate
+      +`<button class="mc-x" title="Remove from watchlist" onclick="toggleWatch('${id}',event)">&times;</button></div>`;
+  }).join('');
+  let tray='';
+  if(wpCompareSet.length){
+    const chips=wpCompareSet.map(id=>{const p=PROFESSORS[id]||{};return `<span class="wc-chip">${(p.name||id).split(' ')[0]} ${(p.name||'').split(' ').slice(-1)[0]||''} <span class="rm" title="Remove from tray" onclick="wpToggleCompare('${id}',event)">✕</span></span>`;}).join('');
+    const ready=wpCompareSet.length>=2;
+    tray=`<div class="wc-tray"><div class="wc-chips">${chips}</div><button class="wc-go" ${ready?'':'disabled'} onclick="wpOpenCompare()">Compare (${wpCompareSet.length}) →</button></div>`;
+  }
+  const hint=wpCompareSet.length===1?'<div class="wc-hint">Add one more professor to compare them side by side.</div>':'';
+  out.innerHTML=`<div class="mc-head"><div><b>${profs.length} professor${profs.length===1?'':'s'} watched</b> · tap Compare on the ones you’re deciding between</div><button class="wl-clear" onclick="clearWatch()">Clear watchlist</button></div><div class="mc-list">${cards}</div>${hint}${tray}`;
 }
 
 /* ---- CLASS watchlist (separate from professors) ---- */
@@ -5335,34 +5635,82 @@ function classInfo(code){
   var secs=(typeof SEAT_SECTIONS!=='undefined'&&SEAT_SECTIONS&&SEAT_SECTIONS[code])?SEAT_SECTIONS[code]:[];
   var agg=(typeof PROFESSIFY_SEATS!=='undefined'&&PROFESSIFY_SEATS&&PROFESSIFY_SEATS[code])?PROFESSIFY_SEATS[code]:null;
   var instrs=[],seen={};
-  secs.forEach(function(r){var nm=(r.instructor||'').trim();if(!nm||seen[nm])return;seen[nm]=1;var pid=(typeof matchProfId==='function')?matchProfId(nm):null;var rating=pid&&PROFESSORS[pid]?PROFESSORS[pid].rating:null;instrs.push({name:nm,rating:rating});});
+  secs.forEach(function(r){var nm=(r.instructor||'').trim();if(!nm||/^(staff|tba|to be arranged)$/i.test(nm)||seen[nm])return;seen[nm]=1;var pid=(typeof matchProfId==='function')?matchProfId(nm):null;var rating=pid&&PROFESSORS[pid]?PROFESSORS[pid].rating:null;instrs.push({name:nm,rating:rating,pid:pid&&PROFESSORS[pid]?pid:null});});
   if(!instrs.length&&typeof confirmedProfs==='function'){(confirmedProfs(code)||[]).forEach(function(pid){if(PROFESSORS[pid])instrs.push({name:PROFESSORS[pid].name,rating:PROFESSORS[pid].rating});});}
   var times=[],tseen={};secs.forEach(function(r){var t=(typeof prettyTime==='function')?prettyTime(r.days):'';if(t&&!tseen[t]){tseen[t]=1;times.push(t);}});
   var best=null;instrs.forEach(function(x){if(x.rating!=null&&(!best||x.rating>best.rating))best=x;});
   return {code:code,name:name,units:units,area:area,sections:secs.length,agg:agg,instrs:instrs,times:times,best:best};
 }
-function renderWatchClasses(){
-  var out=document.getElementById('watchClassOut');if(!out)return;
-  var codes=watchClasses.slice();
-  if(!codes.length){ out.innerHTML='<div class="wl-empty"><h3>No classes saved yet</h3><p>Hit <b style="color:var(--text-2)">Watch</b> on a class to add it here. Compare units, live seats, waitlist odds, who teaches it, and when — side by side.</p><button class="btn primary" onclick="show(\'explore\')">Browse classes →</button></div>'; return; }
+/* ---- Compare tray: watchlist shows as a clean list; drop classes into a tray, compare on demand ---- */
+var wcCompareSet=[];
+var wcMode='list';
+function wcInCompare(code){return wcCompareSet.indexOf(code)>=0;}
+function wcToggleCompare(code,ev){if(ev){ev.stopPropagation();}var i=wcCompareSet.indexOf(code);if(i>=0)wcCompareSet.splice(i,1);else wcCompareSet.push(code);renderWatchClasses();}
+function wcClearCompare(){wcCompareSet=[];renderWatchClasses();}
+function wcOpenCompare(){wcCompareSet=wcCompareSet.filter(function(c){return watchClasses.indexOf(c)>=0;});if(wcCompareSet.length<2)return;wcMode='compare';renderWatchClasses();var box=document.getElementById('watchClassOut');if(box&&box.scrollIntoView)box.scrollIntoView({behavior:'smooth',block:'start'});}
+function wcBackToList(){wcMode='list';renderWatchClasses();}
+function wcSeatBadge(a){
+  if(!a)return '<span class="mc-seat none">Check schedule</span>';
+  if(a.open>0)return '<span class="mc-seat open">'+a.seats+' of '+a.cap+' open · live</span>';
+  if(a.wait>0){var wc=a.wlcap?(' '+Math.max(0,a.wl||0)+'/'+a.wlcap):'';return '<span class="mc-seat wait">Waitlist'+wc+'</span>';}
+  return '<span class="mc-seat full">Full</span>';
+}
+/* The side-by-side table — now only built for the classes you dropped into the tray. */
+function wcCompareTable(codes){
   var infos=codes.map(classInfo);
-  function seatCell(a){ if(!a||!a.cap)return '<span class="wl-val" style="color:var(--faint)">Check schedule</span>'; return '<span class="wl-val"><b style="color:'+(a.open>0?'var(--good)':'#e0847a')+'">'+a.seats+'</b> of '+a.cap+' open · live</span>'; }
-  function wlCell(a){ if(!a||!a.wlcap)return '<span class="wl-val" style="color:var(--faint)">—</span>'; var left=Math.max(0,a.wlcap-a.wl); return '<span class="wl-val">'+left+'/'+a.wlcap+' left</span>'; }
+  // Seats/waitlist reflect the best-rated instructor's SINGLE section, not the aggregate.
+  var prims=infos.map(function(i){return clsPrimarySection(i.code,(i.best?i.best.pid:null),(i.best?i.best.name:null));});
+  function seatCell(prim){ var s=prim&&prim.seat; if(!s||s.cap==null)return '<span class="wl-val" style="color:var(--faint)">Check schedule</span>'; var av=(s.cls==='open')?(s.n||0):0; return '<span class="wl-val"><b style="color:'+(s.cls==='open'?'var(--good)':'#e0847a')+'">'+av+'</b> of '+s.cap+' open · live</span>'; }
+  function wlCell(prim){ var s=prim&&prim.seat; if(!s||!s.wlcap)return '<span class="wl-val" style="color:var(--faint)">—</span>'; var left=Math.max(0,s.wlcap-(s.wl||0)); return '<span class="wl-val">'+left+'/'+s.wlcap+' left</span>'; }
   var rows=[
     {k:'Course', cell:infos.map(function(i){return '<span class="wl-val">'+escAcc(i.name||i.code)+'</span>';})},
     {k:'Units', cell:infos.map(function(i){return '<span class="wl-val">'+(i.units!=null?i.units:'—')+'</span>';})},
     {k:'Counts toward', cell:infos.map(function(i){return '<span class="wl-chip">'+escAcc(i.area||'—')+'</span>';})},
     {k:'Sections this term', cell:infos.map(function(i){return '<span class="wl-val">'+(i.sections?(i.sections+' · live'):'—')+'</span>';})},
-    {k:'Open seats', cell:infos.map(function(i){return seatCell(i.agg);})},
-    {k:'Waitlist spots left', cell:infos.map(function(i){return wlCell(i.agg);})},
+    {k:'Open seats · best section', cell:prims.map(function(p){return seatCell(p);})},
+    {k:'Waitlist spots left', cell:prims.map(function(p){return wlCell(p);})},
     {k:'Best-rated instructor', cell:infos.map(function(i){return i.best?('<span class="wl-val">'+escAcc(i.best.name)+' <span class="prb" style="color:'+scoreColor(i.best.rating)+'">'+i.best.rating.toFixed(1)+'</span></span>'):'<span class="wl-val" style="color:var(--faint)">TBA</span>';})},
     {k:'Who teaches it', cell:infos.map(function(i){return i.instrs.length?i.instrs.slice(0,4).map(function(x){return '<span class="wl-chip">'+escAcc(x.name)+'</span>';}).join(''):'<span class="wl-val" style="color:var(--faint)">Instructor TBA</span>';})},
     {k:'Meeting times', cell:infos.map(function(i){return i.times.length?i.times.slice(0,3).map(function(t){return '<span class="wl-chip">'+escAcc(t)+'</span>';}).join(''):'<span class="wl-val" style="color:var(--faint)">Check schedule</span>';})}
   ];
-  var thead='<tr><th class="wl-attr"></th>'+infos.map(function(i){return '<th class="wl-phead"><span class="pn">'+escAcc(i.code)+'</span><span class="pdp">'+escAcc(String(i.name||'').slice(0,30))+'</span><br><button class="wl-take'+(isMyClass(i.code)?' on':'')+'" onclick="toggleMyClass(\''+i.code+'\')">'+(isMyClass(i.code)?'✓ Taking':'+ Taking this')+'</button> <button class="wl-rm" title="Remove" onclick="toggleWatchClass(\''+i.code+'\')">Remove ✕</button></th>';}).join('')+'</tr>';
+  var thead='<tr><th class="wl-attr"></th>'+infos.map(function(i){return '<th class="wl-phead"><span class="pn">'+escAcc(i.code)+'</span><span class="pdp">'+escAcc(String(i.name||'').slice(0,30))+'</span><br><button class="wl-take'+(isMyClass(i.code)?' on':'')+'" onclick="toggleMyClass(\''+i.code+'\')">'+(isMyClass(i.code)?'✓ Taking':'+ Taking this')+'</button> <button class="wl-rm" title="Remove from compare" onclick="wcToggleCompare(\''+i.code+'\',event)">Remove ✕</button></th>';}).join('')+'</tr>';
   var tbody=rows.map(function(r){return '<tr><td class="wl-attr">'+r.k+'</td>'+r.cell.map(function(c){return '<td>'+c+'</td>';}).join('')+'</tr>';}).join('');
-  var over=infos.length>5?'<p class="wl-note">Easiest to compare 5 or fewer — scroll sideways on a phone.</p>':'';
-  out.innerHTML='<div class="wl-head"><span style="color:var(--muted);font-size:13px">Live seats, waitlist, and times where a section exists — otherwise it says check the schedule. Nothing is estimated.</span><button class="wl-clear" onclick="clearWatchClasses()">Clear classes</button></div><div class="wl-scroll"><table class="wl-table"><thead>'+thead+'</thead><tbody>'+tbody+'</tbody></table></div>'+over;
+  return '<div class="wl-scroll"><table class="wl-table"><thead>'+thead+'</thead><tbody>'+tbody+'</tbody></table></div>';
+}
+function renderWatchClasses(){
+  var out=document.getElementById('watchClassOut');if(!out)return;
+  var codes=watchClasses.slice();
+  wcCompareSet=wcCompareSet.filter(function(c){return codes.indexOf(c)>=0;});
+  if(!codes.length){ wcMode='list'; out.innerHTML='<div class="wl-empty"><h3>No classes saved yet</h3><p>Hit <b style="color:var(--text-2)">Watch</b> on a class to add it here. Then drop a few into the compare tray to see units, live seats, waitlist odds, who teaches it, and when — side by side.</p><button class="btn primary" onclick="show(\'explore\')">Browse classes →</button></div>'; return; }
+  // Compare view — only the classes in the tray
+  if(wcMode==='compare'&&wcCompareSet.length>=2){
+    out.innerHTML='<div class="wc-cmphead"><button class="wc-back" onclick="wcBackToList()">← Back to list</button><span class="wc-cmpn">Comparing '+wcCompareSet.length+' class'+(wcCompareSet.length===1?'':'es')+'</span></div>'+wcCompareTable(wcCompareSet)+'<p class="wl-note">Live seats, waitlist, and times where a section exists — otherwise it says check the schedule. Nothing is estimated.</p>';
+    return;
+  }
+  wcMode='list';
+  var infos=codes.map(classInfo);
+  var cards=infos.map(function(i){
+    var on=wcInCompare(i.code);
+    // Single section's seats (the best-rated instructor's), not the aggregate.
+    var seat=sectionSeatBadge(clsPrimarySection(i.code,(i.best?i.best.pid:null),(i.best?i.best.name:null)));
+    var meta;
+    if(i.sections<=1&&i.best){ meta=escAcc(i.best.name)+' · '+i.best.rating.toFixed(1)+(i.times[0]?' · '+escAcc(i.times[0]):''); }
+    else if(i.sections){ meta=i.sections+' section'+(i.sections===1?'':'s')+' · live'; }
+    else { meta='Not offered this term'; }
+    return '<div class="mc-card wc-card'+(on?' incmp':'')+'"><div class="mc-main"><div class="mc-code">'+escAcc(i.code)+(i.units!=null?' · '+i.units+' unit'+(i.units===1?'':'s'):'')+'</div><div class="mc-name">'+escAcc(i.name||'')+'</div><div class="mc-sub">'+meta+'</div></div>'
+      +'<button class="wc-cmp'+(on?' on':'')+'" onclick="wcToggleCompare(\''+i.code+'\',event)">'+(on?'✓ In compare':'⇄ Compare')+'</button>'
+      +seat
+      +'<button class="mc-x" title="Remove from watchlist" onclick="toggleWatchClass(\''+i.code+'\',event)">&times;</button></div>';
+  }).join('');
+  var tray='';
+  if(wcCompareSet.length){
+    var chips=wcCompareSet.map(function(c){return '<span class="wc-chip">'+escAcc(c)+' <span class="rm" title="Remove from tray" onclick="wcToggleCompare(\''+c+'\',event)">✕</span></span>';}).join('');
+    var ready=wcCompareSet.length>=2;
+    tray='<div class="wc-tray"><div class="wc-chips">'+chips+'</div><button class="wc-go" '+(ready?'':'disabled')+' onclick="wcOpenCompare()">Compare ('+wcCompareSet.length+') →</button></div>';
+  }
+  var hint=wcCompareSet.length===1?'<div class="wc-hint">Add one more class to compare them side by side.</div>':'';
+  out.innerHTML='<div class="mc-head"><div><b>'+codes.length+' saved class'+(codes.length===1?'':'es')+'</b> · tap Compare on the ones you’re deciding between</div><button class="wl-clear" onclick="clearWatchClasses()">Clear classes</button></div>'
+    +'<div class="mc-list">'+cards+'</div>'+hint+tray;
 }
 /* ---- MY CLASSES — "going to take these": promoted from watched classes; shareable with friends later ---- */
 let myClasses=[];
@@ -5422,7 +5770,12 @@ function renderMyClasses(){
   var infos=codes.map(classInfo);
   var conf=myClassConflicts(codes);
   var cards=infos.map(function(i){
-    var seat=i.agg?('<span class="mc-seat '+(i.agg.open>0?'open':(i.agg.wait>0?'wait':'full'))+'">'+(i.agg.open>0?(i.agg.seats+' of '+i.agg.cap+' open · live'):(i.agg.wait>0?('Waitlist '+Math.max(0,(i.agg.wlcap||99)-(i.agg.wl||0))+'/'+(i.agg.wlcap||99)):'Full'))+'</span>'):'<span class="mc-seat none">Check schedule</span>';
+    // Seats for the SPECIFIC section this student is taking — matched by their
+    // section's professor + meeting time — never the sum of every section.
+    var mcProf=(myClassMeta[i.code]&&myClassMeta[i.code].prof)?myClassMeta[i.code].prof:(i.best?i.best.name:(i.instrs[0]?i.instrs[0].name:''));
+    var mcTime=myClassTime(i.code);
+    var prim=clsPrimarySection(i.code,null,mcProf,mcTime);
+    var seat=sectionSeatBadge(prim);
     var prof=(myClassMeta[i.code]&&myClassMeta[i.code].prof)?escAcc(myClassMeta[i.code].prof):(i.best?(escAcc(i.best.name)+' · '+i.best.rating.toFixed(1)):(i.instrs[0]?escAcc(i.instrs[0].name):'Instructor TBA'));
     var timeStr=myClassTime(i.code); var time=timeStr?escAcc(timeStr):'Time TBA';
     var clash=conf.bad[i.code]?'<span class="mc-clash" title="Overlaps another class time">⚠ Time clash</span>':'';
@@ -5508,7 +5861,13 @@ function fileThumb(f){
 function extractCourseCodes(text){
   const re=/\b([A-Z]{2,4})\s?[-]?\s?(\d{3,4}[A-Z]?)\b/g;const seen=new Set(),out=[];let m;
   const up=(text||'').toUpperCase();
-  while((m=re.exec(up))){const code=m[1]+' '+m[2];if(!seen.has(code)){seen.add(code);out.push(code);}}
+  while((m=re.exec(up))){
+    const num=m[2];
+    // Real Cal Poly course numbers never start with 0 — a leading zero means we
+    // grabbed a room suffix (e.g. "Business 003-0111") or building code, not a class.
+    if(num.charAt(0)==='0')continue;
+    const code=m[1]+' '+num;if(!seen.has(code)){seen.add(code);out.push(code);}
+  }
   return out.slice(0,40);
 }
 const PREFIX_MAJOR={CSC:'Computer Science',CPE:'Computer Engineering',BUS:'Business Administration',ECON:'Business Administration',ITP:'Business Administration',ANT:'Anthropology & Geography',ANTH:'Anthropology & Geography',GEOG:'Anthropology & Geography'};
@@ -5988,6 +6347,43 @@ Object.assign(window.SCHED_MAJORS, {
   }
   function termUnits(t){var lo=0,hi=0;t.slots.forEach(function(s){lo+=u(s.units);hi+=uHi(s.units);});return hi>lo?(lo+'–'+hi):(''+lo);}
 
+  /* Live preview card for Step 1 — reflects the current selections and, using the same
+     greedy logic as build(), shows a real estimate of the next term: total units, how many
+     classes, and how many fixed "core" courses are still left (updates as you check things
+     off in Step 2). */
+  function renderSchPreview(){
+    var el=document.getElementById('schPreview'); if(!el)return;
+    var msel=document.getElementById('schMajorSel'); if(!msel)return;
+    var key=msel.value, m=(typeof SCHED_MAJORS!=='undefined')?SCHED_MAJORS[key]:null;
+    var term=(document.getElementById('schTermSel')||{}).value||'Fall';
+    var target=+(((document.getElementById('schUnitSel')||{}).value)||15);
+    var conc=''; var cw=document.getElementById('schConcWrap'), cs=document.getElementById('schConcSel');
+    if(cw&&!cw.classList.contains('sp-hidden')&&cs&&cs.value)conc=cs.value;
+    var standing='',year=''; try{if(typeof student!=='undefined'){standing=student.standing||'';year=student.year||'';}}catch(e){}
+    var majorName=m?m.name:((msel.options[msel.selectedIndex]||{}).textContent||'').replace(/\s*\([^)]*\)\s*$/,'').trim();
+    var classes=0, coreLeft=0, pk=0, pkHi=0;
+    if(m){
+      var remaining=[];
+      m.terms.forEach(function(t){t.slots.forEach(function(s){ if(!completed[s.id]){ remaining.push({s:s,term:t.term}); if(s.type==='course')coreLeft++; } });});
+      var picked=[],units=0;
+      remaining.forEach(function(r){ if(units>=target)return; if(r.term===term){picked.push(r.s);units+=u(r.s.units);} });
+      if(units<target-2){ remaining.forEach(function(r){ if(units>=target)return; if(picked.indexOf(r.s)<0){picked.push(r.s);units+=u(r.s.units);} }); }
+      classes=picked.length; picked.forEach(function(s){pk+=u(s.units);pkHi+=uHi(s.units);});
+    }
+    var esc=(typeof escapeHtml==='function')?escapeHtml:function(x){return (''+x);};
+    var unitsTxt = m ? (pkHi>pk?(pk+'–'+pkHi):(''+(pk||target))) : ('~'+target);
+    var sub=[majorName]; if(conc)sub.push(conc); if(standing)sub.push(standing);
+    el.innerHTML =
+      '<p class="spv-kick">Your next term</p>'+
+      '<div class="spv-term">'+esc(term)+(year?(' '+esc(year)):'')+'</div>'+
+      '<div class="spv-sub">'+sub.filter(Boolean).map(esc).join(' · ')+'</div>'+
+      '<div class="spv-stats">'+
+        '<div><b>'+unitsTxt+'</b><span>units</span></div>'+
+        '<div><b>'+(m?(classes||'—'):'—')+'</b><span>class'+(classes===1?'':'es')+'</span></div>'+
+        '<div><b>'+(m?coreLeft:'—')+'</b><span>core left</span></div>'+
+      '</div>';
+  }
+
   function renderChecklist(key){
     var m=SCHED_MAJORS[key]; completed={}; curKey=key;
     var cl=document.getElementById('schChecklist'); cl.innerHTML='';
@@ -6000,7 +6396,7 @@ Object.assign(window.SCHED_MAJORS, {
         el.innerHTML='<div class="sp-box"><svg width="11" height="11" viewBox="0 0 12 12"><path d="M2 6l2.5 2.5L10 3" fill="none" stroke="#0b0f0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>'+
           '<div class="b"><div class="t">'+head+typeTag(s.type)+'</div>'+(s.note?'<div class="s">'+s.note+'</div>':'')+'</div>'+
           '<div class="sp-u">'+uLabel(s.units)+'</div>';
-        el.onclick=function(){ if(completed[s.id]){delete completed[s.id];el.classList.remove('done');}else{completed[s.id]=true;el.classList.add('done');} };
+        el.onclick=function(){ if(completed[s.id]){delete completed[s.id];el.classList.remove('done');}else{completed[s.id]=true;el.classList.add('done');} renderSchPreview(); };
         blk.appendChild(el);
       });
       cl.appendChild(blk);
@@ -6071,12 +6467,14 @@ Object.assign(window.SCHED_MAJORS, {
       document.getElementById('schFullToggle').classList.add('sp-hidden');
       nd.classList.remove('sp-hidden');
       nd.textContent='“'+opt.textContent+'” — its spot is reserved. Its term-by-term plan is being loaded from the Cal Poly catalog. 21 majors are live right now so you can try the planner.';
+      renderSchPreview();
       return;
     }
     nd.classList.add('sp-hidden');
     document.getElementById('schFullToggle').classList.remove('sp-hidden');
     if(SCHED_MAJORS[sel.value]){ renderChecklist(sel.value); document.getElementById('schCheckCard').classList.remove('sp-hidden'); }
     schPopulateConc();
+    renderSchPreview();
   }
   /* Concentration options for the selected major — from the catalog requirement lists,
      falling back to the app's major catalog. Only shown when the major has concentration slots. */
@@ -6108,11 +6506,13 @@ Object.assign(window.SCHED_MAJORS, {
     (window.SCHED_COMING||[]).forEach(function(g){var gg=document.createElement('optgroup');gg.label=g[0]+' (loading)';for(var i=1;i<g.length;i++){var o=document.createElement('option');o.value='coming';o.textContent=g[i];o.setAttribute('data-coming','1');gg.appendChild(o);}sel.appendChild(gg);});
     sel.onchange=onMajor;
     var csel=document.getElementById('schConcSel');
-    if(csel)csel.onchange=function(){ window.SCHED_LAST_CONC=this.value||'__ALL__'; try{ if(this.value)student.conc=this.value; }catch(e){} try{ if(window.saveProfile)saveProfile(); }catch(e){} };
+    if(csel)csel.onchange=function(){ window.SCHED_LAST_CONC=this.value||'__ALL__'; try{ if(this.value)student.conc=this.value; }catch(e){} try{ if(window.saveProfile)saveProfile(); }catch(e){} renderSchPreview(); };
+    var _tsel=document.getElementById('schTermSel'); if(_tsel)_tsel.onchange=renderSchPreview;
+    var _usel=document.getElementById('schUnitSel'); if(_usel)_usel.onchange=renderSchPreview;
     document.getElementById('schBuildBtn').onclick=build;
-    document.getElementById('schQNone').onclick=function(){completed={};var s=document.querySelectorAll('#schChecklist .sp-slot');for(var i=0;i<s.length;i++)s[i].classList.remove('done');};
+    document.getElementById('schQNone').onclick=function(){completed={};var s=document.querySelectorAll('#schChecklist .sp-slot');for(var i=0;i<s.length;i++)s[i].classList.remove('done');renderSchPreview();};
     var qb=document.querySelectorAll('#schCheckCard .sp-quick button[data-yr]');
-    qb.forEach(function(b){b.onclick=function(){var yr=+b.getAttribute('data-yr');var slots=document.querySelectorAll('#schChecklist .sp-slot');slots.forEach(function(e){var id=e.getAttribute('data-id');if(+e.getAttribute('data-yr')<=yr){completed[id]=true;e.classList.add('done');}else{delete completed[id];e.classList.remove('done');}});};});
+    qb.forEach(function(b){b.onclick=function(){var yr=+b.getAttribute('data-yr');var slots=document.querySelectorAll('#schChecklist .sp-slot');slots.forEach(function(e){var id=e.getAttribute('data-id');if(+e.getAttribute('data-yr')<=yr){completed[id]=true;e.classList.add('done');}else{delete completed[id];e.classList.remove('done');}});renderSchPreview();};});
     // preselect student's major if it matches one we have
     var sm=''; try{ sm=(window.student&&student.major)||''; }catch(e){}
     var match=Object.keys(SCHED_MAJORS).find(function(k){return SCHED_MAJORS[k].name.toLowerCase()===sm.toLowerCase();});
@@ -6156,9 +6556,10 @@ Object.assign(window.SCHED_MAJORS, {
         if(student.minor&&student.minor!=='None')bits.push(student.minor+' minor');
         if(student.standing)bits.push(student.standing);
       }catch(e){}
-      if(bits.length){ note.innerHTML='Planning from your profile: <b style="color:var(--text-2)">'+bits.join(' · ')+'</b>. Change anything below if you want.'; note.classList.remove('sp-hidden'); }
+      if(bits.length){ note.innerHTML='Pre-filled from your profile — change anything below.'; note.classList.remove('sp-hidden'); }
       else{ note.classList.add('sp-hidden'); }
     }
+    renderSchPreview();
   };
 
   if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',window.schInit);}else{window.schInit();}
@@ -6395,17 +6796,25 @@ function attachTypeahead(inputId,getItems,onPick){
   wrap.appendChild(box);
   const st=taState[inputId]={open:false,idx:-1,items:[]};
   function close(){st.open=false;st.idx=-1;box.classList.remove('on');box.innerHTML='';inp.setAttribute('aria-expanded','false');inp.removeAttribute('aria-activedescendant');}
+  // Update only the highlighted row — never rebuild innerHTML here, or the
+  // element under the cursor gets detached mid-hover and the click never lands.
+  function highlight(){
+    const items=box.querySelectorAll('.ta-item');
+    items.forEach((it,ii)=>{const on=ii===st.idx;it.classList.toggle('on',on);it.setAttribute('aria-selected',on?'true':'false');});
+    if(st.idx>=0)inp.setAttribute('aria-activedescendant',inputId+'Ta'+st.idx);
+    else inp.removeAttribute('aria-activedescendant');
+    const cur=st.idx>=0?items[st.idx]:null;if(cur&&cur.scrollIntoView)cur.scrollIntoView({block:'nearest'});
+  }
   function draw(){
     if(!st.items.length){close();return;}
     st.open=true;box.classList.add('on');inp.setAttribute('aria-expanded','true');
     const q=inp.value;
     box.innerHTML=st.items.map((o,i)=>`<div class="ta-item${i===st.idx?' on':''}" data-i="${i}" role="option" id="${inputId}Ta${i}" aria-selected="${i===st.idx}">
       <span class="ta-v">${taHighlight(o.label,q)}</span>${o.sub?`<span class="ta-s">${escapeHtml(o.sub)}</span>`:''}</div>`).join('');
-    if(st.idx>=0)inp.setAttribute('aria-activedescendant',inputId+'Ta'+st.idx);
-    else inp.removeAttribute('aria-activedescendant');
+    highlight();
     [...box.querySelectorAll('.ta-item')].forEach(el=>{
       el.addEventListener('mousedown',ev=>{ev.preventDefault();pick(+el.dataset.i);});
-      el.addEventListener('mouseenter',()=>{st.idx=+el.dataset.i;draw();});
+      el.addEventListener('mouseenter',()=>{st.idx=+el.dataset.i;highlight();});
     });
   }
   function pick(i){
@@ -6429,8 +6838,8 @@ function attachTypeahead(inputId,getItems,onPick){
   inp.addEventListener('blur',()=>setTimeout(close,120));
   inp.addEventListener('keydown',e=>{
     if(!st.open)return;
-    if(e.key==='ArrowDown'){e.preventDefault();st.idx=Math.min(st.idx+1,st.items.length-1);draw();}
-    else if(e.key==='ArrowUp'){e.preventDefault();st.idx=Math.max(st.idx-1,0);draw();}
+    if(e.key==='ArrowDown'){e.preventDefault();st.idx=Math.min(st.idx+1,st.items.length-1);highlight();}
+    else if(e.key==='ArrowUp'){e.preventDefault();st.idx=Math.max(st.idx-1,0);highlight();}
     else if(e.key==='Enter'){if(st.idx>=0){e.preventDefault();pick(st.idx);}}
     else if(e.key==='Tab'){if(st.idx>=0)pick(st.idx);else if(st.items.length===1)pick(0);}
     else if(e.key==='Escape'){e.preventDefault();close();}
@@ -7156,6 +7565,36 @@ function fp_name(code){
   }
   return '';
 }
+/* Classes a RATED professor is teaching this term, from the live seat feed.
+   Reverse of matchProfId: scan sections, keep those whose instructor resolves to this id. */
+function ratedProfTeaches(pid){
+  if(typeof PROFESSORS==='undefined'||!PROFESSORS[pid]||typeof SEAT_SECTIONS==='undefined'||!SEAT_SECTIONS)return [];
+  var out=[],seen={};
+  for(var code in SEAT_SECTIONS){
+    (SEAT_SECTIONS[code]||[]).forEach(function(r){
+      var nm=(r.instructor||'').trim(); if(!nm)return;
+      if(matchProfId(nm)!==pid)return;
+      var tk=code+'|'+(r.section||r.class_nbr||'');
+      if(seen[tk])return; seen[tk]=1;
+      out.push({code:code,name:(fp_name(code)||r.title||''),days:prettyTime(r.days),seat:secSeat(r)});
+    });
+  }
+  out.sort(function(a,b){return a.code.localeCompare(b.code);});
+  return out;
+}
+/* "Teaching this term" block for the rated-professor profile modal (themed via PFC). */
+function profTeachingBlock(pid){
+  var t=ratedProfTeaches(pid); if(!t.length)return '';
+  var rows=t.slice(0,14).map(function(x,i){
+    var border=i<Math.min(t.length,14)-1?'border-bottom:1px solid '+PFC.line+';':'';
+    return '<div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;padding:9px 2px;'+border+'">'
+      +'<div style="min-width:0"><div style="font-weight:600;color:'+PFC.green+'">'+escapeHtml(x.code)+(x.name?' · <span style="font-weight:400;color:'+PFC.ink+'">'+escapeHtml(x.name)+'</span>':'')+'</div>'
+      +'<div style="font-size:12.5px;color:'+PFC.ink2+';font-style:italic;margin-top:2px">'+escapeHtml(x.days||'Time to be arranged')+'</div></div>'
+      +'<div style="flex:none;font-size:12px;color:'+PFC.ink2+';text-align:right;max-width:150px">'+escapeHtml(seatBadge(x.seat))+'</div></div>';
+  }).join('');
+  return '<div style="font-size:12px;color:'+PFC.ink2+';letter-spacing:.5px;margin:2px 0 8px">TEACHING THIS TERM ('+t.length+')</div>'
+    +'<div style="background:'+PFC.panel+';border:1px solid '+PFC.line+';border-radius:10px;padding:2px 12px;margin-bottom:14px">'+rows+'</div>';
+}
 /* ===== Instructors teaching THIS term who aren't in the PolyRatings roster =====
    Built from the live seat feed so a current professor with no rating yet is still
    findable in search, linked to the exact classes they teach. Cached; invalidated
@@ -7558,7 +7997,7 @@ function enforceEduDomain(){
     const bad=sbUser.email;
     try{sb.auth.signOut();}catch(e){}
     sbUser=null;eduVerified=false;
-    alert('Please sign in with your school .edu email'+(bad?` — "${bad}" isn't one.`:'.'));
+    alert('Please sign in with your @calpoly.edu email'+(bad?` — "${bad}" isn't one.`:'.'));
     return false;
   }
   return true;
@@ -7608,7 +8047,7 @@ function frCheckEdu(){const v=(document.getElementById('frAuthEmail').value||'')
 
 async function frDoVerify(){
   const email=(document.getElementById('frAuthEmail').value||'').trim();
-  if(!eduOk(email)){document.getElementById('frAuthErr').textContent='Use your school .edu email.';return;}
+  if(!eduOk(email)){document.getElementById('frAuthErr').textContent='Use your @calpoly.edu email.';return;}
   if(!backendReady()){document.getElementById('frAuthErr').textContent='Live accounts aren\'t configured for this deployment yet.';return;}
   if(frBusy)return;frBusy=true;
   const btn=document.getElementById('frAuthBtn');btn.disabled=true;btn.textContent='Sending…';
@@ -8039,9 +8478,9 @@ function friendRowHtml(f){
 }
 
 function updateFriendsBadge(){
-  const b=document.getElementById('friendsNavBadge');if(!b)return;
-  const n=incomingRequests.length;
-  b.textContent=n;b.hidden=n===0;
+  const n=(typeof incomingRequests!=='undefined'?incomingRequests.length:0);
+  const b=document.getElementById('friendsNavBadge');if(b){b.textContent=n;b.hidden=n===0;}
+  const mb=document.getElementById('mFriendsBadge');if(mb){mb.textContent=n;mb.hidden=n===0;}
 }
 
 function renderFriends(){
@@ -8178,7 +8617,7 @@ function renderMyHistory(){
       <span class="hc">${escapeHtml(h.code)}</span>
       <span class="ht">${escapeHtml(h.term)}</span>
       ${h.professor?`<span class="hp">${escapeHtml(h.professor)}</span>`:''}
-      ${pid?`<button class="fh-review" onclick="startRate('${pid}')">Leave a review</button>`:''}
+      ${pid?`<button class="fh-review" onclick="openProf('${pid}')">Leave a review</button>`:''}
       <button class="save-ico fr-rm" title="Remove ${escapeHtml(h.code)}" onclick="removePastClass('${escapeHtml(h.code)}')">&times;</button>
     </div>`;}).join('')}</div>
   </div>`).join('');
@@ -8330,5 +8769,24 @@ document.addEventListener("visibilitychange",function(){
 
 loadSeats();  // pull real seat status from Supabase on load
 </script>
+
+<!-- ============ MOBILE BOTTOM TAB BAR (phones only) ============ -->
+<nav class="mtabbar" aria-label="Primary">
+  <button id="mtab-home" class="mtab active" onclick="show('home')" aria-label="Home">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 10.5 12 3l9 7.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 9.5V20h14V9.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Home</span></button>
+  <button id="mtab-explore" class="mtab" onclick="show('explore')" aria-label="Explore">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2" stroke-linecap="round"/></svg>
+    <span>Explore</span></button>
+  <button id="mtab-sched" class="mtab" onclick="show('sched')" aria-label="Schedule">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18M8 2.5v4M16 2.5v4" stroke-linecap="round"/></svg>
+    <span>Schedule</span></button>
+  <button id="mtab-friends" class="mtab" onclick="show('friends')" aria-label="Friends">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9" cy="8" r="3.1"/><path d="M3.4 19c0-3 2.5-5 5.6-5s5.6 2 5.6 5" stroke-linecap="round"/><path d="M16.2 5.9a2.9 2.9 0 0 1 0 5.8M17.8 19c0-2.3-1-4-2.6-4.9" stroke-linecap="round"/></svg>
+    <span id="mFriendsBadge" class="mbadge" hidden>0</span><span>Friends</span></button>
+  <button id="mtab-watch" class="mtab" onclick="show('watch')" aria-label="Watchlist">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 4h12a1 1 0 0 1 1 1v15l-7-4-7 4V5a1 1 0 0 1 1-1z" stroke-linejoin="round"/></svg>
+    <span id="mWatchCount" class="mbadge" hidden>0</span><span>Watchlist</span></button>
+</nav>
 </body>
 </html>
