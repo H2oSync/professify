@@ -216,20 +216,23 @@ async function run() {
       }
       await setField(page, 'SSR_CLSRCH_WRK_SUBJECT_SRCH', subj, 'subject');
       // Turn OFF "Show Open Classes Only" so FULL / WAITLISTED / CLOSED sections are
-      // included. PeopleSoft applies this filter SERVER-SIDE via the checkbox's own
-      // postback — so just setting checked=false (or firing 'change') is NOT enough: the
-      // search still runs open-only and drops full/closed sections (we saw 0 Closed). If
-      // the box is on, click it NATIVELY (fires PeopleSoft's onclick postback) and wait,
-      // then re-set the subject in case the postback blanked it. Log before->after state.
-      const ooBefore = await page.evaluate(() => { const o = window.__pf_find('SSR_CLSRCH_WRK_SSR_OPEN_ONLY'); return o ? (o.checked ? 'on' : 'off') : 'absent'; });
-      if (ooBefore === 'on') {
-        await postback(page, () => page.evaluate(() => { const o = window.__pf_find('SSR_CLSRCH_WRK_SSR_OPEN_ONLY'); if (o && o.checked) o.click(); }));
-        await page.evaluate(PAGE_HELPERS);
-        const subjNow = await readField(page, 'SSR_CLSRCH_WRK_SUBJECT_SRCH');
-        if (!subjNow || String(subjNow).toUpperCase() !== subj.toUpperCase()) await setField(page, 'SSR_CLSRCH_WRK_SUBJECT_SRCH', subj, 'subject(re)');
-      }
-      const ooAfter = await page.evaluate(() => { const o = window.__pf_find('SSR_CLSRCH_WRK_SSR_OPEN_ONLY'); return o ? (o.checked ? 'on' : 'off') : 'absent'; });
-      const openOnlyState = ooBefore + '->' + ooAfter;
+      // included. ROOT CAUSE of the earlier misses: the real checkbox's id has a "$N"
+      // suffix (e.g. SSR_CLSRCH_WRK_SSR_OPEN_ONLY$4) and is surrounded by DECOYS that share
+      // the id prefix — a wrapper <div> (win0div…), a hidden "$chk" companion input, and a
+      // <label>. Looking up the bare id (or a prefix match) grabbed a decoy, so we read
+      // "off" from the wrong node and NEVER unchecked the real box — every search ran
+      // open-only and dropped ~90 sections incl. BUS 3431 and everything waitlisted/closed.
+      // Fix: select the actual input[type=checkbox] directly and uncheck it. Verified live:
+      // this turns 159 open-only BUS sections into 246, with 102 waitlist + 2 closed and
+      // BUS 3431 present. It's a client-side filter applied at Search time — no postback.
+      const openOnlyState = await page.evaluate(() => {
+        const o = document.querySelector('input[type="checkbox"][id^="SSR_CLSRCH_WRK_SSR_OPEN_ONLY$"]');
+        if (!o) return 'absent';
+        const before = o.checked ? 'on' : 'off';
+        if (o.checked) o.click();                                   // native click unchecks
+        if (o.checked) { o.checked = false; o.dispatchEvent(new Event('change', { bubbles: true })); }
+        return before + '->' + (o.checked ? 'on' : 'off');
+      });
       await postback(page, () => page.evaluate(() => { const b = window.__pf_find('CLASS_SRCH_WRK2_SSR_PB_CLASS_SRCH'); if (b) b.click(); }));
       await dismissOversize(page);
 
