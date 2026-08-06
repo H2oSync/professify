@@ -214,17 +214,44 @@ async function run() {
         if (await modify.count()) await postback(page, () => modify.click());
         await page.evaluate(PAGE_HELPERS);
       }
+      // The Subject control is a <select> that PeopleSoft only POPULATES after the institution
+      // postback lands. Under load that can lag, so wait for its options before selecting —
+      // otherwise `.value = 'BUS'` matches no <option>, stays empty, and the search is subject-less.
+      await page.waitForFunction(() => {
+        const s = document.querySelector('select[id^="SSR_CLSRCH_WRK_SUBJECT_SRCH"]');
+        return s && s.options.length > 1;
+      }, null, { timeout: 20000 }).catch(() => {});
       await setField(page, 'SSR_CLSRCH_WRK_SUBJECT_SRCH', subj, 'subject');
-      // Turn OFF "Show Open Classes Only" so FULL / WAITLISTED / CLOSED sections are
-      // included. ROOT CAUSE of the earlier misses: the real checkbox's id has a "$N"
-      // suffix (e.g. SSR_CLSRCH_WRK_SSR_OPEN_ONLY$4) and is surrounded by DECOYS that share
-      // the id prefix — a wrapper <div> (win0div…), a hidden "$chk" companion input, and a
-      // <label>. Looking up the bare id (or a prefix match) grabbed a decoy, so we read
-      // "off" from the wrong node and NEVER unchecked the real box — every search ran
-      // open-only and dropped ~90 sections incl. BUS 3431 and everything waitlisted/closed.
-      // Fix: select the actual input[type=checkbox] directly and uncheck it. Verified live:
-      // this turns 159 open-only BUS sections into 246, with 102 waitlist + 2 closed and
-      // BUS 3431 present. It's a client-side filter applied at Search time — no postback.
+
+      // SECOND CRITERION — Cal Poly's class search requires AT LEAST 2 search criteria.
+      // Subject counts as one; we add "Course Number >= 0" (matches every course) as the
+      // second so a whole-subject sweep is allowed. WITHOUT this the page returns
+      // "Select at least 2 search criteria" and ZERO sections. This is the real reason lanes
+      // went empty once open-only was correctly unchecked: previously the (never-unchecked)
+      // "Show Open Classes Only" box was silently acting as the 2nd criterion. Verified live:
+      // Subject + this criterion + open-only OFF => 257 BUS section links, statuses
+      // {Open:158, Wait List:101, Closed:2}, BUS 3431 present.
+      let criterionState = 'unset';
+      for (let a = 1; a <= 3; a++) {
+        const ok = await page.evaluate(() => {
+          const op = document.querySelector('select[id^="SSR_CLSRCH_WRK_SSR_EXACT_MATCH1"]');
+          const num = document.querySelector('input[id^="SSR_CLSRCH_WRK_CATALOG_NBR"]');
+          if (!op || !num) return null;
+          op.value = 'G';                                   // "greater than or equal to"
+          op.dispatchEvent(new Event('change', { bubbles: true }));
+          num.value = '0';
+          num.dispatchEvent(new Event('change', { bubbles: true }));
+          return op.value === 'G' && String(num.value) === '0';
+        });
+        if (ok) { criterionState = 'G>=0'; break; }
+        criterionState = ok === null ? 'missing' : 'retry';
+        await sleep(400);
+      }
+
+      // Turn OFF "Show Open Classes Only" so FULL / WAITLISTED / CLOSED sections are included.
+      // The real checkbox id has a "$N" suffix (SSR_CLSRCH_WRK_SSR_OPEN_ONLY$4) with decoy
+      // siblings (a hidden "$chk" input and a "_LBL" label) — target the actual checkbox input
+      // directly and uncheck it. Client-side filter, applied at Search time.
       const openOnlyState = await page.evaluate(() => {
         const o = document.querySelector('input[type="checkbox"][id^="SSR_CLSRCH_WRK_SSR_OPEN_ONLY$"]');
         if (!o) return 'absent';
@@ -256,7 +283,7 @@ async function run() {
         capNote: /(only the first|maximum number|more than \d+|has been limited|limited to \d+|exceeds the maximum)/i.test(document.body.innerText || ''),
         has3431: /3431\s*-/.test(document.body.innerText || ''),
       }));
-      console.log(`  ${subj}: ${list.length} sections (raw links=${diag.rawLinks}) / ${codeSet.size} courses  (open-only=${openOnlyState}, statuses=${JSON.stringify(statusMix)}${blanks ? `, ${blanks} BLANK-code` : ''}${diag.capNote ? ', CAP-NOTE!' : ''}${subj === 'BUS' ? `, has3431=${diag.has3431}` : ''}, msg=${outcome.msg || 'none'})${CFG.FETCH_DETAILS && list.length ? ' — fetching counts…' : ''}`);
+      console.log(`  ${subj}: ${list.length} sections (raw links=${diag.rawLinks}) / ${codeSet.size} courses  (crit=${criterionState}, open-only=${openOnlyState}, statuses=${JSON.stringify(statusMix)}${blanks ? `, ${blanks} BLANK-code` : ''}${diag.capNote ? ', CAP-NOTE!' : ''}${subj === 'BUS' ? `, has3431=${diag.has3431}` : ''}, msg=${outcome.msg || 'none'})${CFG.FETCH_DETAILS && list.length ? ' — fetching counts…' : ''}`);
       if (list.length === 0) await dumpDiag(page, subj.toLowerCase());
 
       if (CFG.FETCH_DETAILS) {
