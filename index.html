@@ -541,6 +541,11 @@ window.toggleTheme = toggleTheme;
   .cs-prof .pn{font-size:13px;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .cs-prof .rt{font-size:12px;font-weight:700;flex:none}
   .cs-meets{font-size:12.5px;color:var(--muted);white-space:nowrap}
+  .cs-rowchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:5px;white-space:normal}
+  .cs-clash{display:inline-flex;align-items:center;font-size:11px;font-weight:700;color:var(--low);background:rgba(226,86,79,.12);border:1px solid rgba(226,86,79,.32);border-radius:999px;padding:2px 9px}
+  .cs-frsec{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--accent);background:rgba(var(--accent-rgb),.12);border:1px solid rgba(var(--accent-rgb),.3);border-radius:999px;padding:2px 9px}
+  .cs-frsec .fr-avs{display:inline-flex}
+  .cs-row-clash{background:rgba(226,86,79,.05)}
   .cs-seat{font-size:11.5px;font-weight:600;white-space:nowrap;text-align:right}
   .cs-seat.open{color:var(--good)}.cs-seat.wait{color:var(--mid)}.cs-seat.full{color:#e0847a}
   .campus-banner{display:flex;align-items:center;gap:12px;background:var(--accent-dim);border:1px solid rgba(var(--accent-rgb),.3);border-radius:14px;padding:12px 16px;margin:16px 0;font-size:14px;color:var(--text-2)}
@@ -764,6 +769,11 @@ window.toggleTheme = toggleTheme;
   .ver{font-size:11.5px;color:var(--accent);display:inline-flex;align-items:center;gap:5px}
   .ver svg{width:12px;height:12px}
   .rtop .rs{margin-left:auto;font-size:14px;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+  .rev-prov{display:flex;align-items:center;flex-wrap:wrap;gap:6px;font-family:var(--mono,ui-monospace,Menlo,monospace);font-size:11.5px;color:var(--muted);margin:-2px 0 10px}
+  .rev-prov .rp-seg{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+  .rev-prov .rp-ver{color:var(--accent);font-weight:600}
+  .rev-prov .rp-ver svg{width:12px;height:12px}
+  .rev-prov .rp-dot{color:var(--faint)}
   .rtext{font-size:14px;color:var(--text-2);margin:0 0 12px;line-height:1.6}
   .rtags{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px}
   .rtags .t{font-size:11.5px;color:var(--muted);background:var(--panel-2);border:1px solid var(--line);padding:4px 9px;border-radius:999px}
@@ -1070,6 +1080,16 @@ window.toggleTheme = toggleTheme;
     /* ---- thumb-friendly targets ---- */
     .seg button,.area-chip,.copybtn,.save-ico,.wl-btn,.fr-addtoggle,.fr-cc-btn,.btn,.eye-btn{min-height:44px}
     .copybtn{padding:9px 12px}
+    /* ---- MOBILE NON-NEGOTIABLES (§2.6) — mobile-only; desktop CSS is untouched ---- */
+    /* 16px inputs kill iOS's zoom-on-focus (anything <16px zooms). !important beats the
+       per-input sizes (incl. #exQuery 15px, 12.5–14px fields) without changing desktop. */
+    input,select,textarea,#exQuery,#cmdkInput{font-size:16px!important}
+    /* Bigger tap targets for the controls added this session */
+    .cs-watch,.cs-enroll,.cs-inmine,.rf-grade button,.rf-seg button,.rf-tags button,.wc-move,.pcmp-pick,.sl-cta,.sl-ghost,.stat-click{min-height:44px}
+    .cmdk-row,.myr-row{min-height:44px}
+    /* Kill the tap-highlight flash + double-tap zoom delay, add instant press feedback */
+    button,a,[role=button],.cmdk-row,.myr-row,.sl-row,.pcard,.cls-row,.mc-card{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+    button:active,.btn:active,.mtab:active,.cs-watch:active,.cs-enroll:active,.wc-move:active,.pcmp-pick:active,.sl-cta:active,.cmdk-row:active,.rate-open:active{opacity:.72;transform:scale(.985)}
 
     /* ---- modals become bottom sheets ---- */
     .mback{align-items:flex-end;padding:0}
@@ -1127,7 +1147,7 @@ if(typeof qrcode==="function")window.qrcode=qrcode;
         <div class="nt-foot">
           <label class="nt-toggle"><input type="checkbox" id="notifSeatToggle" checked onchange="toggleSeatAlerts(this)">
             Seat alerts for my saved classes</label>
-          <span id="notifFresh" class="faint">Seats checked just now</span>
+          <span id="notifFresh" class="faint">Seat counts from Cal Poly Class Search</span>
         </div>
       </div>
     </div>
@@ -1797,6 +1817,69 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
 .pcmp-pick.sec:hover{border-color:var(--accent);color:var(--accent)}
 .pcmp-rm{background:none;border:none;color:var(--faint);cursor:pointer;font-size:11.5px;padding:0;font-family:inherit;align-self:center}
 .pcmp-rm:hover{color:#d98a7a}
+/* ===== Shared-schedule landing (opened from a share link) ===== */
+.sl-back{position:fixed;inset:0;z-index:6000;background:rgba(8,9,11,.72);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:20px}
+.sl-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;max-width:460px;width:100%;max-height:90vh;overflow-y:auto;padding:24px 22px 20px;position:relative;box-shadow:0 18px 48px rgba(0,0,0,.4)}
+.sl-x{position:absolute;top:14px;right:14px;background:none;border:none;color:var(--faint);font-size:24px;line-height:1;cursor:pointer}
+.sl-x:hover{color:var(--text)}
+.sl-kick{font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--accent)}
+.sl-h{font-size:21px;font-weight:700;color:var(--text);margin:4px 0 16px}
+.sl-list{display:flex;flex-direction:column;gap:8px;margin-bottom:18px}
+.sl-row{display:flex;align-items:center;gap:12px;background:var(--panel-2);border:1px solid var(--line);border-radius:11px;padding:11px 13px}
+.sl-code{font-family:var(--mono,ui-monospace,Menlo,monospace);font-weight:700;font-size:13px;color:var(--text);flex:none;min-width:74px}
+.sl-sec{font-weight:500;color:var(--muted);font-size:11.5px}
+.sl-mid{flex:1;min-width:0}
+.sl-nm{font-size:13.5px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sl-sub{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sl-when{font-size:12px;color:var(--text-2);text-align:right;flex:none;white-space:nowrap}
+.sl-cta{width:100%;background:var(--accent);color:var(--accent-ink);border:none;border-radius:10px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
+.sl-cta:hover{filter:brightness(1.05)}
+.sl-ghost{width:100%;background:transparent;border:1px solid var(--line);color:var(--text-2);border-radius:10px;padding:11px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:9px}
+.sl-ghost:hover{border-color:var(--accent);color:var(--accent)}
+.sl-fine{font-size:11.5px;color:var(--faint);text-align:center;margin:12px 0 0;line-height:1.5}
+.stat-click{cursor:pointer;border-radius:7px;margin:0 -6px;padding:0 6px;transition:background .12s}
+.stat-click:hover{background:rgba(var(--accent-rgb),.09)}
+.myr-list{display:flex;flex-direction:column;gap:9px;max-height:60vh;overflow-y:auto;margin-bottom:6px}
+.myr-row{background:var(--panel-2);border:1px solid var(--line);border-radius:11px;padding:12px 13px}
+.myr-row:hover{border-color:rgba(var(--accent-rgb),.4)}
+.myr-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.myr-nm{font-size:14.5px;font-weight:600;color:var(--text)}
+.myr-score{font-size:15px;font-weight:700} .myr-score small{font-size:11px;color:var(--muted);font-weight:500}
+.myr-sub{font-size:12px;color:var(--muted);margin-top:3px}
+.myr-grade{font-family:var(--mono,ui-monospace,Menlo,monospace);color:var(--accent);font-weight:700}
+.myr-note{font-size:13px;color:var(--text-2);margin:8px 0 0;line-height:1.5}
+.myr-link{font-size:12px;color:var(--accent);font-weight:600;margin-top:8px}
+.myr-empty{font-size:13.5px;color:var(--muted);line-height:1.6;padding:6px 2px 4px}
+/* ===== ⌘K command palette ===== */
+.cmdk-back{position:fixed;inset:0;z-index:9000;background:rgba(8,9,11,.5);backdrop-filter:blur(3px);display:none;align-items:flex-start;justify-content:center;padding:16vh 16px 16px}
+.cmdk{width:100%;max-width:600px;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 24px 60px rgba(0,0,0,.5);overflow:hidden;display:flex;flex-direction:column;max-height:66vh}
+.cmdk-inp{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.cmdk-ic{color:var(--muted);font-size:16px}
+.cmdk-inp input{flex:1;background:none;border:none;outline:none;color:var(--text);font-size:16px;font-family:inherit;padding:0}
+.cmdk-inp input::placeholder{color:var(--faint)}
+.cmdk-esc{font-size:10px;color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:2px 6px;font-family:inherit}
+.cmdk-list{overflow-y:auto;padding:6px}
+.cmdk-grp{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);padding:8px 10px 4px}
+.cmdk-row{display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:9px;cursor:pointer}
+.cmdk-row.on{background:rgba(var(--accent-rgb),.14)}
+.cmdk-em{width:22px;text-align:center;color:var(--muted);font-size:14px;flex:none}
+.cmdk-ini{width:22px;height:22px;border-radius:6px;background:var(--accent-dim);color:var(--accent);display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex:none}
+.cmdk-lbl{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;overflow:hidden}
+.cmdk-l1{font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cmdk-sub{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cmdk-go{color:var(--faint);font-size:12px;opacity:0;flex:none}
+.cmdk-row.on .cmdk-go{opacity:1;color:var(--accent)}
+.cmdk-foot{display:flex;gap:16px;padding:9px 14px;border-top:1px solid var(--line);font-size:11px;color:var(--muted)}
+.cmdk-foot kbd{background:var(--panel-2);border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-family:inherit;font-size:10px;margin-right:2px}
+.cmdk-empty{padding:20px 14px;color:var(--muted);font-size:13px;text-align:center;line-height:1.5}
+/* ===== Reciprocity unlock ===== */
+.recip-card{display:flex;gap:12px;align-items:flex-start;background:linear-gradient(180deg,rgba(var(--accent-rgb),.12),rgba(var(--accent-rgb),.03));border:1px solid rgba(var(--accent-rgb),.34);border-radius:12px;padding:14px 15px;margin:2px 0 14px}
+.recip-ic{font-size:18px;line-height:1;flex:none;margin-top:1px}
+.recip-h{font-size:14.5px;font-weight:700;color:var(--text)}
+.recip-p{font-size:13px;color:var(--text-2);margin:4px 0 10px;line-height:1.5}
+.recip-btn{background:var(--accent);color:var(--accent-ink);border:none;border-radius:9px;padding:9px 15px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit}
+.recip-btn:hover{filter:brightness(1.05)}
+.rev-locked{filter:blur(5px);user-select:none;pointer-events:none;opacity:.85}
 </style>
 
 <!-- ============ WATCHLIST ============ -->
@@ -2198,6 +2281,10 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
 .rf-seg{display:flex;gap:6px}
 .rf-seg button{flex:1;height:36px;border-radius:9px;border:1px solid rgba(var(--fg-rgb),.16);background:var(--panel-2);color:var(--text-2);font:600 13px -apple-system,BlinkMacSystemFont,sans-serif;cursor:pointer;padding:0}
 .rf-seg button.on{background:rgba(var(--accent-rgb),.18);border-color:rgba(var(--accent-rgb),.6);color:var(--good)}
+.rf-grade{flex-wrap:wrap}
+.rf-grade button{flex:0 0 auto;min-width:46px;padding:0 12px;font-family:var(--mono,ui-monospace,Menlo,monospace)}
+.rf-grade button.rf-grade-na{font-family:inherit;font-weight:500;color:var(--muted)}
+.rf-grade button.rf-grade-na.on{background:var(--panel-2);border-color:rgba(var(--fg-rgb),.16);color:var(--text-2)}
 .rf-tags{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 .rf-tags button{text-align:left;font-size:12.5px;padding:9px 10px;border-radius:9px;border:1px solid rgba(var(--fg-rgb),.16);background:var(--panel-2);color:var(--text-2);cursor:pointer}
 .rf-tags button.on{background:rgba(var(--accent-rgb),.18);border-color:rgba(var(--accent-rgb),.6);color:var(--good)}
@@ -2315,16 +2402,25 @@ function pqDedupeGroup(group){
 }
 function prereqChipHtml(code, plannedBefore){
   if(typeof hasPrereqs!=='function'||!hasPrereqs(code))return '';
-  var completed=(typeof completedCodes==='function'?completedCodes():[]);
-  var st=prereqStatus(code, completed, plannedBefore||[]);
-  var signedIn=(typeof sbUser!=='undefined'&&sbUser);
   var esc=(typeof escapeHtml==='function')?escapeHtml:function(x){return x;};
+  var completed=(typeof completedCodes==='function'?completedCodes():[]);
+  // If you've ALREADY taken this class, a prerequisite warning makes no sense — say so instead.
+  var canonSelf=(typeof canonCode==='function')?canonCode(code):code;
+  if(completed.indexOf(canonSelf)>=0)return '<span class="pq-chip pq-met" title="This class is in your Past Classes">✓ You\'ve taken this</span>';
+  // Completing a course means you met its prerequisites. Infer only UNAMBIGUOUS (single-course)
+  // prereqs from what you've taken — never guess which side of an "A or B" you satisfied — so a
+  // downstream class stops nagging about a prereq you clearly already have (e.g. you took Real
+  // Estate Finance, which requires BUS 3431, so BUS 3431 counts as done everywhere).
+  var completedEff=completed.slice();
+  try{ completed.forEach(function(c){ var rc=coursePrereqs(c); if(rc&&rc.req)rc.req.forEach(function(g){ if(g&&g.length===1){var cc=canonCode(g[0]); if(completedEff.indexOf(cc)<0)completedEff.push(cc);} }); }); }catch(e){}
+  var st=prereqStatus(code, completedEff, plannedBefore||[]);
+  var signedIn=(typeof sbUser!=='undefined'&&sbUser);
   if(st.state==='met')return '<span class="pq-chip pq-met" title="You\'ve completed the prerequisites">✓ Prereqs done</span>';
   if(st.state==='concurrent'){ var cg=st.concurrent.map(function(g){return pqDedupeGroup(g).join(' or ');}).join(', '); return '<span class="pq-chip pq-conc" title="May be taken at the same time">↔ Can take with '+esc(cg)+'</span>'; }
   if(st.state!=='unmet')return '';
   /* --- unmet: compact chip, expandable to a structured checklist --- */
   var rec=coursePrereqs(code)||{req:[]};
-  var have={}; completed.concat((plannedBefore||[]).map(canonCode)).forEach(function(c){have[canonCode(c)]=1;});
+  var have={}; completedEff.concat((plannedBefore||[]).map(canonCode)).forEach(function(c){have[canonCode(c)]=1;});
   var unmet=[],met=[];
   rec.req.forEach(function(g){
     var dg=pqDedupeGroup(g);
@@ -5262,6 +5358,120 @@ function clsCopySec(ev,nbr){ if(ev){ev.stopPropagation();}
   try{ if(navigator.clipboard)navigator.clipboard.writeText(String(nbr)); }catch(_e){}
   if(typeof frToast==='function')frToast('Copied class #'+nbr+' — paste it into the registration portal.');
 }
+/* ===== Section-row signals: time conflicts (real now) + friends-in-section (real when data exists) ===== */
+/* Course codes of sections you're already WATCHING or ENROLLED in whose meeting time overlaps
+   this one. Real per-section overlap; a course never conflicts with its own other section. */
+function secTimeConflicts(code, sec){
+  try{
+    if(typeof parseMeet!=='function'||typeof meetsOverlap!=='function')return [];
+    var meet=parseMeet(sec&&sec.days); if(!meet||!meet.days||!meet.days.length)return [];
+    var cc=(typeof canonCode==='function')?canonCode(code):code, hits={};
+    function scan(metaObj, timeFallback){
+      if(!metaObj)return;
+      for(var k in metaObj){
+        if(((typeof canonCode==='function')?canonCode(k):k)===cc)continue;
+        var m=metaObj[k], secs=(m&&Array.isArray(m.secs)&&m.secs.length)?m.secs:null;
+        if(secs){ secs.forEach(function(s){ if(meetsOverlap(meet,parseMeet(s.days)))hits[k]=1; }); }
+        else if(timeFallback){ var t=timeFallback(k); if(t&&meetsOverlap(meet,parseMeet(t)))hits[k]=1; }
+      }
+    }
+    scan(typeof watchMeta!=='undefined'?watchMeta:null,null);
+    scan(typeof myClassMeta!=='undefined'?myClassMeta:null,(typeof myClassTime==='function'?myClassTime:null));
+    return Object.keys(hits);
+  }catch(e){return [];}
+}
+function secConflictChip(code, sec){
+  var hits=secTimeConflicts(code,sec); if(!hits.length)return '';
+  var first=(typeof canonCode==='function')?canonCode(hits[0]):hits[0];
+  var more=hits.length>1?(' +'+(hits.length-1)):'';
+  return '<span class="cs-clash" title="Overlaps a section you’re watching or enrolled in">⚠ Conflicts with '+escapeHtml(first)+more+'</span>';
+}
+/* Friends known to be in THIS specific section. saved_classes is course-level today, so this
+   stays empty until friends share section-level schedules — we never guess a friend's section.
+   The pipeline already carries f.crns when the backend provides it, so this lights up for real. */
+function friendsInSection(code, crn){
+  if(!crn)return [];
+  try{ return (typeof FRIENDS!=='undefined'?FRIENDS:[]).filter(function(f){ var cs=(f&&(f.crns||f.sections))||[]; return Array.isArray(cs)&&cs.some(function(x){return String(x)===String(crn);}); }); }catch(e){return [];}
+}
+function friendSecChip(code, sec){
+  var crn=sec&&(sec.class_nbr||sec.crn);
+  var fr=friendsInSection(code,crn); if(!fr.length)return '';
+  var avs=fr.slice(0,3).map(function(f){return '<span class="fr-av" style="background:'+f.color+'">'+f.ini+'</span>';}).join('');
+  var n=fr.length;
+  return '<span class="cs-frsec" title="'+escapeHtml(fr.map(function(f){return f.name;}).join(', '))+'"><span class="fr-avs">'+avs+'</span>'+n+' friend'+(n>1?'s':'')+' in this section</span>';
+}
+/* ============ ⌘K COMMAND PALETTE ============
+   Fuzzy search across classes, professors, and actions — keyboard-first, top-anchored.
+   Reuses the same taFilter scorer and option lists as the in-app search, so results match. */
+let cmdkVisible=false, cmdkSel=0, cmdkItems=[];
+function _cmdkCode(q){ var m=String(q||'').toUpperCase().match(/[A-Z]{2,4}\s?\d{2,4}/); return m?m[0].replace(/([A-Z])\s?(\d)/,'$1 $2'):null; }
+function cmdkEnsure(){
+  var el=document.getElementById('cmdkBack'); if(el)return el;
+  el=document.createElement('div'); el.id='cmdkBack'; el.className='cmdk-back';
+  el.innerHTML='<div class="cmdk" role="dialog" aria-label="Command palette">'
+    +'<div class="cmdk-inp"><span class="cmdk-ic">⌕</span><input id="cmdkInput" placeholder="Search classes, professors, or actions…" autocomplete="off" spellcheck="false" aria-label="Search"><kbd class="cmdk-esc">esc</kbd></div>'
+    +'<div class="cmdk-list" id="cmdkList"></div>'
+    +'<div class="cmdk-foot"><span><kbd>↑</kbd><kbd>↓</kbd> navigate</span><span><kbd>↵</kbd> open</span><span><kbd>⌘K</kbd> toggle</span></div>'
+    +'</div>';
+  el.addEventListener('mousedown',function(e){ if(e.target===el)cmdkHide(); });
+  document.body.appendChild(el);
+  var inp=el.querySelector('#cmdkInput');
+  inp.addEventListener('input',function(){ cmdkSel=0; cmdkCompute(inp.value); });
+  inp.addEventListener('keydown',cmdkKey);
+  return el;
+}
+function cmdkShow(){
+  cmdkEnsure(); var el=document.getElementById('cmdkBack');
+  el.style.display='flex'; cmdkVisible=true; document.body.style.overflow='hidden';
+  var inp=document.getElementById('cmdkInput'); inp.value=''; cmdkSel=0; cmdkCompute('');
+  setTimeout(function(){try{inp.focus();}catch(e){}},20);
+}
+function cmdkHide(){ var el=document.getElementById('cmdkBack'); if(el)el.style.display='none'; cmdkVisible=false; document.body.style.overflow=''; }
+function cmdkToggle(){ cmdkVisible?cmdkHide():cmdkShow(); }
+function cmdkKey(e){
+  if(e.key==='ArrowDown'){e.preventDefault(); cmdkSel=Math.min(cmdkItems.length-1,cmdkSel+1); cmdkPaint();}
+  else if(e.key==='ArrowUp'){e.preventDefault(); cmdkSel=Math.max(0,cmdkSel-1); cmdkPaint();}
+  else if(e.key==='Enter'){e.preventDefault(); cmdkRun(cmdkSel);}
+  else if(e.key==='Escape'){e.preventDefault(); cmdkHide();}
+}
+function cmdkCompute(q){
+  q=(q||'').trim(); var ql=q.toLowerCase(); var items=[];
+  var code=_cmdkCode(q);
+  if(code){
+    var canon=(typeof canonCode==='function')?canonCode(code):code;
+    items.push({type:'Action',icon:'⌕',label:'Open '+canon+' in Explore',sub:'sections, seats & professors',run:function(){ show('explore'); if(typeof exSuggest==='function')exSuggest(canon); }});
+    items.push({type:'Action',icon:'☆',label:'Add '+canon+' to Watchlist',sub:'build your schedule',run:function(){ if(typeof toggleWatchClass==='function')toggleWatchClass(canon); if(typeof frToast==='function')frToast(canon+' → Watchlist'); }});
+  }
+  [ {label:'Go to Home',sub:'',run:function(){show('home');}},
+    {label:'Go to Explore',sub:'browse classes & professors',run:function(){show('explore');}},
+    {label:'Go to Schedule',sub:'planner · watchlist · my classes',run:function(){show('sched');}},
+    {label:'Go to Watchlist',sub:'',run:function(){show('watch');}},
+    {label:'Go to Friends',sub:'',run:function(){show('friends');}},
+    {label:'Your reviews',sub:'reviews you’ve written',run:function(){ if(typeof openMyReviews==='function')openMyReviews(); }}
+  ].forEach(function(a){ if(!ql||a.label.toLowerCase().indexOf(ql)>=0||(a.sub&&a.sub.toLowerCase().indexOf(ql)>=0)) items.push({type:'Action',icon:'→',label:a.label,sub:a.sub,run:a.run}); });
+  if(ql){
+    try{ (taFilter(allProfOptions(),ql,5)||[]).forEach(function(o){ items.push({type:'Professor',icon:'ini:'+(o.value||''),label:o.value,sub:o.sub||'',run:function(){ if(o.id&&typeof openProf==='function')openProf(o.id); }}); }); }catch(e){}
+    try{ (taFilter(allClassOptions(),ql,6)||[]).forEach(function(o){ items.push({type:'Class',icon:'#',label:o.value,sub:o.sub||o.label||'',run:function(){ show('explore'); if(typeof exSuggest==='function')exSuggest(o.value); }}); }); }catch(e){}
+  }
+  cmdkItems=items; if(cmdkSel>=items.length)cmdkSel=Math.max(0,items.length-1);
+  cmdkRenderList(q);
+}
+function cmdkRenderList(q){
+  var list=document.getElementById('cmdkList'); if(!list)return;
+  if(!cmdkItems.length){ list.innerHTML='<div class="cmdk-empty">No matches'+(q?' for “'+escapeHtml(q)+'”':'')+'. Try a class code (e.g. BUS 3431) or a professor’s name.</div>'; return; }
+  var lastType='',html='';
+  cmdkItems.forEach(function(it,i){
+    if(it.type!==lastType){ var plural=it.type==='Class'?'Classes':(it.type+'s'); html+='<div class="cmdk-grp">'+plural+'</div>'; lastType=it.type; }
+    var ic=(it.icon&&it.icon.indexOf('ini:')===0)?'<span class="cmdk-ini">'+escapeHtml(initials(it.icon.slice(4)))+'</span>':'<span class="cmdk-em">'+escapeHtml(it.icon||'·')+'</span>';
+    html+='<div class="cmdk-row'+(i===cmdkSel?' on':'')+'" data-i="'+i+'" onmousemove="cmdkHover('+i+')" onclick="cmdkRun('+i+')">'+ic+'<span class="cmdk-lbl"><span class="cmdk-l1">'+escapeHtml(it.label)+'</span>'+(it.sub?'<span class="cmdk-sub">'+escapeHtml(it.sub)+'</span>':'')+'</span><span class="cmdk-go">↵</span></div>';
+  });
+  list.innerHTML=html; cmdkScrollSel();
+}
+function cmdkPaint(){ document.querySelectorAll('#cmdkList .cmdk-row').forEach(function(r){ r.classList.toggle('on',Number(r.getAttribute('data-i'))===cmdkSel); }); cmdkScrollSel(); }
+function cmdkScrollSel(){ var r=document.querySelector('#cmdkList .cmdk-row.on'); if(r&&r.scrollIntoView)r.scrollIntoView({block:'nearest'}); }
+function cmdkHover(i){ cmdkSel=i; cmdkPaint(); }
+function cmdkRun(i){ var it=cmdkItems[i]; if(!it)return; cmdkHide(); try{ it.run(); }catch(e){} }
+try{ document.addEventListener('keydown',function(e){ if((e.metaKey||e.ctrlKey)&&(e.key==='k'||e.key==='K')){ e.preventDefault(); cmdkToggle(); } },true); }catch(e){}
 function clsSectionRows(code){
   var secs=clsSections(code);
   secs.sort(function(a,b){var r=seatRank(b.seat)-seatRank(a.seat); if(r)return r; return (b.rating==null?-1:b.rating)-(a.rating==null?-1:a.rating);});
@@ -5283,7 +5493,9 @@ function clsSectionRows(code){
         +(mine?'<span class="cs-inmine">✓ In My Classes</span>':'<button class="cs-enroll" title="Cal Poly has you enrolled or waitlisted in this section? Add it to My Classes." onclick="mcEnrollSec(\''+escAcc(code)+'\',\''+escAcc(crn)+'\',event)">I’m in this →</button>')
       +'</div>';
     }
-    return '<div class="cs-row"'+copyAttr+'>'+profCell+'<span class="cs-meets">'+(s.days?escapeHtml(s.days):'Time TBA')+'</span>'+seatCell+acts+'</div>';
+    var conf=secConflictChip(code,s), frs=friendSecChip(code,s);
+    var rowchips=(frs||conf)?('<span class="cs-rowchips">'+frs+conf+'</span>'):'';
+    return '<div class="cs-row'+(conf?' cs-row-clash':'')+'"'+copyAttr+'>'+profCell+'<span class="cs-meets">'+(s.days?escapeHtml(s.days):'Time TBA')+rowchips+'</span>'+seatCell+acts+'</div>';
   }).join('');
 }
 function clsRow(c){
@@ -5565,7 +5777,16 @@ function openProf(id){currentProf=id;revSort='helpful';renderModal();document.ge
 function closeModal(){document.getElementById('mback').classList.remove('open');document.body.style.overflow='';}
 function setRevSort(s){revSort=s;renderModal();}
 function claimProfile(){document.getElementById('claimNote').innerHTML=`<div class="claim-note">Profile claiming is coming soon. Professors will verify with their <b>@calpoly.edu</b> email, then can edit their background, add an “About me,” and respond to reviews — a simple way to keep faculty involved and on your side.</div>`;}
-function voteHelpful(i){const r=modalRevs[i];if(!r)return;if(r._v){r.helpful--;r._v=false;}else{r.helpful++;r._v=true;}renderModal();}
+function voteHelpful(i){const r=modalRevs[i];if(!r)return;const voting=!r._v;if(r._v){r.helpful=Math.max(0,(r.helpful||0)-1);r._v=false;}else{r.helpful=(r.helpful||0)+1;r._v=true;}renderModal();try{if(r.id)persistHelpful(r.id,voting);}catch(e){}}
+/* Persist a helpful vote so it counts toward the reviewer's real impact number. One row per
+   (review, voter) in review_helpful; no-ops silently until that table exists (never breaks voting). */
+async function persistHelpful(reviewId,on){
+  if(typeof backendReady!=='function'||!backendReady()||typeof sbUser==='undefined'||!sbUser||!reviewId)return;
+  try{
+    if(on){ await sb.from('review_helpful').upsert({review_id:reviewId,voter_id:sbUser.id}); }
+    else { await sb.from('review_helpful').delete().eq('review_id',reviewId).eq('voter_id',sbUser.id); }
+  }catch(e){ /* table not created yet — vote stays local for this session */ }
+}
 /* ============ RATE A PROFESSOR ============ */
 let eduVerified=false;
 let reviewsGiven=0;
@@ -5673,7 +5894,7 @@ async function loadReviews(id){
     const {data,error}=await sb.from('reviews').select('*').eq('professor_key',key).order('created_at',{ascending:false}).limit(200);
     if(error)throw error;
     if(Array.isArray(data)){
-      dbReviews[key]=data.map(r=>({course:r.course||'',term:r.term||'Fall 2026',score:r.score,difficulty:r.difficulty,teach:r.teach_ability,hours:r.hours||'',format:r.format||'',again:r.would_again,verified:true,helpful:r.helpful||0,text:r.note||'',tags:Array.isArray(r.tags)?r.tags:[],_db:true}));
+      dbReviews[key]=data.map(r=>({id:r.id,course:r.course||'',term:(r.term||'').trim(),score:r.score,difficulty:r.difficulty,teach:r.teach_ability,hours:r.hours||'',format:r.format||'',grade:(r.grade||'').trim(),again:r.would_again,verified:true,helpful:r.helpful||0,text:r.note||'',tags:Array.isArray(r.tags)?r.tags:[],_db:true}));
       delete dbReviewsError[key];
       if(currentProf===id&&modalMode==='profile')renderModal();
     }
@@ -5725,7 +5946,7 @@ function rateHtmlBlend(p){
   const v4=v5/5*4;                                            // scoreColor thresholds are on the 0–4 scale
   return `<span class="rate" style="color:${scoreColor(v4)}"><span class="rd" style="background:${scoreColor(v4)}"></span>${v5.toFixed(1)}<span style="opacity:.5;font-weight:500;font-size:.85em">/5</span></span>`;
 }
-function startRate(id,course){currentProf=id;rateErrMsg='';pendingRateCourse=course||'';var _mb=document.getElementById('mback');if(_mb&&!_mb.classList.contains('open')){_mb.classList.add('open');document.body.style.overflow='hidden';}if(!eduVerified){renderVerify(id);return;}rateDraft={course:course||'',score:0,difficulty:0,teach:0,hours:'',format:'',again:null,chips:new Set(),badChips:new Set(),text:''};renderRateForm(id);}
+function startRate(id,course){currentProf=id;rateErrMsg='';pendingRateCourse=course||'';var _mb=document.getElementById('mback');if(_mb&&!_mb.classList.contains('open')){_mb.classList.add('open');document.body.style.overflow='hidden';}if(!eduVerified){renderVerify(id);return;}rateDraft={course:course||'',score:0,difficulty:0,teach:0,hours:'',format:'',grade:'',again:null,chips:new Set(),badChips:new Set(),text:''};renderRateForm(id);}
 function renderVerify(id){
   modalMode='rate';
   const p=PROFESSORS[id];
@@ -5864,34 +6085,46 @@ function profGo(target){ closeProfMenu(); if(target==='mine'){ show('sched'); if
 function renderRateForm(id){
   modalMode='rate';
   const p=PROFESSORS[id];
-  const d=rateDraft||(rateDraft={course:'',score:0,difficulty:0,teach:0,hours:'',format:'',again:null,chips:new Set(),badChips:new Set(),text:''});
+  const d=rateDraft||(rateDraft={course:'',score:0,difficulty:0,teach:0,hours:'',format:'',grade:'',again:null,chips:new Set(),badChips:new Set(),text:''});
   const courses=wlCourses(p);
   if(d.course&&courses.indexOf(d.course)<0)courses.unshift(d.course);
   const courseField=courses.length
     ? `<select id="rfCourse" class="rf-sel">${courses.map(c=>`<option ${d.course===c?'selected':''}>${c}</option>`).join('')}<option value="__other" ${(d.course&&courses.indexOf(d.course)<0)?'selected':''}>Other / not listed</option></select>`
     : `<input id="rfCourse" class="rf-sel" placeholder="e.g. CSC 2001" value="${escapeHtml(d.course)}">`;
   const HOURS=['1–3','3–6','6–9','9–12','12+'],FMT=['In person','Hybrid','Online'],WELL=['Explains concepts clearly','Gave timely, useful feedback','Ran engaging discussions','Graded fairly &amp; transparently'],STRUGGLE=['Explanations were unclear','Feedback was slow or unhelpful','Lectures were disengaging','Grading felt unfair or unclear'];
+  // Show the optional-detail section pre-expanded only if the draft already carries any of it
+  // (e.g. re-editing) — otherwise a fresh review is just the 3 required fields.
+  const moreOpen=!!(d.difficulty||d.teach||d.hours||d.format||d.grade||(d.chips&&d.chips.size)||(d.badChips&&d.badChips.size)||(d.text&&String(d.text).trim()));
   document.getElementById('modal').innerHTML=`<div class="rate-wrap"><button class="mclose" onclick="renderModal()">&times;</button>
     <style>
       .rf-big{font-size:18px;font-weight:700;color:var(--text);line-height:1.2}
       .rf-tags-bad button.on{background:rgba(226,86,79,.15);border-color:rgba(226,86,79,.55);color:#e88079}
       .rf-more{background:none;border:none;color:var(--muted);font:600 12.5px inherit;cursor:pointer;padding:8px 2px 0}
       .rf-more:hover{color:var(--text-2)}
+      .rf-more-toggle{width:100%;background:var(--panel-2);border:1px dashed var(--line);border-radius:10px;color:var(--text-2);font:600 13.5px inherit;padding:13px;cursor:pointer;margin:6px 0 2px;text-align:center}
+      .rf-more-toggle span{color:var(--muted);font-weight:400;font-size:12.5px}
+      .rf-more-toggle:hover{border-color:rgba(var(--accent-rgb),.6);color:var(--accent)}
+      .rf-fast{font-size:12.5px;color:var(--muted);text-align:center;margin:2px 0 8px}
     </style>
     <div class="rf">
       <div class="rf-head"><h2 class="rate-h" style="margin:0">Rate ${escapeHtml(p.name)}</h2></div>
       <div class="rf-blk"><label class="rf-lab">Which course? <span style="color:var(--low)" title="Required">*</span></label>${courseField}<div id="rfCourseHint" class="rf-hint" style="margin-top:6px;display:none;color:var(--accent)"></div></div>
       <div class="rf-blk"><div class="rf-row"><span class="rf-rl rf-big">Overall rating</span><div class="rf-stars" id="rf-overall"></div><span class="rf-val empty" id="rfv-overall">–</span></div><div class="rf-hint">Tap a star — tap its <b>left half</b> for a half-star.</div></div>
-      <div class="rf-blk"><div class="rf-row"><span class="rf-rl rf-big">Professor difficulty</span><div class="rf-stars" id="rf-diff"></div><span class="rf-val empty" id="rfv-diff">–</span></div><div class="rf-hint">1 = easy · 5 = hard</div></div>
-      <div class="rf-blk"><div class="rf-row"><span class="rf-rl rf-big">Teaching ability</span><div class="rf-stars" id="rf-teach"></div><span class="rf-val empty" id="rfv-teach">–</span></div></div>
-      <div class="rf-blk"><label class="rf-lab">Hours per week outside class</label><div class="rf-seg" id="rf-hours">${HOURS.map(h=>`<button type="button" class="${d.hours===h?'on':''}">${h}</button>`).join('')}</div></div>
-      <div class="rf-blk"><label class="rf-lab">Was this class in person, hybrid, or online?</label><div class="rf-seg" id="rf-format">${FMT.map(f=>`<button type="button" class="${d.format===f?'on':''}">${f}</button>`).join('')}</div></div>
-      <div class="rf-blk"><label class="rf-lab">What did the professor do well? <span class="rf-opt">(pick any)</span></label><div class="rf-tags" id="rf-well">${WELL.map(w=>`<button type="button" class="${d.chips.has(w)?'on':''}">${w}</button>`).join('')}</div><button type="button" class="rf-more" id="rf-well-more" onclick="rfShowMore('well')">+ more good things</button></div>
-      <div class="rf-blk"><label class="rf-lab">What did the professor struggle with? <span class="rf-opt">(pick any)</span></label><div class="rf-tags rf-tags-bad" id="rf-bad">${STRUGGLE.map(w=>`<button type="button" class="${d.badChips.has(w)?'on':''}">${w}</button>`).join('')}</div><button type="button" class="rf-more" id="rf-bad-more" onclick="rfShowMore('bad')">+ more struggles</button></div>
       <div class="rf-blk"><div class="rf-row"><span class="rf-rl rf-big">Would you take this professor again?</span></div><div class="rf-seg" id="rf-again" style="margin-top:9px"><button type="button" class="${d.again===true?'on':''}">Yes</button><button type="button" class="${d.again===false?'on':''}">No</button></div></div>
-      <div class="rf-blk"><label class="rf-lab">Anything else? <span class="rf-opt">(optional)</span></label><textarea id="rfNote" class="rf-note" rows="2" maxlength="280" placeholder="One tip for the next student…">${escapeHtml(d.text)}</textarea></div>
+      <button type="button" class="rf-more-toggle" id="rfMoreToggle" onclick="rfToggleMore()" style="display:${moreOpen?'none':'block'}">+ Add more detail<br><span>difficulty · workload · grade · what they did well (all optional)</span></button>
+      <div id="rf-more" class="rf-more-wrap" style="display:${moreOpen?'block':'none'}">
+        <div class="rf-blk"><div class="rf-row"><span class="rf-rl rf-big">Professor difficulty</span><div class="rf-stars" id="rf-diff"></div><span class="rf-val empty" id="rfv-diff">–</span></div><div class="rf-hint">1 = easy · 5 = hard</div></div>
+        <div class="rf-blk"><div class="rf-row"><span class="rf-rl rf-big">Teaching ability</span><div class="rf-stars" id="rf-teach"></div><span class="rf-val empty" id="rfv-teach">–</span></div></div>
+        <div class="rf-blk"><label class="rf-lab">Hours per week outside class</label><div class="rf-seg" id="rf-hours">${HOURS.map(h=>`<button type="button" class="${d.hours===h?'on':''}">${h}</button>`).join('')}</div></div>
+        <div class="rf-blk"><label class="rf-lab">Was this class in person, hybrid, or online?</label><div class="rf-seg" id="rf-format">${FMT.map(f=>`<button type="button" class="${d.format===f?'on':''}">${f}</button>`).join('')}</div></div>
+        <div class="rf-blk"><label class="rf-lab">What grade did you get? <span class="rf-opt">(optional · shown only in aggregate, never tied to you)</span></label><div class="rf-seg rf-grade" id="rf-grade">${['A','A-','B+','B','B-','C+','C','C-','D','F','P/CR'].map(g=>`<button type="button" class="${d.grade===g?'on':''}">${g}</button>`).join('')}<button type="button" class="rf-grade-na ${!d.grade?'on':''}">Prefer not to say</button></div></div>
+        <div class="rf-blk"><label class="rf-lab">What did the professor do well? <span class="rf-opt">(pick any)</span></label><div class="rf-tags" id="rf-well">${WELL.map(w=>`<button type="button" class="${d.chips.has(w)?'on':''}">${w}</button>`).join('')}</div><button type="button" class="rf-more" id="rf-well-more" onclick="rfShowMore('well')">+ more good things</button></div>
+        <div class="rf-blk"><label class="rf-lab">What did the professor struggle with? <span class="rf-opt">(pick any)</span></label><div class="rf-tags rf-tags-bad" id="rf-bad">${STRUGGLE.map(w=>`<button type="button" class="${d.badChips.has(w)?'on':''}">${w}</button>`).join('')}</div><button type="button" class="rf-more" id="rf-bad-more" onclick="rfShowMore('bad')">+ more struggles</button></div>
+        <div class="rf-blk"><label class="rf-lab">Anything else? <span class="rf-opt">(optional)</span></label><textarea id="rfNote" class="rf-note" rows="2" maxlength="280" placeholder="One tip for the next student…">${escapeHtml(d.text)}</textarea></div>
+      </div>
       <div id="rfErr" class="rate-err" style="min-height:0"></div>
-      <button id="rfSubmit" class="btn primary rf-submit" onclick="submitRate('${id}')" disabled>Submit review</button>
+      <button id="rfSubmit" class="btn primary rf-submit" onclick="submitRate('${id}')" disabled>Post review</button>
+      <p class="rf-fast">Takes about 15 seconds · add detail above only if you want</p>
       <p class="rate-fine" style="text-align:center">Posts anonymously · one review per class · verified student</p>
     </div></div>`;
   setupRateForm();
@@ -5908,6 +6141,8 @@ function rfShowMore(which){
   (isBad?RF_BAD_MORE:RF_WELL_MORE).forEach(t=>{const b=document.createElement('button');b.type='button';b.textContent=t;box.appendChild(b);rfWireTag(b,set);});
   const mb=document.getElementById(isBad?'rf-bad-more':'rf-well-more');if(mb)mb.remove();
 }
+/* Reveal the optional-detail section of the 2-step review form. */
+function rfToggleMore(){ var m=document.getElementById('rf-more'); if(m)m.style.display='block'; var t=document.getElementById('rfMoreToggle'); if(t)t.style.display='none'; }
 function rfBack(s){return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 24 24" style="position:absolute;top:0;left:0"><path d="'+RF_STAR+'" fill="none" stroke="#3a3f47" stroke-width="1.5"/></svg>';}
 function rfFront(s,c){return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 24 24" style="display:block"><path d="'+RF_STAR+'" fill="'+c+'" stroke="'+c+'" stroke-width="1.5"/></svg>';}
 function rfMakeStars(elId,valId,field,colorFn){
@@ -5931,6 +6166,7 @@ function setupRateForm(){
   rfMakeStars('rf-teach','rfv-teach','teach',null);
   rfSingle('rf-hours',t=>{rateDraft.hours=t;});
   rfSingle('rf-format',t=>{rateDraft.format=t;});
+  rfSingle('rf-grade',t=>{rateDraft.grade=(t==='Prefer not to say'?'':t);});
   rfSingle('rf-again',t=>{rateDraft.again=(t==='Yes');rfCheck();});
   const well=document.getElementById('rf-well');if(well)well.querySelectorAll('button').forEach(b=>rfWireTag(b,rateDraft.chips));
   const bad=document.getElementById('rf-bad');if(bad)bad.querySelectorAll('button').forEach(b=>rfWireTag(b,rateDraft.badChips));
@@ -5948,6 +6184,19 @@ function rfMeta(r){
   if(!parts.length)return '';
   return '<div class="rf-meta">'+parts.map(x=>'<span>'+escapeHtml(x)+'</span>').join('')+'</div>';
 }
+/* Provenance chip — the credibility moat over RateMyProfessors. Built ONLY from real,
+   known fields: the .edu-verified flag, the course actually reviewed, and the term IF the
+   review genuinely carries one. Nothing is assumed — no term is shown when it's unknown. */
+function reviewProvenance(r){
+  var segs=[];
+  if(r&&r.verified)segs.push('<span class="rp-seg rp-ver">'+CHECK+' Verified Cal Poly student</span>');
+  var course=(r&&r.course)?((typeof revCourseLabel==='function')?revCourseLabel(r.course):escapeHtml(r.course)):'';
+  if(course)segs.push('<span class="rp-seg">Took '+course+'</span>');
+  var term=(r&&r.term||'').trim();
+  if(term)segs.push('<span class="rp-seg">'+escapeHtml(term)+'</span>');
+  if(!segs.length)return '';
+  return '<div class="rev-prov">'+segs.join('<span class="rp-dot">·</span>')+'</div>';
+}
 let rateErrMsg='';
 async function submitRate(id){
   const p=PROFESSORS[id];const d=rateDraft||{chips:new Set(),badChips:new Set()};
@@ -5957,13 +6206,18 @@ async function submitRate(id){
   const course=(typeof normCourse==='function'?normCourse(d.course):(d.course||'').trim().toUpperCase());
   if(!course){rfErr('Pick the class you took with this professor — reviews are tied to a specific course.');return;}
   const courseKey=(typeof canonCode==='function')?canonCode(course):course;
-  const review={course:course,course_key:courseKey,term:'Fall 2026',score:d.score,difficulty:d.difficulty||null,teach:d.teach||null,hours:d.hours||'',format:d.format||'',again:d.again,verified:true,helpful:0,text:(d.text||'').trim(),tags:tags,badTags:badTags,_mine:true};
+  /* term is intentionally blank: the rate form never asks WHEN the class was taken, so we
+     don't invent one. The provenance chip shows a term only when a review genuinely has it. */
+  const review={course:course,course_key:courseKey,term:'',score:d.score,difficulty:d.difficulty||null,teach:d.teach||null,hours:d.hours||'',format:d.format||'',grade:d.grade||'',again:d.again,verified:true,helpful:0,text:(d.text||'').trim(),tags:tags,badTags:badTags,_mine:true};
   if(backendReady()&&sbUser){
     if(sbBusy)return;sbBusy=true;
     const btn=document.getElementById('rfSubmit');if(btn){btn.disabled=true;btn.textContent='Posting…';}
-    const row={professor_key:profKey(p),professor_name:p.name,department:p.dept,course:course||null,score:d.score,difficulty:d.difficulty||null,teach_ability:d.teach||null,hours:d.hours||null,format:d.format||null,would_again:d.again===true,tags:tags,note:review.text||null};
+    const row={professor_key:profKey(p),professor_name:p.name,department:p.dept,course:course||null,score:d.score,difficulty:d.difficulty||null,teach_ability:d.teach||null,hours:d.hours||null,format:d.format||null,grade:d.grade||null,would_again:d.again===true,tags:tags,note:review.text||null};
     try{
-      const {error}=await sb.from('reviews').insert(row);
+      let {error}=await sb.from('reviews').insert(row);
+      // If the DB doesn't have the optional `grade` column yet, don't fail the whole review —
+      // drop grade and retry so submissions always work; grade persists once the column exists.
+      if(error&&/grade|column|schema/i.test(error.message||'')){ var _r=Object.assign({},row); delete _r.grade; var retry=await sb.from('reviews').insert(_r); error=retry.error; }
       if(error)throw error;
       (dbReviews[profKey(p)]=dbReviews[profKey(p)]||[]).unshift({...review,_db:true});
       reviewsGiven++;sbBusy=false;renderThanks(id,true);
@@ -6027,21 +6281,90 @@ async function loadMyReviewed(){
   /* merge anything posted this session (works even if the user_id column differs) */
   try{ for(var k in dbReviews){ if((dbReviews[k]||[]).some(function(rv){return rv._mine;}))MY_REVIEWED[String(k).split('|')[0]]=1; } }catch(e){}
 }
+/* ============ "Your reviews" — see everything you've rated ============ */
+window.MY_REVIEWS=window.MY_REVIEWS||null;
+async function loadMyReviews(){
+  var out=[];
+  try{
+    if(typeof backendReady==='function'&&backendReady()&&typeof sbUser!=='undefined'&&sbUser){
+      // select('*') so a missing optional column (e.g. grade) never errors the query
+      var r=await sb.from('reviews').select('*').eq('user_id',sbUser.id).order('created_at',{ascending:false});
+      if(!r.error&&Array.isArray(r.data))out=r.data.slice();
+    }
+  }catch(e){}
+  // fold in anything written this session that isn't in the fetch yet (preview / not-yet-synced)
+  try{
+    var seen={}; out.forEach(function(x){seen[String(x.professor_key||'')+'|'+String(x.course||'')]=1;});
+    for(var id in PROFESSORS){ var p=PROFESSORS[id]; ((p&&p.revs)||[]).forEach(function(rv){
+      if(rv&&rv._mine){ var pk=profKey(p), key=pk+'|'+String(rv.course||''); if(!seen[key]){ out.push({professor_key:pk,professor_name:p.name,department:p.dept,course:rv.course,score:rv.score,grade:rv.grade||'',teach_ability:rv.teach,difficulty:rv.difficulty,would_again:rv.again,note:rv.text||'',_local:true}); seen[key]=1; } }
+    }); }
+  }catch(e){}
+  window.MY_REVIEWS=out;
+  // Private impact = how many classmates marked YOUR reviews helpful (real votes in review_helpful).
+  try{
+    if(typeof backendReady==='function'&&backendReady()&&sbUser){
+      var ids=out.map(function(r){return r.id;}).filter(Boolean);
+      if(ids.length){
+        var hr=await sb.from('review_helpful').select('review_id').in('review_id',ids);
+        window.MY_IMPACT=(!hr.error&&Array.isArray(hr.data))?hr.data.length:0;
+      } else { window.MY_IMPACT=0; }
+    }
+  }catch(e){ /* table not created yet — impact simply unknown, shown as 0 */ }
+  return out;
+}
+function myRevProfId(r){
+  try{ for(var id in PROFESSORS){ if(profKey(PROFESSORS[id])===r.professor_key)return id; } }catch(e){}
+  try{ if(typeof matchProfId==='function')return matchProfId(r.professor_name); }catch(e){}
+  return null;
+}
+async function openMyReviews(){
+  var host=document.getElementById('myReviewsBack');
+  if(!host){ host=document.createElement('div'); host.id='myReviewsBack'; host.className='sl-back'; document.body.appendChild(host); }
+  host.innerHTML='<div class="sl-card"><button class="sl-x" onclick="closeMyReviews()">&times;</button><div class="sl-kick">Your reviews</div><h2 class="sl-h">Loading…</h2></div>';
+  host.style.display='flex'; document.body.style.overflow='hidden';
+  await loadMyReviews();
+  renderMyReviews();
+}
+function closeMyReviews(){ var h=document.getElementById('myReviewsBack'); if(h){h.style.display='none';h.innerHTML='';} document.body.style.overflow=''; }
+function renderMyReviews(){
+  var host=document.getElementById('myReviewsBack'); if(!host)return;
+  var list=window.MY_REVIEWS||[];
+  var rows=list.map(function(r){
+    var id=myRevProfId(r);
+    var course=(typeof canonCode==='function'&&r.course)?canonCode(r.course):(r.course||'');
+    var sc=(r.score!=null)?Number(r.score).toFixed(1):'—';
+    var col=(typeof scoreColor==='function')?scoreColor((Number(r.score)||0)/5*4):'var(--accent)';
+    var grade=r.grade?('<span class="myr-grade">'+escapeHtml(r.grade)+'</span>'):'';
+    var note=r.note?('<p class="myr-note">'+escapeHtml(r.note)+'</p>'):'';
+    var sub=[course?('Took '+escapeHtml(course)):'', grade].filter(Boolean).join(' · ');
+    var openable=!!id;
+    return '<div class="myr-row"'+(openable?' onclick="closeMyReviews();openProf(\''+id+'\')" style="cursor:pointer"':'')+'>'
+      +'<div class="myr-top"><span class="myr-nm">'+escapeHtml(r.professor_name||'Professor')+'</span><span class="myr-score" style="color:'+col+'">'+sc+'<small>/5</small></span></div>'
+      +(sub?'<div class="myr-sub">'+sub+'</div>':'')
+      +note
+      +(openable?'<div class="myr-link">View professor →</div>':'')
+    +'</div>';
+  }).join('');
+  var body=list.length
+    ? '<div class="myr-list">'+rows+'</div>'
+    : '<div class="myr-empty">You haven’t written any reviews yet. Rate a professor and it’ll show up here so you can find it again.</div>';
+  host.innerHTML='<div class="sl-card"><button class="sl-x" onclick="closeMyReviews()">&times;</button><div class="sl-kick">Your reviews</div><h2 class="sl-h">'+(list.length?(list.length+' review'+(list.length===1?'':'s')+' you’ve written'):'Your reviews')+'</h2>'+body+'<p class="sl-fine">Only you can see this list. Your reviews post anonymously to other students.</p></div>';
+}
 /* keyed by NAME only — the same professor can carry different dept strings between
    the curated roster and the live PolyRatings feed, and the badge must survive that */
 function profKeyName(p){return String((typeof profKey==='function'?profKey(p):'')).split('|')[0];}
 /* ---- professors YOU'VE had: Past Classes + current My Classes, front and center ---- */
 function rlMyProfs(){
   var out=[],seen={};
-  function push(pid,ctx,now){
+  function push(pid,ctx,now,code){
     if(!pid||seen[pid]||typeof PROFESSORS==='undefined'||!PROFESSORS[pid])return;
-    seen[pid]=1;out.push({id:pid,p:PROFESSORS[pid],ctx:ctx,now:!!now});
+    seen[pid]=1;out.push({id:pid,p:PROFESSORS[pid],ctx:ctx,now:!!now,code:code||''});
   }
   try{ /* past classes with a professor logged */
     (typeof myHistory!=='undefined'?myHistory:[]).forEach(function(h){
       if(!h.professor)return;
       var pid=(typeof matchProfId==='function')?matchProfId(h.professor):null;
-      push(pid,(h.code||'')+' · '+(h.term||'')+' '+(h.year||''),false);
+      push(pid,(h.code||'')+' · '+(h.term||'')+' '+(h.year||''),false,h.code);
     });
   }catch(e){}
   try{ /* current classes — the professor you have right now */
@@ -6050,7 +6373,7 @@ function rlMyProfs(){
       if(!nm){var ci=(typeof classInfo==='function')?classInfo(code):null;nm=(ci&&ci.best&&ci.best.name)||'';}
       if(!nm)return;
       var pid=(typeof matchProfId==='function')?matchProfId(nm):null;
-      push(pid,'taking now · '+code,true);
+      push(pid,'taking now · '+code,true,code);
     });
   }catch(e){}
   return out;
@@ -6095,7 +6418,7 @@ function renderReviewLanding(){
           +mine.slice(0,8).map(function(m){
             const rvd=MY_REVIEWED[profKeyName(m.p)];
             const r5=m.p.rating!=null?to5(m.p.rating).toFixed(1)+'/5':'';
-            return `<div onclick="rlOpenProf('${m.id}')" style="display:flex;align-items:center;justify-content:space-between;background:${PFC.panel};border:1px solid ${rvd?PFC.line:PFC.green+'55'};border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer">
+            return `<div onclick="rlOpenProf('${m.id}','${escapeHtml(m.code||'')}')" style="display:flex;align-items:center;justify-content:space-between;background:${PFC.panel};border:1px solid ${rvd?PFC.line:PFC.green+'55'};border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer">
               <div style="display:flex;align-items:center;gap:10px;min-width:0">
                 <div style="width:36px;height:36px;border-radius:8px;background:${PFC.greenTint};display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;color:${PFC.green};flex:none">${initials(m.p.name)}</div>
                 <div style="min-width:0">
@@ -6144,7 +6467,86 @@ function letterGrade(t){
 }
 function gbRow(r){const t=ratingToTen(r);if(t==null)return `<span class="gb-empty">No ratings</span>`;return `<div class="gb-row"><span class="gb-letter">${letterGrade(t)}</span><span class="gb-score">${to5(r).toFixed(1)}/5</span></div>`;}
 function difficultyLabel(d){if(d==null)return '';const d5=d/4*5;if(d5<=2.5)return 'Relatively easy';if(d5<=3.5)return 'Moderate';return 'Challenging';}
+/* ===== Rating display v2 — aggregates computed ONLY from real Professify reviews =====
+   Nothing is invented: a stat renders only when enough real data backs it, and grades are
+   shown strictly in aggregate (never per-review, never below a small-count privacy floor). */
+const GRADE_GPA={'A+':4,'A':4,'A-':3.7,'B+':3.3,'B':3,'B-':2.7,'C+':2.3,'C':2,'C-':1.7,'D+':1.3,'D':1,'D-':0.7,'F':0};
+function revRetake(revs){ var a=(revs||[]).filter(function(r){return r&&r.again!=null&&r.again!=='';}); if(a.length<3)return null; var yes=a.filter(function(r){return r.again===true||r.again==='Yes';}).length; return {pct:Math.round(yes/a.length*100),n:a.length}; }
+function revDifficulty(revs,p){ var d=(revs||[]).filter(function(r){return r&&r.difficulty!=null&&r.difficulty!=='';}).map(function(r){return Number(r.difficulty);}); if(d.length>=3)return {v:d.reduce(function(a,b){return a+b;},0)/d.length,n:d.length}; return null; }
+function revGrade(revs){
+  var g=(revs||[]).map(function(r){return r&&r.grade;}).filter(function(x){return x&&GRADE_GPA[x]!=null;});
+  if(g.length<3)return null;                               // privacy + honesty floor
+  var counts={}; g.forEach(function(x){counts[x]=(counts[x]||0)+1;});
+  var common=Object.keys(counts).sort(function(a,b){return counts[b]-counts[a];})[0];
+  var gpa=g.reduce(function(a,x){return a+GRADE_GPA[x];},0)/g.length;
+  var fam={A:0,B:0,C:0,D:0,F:0}; g.forEach(function(x){var f=x[0]; if(fam[f]!=null)fam[f]++;});
+  return {common:common,gpa:gpa,n:g.length,fam:fam};
+}
+function revScoreBuckets(revs){ var b=[0,0,0,0,0]; (revs||[]).forEach(function(r){ if(r&&r.score!=null){ var s=Math.max(1,Math.min(5,Math.round(Number(r.score)))); b[s-1]++; } }); return b; }
+/* The intertwined v2 detail block: highlights + stat tiles + distribution. Slots in where the
+   old dead grid (class size / years, always "—") used to be, under the existing overall score. */
+function pfDetailV2(p,revs){
+  revs=revs||[];
+  var n=revs.length;
+  var hrs=(typeof pfMode==='function')?pfMode(revs.map(function(r){return r.hours;})):null;
+  var rt=revRetake(revs), gr=revGrade(revs);
+  // ----- stat tiles (only real values; overall stays the big headline above) -----
+  var tiles=[];
+  if(rt)tiles.push({k:'Would retake',v:rt.pct+'%',sub:'of '+rt.n});
+  if(gr)tiles.push({k:'Avg grade',v:gr.common,sub:gr.n+' reported',mono:true,accent:true});
+  if(hrs)tiles.push({k:'Avg hrs / week',v:hrs});
+  var tilesHtml=tiles.length?('<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:10px;margin:2px 0 14px">'+tiles.map(function(t){
+    return '<div style="background:'+PFC.panel+';border:1px solid '+PFC.line+';border-radius:11px;padding:12px 13px">'
+      +'<div style="font-size:10.5px;letter-spacing:.03em;text-transform:uppercase;color:'+PFC.ink2+'">'+t.k+'</div>'
+      +'<div style="font-size:19px;font-weight:700;margin-top:5px;color:'+(t.accent?PFC.green:PFC.ink)+';'+(t.mono?'font-family:var(--mono,ui-monospace,Menlo,monospace);':'')+'">'+t.v+'</div>'
+      +(t.sub?'<div style="font-size:10.5px;color:'+PFC.ink2+';margin-top:3px">'+t.sub+'</div>':'')
+      +'</div>';
+  }).join('')+'</div>'):'';
+  // ----- highlights -----
+  var tags=(typeof pfTopTags==='function')?pfTopTags(revs,2):[];
+  var hi=(n>0&&tags.length)?('<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">'+tags.map(function(t){return '<span style="flex:1;min-width:120px;background:'+PFC.panel+';border:1px solid '+PFC.line+';border-radius:10px;padding:11px;text-align:center;font-size:13.5px;font-weight:500;color:'+PFC.green+'">'+escapeHtml(t)+'</span>';}).join('')+'</div>'):'';
+  // ----- rating distribution (from real review scores) -----
+  var dist='';
+  if(!n){
+    dist='<div style="background:'+PFC.panel+';border:1px solid '+PFC.line+';border-radius:11px;padding:14px 16px;margin-bottom:14px;font-size:12.5px;color:'+PFC.ink2+';line-height:1.5">The rating breakdown, workload, and grades fill in from <b style="color:'+PFC.ink+'">Professify student reviews</b> — none yet.'+(p.live?' The overall score above is live from PolyRatings.':'')+' <span style="color:'+PFC.green+';font-weight:600">Be the first below.</span></div>';
+  }else{
+    var b=revScoreBuckets(revs), max=Math.max.apply(null,b.concat([1])), rows='';
+    for(var s=5;s>=1;s--){ var c=b[s-1], w=Math.round(c/max*100);
+      rows+='<div style="display:flex;align-items:center;gap:9px;font-size:12px;margin-bottom:5px"><span style="width:12px;color:'+PFC.ink2+';text-align:right">'+s+'</span><div style="flex:1;height:8px;background:'+PFC.line+';border-radius:99px;overflow:hidden"><i style="display:block;height:100%;width:'+w+'%;background:'+PFC.green+';border-radius:99px"></i></div><span style="width:20px;color:'+PFC.ink2+';text-align:right">'+c+'</span></div>';
+    }
+    var small=(n<5)?'<div style="font-size:11.5px;color:#B7791F;margin-top:8px">Only '+n+' review'+(n===1?'':'s')+' so far — read them individually rather than trusting the average.</div>':'';
+    var gblock='';
+    if(gr&&gr.n>=5){
+      var gmax=Math.max(gr.fam.A,gr.fam.B,gr.fam.C,gr.fam.D,gr.fam.F,1);
+      var bars=['A','B','C','D','F'].map(function(L){var h=Math.round(gr.fam[L]/gmax*100),hiL=(L===gr.common[0]);return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;justify-content:flex-end;height:50px"><div style="width:100%;border-radius:5px 5px 0 0;min-height:3px;height:'+h+'%;background:'+(hiL?PFC.green:PFC.blue)+'"></div><div style="font-size:11px;color:'+PFC.ink2+';font-family:var(--mono,ui-monospace,Menlo,monospace)">'+L+'</div></div>';}).join('');
+      var gHead='<div style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:'+PFC.ink2+';margin-bottom:10px">Grades reported · '+gr.n+'</div>';
+      var gLocked=(typeof recipUnlocked==='function'&&!recipUnlocked());
+      var gInner=gLocked
+        ? '<div style="font-size:12.5px;color:'+PFC.ink2+'">🔒 Add a review to unlock the grade breakdown.</div>'
+        : '<div style="display:flex;gap:6px;align-items:flex-end">'+bars+'</div>';
+      gblock='<div style="margin-top:16px;padding-top:14px;border-top:1px solid '+PFC.line+'">'+gHead+gInner+'</div>';
+    }
+    dist='<div style="background:'+PFC.panel+';border:1px solid '+PFC.line+';border-radius:12px;padding:14px 16px;margin-bottom:14px"><div style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:'+PFC.ink2+';margin-bottom:10px">Rating distribution · '+n+' review'+(n===1?'':'s')+'</div>'+rows+small+gblock+'</div>';
+  }
+  return hi+tilesHtml+dist;
+}
 
+/* ===== Reciprocity unlock — "students helping students" =====
+   Overall scores, dimensions, seats & search stay FREE. Full review TEXT and grade
+   distributions unlock after you contribute reviews. Anyone with NO completed classes
+   (first-term freshmen) is exempt — you can't ask for data someone doesn't have yet. */
+const RECIP_UNLOCK_N=1;   // reviews needed to unlock. Change to 3 here for a bigger ask — one place.
+function recipReviewCount(){ try{ return (window.MY_REVIEWS!=null)?window.MY_REVIEWS.length:(typeof reviewsGiven!=='undefined'?reviewsGiven:0); }catch(e){ return 0; } }
+function recipHasHistory(){ try{ return !!(typeof myHistory!=='undefined'&&myHistory&&myHistory.length); }catch(e){ return false; } }
+function recipUnlocked(){ if(!recipHasHistory())return true; return recipReviewCount()>=RECIP_UNLOCK_N; }
+function recipRemaining(){ return Math.max(0,RECIP_UNLOCK_N-recipReviewCount()); }
+function recipUnlockCard(){
+  var n=recipRemaining();
+  return '<div class="recip-card"><div class="recip-ic">🔒</div><div class="recip-body">'
+    +'<div class="recip-h">Unlock full reviews &amp; grades</div>'
+    +'<p class="recip-p">Professify runs on students helping students. Add '+(n<=1?'one review':(n+' reviews'))+' of a professor you’ve had to read what everyone wrote.</p>'
+    +'<button class="recip-btn" onclick="closeModal();if(typeof openReviewLanding===\'function\')openReviewLanding();">Add a review →</button></div></div>';
+}
 function renderModal(){
   modalMode='profile';
   const p=PROFESSORS[currentProf];
@@ -6157,6 +6559,7 @@ function renderModal(){
   if(revSort==='helpful')revs.sort((a,b)=>b.helpful-a.helpful);else revs.sort((a,b)=>(b.term||'').localeCompare(a.term||''));
   const topIdx=modalRevs.length?modalRevs.map((r,i)=>[i,r.helpful]).sort((a,b)=>b[1]-a[1])[0][0]:-1;
 
+  const rlocked=(typeof recipUnlocked==='function')?!recipUnlocked():false;   // gate full text + grades
   const scoreFive=blendFive(p);
   const ratingsCount=blendCount(p);
   const polyN=hasR?(p.evals||0):0;               // real PolyRatings sample behind the blend
@@ -6209,30 +6612,14 @@ function renderModal(){
           ${scoreFive!=null?`${pfStars((scoreFive/5)*100,PFC.blue)}<div style="font-size:20px;font-weight:500;color:${PFC.blue};margin-top:7px">${scoreFive.toFixed(1)}<span style="font-size:13px;color:${PFC.ink2};font-weight:400"> / 5</span></div><div style="font-size:12px;color:${PFC.ink2};font-style:italic;margin-top:2px">${ratingsCount.toLocaleString()} ${ratingsCount===1?'rating':'ratings'}${studN>0&&polyN>0?' (incl. '+studN+' from students)':''}</div>`:`<div style="font-size:13px;color:${PFC.ink2};font-style:italic;max-width:180px;text-align:right">No ratings yet — be the first to review</div>`}
         </div>
       </div>
-      ${(function(){
-        /* Detailed breakdowns (would-take-again, hours, class size, highlights) come ONLY
-           from Professify student reviews — PolyRatings' data doesn't include them. Show the
-           grid only when we actually have that data; otherwise say so honestly instead of
-           printing a wall of dashes. */
-        const haveDetail = modalRevs.length>0 || p.again!=null || (hrsMode&&hrsMode!=='—') || p.since;
-        if(!haveDetail){
-          return `<div style="background:${PFC.panel};border:1px solid ${PFC.line};border-radius:10px;padding:14px 16px;margin:4px 0 10px;font-size:12.5px;color:${PFC.ink2};line-height:1.5">Workload, would-take-again, and class size come from <b style="color:${PFC.ink}">Professify student reviews</b> — none yet.${p.live?' PolyRatings gives the overall score above; the rest fills in as students review here.':''} <span style="color:${PFC.green};font-weight:600">Be the first below.</span></div>`;
-        }
-        return `<div style="display:flex;gap:6px;margin-bottom:10px">${highlightTags.length?highlightTags.map(t=>`<span style="flex:1;background:${PFC.panel};border:1px solid ${PFC.line};border-radius:10px;padding:12px;text-align:center;font-size:14px;font-weight:500;color:${PFC.green}">${t}</span>`).join(''):`<span style="flex:1;background:${PFC.panel};border:1px solid ${PFC.line};border-radius:10px;padding:12px;text-align:center;font-size:13px;font-style:italic;color:${PFC.ink2}">Not enough reviews yet to surface highlights</span>`}</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;margin-top:10px">
-          <div style="background:${PFC.panel};border:1px solid ${PFC.line};border-radius:10px;padding:12px"><div style="font-size:11px;color:${PFC.ink2}">WOULD TAKE AGAIN</div><div style="font-size:14px;margin-top:4px">${p.again!=null?p.again+'%':'—'}</div></div>
-          <div style="background:${PFC.panel};border:1px solid ${PFC.line};border-radius:10px;padding:12px"><div style="font-size:11px;color:${PFC.ink2}">AVG HRS / WEEK</div><div style="font-size:14px;margin-top:4px">${hrsMode||'—'}</div></div>
-          <div style="background:${PFC.panel};border:1px solid ${PFC.line};border-radius:10px;padding:12px"><div style="font-size:11px;color:${PFC.ink2}">TYPICAL CLASS SIZE</div><div style="font-size:14px;margin-top:4px">—</div></div>
-          <div style="background:${PFC.panel};border:1px solid ${PFC.line};border-radius:10px;padding:12px"><div style="font-size:11px;color:${PFC.ink2}">YEARS AT CAL POLY</div><div style="font-size:14px;margin-top:4px">${p.since?(2026-p.since)+' yrs':'—'}</div></div>
-        </div>`;
-      })()}
+      ${pfDetailV2(p,modalRevs)}
       ${typeof profTeachingBlock==='function'?profTeachingBlock(currentProf):''}
       ${p.edu?`<div style="background:${PFC.panel};border:1px solid ${PFC.line};border-radius:10px;padding:12px;margin-bottom:10px"><div style="font-size:11px;color:${PFC.ink2};margin-bottom:6px">EDUCATION</div><div style="font-size:13px;font-style:italic;line-height:1.6">${p.edu}</div></div>`:''}
       <button class="rate-open" onclick="startRate('${currentProf}')" style="width:100%;background:${PFC.green};color:${PFC.greenInk};border:none;border-radius:10px;padding:13px;font-size:14px;font-weight:500;margin-bottom:20px;cursor:pointer">Leave a review</button>
       <div style="font-size:12px;color:${PFC.ink2};letter-spacing:.5px;margin-bottom:10px">KEY INSIGHTS</div>
       <div style="background:${PFC.panel};border:1px solid ${PFC.line};border-radius:10px;padding:12px">
         ${insightTags.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">${insightTags.map((t,i)=>`<span style="background:${i%2===0?PFC.greenTint:PFC.blueTint};color:${i%2===0?PFC.green:PFC.blue};font-size:11px;padding:3px 9px;border-radius:20px">${t}</span>`).join('')}</div>`:''}
-        ${topRev&&topRev.text?`<div style="font-size:13px;line-height:1.5;font-style:italic">"${escapeHtml(topRev.text)}"</div>`:`<div style="font-size:13px;line-height:1.5;font-style:italic;color:${PFC.ink2}">No reviews yet — be the first to share what this class was like.</div>`}
+        ${topRev&&topRev.text?(rlocked?`<div style="font-size:13px;line-height:1.5;font-style:italic;color:${PFC.ink2}">🔒 Add a review to read what students wrote.</div>`:`<div style="font-size:13px;line-height:1.5;font-style:italic">"${escapeHtml(topRev.text)}"</div>`):`<div style="font-size:13px;line-height:1.5;font-style:italic;color:${PFC.ink2}">No reviews yet — be the first to share what this class was like.</div>`}
       </div>
     </div>`;
 
@@ -6247,7 +6634,7 @@ function renderModal(){
       </div>
       ${p.style?`<div class="msec"><h4>Teaching style — does it fit you?</h4><div class="sbars">${Object.entries(p.style).map(([k,v])=>`<div class="sbar"><div class="st"><span>${k}</span><span class="v">${v}%</span></div><div class="track"><i style="width:${v}%"></i></div></div>`).join('')}</div></div>`:''}
       ${p.track?`<div class="msec"><h4>Track record — where they've taught</h4><div class="rows">${p.track.map(t=>`<div class="trow ${t[2]?'cur':''}"><span class="dash"></span><span>${t[0]}</span><span class="yr">${t[1]}</span></div>`).join('')}</div></div>`:''}
-      ${revErrHtml}${modalRevs.length?`<div class="msec"><div class="revhead"><h4>Reviews · ${modalRevs.length}</h4><div class="revsort"><button class="${revSort==='helpful'?'active':''}" onclick="setRevSort('helpful')">Most helpful</button><button class="${revSort==='recent'?'active':''}" onclick="setRevSort('recent')">Most recent</button></div></div>${revs.map(r=>`<div class="review"><div class="rtop"><span class="rc">${revCourseLabel(r.course)}</span><span class="rt">${escapeHtml(r.term)}</span>${r.verified?`<span class="ver">${CHECK} Verified enrolled</span>`:''}${r._i===topIdx?`<span class="best">Most helpful for ${escapeHtml(canonCode(r.course))}</span>`:''}<span class="rs" style="color:${scoreColor(r.score)}"><span class="rd" style="width:6px;height:6px;border-radius:50%;background:${scoreColor(r.score)};display:inline-block"></span>${Number(r.score).toFixed(1)}</span></div>${rfMeta(r)}<p class="rtext">${escapeHtml(r.text).replace(/\n/g,'<br>')}</p><div class="rtags">${r.tags.map(t=>`<span class="t">${escapeHtml(t)}</span>`).join('')}</div><div class="rfoot"><button class="hbtn ${r._v?'on':''}" onclick="voteHelpful(${r._i})">${THUMB} Helpful</button><span class="hcount">${r.helpful} found this helpful</span></div></div>`).join('')}</div>`:`<div class="msec"><h4>Reviews</h4><div class="norev"><p>No reviews yet.</p><button class="btn primary rate-open" onclick="startRate('${currentProf}')">Be the first to review</button></div></div>`}
+      ${revErrHtml}${modalRevs.length?`<div class="msec"><div class="revhead"><h4>Reviews · ${modalRevs.length}</h4><div class="revsort"><button class="${revSort==='helpful'?'active':''}" onclick="setRevSort('helpful')">Most helpful</button><button class="${revSort==='recent'?'active':''}" onclick="setRevSort('recent')">Most recent</button></div></div>${rlocked?recipUnlockCard():''}${revs.map(r=>`<div class="review"><div class="rtop">${r._i===topIdx?`<span class="best">Most helpful for ${escapeHtml(canonCode(r.course))}</span>`:''}<span class="rs" style="color:${scoreColor(r.score)}"><span class="rd" style="width:6px;height:6px;border-radius:50%;background:${scoreColor(r.score)};display:inline-block"></span>${Number(r.score).toFixed(1)}</span></div>${reviewProvenance(r)}${rfMeta(r)}<p class="rtext${rlocked?' rev-locked':''}">${escapeHtml(r.text).replace(/\n/g,'<br>')}</p><div class="rtags">${r.tags.map(t=>`<span class="t">${escapeHtml(t)}</span>`).join('')}</div><div class="rfoot"><button class="hbtn ${r._v?'on':''}" onclick="voteHelpful(${r._i})">${THUMB} Helpful</button><span class="hcount">${r.helpful} found this helpful</span></div></div>`).join('')}</div>`:`<div class="msec"><h4>Reviews</h4><div class="norev"><p>No reviews yet.</p><button class="btn primary rate-open" onclick="startRate('${currentProf}')">Be the first to review</button></div></div>`}
     </div>`;
 }
 
@@ -6445,6 +6832,7 @@ function mcCommitSection(code,s,status,wlPos){
   else if(arr.every(function(x){return x.status==='enrolled';})){ delete myClassMeta[code].wl; }
   try{if(typeof saveMyClassMeta==='function')saveMyClassMeta();}catch(e){}
   try{if(typeof pushMySecToDb==='function')pushMySecToDb(code,rec);}catch(e){}
+  try{if(typeof syncSavedSection==='function')syncSavedSection(code);}catch(e){}
   /* if this section was on the Watchlist, it's now official — drop it from there */
   try{ if(isWatchedSec(code,rec.crn))wcWatchSec(code,rec.crn); }catch(e){}
   if(typeof frToast==='function')frToast(code+(rec.section?' '+rec.section:'')+' → My Classes '+(status==='waitlisted'?('· waitlist #'+(wlPos||'?')):'· enrolled')+' ✓');
@@ -6824,7 +7212,7 @@ function renderMyClasses(){
   var toggle='<div class="mc-viewtog"><button class="'+(myClassesView==='list'?'on':'')+'" onclick="setMyClassesView(\'list\')">List</button><button class="'+(myClassesView==='calendar'?'on':'')+'" onclick="setMyClassesView(\'calendar\')">Calendar</button></div>';
   var body=myClassesView==='calendar'?renderMyCalendar(codes,conf):('<div class="mc-list">'+cards+'</div>');
   var countTxt=(nCards>codes.length)?(codes.length+' course'+(codes.length===1?'':'s')+' · '+nCards+' sections'):(codes.length+' class'+(codes.length===1?'':'es'));
-  out.innerHTML='<div class="mc-head"><div><b>'+countTxt+'</b> · ~'+units+' units — enrolled &amp; waitlisted this term</div><div class="mc-headr">'+toggle+'<button class="fr-addtoggle" onclick="openSchedImport()" title="Screenshot your PASS / Student Center schedule — we read the classes, seats, and waitlist spots">📷 Import schedule</button><button class="wl-clear" onclick="clearMyClasses()">Clear</button></div></div>'
+  out.innerHTML='<div class="mc-head"><div><b>'+countTxt+'</b> · ~'+units+' units — enrolled &amp; waitlisted this term</div><div class="mc-headr">'+toggle+'<button class="fr-addtoggle" onclick="shareMySchedule()" title="Send a link that opens your schedule on Professify — friends can see it and add you">🔗 Share schedule</button><button class="fr-addtoggle" onclick="openSchedImport()" title="Screenshot your PASS / Student Center schedule — we read the classes, seats, and waitlist spots">📷 Import schedule</button><button class="wl-clear" onclick="clearMyClasses()">Clear</button></div></div>'
     +banner+body
     +'<div class="wl-insight" style="margin-top:16px">These are the classes Cal Poly officially has you <b style="color:var(--text-2)">enrolled in or waitlisted for</b> — imported from your schedule. Comparing sections you haven’t locked in? Those live in your <b style="color:var(--text-2)">Watchlist</b>. When friends launches, this is the schedule they’ll see.</div>';
 }
@@ -7966,7 +8354,7 @@ function hydrateFriendsFromCache(){
     var raw=localStorage.getItem('professify_friends_cache_'+sbUser.id); if(!raw)return false;
     var c=JSON.parse(raw); if(!c||c.uid!==sbUser.id||!Array.isArray(c.friendsList))return false;
     friendsList=c.friendsList;
-    FRIENDS=friendsList.map(function(f){return {id:f.id,name:f.name,ini:initials(f.name),color:colorForId(f.id),classes:f.classes||[],history:f.history||[]};});
+    FRIENDS=friendsList.map(function(f){return {id:f.id,name:f.name,ini:initials(f.name),color:colorForId(f.id),classes:f.classes||[],crns:f.crns||f.sections||[],history:f.history||[]};});
     incomingRequests=Array.isArray(c.incoming)?c.incoming:[];
     outgoingRequests=Array.isArray(c.outgoing)?c.outgoing:[];
     friendsLoaded=true;                 // show cached friends now; refresh updates them
@@ -7996,27 +8384,31 @@ async function _loadFriendsDataInner(){
     if(profErr){friendsLoadError='Could not load friend names: '+profErr.message;console.error('[professify] profiles read failed:',profErr.message);}
     (profs||[]).forEach(p=>profMap[p.id]=p);
   }
-  let classMap={},histMap={},addMap={},wlMap={};
+  let classMap={},histMap={},addMap={},wlMap={},crnsMap={};
   if(friendIds.length){
     // created_at powers the activity feed — no separate events table needed.
-    /* waitlist_pos is optional (professify-waitlist.sql) — fall back cleanly if the column isn't there yet */
-    let {data:classes,error:clsErr}=await sb.from('saved_classes').select('user_id,code,created_at,waitlist_pos').in('user_id',friendIds);
-    if(clsErr&&/waitlist_pos|column|schema cache/i.test(clsErr.message||'')){
-      ({data:classes,error:clsErr}=await sb.from('saved_classes').select('user_id,code,created_at').in('user_id',friendIds));
+    /* waitlist_pos + class_nbr are optional columns — fall back cleanly if they aren't there yet */
+    let {data:classes,error:clsErr}=await sb.from('saved_classes').select('user_id,code,created_at,waitlist_pos,class_nbr').in('user_id',friendIds);
+    if(clsErr&&/class_nbr|waitlist_pos|column|schema cache/i.test(clsErr.message||'')){
+      ({data:classes,error:clsErr}=await sb.from('saved_classes').select('user_id,code,created_at,waitlist_pos').in('user_id',friendIds));
+      if(clsErr&&/waitlist_pos|column|schema cache/i.test(clsErr.message||'')){
+        ({data:classes,error:clsErr}=await sb.from('saved_classes').select('user_id,code,created_at').in('user_id',friendIds));
+      }
     }
     if(clsErr)console.error('[professify] friends saved_classes read failed:',clsErr.message);
     (classes||[]).forEach(c=>{
       (classMap[c.user_id]=classMap[c.user_id]||[]).push(c.code);
       (addMap[c.user_id]=addMap[c.user_id]||[]).push({code:c.code,at:c.created_at});
       if(c.waitlist_pos!=null){(wlMap[c.user_id]=wlMap[c.user_id]||{})[c.code]=c.waitlist_pos;}
+      if(c.class_nbr){(crnsMap[c.user_id]=crnsMap[c.user_id]||[]).push(String(c.class_nbr));}
     });
     // classes friends have already completed (see class_history_migration.sql)
     const {data:hist,error:histErr}=await sb.from('class_history').select('user_id,code,term,year,professor,created_at').in('user_id',friendIds);
     if(histErr)console.error('[professify] class_history read failed:',histErr.message);
     (hist||[]).forEach(h=>{(histMap[h.user_id]=histMap[h.user_id]||[]).push({code:h.code,term:h.term,year:h.year,professor:h.professor||'',at:h.created_at});});
   }
-  friendsList=friendIds.map(id=>({id,name:(profMap[id]&&profMap[id].display_name)||'Classmate',handle:(profMap[id]&&profMap[id].instagram_handle)||'',classes:classMap[id]||[],history:histMap[id]||[],classAdds:addMap[id]||[],wl:wlMap[id]||{},color:colorForId(id)}));
-  FRIENDS=friendsList.map(f=>({id:f.id,name:f.name,ini:initials(f.name),color:colorForId(f.id),classes:f.classes,history:f.history}));
+  friendsList=friendIds.map(id=>({id,name:(profMap[id]&&profMap[id].display_name)||'Classmate',handle:(profMap[id]&&profMap[id].instagram_handle)||'',classes:classMap[id]||[],crns:crnsMap[id]||[],history:histMap[id]||[],classAdds:addMap[id]||[],wl:wlMap[id]||{},color:colorForId(id)}));
+  FRIENDS=friendsList.map(f=>({id:f.id,name:f.name,ini:initials(f.name),color:colorForId(f.id),classes:f.classes,crns:f.crns||f.sections||[],history:f.history}));
   incomingRequests=incomingRequests.map(r=>({...r,
     name:(profMap[r.from_user]&&profMap[r.from_user].display_name)||'A classmate',
     handle:(profMap[r.from_user]&&profMap[r.from_user].instagram_handle)||''}));
@@ -8697,7 +9089,7 @@ async function retryFriendsLoad(){
   await loadFriendsData();
   renderFriends();
 }
-function rlOpenProf(id){closeReviewLanding();startRate(id);}
+function rlOpenProf(id,course){closeReviewLanding();startRate(id,course||'');}
 function rlPickMajor(m){rlMajor=m;rlPrefix=majorPrefix(m)||'';renderReviewLanding();}
 function rlSetNum(v){rlNum=String(v||'').trim();clearTimeout(rlT);rlT=setTimeout(renderReviewLanding,350);}
 function rlSetPrefix(v){rlPrefix=String(v||'').toUpperCase().trim();clearTimeout(rlT);rlT=setTimeout(renderReviewLanding,350);}
@@ -8919,9 +9311,12 @@ function setNotifSeen(){
 function agoLabel(iso){return iso?timeAgo(iso):'';}
 /* ---- seat polling: only the classes you've saved, so it stays cheap ---- */
 function savedCodesForAlerts(){
-  const a=(typeof myClasses!=='undefined'?myClasses:[]).slice();
-  (typeof watchClasses!=='undefined'?watchClasses:[]).forEach(c=>{if(a.indexOf(c)<0)a.push(c);});
-  return a;
+  // Only classes you WANT a seat in — your Watchlist, minus anything you're already enrolled
+  // in. You already have a seat in My Classes, so alerting about those is pointless noise.
+  const mine=(typeof myClasses!=='undefined')?myClasses:[];
+  const out=[];
+  (typeof watchClasses!=='undefined'?watchClasses:[]).forEach(c=>{ if(out.indexOf(c)<0 && mine.indexOf(c)<0)out.push(c); });
+  return out;
 }
 function seatSnapshot(){try{return JSON.parse(localStorage.getItem('professify_seat_snap')||'{}');}catch(e){return {};}}
 function saveSeatSnapshot(s){try{localStorage.setItem('professify_seat_snap',JSON.stringify(s));}catch(e){}}
@@ -8941,6 +9336,10 @@ async function pollSeats(){
     if(!Array.isArray(rows))return;
     const now=new Date().toISOString();
     const prev=seatSnapshot(), next={};
+    // Which COURSES we've already baselined. A class you just started watching gets recorded
+    // silently on its first poll — we only alert on CHANGES after that, never on "these sections
+    // exist." That was the bug: adding a class fired one "new section" per section at once.
+    const prevCodes={}; Object.keys(prev).forEach(k=>{prevCodes[k.split('|')[0]]=1;});
     const fresh=[];
     rows.forEach(r=>{
       const key=(r.course_code||'')+'|'+(r.section||'');
@@ -8948,8 +9347,9 @@ async function pollSeats(){
       next[key]={a:avail,s:r.status||''};
       const was=prev[key];
       if(!was){
-        // A section we've never seen for a class we care about = newly added.
-        if(Object.keys(prev).length)fresh.push({type:'newsection',code:r.course_code,section:r.section,
+        // Only a genuinely new section, on a class we were ALREADY tracking, WITH open seats,
+        // is worth an alert (e.g. the registrar adds a section to a full class). Otherwise silent.
+        if(prevCodes[r.course_code]&&avail>0)fresh.push({type:'newsection',code:r.course_code,section:r.section,
           avail,cap:r.capacity||0,instructor:r.instructor||'',days:r.days||'',at:now});
         return;
       }
@@ -8970,6 +9370,16 @@ async function pollSeats(){
 function startSeatPolling(){
   if(seatPollT)return;
   try{seatEvents=JSON.parse(sessionStorage.getItem('professify_seat_events')||'[]');}catch(e){}
+  // Drop stale noise from older builds: full "new section" events and alerts for classes you're
+  // now enrolled in. Only real openings survive.
+  try{
+    seatEvents=(seatEvents||[]).filter(function(e){
+      if(e&&e.type==='newsection'&&!(e.avail>0))return false;
+      if(e&&typeof isMyClass==='function'&&isMyClass(e.code))return false;
+      return true;
+    });
+    sessionStorage.setItem('professify_seat_events',JSON.stringify(seatEvents));
+  }catch(e){}
   pollSeats();
   // Only while the tab is visible — no point polling a backgrounded tab, and it
   // keeps the request count sane.
@@ -8989,7 +9399,11 @@ function buildNotifications(){
     out.push({kind:'friend',at:i.at,type:i.type,who:i.who,code:i.code,
       term:i.term,year:i.year,professor:i.professor});
   });
-  if(seatAlertsOn())seatEvents.forEach(e=>out.push({kind:'seat',...e}));
+  if(seatAlertsOn())seatEvents.forEach(e=>{
+    // Never show a seat alert for a class you're already enrolled in — you have a seat.
+    if(typeof isMyClass==='function'&&isMyClass(e.code))return;
+    out.push({kind:'seat',...e});
+  });
   out.sort((a,b)=>new Date(b.at)-new Date(a.at));
   return out.slice(0,40);
 }
@@ -9054,7 +9468,7 @@ function notifRowHtml(n,unread){
     <span class="nt-ico seat">${icon}</span>
     <div class="nt-main">
       <div class="nt-t">${title}</div>
-      <div class="nt-b">${body} — <span class="nt-stale">checked ${agoLabel(n.at)}</span></div>
+      <div class="nt-b">${body}</div>
       <div class="nt-acts">
         ${mineAlready?'<span class="nt-have">Already in your classes</span>'
                     :`<button class="nt-btn primary" onclick="notifAddClass('${jsArg(n.code)}')">Add to my classes</button>`}
@@ -9089,7 +9503,7 @@ function renderNotifs(){
         : "Nothing new. When a friend joins one of your classes or a seat opens up, it shows here."}</div>`;
   const chk=document.getElementById('notifSeatToggle');if(chk)chk.checked=seatAlertsOn();
   const fresh=document.getElementById('notifFresh');
-  if(fresh)fresh.textContent=seatLastCheck?('Seats checked '+agoLabel(seatLastCheck)):'Checked every 2 min while open';
+  if(fresh)fresh.textContent='Seat counts from Cal Poly Class Search';
 }
 function setNotifFilter(el){
   notifFilter=el.dataset.f;
@@ -10165,9 +10579,104 @@ function shareInviteLink(){
     else if(typeof frToast==='function')frToast('Long-press the link to copy it.');
   }catch(e){}
 }
+/* ============ SHARE MY SCHEDULE (as a link, not an image) ============
+   The link opens the real site to a read-only view of the sharer's term. The whole
+   schedule is packed into the URL itself (no backend needed), so it works the moment
+   it's tapped — even for someone who isn't signed in yet. If the sharer is signed in
+   we also append their ?add= invite token, so "Add <name>" uses the existing friend
+   flow. This is a deliberate person-to-person share (never a campus-wide directory)
+   and doubles as the fixed invite-landing. Only classes the sharer actually chose are
+   encoded — nothing invented. */
+function _b64urlEnc(str){ try{ return btoa(unescape(encodeURIComponent(str))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }catch(e){ return ''; } }
+function _b64urlDec(s){ try{ s=String(s||'').replace(/-/g,'+').replace(/_/g,'/'); while(s.length%4)s+='='; return decodeURIComponent(escape(atob(s))); }catch(e){ return ''; } }
+function myScheduleForShare(){
+  var out=[];
+  try{
+    (myClasses||[]).forEach(function(code){
+      var ci=(typeof classInfo==='function')?classInfo(code):null;
+      var m=(typeof myClassMeta!=='undefined'&&myClassMeta[code])||{};
+      var sec=(m.secs&&m.secs.length)?m.secs[0]:null;
+      out.push({
+        c:code,
+        n:(ci&&ci.name)||'',
+        t:(sec&&sec.days)||m.time||'',
+        p:(sec&&sec.prof)||m.prof||'',
+        s:(sec&&sec.section)||''
+      });
+    });
+  }catch(e){}
+  return out;
+}
+function schedShareLink(){
+  var cl=myScheduleForShare();
+  if(!cl.length)return '';
+  var base=((cfg().SITE_URL||'').replace(/\/+$/,''))||'';
+  var payload=_b64urlEnc(JSON.stringify({v:1,cl:cl}));
+  var first='';
+  try{ first=((myProfile&&myProfile.display_name)||'').split(' ')[0]||''; }catch(e){}
+  var qs='sched='+payload+(first?('&nm='+encodeURIComponent(first)):'');
+  try{ if(typeof sbUser!=='undefined'&&sbUser&&sbUser.id)qs+='&add='+encodeURIComponent(sbUser.id); }catch(e){}
+  return base?(base+'/?'+qs):('professify:sched:'+payload);
+}
+function shareMySchedule(){
+  if(!(myClasses&&myClasses.length)){ if(typeof frToast==='function')frToast('Add a class to My Classes first, then share your schedule.'); return; }
+  var link=schedShareLink(); if(!link)return;
+  if(navigator.share){ navigator.share({title:'My Professify schedule',text:'Here’s my Cal Poly schedule — see if we overlap:',url:link}).catch(function(){}); return; }
+  try{
+    if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(link).then(function(){if(typeof frToast==='function')frToast('Schedule link copied — send it to a friend.');},function(){if(typeof frToast==='function')frToast('Couldn’t copy automatically — long-press to copy the link.');}); }
+    else if(typeof frToast==='function')frToast('Long-press the link to copy it.');
+  }catch(e){}
+}
+/* Parse a meeting string like "TuTh 9:00AM–10:20AM" into day tokens for the mini grid. */
+function _shDays(t){ var out=[]; var s=String(t||''); ['Mo','Tu','We','Th','Fr','Sa','Su'].forEach(function(d){ if(s.indexOf(d)>=0)out.push(d); }); return out; }
+function _shTimeOnly(t){ var m=String(t||'').match(/\d{1,2}:\d{2}\s?[AaPp][Mm].*/); return m?m[0].replace(/\s+/g,''):''; }
+function initSchedShare(){
+  var enc=null,nm='A friend',addId=null;
+  try{ var q=new URLSearchParams(location.search); enc=q.get('sched'); nm=q.get('nm')||'A friend'; addId=q.get('add')||null; }catch(e){ return; }
+  if(!enc)return;
+  var data=null; try{ data=JSON.parse(_b64urlDec(enc)); }catch(e){}
+  if(!data||!Array.isArray(data.cl)||!data.cl.length)return;
+  // Stash any invite token so "Add <name>" connects after sign-in (same key initInvite uses).
+  if(addId&&typeof UUID_RE!=='undefined'&&UUID_RE.test(addId)){ try{sessionStorage.setItem('professify_pending_add',addId);}catch(e){} }
+  window._schedLandingOpen=true;
+  try{ history.replaceState({},'',location.pathname); }catch(e){}   // clean the long URL
+  renderSharedScheduleLanding(nm, data.cl, (addId&&UUID_RE.test(addId))?addId:null);
+}
+function renderSharedScheduleLanding(nm, cl, addId){
+  var host=document.getElementById('schedLanding');
+  if(!host){ host=document.createElement('div'); host.id='schedLanding'; host.className='sl-back'; document.body.appendChild(host); }
+  var name=escapeHtml(nm||'A friend'); var first=escapeHtml((nm||'A friend').split(' ')[0]);
+  var units=0;
+  var rows=cl.map(function(x){
+    var days=_shDays(x.t), tm=_shTimeOnly(x.t);
+    var when=(days.length?days.join('')+' ':'')+ (tm|| (x.t?escapeHtml(x.t):'Time TBA'));
+    return '<div class="sl-row">'
+      +'<div class="sl-code">'+escapeHtml(x.c||'')+(x.s?' <span class="sl-sec">'+escapeHtml(x.s)+'</span>':'')+'</div>'
+      +'<div class="sl-mid"><div class="sl-nm">'+escapeHtml(x.n||'')+'</div><div class="sl-sub">'+escapeHtml(x.p||'Instructor TBA')+'</div></div>'
+      +'<div class="sl-when">'+escapeHtml(when)+'</div>'
+    +'</div>';
+  }).join('');
+  var cta = addId
+    ? '<button class="sl-cta" onclick="schedLandingConnect()">Add '+first+' &amp; compare schedules →</button>'
+    : '<button class="sl-cta" onclick="schedLandingJoin()">See which of your classes overlap → sign up</button>';
+  host.innerHTML='<div class="sl-card">'
+    +'<button class="sl-x" title="Close" onclick="closeSchedLanding()">&times;</button>'
+    +'<div class="sl-kick">'+(addId?('Shared by '+name):'A Professify schedule')+'</div>'
+    +'<h2 class="sl-h">'+(addId?(first+'’s Fall 2026 schedule'):'Fall 2026 schedule')+'</h2>'
+    +'<div class="sl-list">'+rows+'</div>'
+    +cta
+    +'<button class="sl-ghost" onclick="closeSchedLanding();if(typeof show===\'function\')show(\'explore\')">Just browse Professify →</button>'
+    +'<p class="sl-fine">Only the classes '+first+' chose to share. Your own schedule stays private until you share it.</p>'
+    +'</div>';
+  host.style.display='flex'; document.body.style.overflow='hidden';
+}
+function closeSchedLanding(){ var h=document.getElementById('schedLanding'); if(h){h.style.display='none';h.innerHTML='';} window._schedLandingOpen=false; document.body.style.overflow=''; }
+function schedLandingConnect(){ closeSchedLanding(); try{ if(typeof sbUser!=='undefined'&&sbUser){ if(typeof processPendingAdd==='function')processPendingAdd(); if(typeof show==='function')show('friends'); return; } }catch(e){} if(typeof openAuth==='function')openAuth(); }
+function schedLandingJoin(){ closeSchedLanding(); if(typeof openAuth==='function')openAuth(); }
 // On page load: if the URL carries an invite token, remember it (survives the
 // sign-in email round-trip) and either connect immediately or welcome the guest.
 function initInvite(){
+  if(window._schedLandingOpen)return;   // a schedule-share landing already handled this visit
   var id=null;
   try{ var q=new URLSearchParams(location.search); id=q.get('add')||q.get('ref')||q.get('invite'); }catch(e){}
   if(!id||!UUID_RE.test(id))return;
@@ -10646,6 +11155,18 @@ async function pushMyClassToDb(code,add){
     return !error;
   }catch(e){ return false; }
 }
+/* Stamp the section CRN a student is actually in onto their saved_classes row, so a friend
+   viewing that exact section sees "N friends in this section". Course-level rows keep working;
+   this just fills in the primary section's class number. No-ops silently until the column exists. */
+async function syncSavedSection(code){
+  if(!backendReady()||typeof sbUser==='undefined'||!sbUser)return;
+  try{
+    var m=(typeof myClassMeta!=='undefined')?myClassMeta[code]:null;
+    var crn=(m&&Array.isArray(m.secs)&&m.secs[0]&&m.secs[0].crn)?String(m.secs[0].crn):null;
+    if(!crn)return;
+    await sb.from('saved_classes').upsert({user_id:sbUser.id,code:code,class_nbr:crn});
+  }catch(e){ /* class_nbr column not added yet — ignore; course-level row is unaffected */ }
+}
 /* ============ SECTION SYNC (my_sections + watch_sections) ============
    Section-aware My Classes + Watchlist follow the student across devices.
    All guarded: if the tables aren't there yet, these no-op silently. */
@@ -10771,6 +11292,7 @@ async function addByHandle(){
   }catch(e){errEl.textContent=(e&&e.message)||'Search failed. Try again.';}
 }
 
+try{initSchedShare();}catch(e){}   // a ?sched= link opens straight to the sharer's read-only schedule
 try{initInvite();}catch(e){}   // stash any ?add= invite token (same script as its definition) before the backend resolves sign-in
 
 /*__SAGE_WIRING__*/
@@ -11594,9 +12116,13 @@ function hmRenderRailL(){
   var signed=(typeof sbUser!=='undefined'&&sbUser);
   var name=(typeof myProfile!=='undefined'&&myProfile&&myProfile.display_name)?myProfile.display_name:'';
   var maj=(typeof student!=='undefined'&&student.major)?student.major:'Pick your major in Settings';
+  // Load the real "your reviews" list once so the count is accurate (not the per-session tally).
+  if(signed && !window._myRevLoaded && typeof loadMyReviews==='function'){ window._myRevLoaded=true; try{ loadMyReviews().then(function(){ try{ if(window._myRevLoaded)hmRenderRailL(); }catch(e){} }); }catch(e){} }
+  var myRevN=(window.MY_REVIEWS!=null)?window.MY_REVIEWS.length:(reviewsGiven||0);
   var stats='';
   try{
-    stats+='<div class="stat"><span>Reviews you’ve written</span><b>'+(reviewsGiven||0)+'</b></div>';
+    stats+='<div class="stat stat-click" onclick="openMyReviews()" title="See the reviews you\'ve written"><span>Reviews you’ve written</span><b>'+myRevN+' ›</b></div>';
+    if(myRevN>0){ var impact=(window.MY_IMPACT!=null)?window.MY_IMPACT:0; stats+='<div class="stat" title="Classmates who marked your reviews helpful"><span>Classmates you’ve helped</span><b>'+impact+'</b></div>'; }
     stats+='<div class="stat"><span>Classes saved</span><b>'+((myClasses&&myClasses.length)||0)+'</b></div>';
     stats+='<div class="stat"><span>Friends</span><b>'+((typeof FRIENDS!=='undefined'&&FRIENDS.length)||0)+'</b></div>';
     stats+='<div class="stat"><span>Watching</span><b>'+(((watchlist&&watchlist.length)||0)+((watchClasses&&watchClasses.length)||0))+'</b></div>';
@@ -11716,11 +12242,7 @@ function hmRenderLanding(){
   var lb=top.length?top.map(lrow).join(''):'<div class="lp-dp" style="padding:12px 2px;line-height:1.5">Live ratings load here from PolyRatings.</div>';
   var count='2,000+'; try{var nn=0;for(var q in PROFESSORS){if(PROFESSORS[q]&&PROFESSORS[q].live&&PROFESSORS[q].rating!=null)nn++;}if(nn>50)count=nn.toLocaleString();}catch(e){}
   host.innerHTML=''
-    +'<div class="lp"><div class="lp-band"><div class="lp-bin">'
-      +'<div class="lp-stat"><b>'+count+'</b><span>Cal Poly professors rated</span></div>'
-      +'<div class="lp-stat"><b>Live</b><span>seats &amp; class times</span></div>'
-      +'<div class="lp-stat"><b>$0</b><span>free · ad-free · .edu only</span></div>'
-    +'</div></div>'
+    +'<div class="lp">'
     +'<div class="lp-hero">'
       +'<div class="lp-l">'
         +'<div class="lp-ey">Cal Poly · San Luis Obispo</div>'
