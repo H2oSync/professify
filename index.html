@@ -2652,7 +2652,7 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
    them apart from inside the app. Now there is: this string is written at build time and shown
    in Settings → About and the landing footer. If the date here isn't the one you expect, the
    tab is stale — reload the right file, not this one. */
-window.PROFESSIFY_BUILD='2026-08-22 13:30';
+window.PROFESSIFY_BUILD='2026-08-22 14:15';
 /* Paint the build stamp everywhere it appears. */
 try{
   (function(){
@@ -7007,6 +7007,19 @@ function updateAuthUI(){
   try{ var sb2=document.getElementById('settingsBtn'); if(sb2)sb2.style.display=(typeof sbUser!=='undefined'&&sbUser)?'none':''; }catch(e){}
   /* Swap the Home view between landing (logged-out) and dashboard (signed-in) on any auth change. */
   try{ if(typeof renderHome==='function')renderHome(); }catch(e){}
+  /* Auth state can change while another view is already on screen — signing in from the
+     Schedule tab, or a Supabase session arriving after boot (getSession is async and this app
+     renders before it resolves). Anything whose copy depends on being signed in has to be
+     repainted here, or it keeps whatever it decided before the session existed.
+     refreshGuestChrome() existed for exactly this and was never called from anywhere. */
+  try{ if(typeof refreshGuestChrome==='function')refreshGuestChrome(); }catch(e){}
+  try{ if(typeof renderFriends==='function'&&document.getElementById('view-friends')
+        &&document.getElementById('view-friends').classList.contains('active'))renderFriends(); }catch(e){}
+  /* Re-running the current Schedule sub-tab repaints the Past Classes gate too, which has
+     the same staleness: sit on Past Classes signed out, sign in, and it stayed gated. */
+  try{ var sv=document.getElementById('view-sched');
+       if(sv&&sv.classList.contains('active')&&typeof setSchedTab==='function')
+         setSchedTab(window.schedTab||'plan'); }catch(e){}
 }
 /* Profile dropdown under the account chip: My Classes + Friends live here when signed in. */
 function onAuthBtn(ev){ if(ev){ev.stopPropagation();} if(typeof sbUser!=='undefined'&&sbUser){ toggleProfMenu(); } else { openAuth(); } }
@@ -14768,7 +14781,12 @@ window.show=function(v){
   if(!signed && v==='past'){ if(typeof openAuth==='function')openAuth('past'); return; }
   _hmShow(v);
   if(v==='home'){try{renderHome();}catch(e){}}
-  if(!signed && (v==='sched'||v==='watch')){ try{ if(typeof markSignedOutSchedule==='function')markSignedOutSchedule(); }catch(e){} }
+  /* This was guarded with `!signed`, so the guest strip was only ever SHOWN, never hidden.
+     Sign in with Schedule already rendered and the banner stayed up permanently — the header
+     said "Tate Sims" while the page underneath said "You're browsing without an account".
+     markSignedOutSchedule() reads the current auth state itself and is idempotent, so it must
+     run on every visit to these views, signed in or not. */
+  if(v==='sched'||v==='watch'){ try{ if(typeof markSignedOutSchedule==='function')markSignedOutSchedule(); }catch(e){} }
 };
 /* ============ BACK BUTTON =============================================================
    There was no history handling at all, so the browser's Back (and an Android hardware back,
