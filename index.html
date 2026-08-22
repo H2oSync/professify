@@ -31,7 +31,9 @@
 <meta name="twitter:title"       content="Professify — pick the right professor">
 <meta name="twitter:description" content="Real Cal Poly ratings from PolyRatings, live seats and waitlists, and who of your friends is in each class.">
 <meta name="twitter:image"       content="https://professify.app/share.png">
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<!-- Tesseract (~1MB) used to load here as a render-blocking script on EVERY visit, including
+     the overwhelming majority who never import a screenshot. It's fetched on demand now by
+     lazyScript(), which is what loadOcr() always intended. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -100,6 +102,12 @@ window.toggleTheme = toggleTheme;
     --fg-rgb:255,255,255;  /* foreground tint used by translucent highlights/hairlines */
     --nav-bg:rgba(18,18,18,.78);
     --radius:12px;
+    /* Course codes render in a mono face, and the stack was ui-monospace, "SF Mono", Menlo,
+       monospace — every named face is macOS-only, so Windows fell through to generic
+       `monospace`, which Chrome resolves to Courier New: much lighter and narrower than the
+       rest of the UI. --mono was referenced in a dozen places via var(--mono, …) but never
+       actually defined, so the fallback was doing all the work. Defined here, once. */
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Cascadia Mono","Segoe UI Mono","Liberation Mono",monospace;
     --ease:cubic-bezier(.22,.61,.36,1);
     color-scheme:dark;
   }
@@ -687,7 +695,7 @@ window.toggleTheme = toggleTheme;
   .pq-row.done .pq-lab{color:var(--faint);font-weight:600}
   .pq-lab{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);margin-right:2px;min-width:44px}
   .pq-or{font-size:10.5px;color:var(--faint);padding:0 2px}
-  .pq-code{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11.5px;font-weight:600;background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:4px 8px;color:var(--text-2);cursor:pointer;min-height:28px;transition:border-color .15s,color .15s}
+  .pq-code{font-family:var(--mono);font-size:11.5px;font-weight:600;background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:4px 8px;color:var(--text-2);cursor:pointer;min-height:28px;transition:border-color .15s,color .15s}
   .pq-code:hover{border-color:var(--accent);color:var(--accent)}
   .pq-code.plain{cursor:default}
   .pq-code.plain:hover{border-color:var(--line);color:var(--text-2)}
@@ -699,7 +707,7 @@ window.toggleTheme = toggleTheme;
   .ti-row input[type=checkbox]{accent-color:var(--accent);width:16px;height:16px;flex:none}
   .ti-row select,.ti-row input[type=text]{background:var(--panel);border:1px solid var(--line);border-radius:7px;color:var(--text);font:inherit;font-size:12.5px;padding:7px 9px}
   .ti-row input[type=text]{flex:1;min-width:130px}
-  .pq-gw{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:13px;font-weight:600;border:1px solid var(--line);border-radius:999px;padding:0 15px;min-height:44px;display:inline-flex;align-items:center;gap:7px;color:var(--text-2);background:var(--panel-2);cursor:pointer;transition:border-color .15s,color .15s}
+  .pq-gw{font-family:var(--mono);font-size:13px;font-weight:600;border:1px solid var(--line);border-radius:999px;padding:0 15px;min-height:44px;display:inline-flex;align-items:center;gap:7px;color:var(--text-2);background:var(--panel-2);cursor:pointer;transition:border-color .15s,color .15s}
   .pq-gw:hover{border-color:var(--accent);color:var(--accent)}
   .pq-gw .n{font-family:inherit;font-size:10.5px;color:var(--faint);font-weight:600}
   .wc-group{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin:14px 0 8px}
@@ -715,6 +723,23 @@ window.toggleTheme = toggleTheme;
   .pq-dlg select{flex:1;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;color:var(--text);font:inherit;font-size:14px;padding:10px 12px}
   .pq-dlg .acts{display:flex;gap:12px;justify-content:flex-end;align-items:center}
 
+.ava-img{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}
+.set-ava{overflow:hidden}
+.ep-dlg{max-width:440px}
+.ep-photo{display:flex;align-items:center;gap:16px;margin:16px 0 20px}
+.ep-ava{width:76px;height:76px;border-radius:50%;flex:0 0 auto;background:var(--accent);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-weight:700;font-size:26px;
+  background-size:cover;background-position:center;border:2px solid var(--line)}
+.ep-photo-acts{min-width:0;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ep-hint{font-size:11.5px;color:var(--faint);line-height:1.45;flex-basis:100%;margin-top:2px}
+.ep-hint.bad{color:var(--low)}
+.ep-hint.good{color:var(--accent)}
+.ep-lab{display:block;font-size:12.5px;font-weight:700;color:var(--text-2);margin:14px 0 6px}
+.ep-in{width:100%;margin:0;font-size:16px}
+.ep-userwrap{position:relative;display:flex;align-items:center}
+.ep-at{position:absolute;left:12px;color:var(--faint);font-size:16px;font-weight:600;pointer-events:none}
+.ep-userin{padding-left:26px}
+.ep-rm{color:var(--low)}
 .wl-off{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
 .wl-off-q{font-size:13px;color:var(--muted);margin-right:2px}
 .wl-off-b{background:transparent;border:1px solid var(--line);border-radius:999px;color:var(--text-2);font:600 13px inherit;padding:8px 14px;min-height:40px;cursor:pointer}
@@ -819,7 +844,7 @@ window.toggleTheme = toggleTheme;
   .ver{font-size:11.5px;color:var(--accent);display:inline-flex;align-items:center;gap:5px}
   .ver svg{width:12px;height:12px}
   .rtop .rs{margin-left:auto;font-size:14px;font-weight:600;display:inline-flex;align-items:center;gap:6px}
-  .rev-prov{display:flex;align-items:center;flex-wrap:wrap;gap:6px;font-family:var(--mono,ui-monospace,Menlo,monospace);font-size:11.5px;color:var(--muted);margin:-2px 0 10px}
+  .rev-prov{display:flex;align-items:center;flex-wrap:wrap;gap:6px;font-family:var(--mono);font-size:11.5px;color:var(--muted);margin:-2px 0 10px}
   .rev-prov .rp-seg{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
   .rev-prov .rp-ver{color:var(--accent);font-weight:600}
   .rev-prov .rp-ver svg{width:12px;height:12px}
@@ -980,9 +1005,10 @@ window.toggleTheme = toggleTheme;
   .cls-prate{font-weight:700}
   .cls-more{color:var(--faint);font-weight:400;font-size:12px}
   .poly-revhead{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);font-weight:700;margin:20px 0 10px;padding-top:14px;border-top:1px solid var(--line)}
-  .poly-review{opacity:.94}
+  .poly-link{font-size:13px;color:var(--text-2);line-height:1.5;padding:2px 0 4px}
+  .poly-out{display:inline-block;margin-top:8px;color:var(--accent);font-weight:600;text-decoration:none}
+  .poly-out:hover{text-decoration:underline}
   .rp-poly{color:var(--muted)}
-  .poly-more{font-size:12.5px;color:var(--faint);padding:8px 2px}
   .norev{display:flex;flex-direction:column;align-items:flex-start;gap:12px}
   .norev p{margin:0;color:var(--muted);font-size:14px}
   .bio-empty{font-size:13.5px;color:var(--muted);line-height:1.55;margin:2px 0 14px}
@@ -1373,19 +1399,20 @@ if(typeof qrcode==="function")window.qrcode=qrcode;
     <div class="wrap hm-wrap">
       <aside class="hm-rail hm-railL" id="hmRailL" aria-label="Your profile"></aside>
       <div class="hm-center">
-        <div class="hm-greet">
-          <h1 id="hmGreeting">Welcome to Professify</h1>
-          <div class="hm-sub" id="hmGreetSub">Cal Poly · San Luis Obispo</div>
-        </div>
+        <!-- The greeting used to live here, at the top of the centre column, with the date
+             card separately on the right rail. Two pieces of the same fact (who you are,
+             what day it is) in two columns. They're one card on the rail now — see the
+             Today card in hmRenderRailR(). -->
         <div id="hmAlert"></div>
-        <div id="hmStripWrap"></div>
         <!-- On phones the right rail is display:none and this feed led the page, so a
              signed-in student saw an empty social stream above the fold and their actual
              schedule nowhere. hmPlaceRail() moves the rail into this slot below 1140px and
-             the Quad hides, so mobile Home leads with the day. -->
+             the Quad hides. The slot sits ABOVE the friends strip so mobile Home still
+             opens on the day + greeting rather than on other people. -->
         <div id="hmRailSlot"></div>
+        <div id="hmStripWrap"></div>
         <div id="hmQuadWrap">
-          <div class="hm-slabel" style="margin-top:14px">The Quad — schedules, reviews &amp; class discussions</div>
+          <div class="hm-slabel" style="margin-top:14px">The Quad — your friends' schedules</div>
           <div id="hmComposer"></div>
           <div id="hmFeed"></div>
         </div>
@@ -1468,8 +1495,6 @@ if(typeof qrcode==="function")window.qrcode=qrcode;
   #hmQuadWrap{display:none}
   #hmRailSlot .hm-rail{display:block;position:static;top:auto;margin-top:14px}
 }
-.hm-greet{padding:10px 0 14px}
-.hm-greet h1{font-size:24px;font-weight:650;letter-spacing:-.02em;line-height:1.15;margin:0}
 .hm-sub{font-size:13px;color:var(--muted);margin-top:3px}
 .hm-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:12px}
 @media(hover:hover) and (pointer:fine){
@@ -1478,7 +1503,7 @@ if(typeof qrcode==="function")window.qrcode=qrcode;
 }
 .hm-ct{font-size:14px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
 .hm-ct .hm-more{font-size:12px;color:var(--accent);font-weight:500;cursor:pointer;background:none;border:0;font-family:inherit;padding:4px}
-.hm-code{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:12px;font-weight:600;background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:2px 7px;white-space:nowrap;color:var(--text)}
+.hm-code{font-family:var(--mono);font-size:12px;font-weight:600;background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:2px 7px;white-space:nowrap;color:var(--text)}
 /* alert strip — red left edge, true alerts only */
 .hm-alert{border-left:3px solid var(--low);display:flex;align-items:center;gap:12px;cursor:pointer}
 .hm-alert .t{font-size:14px;font-weight:600}
@@ -1494,6 +1519,7 @@ if(typeof qrcode==="function")window.qrcode=qrcode;
 .hm-fitem .fav{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px;color:#fff}
 .hm-fitem .nm{font-size:12px;font-weight:600;line-height:1.2;max-width:74px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hm-fitem .ev{font-size:10.5px;color:var(--muted);line-height:1.25;max-width:74px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.hm-fitem .ev:empty{min-height:13px}
 .hm-stripend{display:flex;align-items:center;justify-content:center;width:70px;flex-shrink:0;font-size:11px;color:var(--faint);text-align:center;line-height:1.3}
 /* today rows */
 .hm-trow{display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--line-soft);cursor:pointer}
@@ -1550,17 +1576,38 @@ if(typeof qrcode==="function")window.qrcode=qrcode;
 .hm-endline{text-align:center;font-size:12.5px;color:var(--faint);padding:14px 0 22px}
 .hm-endline span{color:var(--accent);font-weight:600;cursor:pointer}
 /* identity card (left rail) */
-.hm-id{padding:0;overflow:hidden;text-align:center}
-.hm-id .cover{height:52px;background:var(--brand,#154734);background:linear-gradient(135deg,#154734,#1B7A4E)}
-.hm-id .fav{width:68px;height:68px;border-radius:50%;margin:-34px auto 0;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:24px;color:#fff;border:3px solid var(--panel);background:var(--accent)}
-.hm-id .fav.fav-anon{background:var(--panel-2);color:var(--muted);border-color:var(--panel)}
-.hm-id .nm{font-size:16px;font-weight:650;margin-top:8px}
-.hm-id .mj{font-size:12px;color:var(--muted);padding:0 12px}
-.hm-id .mj-setup{display:inline-flex;align-items:center;justify-content:center;background:rgba(var(--accent-rgb),.14);border:1px solid rgba(var(--accent-rgb),.4);color:var(--accent);font:700 12px inherit;border-radius:999px;padding:0 14px;margin-top:2px;cursor:pointer;min-height:44px}
+/* Identity card. The green band used to be an empty 52px stripe with the avatar hanging off
+   it and everything pushed below — decoration paying no rent. It now HOLDS the identity, and
+   the four stats became tiles: as rows only one of them looked tappable even though all four
+   navigate, and a tile reads as a button. */
+.hm-id{padding:0;overflow:hidden;text-align:left}
+.hm-id .idhead{background:var(--brand,#154734);background:linear-gradient(135deg,#154734,#1B7A4E);
+  display:flex;align-items:center;gap:11px;padding:13px 16px}
+.hm-id .fav{width:44px;height:44px;border-radius:50%;flex:none;display:flex;align-items:center;
+  justify-content:center;font-weight:700;font-size:16px;color:#fff;border:2px solid rgba(255,255,255,.85);
+  background:var(--accent);overflow:hidden}
+.hm-id .fav.fav-anon{background:rgba(255,255,255,.16);color:#fff;border-color:rgba(255,255,255,.5)}
+.hm-id .fav-btn{padding:0;cursor:pointer;overflow:hidden;font:inherit}
+.hm-id .fav-btn:hover{filter:brightness(1.06)}
+.hm-id .idwho{min-width:0}
+.hm-id .nm{font-size:14.5px;font-weight:650;color:#fff;line-height:1.2;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hm-id .idun{font-size:11.5px;color:rgba(255,255,255,.78);font-family:var(--mono);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hm-id .idun-btn{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.34);color:#fff;
+  font:700 10.5px inherit;border-radius:999px;padding:2px 9px;margin-top:3px;cursor:pointer;
+  display:inline-block}
+.hm-id .idun-btn:hover{background:rgba(255,255,255,.26)}
+.hm-id .mj{font-size:12px;color:var(--muted);padding:11px 16px 0}
+.hm-id .mj-setup{display:inline-flex;align-items:center;justify-content:center;background:rgba(var(--accent-rgb),.14);border:1px solid rgba(var(--accent-rgb),.4);color:var(--accent);font:700 12px inherit;border-radius:999px;padding:0 14px;margin:10px 0 0 16px;cursor:pointer;min-height:44px}
 .hm-id .mj-setup:hover{background:var(--accent);color:var(--accent-ink)}
-.hm-id .stats{border-top:1px solid var(--line-soft);margin-top:12px;padding:10px 14px 14px;text-align:left}
-.hm-id .stat{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:var(--muted)}
-.hm-id .stat b{color:var(--accent);font-weight:600;font-variant-numeric:tabular-nums}
+.hm-id .idgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px 16px 16px}
+.hm-id .tile{background:var(--panel-2);border:1px solid var(--line-soft);border-radius:9px;
+  padding:9px 11px;cursor:pointer;text-align:left;font:inherit;color:inherit;min-height:52px}
+.hm-id .tile:hover{background:var(--panel-3)}
+.hm-id .tile b{display:block;font-size:19px;font-weight:650;line-height:1.1;
+  font-variant-numeric:tabular-nums;color:var(--text)}
+.hm-id .tile span{font-size:10.5px;color:var(--faint)}
 .hm-id .signin{margin:12px 14px 14px;width:calc(100% - 28px);min-height:40px;border-radius:8px;background:var(--accent);color:var(--accent-ink);font-weight:600;font-size:13.5px;border:0;cursor:pointer;font-family:inherit}
 /* mini week calendar in the left rail */
 .hmc-grid{display:flex;gap:3px;margin-top:10px}
@@ -1578,10 +1625,19 @@ if(typeof qrcode==="function")window.qrcode=qrcode;
 .hm-saved .fav{width:26px;height:26px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;flex-shrink:0}
 .hm-saved .r{margin-left:auto;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
 .hm-saved .r b{color:var(--text);font-weight:600}
+.hm-wrow{padding:7px 0;cursor:pointer;border-bottom:1px solid var(--line-soft)}
+.hm-wrow:last-of-type{border-bottom:none}
+.hm-wrow .wl-top{display:flex;align-items:baseline;gap:8px}
+.hm-wrow .wl-code{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text)}
+.hm-wrow .wl-nm{font-size:12.5px;color:var(--muted);line-height:1.3;margin-top:2px;
+  overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.hm-wrow .wl-st{margin-left:auto;font-size:12px;font-weight:600;flex-shrink:0}
+.hm-wrow .wl-st.open{color:var(--accent)}
+.hm-wrow .wl-st.wait{color:var(--mid)}
+.hm-wrow .wl-st.full{color:var(--low)}
 /* right rail */
-.hm-td-h{display:flex;align-items:baseline;gap:8px}
-.hm-td-h b{font-size:15px;font-weight:650;letter-spacing:-.01em}
-.hm-td-h span{font-size:11.5px;color:var(--faint)}
+.hm-td-d{font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);line-height:1.3}
+.hm-tdg{font-size:19px;font-weight:650;letter-spacing:-.022em;line-height:1.25;margin:7px 0 0}
 .hm-count{display:flex;align-items:baseline;gap:8px}
 .hm-count b{font-size:30px;font-weight:650;font-variant-numeric:tabular-nums;line-height:1}
 .hm-count span{font-size:12px;color:var(--muted);line-height:1.35}
@@ -1604,11 +1660,10 @@ if(typeof qrcode==="function")window.qrcode=qrcode;
 /* The Quad composer's styles lived here — removed with the composer itself. */
 /* schedule chips on Quad posts */
 .hm-clsgrid{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
-.hm-clsgrid .hm-chip{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11.5px;font-weight:600}
+.hm-clsgrid .hm-chip{font-family:var(--mono);font-size:11.5px;font-weight:600}
 .hm-clsgrid .hm-chip.shared{color:var(--accent);border-color:rgba(var(--accent-rgb),.35);background:var(--accent-dim)}
 .hm-kind{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
 @media(max-width:640px){
-  .hm-greet h1{font-size:22px}
   .hm-wrap{padding-top:6px}
   .hm-fbody{font-size:16px}
 }
@@ -2096,7 +2151,7 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
 .sl-h{font-size:21px;font-weight:700;color:var(--text);margin:4px 0 16px}
 .sl-list{display:flex;flex-direction:column;gap:8px;margin-bottom:18px}
 .sl-row{display:flex;align-items:center;gap:12px;background:var(--panel-2);border:1px solid var(--line);border-radius:11px;padding:11px 13px}
-.sl-code{font-family:var(--mono,ui-monospace,Menlo,monospace);font-weight:700;font-size:13px;color:var(--text);flex:none;min-width:74px}
+.sl-code{font-family:var(--mono);font-weight:700;font-size:13px;color:var(--text);flex:none;min-width:74px}
 .sl-sec{font-weight:500;color:var(--muted);font-size:11.5px}
 .sl-mid{flex:1;min-width:0}
 .sl-nm{font-size:13.5px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -2117,7 +2172,7 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
 .myr-nm{font-size:14.5px;font-weight:600;color:var(--text)}
 .myr-score{font-size:15px;font-weight:700} .myr-score small{font-size:11px;color:var(--muted);font-weight:500}
 .myr-sub{font-size:12px;color:var(--muted);margin-top:3px}
-.myr-grade{font-family:var(--mono,ui-monospace,Menlo,monospace);color:var(--accent);font-weight:700}
+.myr-grade{font-family:var(--mono);color:var(--accent);font-weight:700}
 .myr-note{font-size:13px;color:var(--text-2);margin:8px 0 0;line-height:1.5}
 .myr-link{font-size:12px;color:var(--accent);font-weight:600;margin-top:8px}
 .myr-empty{font-size:13.5px;color:var(--muted);line-height:1.6;padding:6px 2px 4px}
@@ -2566,7 +2621,7 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
 .rf-seg.rf-term{flex-wrap:wrap}
 .rf-seg.rf-term button{flex:1 1 auto;min-width:104px;height:40px;font-size:12.5px;padding:0 10px}
 .rf-grade{flex-wrap:wrap}
-.rf-grade button{flex:0 0 auto;min-width:46px;padding:0 12px;font-family:var(--mono,ui-monospace,Menlo,monospace)}
+.rf-grade button{flex:0 0 auto;min-width:46px;padding:0 12px;font-family:var(--mono)}
 .rf-grade button.rf-grade-na{font-family:inherit;font-weight:500;color:var(--muted)}
 .rf-grade button.rf-grade-na.on{background:var(--panel-2);border-color:rgba(var(--fg-rgb),.16);color:var(--text-2)}
 .rf-tags{display:grid;grid-template-columns:1fr 1fr;gap:6px}
@@ -2597,7 +2652,7 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
    them apart from inside the app. Now there is: this string is written at build time and shown
    in Settings → About and the landing footer. If the date here isn't the one you expect, the
    tab is stale — reload the right file, not this one. */
-window.PROFESSIFY_BUILD='2026-08-21 10:28';
+window.PROFESSIFY_BUILD='2026-08-22 13:30';
 /* Paint the build stamp everywhere it appears. */
 try{
   (function(){
@@ -2638,9 +2693,24 @@ function myDisplayName(){
   }catch(e){return '';}
 }
 var PERSON_GLYPH='<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="8.2" r="3.6"/><path d="M4.8 20c0-3.7 3.2-6.2 7.2-6.2s7.2 2.5 7.2 6.2" stroke-linecap="round"/></svg>';
+function myAvatarUrl(){
+  try{ return (typeof myProfile!=='undefined'&&myProfile&&myProfile.avatar_url)?String(myProfile.avatar_url):''; }catch(e){ return ''; }
+}
+/* A real photo wins over initials; initials win over the neutral glyph. Same order everywhere,
+   so the header, the rail card and Settings can't show three different things. */
 function myAvatarHtml(){
+  var url=myAvatarUrl();
+  if(url)return '<img class="ava-img" src="'+escapeHtml(url)+'" alt="" loading="lazy">';
   var n=myDisplayName();
   return n?escapeHtml(initials(n)):PERSON_GLYPH;
+}
+/* Friends' photos follow the same rule. Falls back to their initials the moment a URL is
+   missing or the image 404s — never a broken-image icon. */
+function avaHtml(url,name,cls){
+  var ini=escapeHtml(initials(name||'?'));
+  if(url)return '<img class="ava-img'+(cls?' '+cls:'')+'" src="'+escapeHtml(url)+'" alt="" loading="lazy"'
+    +' onerror="this.replaceWith(document.createTextNode(\''+String(ini).replace(/'/g,"")+'\'))">';
+  return ini;
 }
 
 function scoreColor(v){return v==null?'var(--faint)':v>=3.3?'var(--good)':v>=2.5?'var(--mid)':'var(--low)';}
@@ -5857,7 +5927,10 @@ function guestProfList(){
   }
   if(guestProfMode==='worst'){
     var worst=rankProfs(pool,-1);
-    return {label:'Lowest rated', note:'Weighted by how many ratings back each score, so one bad review can’t brand a professor — read the reviews before judging.', list:worst.slice(0,24)};
+    /* Copy audit 2026-08-22: three lines told students to "read the reviews", pointing at
+       PolyRatings review text the app no longer displays. Say what is actually true now —
+       the score is weighted by sample size, and the words live at the source. */
+    return {label:'Lowest rated', note:'Weighted by how many ratings back each score, so one bad review can’t brand a professor.', list:worst.slice(0,24)};
   }
   var best=rankProfs(pool,1);
   return {label:'Highest rated', note:'Weighted by how many ratings back each score — a 4.7 from 20 students outranks a 5.0 from one.', list:best.slice(0,24)};
@@ -6521,21 +6594,20 @@ function cfg(){return window.PROFESSIFY_CONFIG||{};}
 function backendConfigured(){var c=cfg();return !!(c.SUPABASE_URL&&c.SUPABASE_ANON_KEY);}
 function profKey(p){return ((p&&p.name||'')+'|'+(p&&p.dept||'')).toLowerCase().trim();}
 function profReviews(p){return [...(dbReviews[profKey(p)]||[]),...((p&&p.revs)||[])];}
-/* Real PolyRatings review TEXT, already fetched by loadPolyProfDetail() and — until now —
-   never rendered, so a professor with 237 real reviews displayed "No reviews yet." These are
-   shown below native Professify reviews, clearly attributed, never votable (they aren't ours),
-   and never hidden behind the reciprocity gate (they're public data we didn't earn). */
-function polyReviewsFor(p){
-  var d=p&&p._prDetail; if(!d||!Array.isArray(d.reviews))return [];
-  return d.reviews.filter(function(r){return r&&String(r.text||'').trim();}).map(function(r){
-    return {
-      score:(r.score!=null?r.score:null),
-      text:String(r.text||'').trim(),
-      course:r.course||'', term:(r.term||'').trim(), grade:r.grade||'',
-      tags:[], helpful:0, verified:false, _src:'poly', at:r.at||'',
-      year:(function(){ var m=String(r.at||'').match(/^(\d{4})/); return m?m[1]:''; })()
-    };
-  }).sort(function(a,b){ return String(b.at||'').localeCompare(String(a.at||'')); });
+/* PolyRatings review TEXT is NOT displayed in Professify (Tate's call, 2026-08-22).
+   Those paragraphs are written by PolyRatings' users and hosted by PolyRatings; reproducing
+   them here republishes someone else's content under our brand. What we do show is the
+   factual layer — their numeric ratings and per-course averages, which is what the app is
+   actually for — and a link so a student can read the words at the source.
+   This function therefore returns a COUNT, never renderable text. If you find yourself
+   reaching for r.text from _prDetail to put on screen, that is the thing being avoided. */
+function polyReviewCount(p){
+  var d=p&&p._prDetail; if(!d||!Array.isArray(d.reviews))return 0;
+  return d.reviews.filter(function(r){return r&&String(r.text||'').trim();}).length;
+}
+/* Deep link to the professor at the source. */
+function polyProfUrl(p){
+  return (p&&p.prId)?('https://polyratings.dev/professor/'+encodeURIComponent(p.prId)):'https://polyratings.dev';
 }
 function eduOk(email){
   const v=(email||'').trim().toLowerCase();
@@ -6809,7 +6881,27 @@ function markSignedOutSchedule(){
   if(note)note.style.display=signed?'none':'flex';
 }
 function refreshGuestChrome(){ try{ markSignedOutSchedule(); }catch(e){} }
-function authErr(m){ var e=document.getElementById('authErr'); if(e)e.textContent=m; }
+/* Supabase's raw auth errors are written for the developer who owns the project, not for the
+   student staring at a sign-up form. This copy used to say the sender was "still in test mode",
+   which was true while the project ran on Supabase's built-in email service (2/hour, team
+   addresses only). Custom SMTP is live now, so that sentence became a lie the moment it was
+   most likely to be read. What "not authorized" means today is an address the project won't
+   send to; what a rate-limit means today is a real per-hour cap, not a test restriction. */
+function authFriendlyErr(msg){
+  var m=String(msg||'');
+  if(/not authorized|Email address .* not authorized|is not authorized/i.test(m))
+    return 'We can’t send a code to that address. Use your @calpoly.edu email — if that’s what you entered, let Tate know and he’ll check the sender.';
+  if(/rate limit|too many requests|only request this after|429/i.test(m))
+    return 'Too many codes requested just now — there’s an hourly limit on verification emails. Wait a minute and hit resend.';
+  if(/signups not allowed|Signups not allowed/i.test(m))
+    return 'New sign-ups are switched off for this project right now.';
+  if(/invalid|malformed/i.test(m)&&/email/i.test(m))
+    return 'That doesn’t look like a valid email address.';
+  if(/failed to fetch|network|load failed/i.test(m))
+    return 'Couldn’t reach the server — check your connection and try again.';
+  return m||'Could not send the code. Try again.';
+}
+function authErr(m){ var e=document.getElementById('authErr'); if(e)e.textContent=authFriendlyErr(m); }
 function authEmailStep(){
   document.getElementById('authBody').innerHTML=
     '<div class="auth-k">'+escapeHtml((window._authCtx&&AUTH_CONTEXTS[window._authCtx].k)||'Join Professify')+'</div><h2 class="auth-h">'+escapeHtml((window._authCtx&&AUTH_CONTEXTS[window._authCtx].h)||'Log in or sign up')+'</h2>'
@@ -6904,7 +6996,10 @@ function authSignedInView(){
 async function authSignOut(){ try{ if(sb&&sb.auth)await sb.auth.signOut(); }catch(e){} sbUser=null; eduVerified=false; updateAuthUI(); if(typeof renderAccountSection==='function')renderAccountSection(); closeAuth(); }
 function updateAuthUI(){
   var btn=document.getElementById('authBtn'); if(!btn)return;
-  if(typeof sbUser!=='undefined'&&sbUser){ var nm=(typeof myDisplayName==='function')?myDisplayName():((sbUser.email||'').split('@')[0]); if(!nm)nm=(sbUser.email||'').split('@')[0]||'Account'; btn.className='auth-btn in'; btn.innerHTML='<span class="auth-ava">'+escapeHtml(((typeof initials==='function'?initials(nm):nm.slice(0,1))||'?').slice(0,1).toUpperCase())+'</span><span>'+escapeHtml(nm)+'</span>'; var h=document.getElementById('profMenuHead'); if(h)h.textContent=nm; }
+  if(typeof sbUser!=='undefined'&&sbUser){ var nm=(typeof myDisplayName==='function')?myDisplayName():((sbUser.email||'').split('@')[0]); if(!nm)nm=(sbUser.email||'').split('@')[0]||'Account'; btn.className='auth-btn in'; var _av=(typeof myAvatarUrl==='function')?myAvatarUrl():'';
+    btn.innerHTML='<span class="auth-ava">'+(_av
+      ? '<img class="ava-img" src="'+escapeHtml(_av)+'" alt="">'
+      : escapeHtml(((typeof initials==='function'?initials(nm):nm.slice(0,1))||'?').slice(0,1).toUpperCase()))+'</span><span>'+escapeHtml(nm)+'</span>'; var h=document.getElementById('profMenuHead'); if(h)h.textContent=nm; }
   else { btn.className='auth-btn'; btn.textContent='Log in \u00b7 Sign up'; closeProfMenu(); }
   /* When signed in, the account pill IS the settings entry (via its dropdown) \u2014 hide the
      standalone gear so there's one control, not two. Signed out, keep the gear so Settings
@@ -7529,7 +7624,7 @@ function pfDetailV2(p,revs){
   var tilesHtml=tiles.length?('<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:10px;margin:2px 0 14px">'+tiles.map(function(t){
     return '<div style="background:'+PFC.panel+';border:1px solid '+PFC.line+';border-radius:11px;padding:12px 13px">'
       +'<div style="font-size:10.5px;letter-spacing:.03em;text-transform:uppercase;color:'+PFC.ink2+'">'+t.k+'</div>'
-      +'<div style="font-size:19px;font-weight:700;margin-top:5px;color:'+(t.accent?PFC.green:PFC.ink)+';'+(t.mono?'font-family:var(--mono,ui-monospace,Menlo,monospace);':'')+'">'+t.v+'</div>'
+      +'<div style="font-size:19px;font-weight:700;margin-top:5px;color:'+(t.accent?PFC.green:PFC.ink)+';'+(t.mono?'font-family:var(--mono);':'')+'">'+t.v+'</div>'
       +(t.sub?'<div style="font-size:10.5px;color:'+PFC.ink2+';margin-top:3px">'+t.sub+'</div>':'')
       +'</div>';
   }).join('')+'</div>'):'';
@@ -7549,7 +7644,7 @@ function pfDetailV2(p,revs){
     var gblock='';
     if(gr&&gr.n>=5){
       var gmax=Math.max(gr.fam.A,gr.fam.B,gr.fam.C,gr.fam.D,gr.fam.F,1);
-      var bars=['A','B','C','D','F'].map(function(L){var h=Math.round(gr.fam[L]/gmax*100),hiL=(L===gr.common[0]);return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;justify-content:flex-end;height:50px"><div style="width:100%;border-radius:5px 5px 0 0;min-height:3px;height:'+h+'%;background:'+(hiL?PFC.green:PFC.blue)+'"></div><div style="font-size:11px;color:'+PFC.ink2+';font-family:var(--mono,ui-monospace,Menlo,monospace)">'+L+'</div></div>';}).join('');
+      var bars=['A','B','C','D','F'].map(function(L){var h=Math.round(gr.fam[L]/gmax*100),hiL=(L===gr.common[0]);return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;justify-content:flex-end;height:50px"><div style="width:100%;border-radius:5px 5px 0 0;min-height:3px;height:'+h+'%;background:'+(hiL?PFC.green:PFC.blue)+'"></div><div style="font-size:11px;color:'+PFC.ink2+';font-family:var(--mono)">'+L+'</div></div>';}).join('');
       var gHead='<div style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:'+PFC.ink2+';margin-bottom:10px">Grades reported · '+gr.n+'</div>';
       var gLocked=(typeof recipUnlocked==='function'&&!recipUnlocked());
       var gInner=gLocked
@@ -7610,7 +7705,7 @@ function renderModal(){
   const sAvg=studentAvg(p);
   const gmax=p.grades?Math.max(...Object.values(p.grades)):1;
   modalRevs=profReviews(p);
-  const polyRevs=(typeof polyReviewsFor==='function')?polyReviewsFor(p):[];
+  const polyN_text=(typeof polyReviewCount==='function')?polyReviewCount(p):0;
   const revErrHtml=(dbReviewsError[profKey(p)])?`<div class="msec"><div class="rev-loaderr" style="display:flex;align-items:center;gap:10px;justify-content:space-between;padding:11px 13px;border:1px solid var(--line);border-radius:10px;color:var(--text-2);font-size:13px;background:var(--panel-2)"><span>Couldn’t load the latest reviews — showing what’s cached.</span><button class="btn" style="padding:5px 12px;font-size:12.5px" onclick="loadReviews(currentProf)">Retry</button></div></div>`:'';
   let revs=modalRevs.map((r,i)=>({...r,_i:i}));
   if(revSort==='helpful')revs.sort((a,b)=>b.helpful-a.helpful);
@@ -7618,18 +7713,15 @@ function renderModal(){
   const topIdx=modalRevs.length?modalRevs.map((r,i)=>[i,r.helpful]).sort((a,b)=>b[1]-a[1])[0][0]:-1;
 
   const rlocked=(typeof recipUnlocked==='function')?!recipUnlocked():false;   // gate full text + grades
-  const revMixed=(modalRevs.length>0&&polyRevs.length>0);   // source chip only earns its place when sources differ
-  const revSrcLine=revMixed?''
-    :(polyRevs.length?'<div class="rev-srcline">All of these are real PolyRatings reviews.</div>'
-    :(modalRevs.length?'<div class="rev-srcline">'+CHECK+' Every review is from a verified Cal Poly student.</div>':''));
-  const polyBlock=polyRevs.length?(
-    `<div class="poly-revhead">${polyRevs.length} review${polyRevs.length===1?'':'s'} from PolyRatings</div>`+
-    polyRevs.slice(0,40).map(r=>`<div class="review poly-review">`
-      +`<div class="rtop">${r.score!=null?`<span class="rs" style="color:${scoreColor((r.score/5)*4)}"><span class="rd" style="width:6px;height:6px;border-radius:50%;background:${scoreColor((r.score/5)*4)};display:inline-block"></span>${Number(r.score).toFixed(1)}</span>`:''}</div>`
-      +reviewProvenance(r,revMixed)
-      +`<p class="rtext">${escapeHtml(r.text).replace(/\n/g,'<br>')}</p>`
-    +`</div>`).join('')
-    +(polyRevs.length>40?`<div class="poly-more">+${polyRevs.length-40} more on PolyRatings</div>`:'')
+  /* Every review LISTED here is now ours, so there is no longer a mix of sources to label. */
+  const revMixed=false;
+  const revSrcLine=modalRevs.length?'<div class="rev-srcline">'+CHECK+' Every review is from a verified Cal Poly student.</div>':'';
+  /* PolyRatings written reviews: pointed at, not reproduced. */
+  const polyBlock=polyN_text?(
+    `<div class="poly-revhead">On PolyRatings</div>`+
+    `<div class="poly-link">${polyN_text.toLocaleString()} written review${polyN_text===1?'':'s'} of ${escapeHtml(p.name)} `
+    +`${polyN_text===1?'is':'are'} on PolyRatings. Their ratings feed the score above; their words stay on their site.`
+    +`<a class="poly-out" href="${polyProfUrl(p)}" target="_blank" rel="noopener noreferrer">Read them on PolyRatings →</a></div>`
   ):'';
   const scoreFive=blendFive(p);
   const ratingsCount=blendCount(p);
@@ -7699,7 +7791,7 @@ function renderModal(){
           ${p.difficulty!=null?`<div style="margin-top:12px;background:${PFC.panel};border:1px solid ${PFC.line};border-radius:8px;padding:5px 10px;display:flex;align-items:center;gap:7px">${pfStars((p.difficulty/4)*100,PFC.green).replace('font-size:26px','font-size:15px').replace('letter-spacing:4px','letter-spacing:2px')}<span style="font-size:11px;color:${PFC.ink2};font-style:italic">${difficultyLabel(p.difficulty)} difficulty</span></div>`:''}
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end">
-          ${scoreFive!=null?`${pfStars((scoreFive/5)*100,PFC.blue)}<div style="font-size:20px;font-weight:500;color:${PFC.blue};margin-top:7px">${scoreFive.toFixed(1)}<span style="font-size:13px;color:${PFC.ink2};font-weight:400"> / 5</span></div><div style="font-size:12px;color:${PFC.ink2};font-style:italic;margin-top:2px">${ratingsCount.toLocaleString()} ${ratingsCount===1?'rating':'ratings'}${studN>0&&polyN>0?' (incl. '+studN+' from students)':''}</div>`+((modalRevs.length+polyRevs.length)?`<button class="pf-jumprev" onclick="pfJumpReviews()">Read ${modalRevs.length+polyRevs.length} review${(modalRevs.length+polyRevs.length)===1?'':'s'} ↓</button>`:''):`<div style="font-size:13px;color:${PFC.ink2};font-style:italic;max-width:180px;text-align:right">No ratings yet — be the first to review</div>`}
+          ${scoreFive!=null?`${pfStars((scoreFive/5)*100,PFC.blue)}<div style="font-size:20px;font-weight:500;color:${PFC.blue};margin-top:7px">${scoreFive.toFixed(1)}<span style="font-size:13px;color:${PFC.ink2};font-weight:400"> / 5</span></div><div style="font-size:12px;color:${PFC.ink2};font-style:italic;margin-top:2px">${ratingsCount.toLocaleString()} ${ratingsCount===1?'rating':'ratings'}${studN>0&&polyN>0?' (incl. '+studN+' from students)':''}</div>`+(modalRevs.length?`<button class="pf-jumprev" onclick="pfJumpReviews()">Read ${modalRevs.length} review${modalRevs.length===1?'':'s'} ↓</button>`:(polyN_text?`<button class="pf-jumprev" onclick="pfJumpReviews()">Where the reviews are ↓</button>`:'')):`<div style="font-size:13px;color:${PFC.ink2};font-style:italic;max-width:180px;text-align:right">No ratings yet — be the first to review</div>`}
         </div>
       </div>
       ${pfDetailV2(p,modalRevs)}
@@ -7725,7 +7817,7 @@ function renderModal(){
              first. On a professor with no Professify reviews yet (every professor, on day one)
              it was a control that visibly did nothing. It appears once there's something to
              sort. */''}
-      ${revErrHtml}${(modalRevs.length||polyRevs.length)?`<div class="msec" id="revSec"><div class="revhead"><h4>Reviews · ${modalRevs.length+polyRevs.length}</h4>${modalRevs.length>1?`<div class="revsort"><button class="${revSort==='helpful'?'active':''}" onclick="setRevSort('helpful')">Most helpful</button><button class="${revSort==='recent'?'active':''}" onclick="setRevSort('recent')">Most recent</button></div>`:''}</div>${revSrcLine}${rlocked?recipUnlockCard():''}${revs.map(r=>`<div class="review"><div class="rtop">${r._i===topIdx?`<span class="best">Most helpful for ${escapeHtml(canonCode(r.course))}</span>`:''}<span class="rs" style="color:${scoreColor((r.score/5)*4)}"><span class="rd" style="width:6px;height:6px;border-radius:50%;background:${scoreColor((r.score/5)*4)};display:inline-block"></span>${Number(r.score).toFixed(1)}</span></div>${reviewProvenance(r,revMixed)}${rfMeta(r)}<p class="rtext${rlocked?' rev-locked':''}">${escapeHtml(r.text).replace(/\n/g,'<br>')}</p><div class="rtags">${r.tags.map(t=>`<span class="t">${escapeHtml(t)}</span>`).join('')}</div><div class="rfoot"><button class="hbtn ${r._v?'on':''}" onclick="voteHelpful(${r._i})">${THUMB} Helpful</button><span class="hcount">${r.helpful} found this helpful</span>${helpfulNudge===r._i?`<button class="help-nudge" onclick="openAuth('helpful')">Sign in to make your vote count →</button>`:''}</div></div>`).join('')}${polyBlock}</div>`:`<div class="msec"><h4>Reviews</h4><div class="norev"><p>No reviews yet — use <b>Leave a review</b> above to be the first.</p></div></div>`}
+      ${revErrHtml}${modalRevs.length?`<div class="msec" id="revSec"><div class="revhead"><h4>Reviews · ${modalRevs.length}</h4>${modalRevs.length>1?`<div class="revsort"><button class="${revSort==='helpful'?'active':''}" onclick="setRevSort('helpful')">Most helpful</button><button class="${revSort==='recent'?'active':''}" onclick="setRevSort('recent')">Most recent</button></div>`:''}</div>${revSrcLine}${rlocked?recipUnlockCard():''}${revs.map(r=>`<div class="review"><div class="rtop">${r._i===topIdx?`<span class="best">Most helpful for ${escapeHtml(canonCode(r.course))}</span>`:''}<span class="rs" style="color:${scoreColor((r.score/5)*4)}"><span class="rd" style="width:6px;height:6px;border-radius:50%;background:${scoreColor((r.score/5)*4)};display:inline-block"></span>${Number(r.score).toFixed(1)}</span></div>${reviewProvenance(r,revMixed)}${rfMeta(r)}<p class="rtext${rlocked?' rev-locked':''}">${escapeHtml(r.text).replace(/\n/g,'<br>')}</p><div class="rtags">${r.tags.map(t=>`<span class="t">${escapeHtml(t)}</span>`).join('')}</div><div class="rfoot"><button class="hbtn ${r._v?'on':''}" onclick="voteHelpful(${r._i})">${THUMB} Helpful</button><span class="hcount">${r.helpful} found this helpful</span>${helpfulNudge===r._i?`<button class="help-nudge" onclick="openAuth('helpful')">Sign in to make your vote count →</button>`:''}</div></div>`).join('')}${polyBlock}</div>`:`<div class="msec" id="revSec"><h4>Reviews</h4><div class="norev"><p>No Professify reviews yet — use <b>Leave a review</b> above to be the first.</p></div>${polyBlock}</div>`}
       ${p.style?`<div class="msec"><h4>Teaching style — does it fit you?</h4><div class="sbars">${Object.entries(p.style).map(([k,v])=>`<div class="sbar"><div class="st"><span>${k}</span><span class="v">${v}%</span></div><div class="track"><i style="width:${v}%"></i></div></div>`).join('')}</div></div>`:''}
       ${p.track?`<div class="msec"><h4>Track record — where they've taught</h4><div class="rows">${p.track.map(t=>`<div class="trow ${t[2]?'cur':''}"><span class="dash"></span><span>${t[0]}</span><span class="yr">${t[1]}</span></div>`).join('')}</div></div>`:''}
       <div class="msec">
@@ -7897,7 +7989,7 @@ function wpCompareTable(ids){
       +'<button class="pcmp-rm" onclick="wpToggleCompare(\''+s.id+'\',event)">Remove from compare</button>'
     +'</div>';
   }).join('');
-  return verdict+'<div class="pcmp-grid">'+cards+'</div><p class="wl-note">Ranked by rating, then how many ratings back it up. Tap a name or “View profile” to read the reviews behind the score.</p>';
+  return verdict+'<div class="pcmp-grid">'+cards+'</div><p class="wl-note">Ranked by rating, then how many ratings back it up. Tap a name or “View profile” for their full record.</p>';
 }
 function renderWatch(){
   const out=document.getElementById('watchOut');if(!out)return;
@@ -8678,6 +8770,7 @@ async function handleFile(files){
   result.innerHTML='';
   const thumb=fileThumb(f);
   const isImg=f.type&&f.type.indexOf('image/')===0;
+  if(isImg){ try{ await loadOcr(); }catch(_e){} }
   if(isImg&&window.Tesseract){
     note.innerHTML=`${thumb}<span class="ocr-spin"></span>Reading <b>${escapeHtml(f.name)}</b> — scanning for your courses… <span style="color:var(--faint)">(runs in your browser, may take a few seconds)</span>`;
     try{
@@ -9077,7 +9170,15 @@ function renderAccountSection(){
   var el=document.getElementById('setAccount'); if(!el)return;
   if(typeof sbUser!=='undefined'&&sbUser){
     var em=sbUser.email||'';
-    el.innerHTML='<div class="set-acct"><div class="who"><div class="set-ava">'+escAcc((em[0]||'?').toUpperCase())+'</div><div><div style="font-weight:600">Signed in</div><div style="color:var(--muted);font-size:13px">'+escAcc(em)+'</div></div></div><button class="set-btn ghost" style="margin-top:12px" onclick="authSignOut()">Sign out</button></div>';
+    var nm=(typeof myDisplayName==='function'&&myDisplayName())||em.split('@')[0];
+    var un=(myProfile&&myProfile.username)?('@'+myProfile.username):'';
+    var avu=(typeof myAvatarUrl==='function')?myAvatarUrl():'';
+    el.innerHTML='<div class="set-acct"><div class="who"><div class="set-ava">'
+      +(avu?'<img class="ava-img" src="'+escAcc(avu)+'" alt="">':escAcc(initials(nm||'?')))
+      +'</div><div><div style="font-weight:600">'+escAcc(nm)+(un?(' <span style="color:var(--muted);font-weight:500">'+escAcc(un)+'</span>'):'')+'</div>'
+      +'<div style="color:var(--muted);font-size:13px">'+escAcc(em)+'</div></div></div>'
+      +'<button class="set-btn" style="margin-top:12px" onclick="closeSettings();openEditProfile()">Edit profile</button>'
+      +'<button class="set-btn ghost" style="margin-top:8px" onclick="authSignOut()">Sign out</button></div>';
   } else {
     el.innerHTML='<div class="set-acct"><div style="font-weight:600;margin-bottom:3px">Your account</div><div style="color:var(--muted);font-size:13px;line-height:1.5">Log in with your Cal Poly .edu email to rate professors and — soon — see which classes your friends are in.</div>'
       +'<button class="set-btn" style="margin-top:11px" onclick="closeSettings();openAuth();">Log in · Sign up</button></div>';
@@ -9835,7 +9936,9 @@ async function _loadFriendsDataInner(){
        people you have BOTH accepted, never in search results. Degrade the same way the class
        reads do, so a deployment without the column still loads names. */
     let profs=null, profErr=null;
-    for(const sel of ['id,display_name,instagram_handle,edu_email','id,display_name,instagram_handle']){
+    for(const sel of ['id,display_name,instagram_handle,edu_email,avatar_url,username',
+                      'id,display_name,instagram_handle,edu_email',
+                      'id,display_name,instagram_handle']){
       const r=await sb.from('profiles').select(sel).in('id',otherIds);
       if(!r.error){ profs=r.data; profErr=null; break; }
       profErr=r.error;
@@ -9887,7 +9990,7 @@ async function _loadFriendsDataInner(){
     if(histErr)console.error('[professify] class_history read failed:',histErr.message);
     (hist||[]).forEach(h=>{(histMap[h.user_id]=histMap[h.user_id]||[]).push({code:h.code,term:h.term,year:h.year,professor:h.professor||'',at:h.created_at});});
   }
-  friendsList=friendIds.map(id=>({id,name:(profMap[id]&&profMap[id].display_name)||'Classmate',handle:(profMap[id]&&profMap[id].instagram_handle)||'',email:(profMap[id]&&profMap[id].edu_email)||'',classes:classMap[id]||[],crns:crnsMap[id]||[],secs:secsMap[id]||[],history:histMap[id]||[],classAdds:addMap[id]||[],wl:wlMap[id]||{},color:colorForId(id)}));
+  friendsList=friendIds.map(id=>({id,name:(profMap[id]&&profMap[id].display_name)||'Classmate',handle:(profMap[id]&&profMap[id].instagram_handle)||'',email:(profMap[id]&&profMap[id].edu_email)||'',avatar_url:(profMap[id]&&profMap[id].avatar_url)||'',username:(profMap[id]&&profMap[id].username)||'',classes:classMap[id]||[],crns:crnsMap[id]||[],secs:secsMap[id]||[],history:histMap[id]||[],classAdds:addMap[id]||[],wl:wlMap[id]||{},color:colorForId(id)}));
   FRIENDS=friendsList.map(f=>({id:f.id,name:f.name,ini:initials(f.name),color:colorForId(f.id),classes:f.classes,crns:f.crns||f.sections||[],secs:f.secs||[],history:f.history}));
   incomingRequests=incomingRequests.map(r=>({...r,
     name:(profMap[r.from_user]&&profMap[r.from_user].display_name)||'A classmate',
@@ -10253,20 +10356,99 @@ function parseSchedWaitlist(data){
   return out;
 }
 /* Text pass: split into blocks by course-code occurrence so duplicate codes stay distinct. */
+/* ---- OCR character confusion ----------------------------------------------------------
+   Measured against real Tesseract output on rendered PASS screenshots (2026-08-22), not
+   assumed. What actually comes back for "S01-LEC" across four capture variants:
+       SOLLEC   ·   so1- tec   ·   SO2LEC   ·   SILSEM   ·   S22   ·   sor LEC
+   The hyphen is usually eaten, 0 reads as O, and 1 reads as I or L. A strict
+   /(S\d{2})-([A-Z]{3})/ matched NONE of them — section recovery was 0 for 4 on every
+   single variant, which is why imported classes had to be matched by day and time.
+   These helpers widen the net; matchSection() then refuses anything the real section feed
+   can't confirm, so a widened net never turns into an invented section. */
+var OCR_D={O:'0',o:'0',Q:'0',D:'0',I:'1',l:'1',i:'1','|':'1','!':'1',L:'1',
+           S:'5',s:'5',B:'8',Z:'2',z:'2',G:'6',T:'7',A:'4',g:'9',q:'9'};
+function ocrDigits(str){
+  return String(str||'').split('').map(function(c){return /[0-9]/.test(c)?c:(OCR_D[c]||c);}).join('');
+}
+/* Every plausible digit reading of an OCR'd number, capped so this can't explode. */
+function ocrNumVariants(str){
+  var s=String(str||''); if(!s||s.length>6)return [];
+  var alts=s.split('').map(function(c){
+    if(/[0-9]/.test(c))return [c];
+    var d=OCR_D[c]; return d?[d]:null;
+  });
+  if(alts.some(function(a){return !a;}))return [];
+  var out=[''];
+  alts.forEach(function(a){ var next=[]; out.forEach(function(pre){ a.forEach(function(c){ next.push(pre+c); }); }); out=next; });
+  return out.filter(function(v){return /^\d+$/.test(v);}).slice(0,16);
+}
+/* A course code that OCR got ALMOST right is recoverable, because unlike a section token
+   there is a definitive list to check against: the catalog. Measured misreads from real
+   Tesseract output — "STAT 3120" -> "star 3120" (one wrong letter), "BUS 3443" -> "BUS 2443"
+   (one wrong digit). Try the obvious corrections, and accept one ONLY if it names a course
+   that actually exists. A correction that can't be confirmed is discarded, never guessed. */
+function codeExists(code){
+  return !!((typeof COURSE_NAME!=='undefined'&&COURSE_NAME[code])||
+            (typeof CLASS_INDEX!=='undefined'&&CLASS_INDEX[code])||
+            (typeof SEAT_SECTIONS!=='undefined'&&SEAT_SECTIONS&&SEAT_SECTIONS[code]));
+}
+function resolveOcrCode(sub,num){
+  sub=String(sub||'').toUpperCase(); num=String(num||'').toUpperCase();
+  if(codeExists(sub+' '+num))return sub+' '+num;
+  var subs=(typeof knownSubjects==='function')?knownSubjects():null;
+  var hits=[];
+  /* one-letter subject corrections, e.g. STAR -> STAT */
+  if(subs){ subs.forEach(function(k){
+    if(k.length!==sub.length)return;
+    var diff=0; for(var i=0;i<k.length;i++)if(k[i]!==sub[i])diff++;
+    if(diff===1&&codeExists(k+' '+num)&&hits.indexOf(k+' '+num)<0)hits.push(k+' '+num);
+  }); }
+  /* one-digit corrections on the number, restricted to OCR-plausible swaps */
+  if(!hits.length&&typeof ocrNumVariants==='function'){
+    var CONF={'0':'O','1':'I','2':'Z','5':'S','6':'G','8':'B'};
+    for(var i=0;i<num.length;i++){
+      for(var d=0;d<10;d++){
+        var alt=num.slice(0,i)+d+num.slice(i+1);
+        if(alt===num)continue;
+        /* only swaps that a glyph confusion could explain, both directions */
+        if(!(CONF[num[i]]||CONF[String(d)]))continue;
+        var c=sub+' '+alt;
+        if(codeExists(c)&&hits.indexOf(c)<0)hits.push(c);
+      }
+    }
+  }
+  return hits.length===1?hits[0]:'';   /* ambiguous means unknown, not a coin flip */
+}
 function parseSchedRows(text){
   var lines=(text||'').split(/\n+/).map(function(l){return l.replace(/ /g,' ').trim();}).filter(Boolean);
-  var codeRe=/\b([A-Z]{2,4})\s?-?\s?(\d{3,4}[A-Z]?)\b/g;
+  /* OCR is not typography. Tesseract returns lowercase whenever the source text is small,
+     thin, or low-contrast — a phone screenshot of PASS very often is — and this pattern was
+     uppercase-only with no /i, so a lowercase read produced ZERO rows and the student was told
+     "No class codes found" about a perfectly good screenshot. Match either case; the captures
+     are upper-cased where they're used. */
+  var codeRe=/\b([A-Za-z]{2,4})\s?-?\s?(\d{3,4}[A-Za-z]?)\b/g;
   var subs=(typeof knownSubjects==='function')?knownSubjects():null;
   var starts=[];
   for(var i=0;i<lines.length;i++){
-    if(/DESCRIPTION|INSTRUCTOR|WAIT\s*LIST|CLASS SCHEDULE/i.test(lines[i]))continue; // header row
+    /* Header-row guard. This used to drop ANY line containing "Wait List" — including
+       "BUS 4404  Investments  S02-LEC (2810)  MoWeFr 2:10PM  Wait List Position 4", a real
+       class row in every compact/printable export. Waitlisted classes are precisely the ones
+       a student most wants imported, and they were silently disappearing. A header carries
+       no course code; a data row does. */
+    if(/DESCRIPTION|INSTRUCTOR|WAIT\s*LIST|CLASS SCHEDULE/i.test(lines[i])
+       && !/[A-Za-z]{2,4}\s?-?\s?\d{3,4}\b/.test(lines[i]))continue;
     codeRe.lastIndex=0; var m, chosen=null;
     while((m=codeRe.exec(lines[i]))){
       if(m[2].charAt(0)==='0')continue;                 // room suffix like 003, not a course
-      var sub=m[1], code=(m[1]+' '+m[2]).toUpperCase();
+      var sub=m[1].toUpperCase(), code=(m[1]+' '+m[2]).toUpperCase();
       // A row starts on a REAL subject — never on the section token's "LEC 2747".
       var ok=subs?(subs.has(sub)||(typeof COURSE_NAME!=='undefined'&&COURSE_NAME[code])||(typeof CLASS_INDEX!=='undefined'&&CLASS_INDEX[code])):!/^(LEC|LAB|SEM|ACT|DIS|IND)$/.test(sub);
       if(ok){ chosen=code; break; }
+      /* Not a known subject as read — but OCR may have bent one character. */
+      if(subs&&!/^(LEC|LAB|SEM|ACT|DIS|IND)$/.test(sub)){
+        var fixed=resolveOcrCode(sub,m[2].toUpperCase());
+        if(fixed){ chosen=fixed; break; }
+      }
     }
     if(chosen)starts.push({idx:i,code:chosen});
   }
@@ -10274,16 +10456,82 @@ function parseSchedRows(text){
   for(var s=0;s<starts.length;s++){
     var from=starts[s].idx, to=(s+1<starts.length?starts[s+1].idx:Math.min(lines.length,from+6));
     var block=lines.slice(from,to).join(' ');
-    var secM=block.match(/(S\d{2})\s*-\s*([A-Z]{2,4})\s*\(?\s*(\d{4,5})\s*\)?/i);
-    var section=secM?(secM[1]+'-'+secM[2]).toUpperCase():'';
-    var crn=secM?secM[3]:'';
+    /* Two column orders exist in the wild. Cal Poly's PASS "View My Classes" prints
+           Class Nbr | Section   ->  "2747 S01-LEC"
+       while the printable view and advisor exports print
+           Section | Class Nbr   ->  "S01-LEC 2747"  /  "S01-LEC (2747)".
+       Only the second was handled, so a screenshot taken straight from PASS — the single most
+       likely thing a student uploads — read the course but lost its class number and section.
+       That downgrades matchSection() to guessing by day and time. */
+    var section='', crn='';
+    var secM=block.match(/(S\d{2})\s*-\s*([A-Za-z]{2,4})\s*\(?\s*(\d{4,5})\s*\)?/i);
+    if(secM){ section=(secM[1]+'-'+secM[2]).toUpperCase(); crn=secM[3]; }
+    if(!crn){
+      var revM=block.match(/\b(\d{4,5})\s*\)?\s+(S\d{2})\s*-\s*([A-Za-z]{2,4})\b/i);
+      if(revM){ crn=revM[1]; section=(revM[2]+'-'+revM[3]).toUpperCase(); }
+    }
+    if(!section){ var sOnly=block.match(/\b(S\d{2})\s*-\s*([A-Za-z]{2,4})\b/i);
+                  if(sOnly)section=(sOnly[1]+'-'+sOnly[2]).toUpperCase(); }
+    /* OCR-tolerant last pass: "SOLLEC", "SILSEM", "so1- tec". Two glyphs that could be
+       digits, an optional eaten hyphen, then a 3-letter component. Marked _fuzzy so the
+       consumer knows it must be confirmed against the real feed before being shown. */
+    var secFuzzy=false;
+    if(!section){
+      var fz=block.match(/\bS[\s.]?([0-9OoQDIlNi|!LSsBZzGT]{2})[\s.\-–—]{0,3}(LEC|LAB|SEM|ACT|DIS|IND|TEC|SEG|LEG|SEN|SEH|SEC)\b/i);
+      if(fz){ var num=ocrDigits(fz[1]);
+              if(/^\d{2}$/.test(num)){ section='S'+num+'-'+fz[2].toUpperCase(); secFuzzy=true; } }
+    }
+    /* Phone screenshots of PASS wrap each class over several lines and Tesseract reads
+       ACROSS the columns, so "S01-" and "LEC" end up separated by half a row of unrelated
+       text ("so1- MoWe 9:10AM - 03- Cc. 2747 tec"). Recover the section NUMBER on its own —
+       that is the part matchSection() keys on anyway — and leave the component off rather
+       than pairing it with whatever three letters happen to be nearby. */
+    if(!section){
+      var sn=block.match(/\bS[\s.]?([0-9OoQDIl|!LSsBZzGT]{2})\s*[-–—]/);
+      if(sn){ var n2=ocrDigits(sn[1]);
+              if(/^\d{2}$/.test(n2)){ section='S'+n2; secFuzzy=true; } }
+    }
     if(!crn){var cm=block.match(/\((\d{4,5})\)/);if(cm)crn=cm[1];}
-    var dm=block.match(/\b(MoWeFr|MoWeThFr|TuThFr|MoWe|TuTh|MWF|MTWRF|MW|TR|Mo|Tu|We|Th|Fr)\b/);
+    /* Last resort: a bare 4-5 digit number that isn't a clock time, a year, or the course
+       number itself. Better a class number found than a section matched by time alone. */
+    if(!crn){
+      var bare=block.replace(/\d{1,2}\s*:\s*\d{2}/g,' ').match(/\b(\d{4,5})\b/g);
+      if(bare){ for(var bi=0;bi<bare.length;bi++){ var bn=bare[bi];
+        if(starts[s].code.indexOf(bn)>=0)continue;
+        if(/^(19|20)\d{2}$/.test(bn))continue;
+        crn=bn; break; } }
+    }
+    /* Day tokens were matched case-sensitively, so "MOWE" from an upper-cased OCR read or
+       "mowe" from a lowercase one both failed and the class lost its meeting days. Match either
+       and normalise back to the canonical casing the rest of the app parses. */
+    var dm=block.match(/\b(MoWeThFr|MoWeFr|TuThFr|MoWe|TuTh|MTWRF|MWF|MW|TR|Mo|Tu|We|Th|Fr)\b/i);
+    if(dm){ var _canon={MOWETHFR:'MoWeThFr',MOWEFR:'MoWeFr',TUTHFR:'TuThFr',MOWE:'MoWe',TUTH:'TuTh',
+              MTWRF:'MTWRF',MWF:'MWF',MW:'MW',TR:'TR',MO:'Mo',TU:'Tu',WE:'We',TH:'Th',FR:'Fr'};
+            dm=[dm[0],_canon[dm[1].toUpperCase()]||dm[1]]; }
     var tm=block.match(/\d{1,2}:\d{2}\s*[AP]\.?\s*M/gi)||[];
     // explicit waitlist wording if the OCR happened to catch it
     var wl=/WAIT\s*-?\s*LIST|WAITLIST|WTLST/i.test(block);
     var pm=block.match(/(?:POSITION|POS)[^0-9]{0,6}(\d{1,3})/i);
-    rows.push({code:starts[s].code,section:section,crn:crn,
+    /* Keep the raw OCR read of the class number too: matchSection() can try its digit
+       variants against real class numbers and confirm one, which is far better than
+       discarding a number that was 90% right. */
+    var crnRaw=crn;
+    if(!crn){
+      var rawTok=block.replace(/\d{1,2}\s*:\s*\d{2}/g,' ')
+                      .match(/\b[0-9OoQDIl|LSsBZzGT]{4,5}\b/g);
+      if(rawTok){ for(var ri=0;ri<rawTok.length;ri++){
+        var cand=ocrDigits(rawTok[ri]);
+        if(!/^\d{4,5}$/.test(cand))continue;
+        if(starts[s].code.indexOf(cand)>=0)continue;
+        if(/^(19|20)\d{2}$/.test(cand))continue;
+        crnRaw=rawTok[ri]; break; } }
+    }
+    /* A waitlist POSITION is only ever printed for a waitlisted class, so finding one is
+       stronger evidence than the word "Wait List" — which OCR routinely mangles into
+       "wait tist" / "Malet" / "waitist" and which the old /WAIT\s*-?\s*LIST/ then missed,
+       leaving a row marked "enrolled" while carrying position 4. */
+    if(pm)wl=true;
+    rows.push({code:starts[s].code,section:section,_secFuzzy:secFuzzy,crn:crn,crnRaw:crnRaw,
       days:dm?dm[1]:'',start:tm[0]?_schFixTime(tm[0]):'',end:tm[1]?_schFixTime(tm[1]):'',
       status:wl?'waitlisted':'enrolled',wlPos:pm?parseInt(pm[1],10):null});
   }
@@ -10291,10 +10539,23 @@ function parseSchedRows(text){
 }
 /* Look a parsed section up in the app's OWN verified feed — by class number first (most
    precise), then section token, then day+start time. Returns the real row or null. */
-function matchSection(code,crn,section,days,start){
+/* The real, verified section feed is the oracle here. Anything OCR produced is a guess
+   until this function confirms it against a section Cal Poly actually offers — which is why
+   widening the OCR net above can't produce a fabricated section or class number. */
+function matchSection(code,crn,section,days,start,crnRaw){
   var secs=(typeof SEAT_SECTIONS!=='undefined'&&SEAT_SECTIONS&&SEAT_SECTIONS[code])?SEAT_SECTIONS[code]:null;
   if(!secs||!secs.length)return null;
-  if(crn){var byN=secs.filter(function(r){return String(r.class_nbr||'').replace(/\D/g,'')===String(crn).replace(/\D/g,'');})[0];if(byN)return byN;}
+  function byNumber(n){ n=String(n||'').replace(/\D/g,''); if(!n)return null;
+    return secs.filter(function(r){return String(r.class_nbr||'').replace(/\D/g,'')===n;})[0]||null; }
+  var hit=byNumber(crn); if(hit)return hit;
+  /* "2810" came back from Tesseract as "2sio". Try every digit reading of the raw token and
+     accept it ONLY if exactly one is a real class number for this course — one match is a
+     recovery, two would be a guess, so two is refused. */
+  if(crnRaw&&typeof ocrNumVariants==='function'){
+    var hits=[];
+    ocrNumVariants(crnRaw).forEach(function(v){ var h=byNumber(v); if(h&&hits.indexOf(h)<0)hits.push(h); });
+    if(hits.length===1)return hits[0];
+  }
   if(section){var secTok=section.replace(/\s+/g,'').toUpperCase();var byS=secs.filter(function(r){return String(r.section||'').replace(/\s+/g,'').toUpperCase().indexOf(secTok.split('-')[0])>=0;})[0];if(byS)return byS;}
   if(days&&start){var dl=days.toLowerCase();var byT=secs.filter(function(r){return (r.days||'').toLowerCase().indexOf(dl)>=0;})[0];if(byT)return byT;}
   return null;
@@ -10321,21 +10582,43 @@ async function handleSchedImport(files){
     schImportCodes=rows.map(function(r){
       const ci=(typeof classInfo==='function')?classInfo(r.code):null;
       const known=!!(ci&&ci.name);
-      const match=matchSection(r.code,r.crn,r.section,r.days,r.start);
+      const match=matchSection(r.code,r.crn,r.section,r.days,r.start,r.crnRaw);
       const geo=wlByKey[r.code+'|'+r.crn];
       let status=r.status, wlPos=r.wlPos;
       if(geo){ status=geo.status; wlPos=geo.wlPos; }               // geometry wins when available
       const prof=(match&&match.instructor)||'';
+      /* Tesseract read STAT 3120's "1:30PM" as "4:30PM" — a wrong value that looks right,
+         which is worse than a missing one. When the section is confirmed, show ITS real
+         meeting time and never the OCR'd one. */
       const days=(match&&match.days)?prettyTime(match.days):((r.days&&r.start)?(r.days+' '+r.start+(r.end?('–'+r.end):'')):'');
+      /* This was the wrong way round: the OCR read won over the verified feed, so a
+         confirmed section could still be displayed as whatever Tesseract thought it saw.
+         Real data first; the OCR read is the fallback, and a merely-fuzzy section that the
+         feed could not confirm is dropped rather than shown as fact. */
+      /* When we HAVE the real section list for this course and still couldn't match, the
+         OCR'd class number is not in it — so it is wrong, and showing it would be worse than
+         showing nothing. (A dense printable export merges rows; that is how STAT 3120 picked
+         up BUS 4404's class number in testing.) With no feed to check against, the OCR read
+         is the best available and is shown as-is. */
+      const haveFeed=!!(typeof SEAT_SECTIONS!=='undefined'&&SEAT_SECTIONS&&SEAT_SECTIONS[r.code]&&SEAT_SECTIONS[r.code].length);
+      const unverified=haveFeed&&!match;
       return {code:r.code,name:(ci&&ci.name)||'',known,
-        section:r.section||(match&&match.section)||'',crn:r.crn||(match?String(match.class_nbr||''):''),
+        section:(match&&match.section)||(unverified||r._secFuzzy?'':r.section)||'',
+        crn:(match?String(match.class_nbr||''):'')||(unverified?'':r.crn)||'',
         prof:prof,days:days,matched:!!match,
         pick:known,status:status||'enrolled',wlPos:wlPos||null};
     });
     // Drop exact duplicate sections (same code + class number).
     var seenK={}; schImportCodes=schImportCodes.filter(function(c){var k=c.code+'|'+(c.crn||c.section||Math.random());if(seenK[k])return false;seenK[k]=1;return true;});
     const dupNote=schImportCodes.length>new Set(schImportCodes.map(function(c){return c.code;})).size?' Two sections of one course stay separate.':'';
-    schImportMsg=schImportCodes.length?('Found '+schImportCodes.length+' class'+(schImportCodes.length===1?'':'es')+'.'+dupNote+' Confirm your status on each — tap Enrolled / Waitlist.'):'';
+    /* Say when the read was poor. A blurry screenshot doesn't fail loudly — it quietly
+       returns two classes out of five, and "Found 2 classes" reads like success. Measured on
+       real Tesseract output: a full-resolution phone screenshot matched 4 of 4 to real
+       sections; the same screenshot at half resolution matched 1 of 4. That difference is
+       entirely fixable by the student, but only if we tell them. */
+    var unmatched=schImportCodes.filter(function(c){return !c.matched;}).length;
+    var quality=unmatched?(' '+unmatched+' of '+schImportCodes.length+' couldn’t be matched to a real section — if that looks wrong, retake the screenshot at full size (not zoomed out, not a photo of your screen).'):'';
+    schImportMsg=schImportCodes.length?('Found '+schImportCodes.length+' class'+(schImportCodes.length===1?'':'es')+'.'+dupNote+quality+' Confirm your status on each — tap Enrolled / Waitlist.'):'';
     renderSchedImport('done',schImportMsg);
   }catch(e){
     console.error('[professify] schedule OCR failed:',e);
@@ -10363,8 +10646,58 @@ function kickFriendsLoad(tries){
   if(tries>40){console.error('[professify] frOnSignedIn never became available — friends cannot load.');return;}
   setTimeout(function(){kickFriendsLoad(tries+1);},50);
 }
+/* lazyScript was called by loadOcr() and loadQrGen() and DEFINED NOWHERE. Both threw
+   ReferenceError on every call, and handleSchedImport catches that and reports
+   "Text recognition didn't load — check your connection and try again" — so every schedule
+   screenshot anyone ever uploaded failed instantly, blaming their wifi. The library itself was
+   fine. Loads on demand now, and resolves immediately when the global is already present. */
+function lazyScript(src,globalName,timeoutMs){
+  return new Promise(function(resolve,reject){
+    if(globalName&&window[globalName])return resolve(window[globalName]);
+    window.__lazy=window.__lazy||{};
+    if(window.__lazy[src])return window.__lazy[src].then(resolve,reject);   // in flight already
+    window.__lazy[src]=new Promise(function(res,rej){
+      var done=false;
+      var el=document.createElement('script');
+      el.src=src; el.async=true;
+      var timer=setTimeout(function(){
+        if(done)return; done=true;
+        delete window.__lazy[src];
+        rej(new Error('Timed out loading '+src));
+      }, timeoutMs||30000);
+      el.onload=function(){
+        if(done)return; done=true; clearTimeout(timer);
+        if(globalName&&!window[globalName]){ delete window.__lazy[src];
+          return rej(new Error(globalName+' did not appear after load')); }
+        res(globalName?window[globalName]:true);
+      };
+      el.onerror=function(){
+        if(done)return; done=true; clearTimeout(timer);
+        delete window.__lazy[src];                                  // let a retry try again
+        rej(new Error('Could not load '+src));
+      };
+      document.head.appendChild(el);
+    });
+    window.__lazy[src].then(resolve,reject);
+  });
+}
 function loadOcr(){return lazyScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js','Tesseract',45000);}
 function loadQrGen(){return lazyScript('https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js','qrcode');}
+/* Every subject code a major actually draws on, most-used first — majorPrefix() returns only
+   the single dominant one, which is too blunt for filtering (a Business student takes ECON and
+   STAT too). Concentrations count: they're the half of the degree a student picks. */
+function majorSubjects(major){
+  try{
+    var cat=MAJOR_CATALOG[major]; if(!cat)return [];
+    var tally={};
+    var add=function(code){ var pre=String(code||'').split(/[\s\d]/)[0]; if(pre)tally[pre]=(tally[pre]||0)+1; };
+    (cat.core||[]).forEach(function(c){ add(c.code); });
+    if(cat.concentrations)Object.keys(cat.concentrations).forEach(function(cn){
+      (cat.concentrations[cn].classes||[]).forEach(function(a){ add(a&&a[0]); });
+    });
+    return Object.keys(tally).sort(function(a,b){return tally[b]-tally[a];});
+  }catch(e){ return []; }
+}
 function majorPrefix(major){
   try{
     const cat=MAJOR_CATALOG[major];if(!cat)return '';
@@ -10557,6 +10890,11 @@ function renderSchedImport(state,msg){
     body=`<div class="si-busy"><span class="ocr-spin"></span><div>${escapeHtml(msg||'Reading your screenshot…')}<div class="fr-mut" style="margin-top:6px">Runs entirely in your browser — the image is never uploaded.</div></div></div>`;
   }else if(state==='done'){
     const known=schImportCodes.filter(c=>c.known),unknown=schImportCodes.filter(c=>!c.known);
+    /* A failed import used to print BOTH the real reason ("Text recognition didn't load")
+       AND the generic empty state ("No class codes found — make sure the screenshot shows
+       codes like BUS 3306"). Two different explanations for one failure, the second of which
+       blamed the student's screenshot for a problem in our code. When there's a specific
+       message, it stands alone. */
     body=`${msg?`<p class="fr-mut" style="margin:0 0 14px">${escapeHtml(msg)}</p>`:''}
       ${schImportCodes.length?`
         <div class="si-list">${schImportCodes.map((c,i)=>`
@@ -10577,7 +10915,7 @@ function renderSchedImport(state,msg){
           <span id="siCount" class="fr-mut"></span>
           <button class="btn primary" onclick="confirmSchedImport()">Add selected</button>
         </div>`
-      : `<div class="si-empty"><b>No class codes found.</b><p>Make sure the screenshot shows codes like <code>BUS 3306</code>. You can also add classes by hand from Explore.</p></div>`}
+      : (msg ? '' : `<div class="si-empty"><b>No class codes found.</b><p>Make sure the screenshot shows codes like <code>BUS 3306</code>. You can also add classes by hand from Explore.</p></div>`)}
       <button class="fr-addtoggle" style="margin-top:12px" onclick="renderSchedImport('idle')">Try another image</button>`;
   }else{
     body=`<div class="si-drop" onclick="document.getElementById('siFile').click()">
@@ -12530,7 +12868,7 @@ function friendRowHtml(f){
       onclick="openFriendProfile('${f.id}')"
       onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openFriendProfile('${f.id}')}"
       title="See ${escapeHtml(f.name)}'s classes">
-    <div class="ini" style="background:${f.color||colorForId(f.id)}">${initials(f.name)}</div>
+    <div class="ini" style="background:${f.color||colorForId(f.id)}">${avaHtml(f.avatar_url,f.name)}</div>
     <div class="fr-rowmain">
       <div class="fr-rowtop"><h4>${escapeHtml(f.name)}</h4>${meta}</div>
       ${sub}
@@ -13026,6 +13364,42 @@ loadSeats();  // pull real seat status from Supabase on load
     <div class="acts"><button class="no" onclick="pqClose()">Cancel</button><button class="go" onclick="pqSubmit()">Save — I took it</button></div>
   </div>
 </div>
+<!-- ============ EDIT PROFILE (name, @username, photo) ============
+     Everything a friend sees about you is authored here. Photos live in the Supabase `avatars`
+     bucket under <user-id>/avatar.jpg, never in the profiles row — a base64 column would ship
+     every friend's image bytes on every Friends load. -->
+<div class="pq-back" id="epBack" onclick="if(event.target===this)closeEditProfile()">
+  <div class="pq-dlg ep-dlg">
+    <h3>Your profile</h3>
+    <div class="d">This is what friends see when they find you.</div>
+
+    <div class="ep-photo">
+      <div class="ep-ava" id="epAva"></div>
+      <div class="ep-photo-acts">
+        <button class="set-btn ghost" onclick="document.getElementById('epFile').click()">Choose photo</button>
+        <button class="set-btn ghost ep-rm" id="epRemove" onclick="epRemovePhoto()" hidden>Remove</button>
+        <div class="ep-hint" id="epPhotoHint">JPG or PNG. We crop it square and shrink it to 256px.</div>
+      </div>
+      <input type="file" id="epFile" accept="image/png,image/jpeg,image/webp" hidden onchange="epPickFile(this)">
+    </div>
+
+    <label class="ep-lab" for="epName">Name</label>
+    <input id="epName" class="rate-input ep-in" maxlength="40" placeholder="Tate Sims" oninput="epValidate()">
+    <div class="ep-hint">Your real name — how friends recognise you.</div>
+
+    <label class="ep-lab" for="epUser">Username</label>
+    <div class="ep-userwrap"><span class="ep-at">@</span>
+      <input id="epUser" class="rate-input ep-in ep-userin" maxlength="20" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="tatesims" oninput="epValidate()"></div>
+    <div class="ep-hint" id="epUserMsg">3–20 characters · letters, numbers and underscores.</div>
+
+    <div id="epErr" class="rate-err" style="min-height:0"></div>
+    <div class="acts">
+      <button class="no" onclick="closeEditProfile()">Cancel</button>
+      <button class="go" id="epSave" onclick="epSave()">Save profile</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ WAITLIST SPOT DIALOG (your position, shared with friends) ============ -->
 <div class="pq-back" id="wlBack" onclick="if(event.target===this)wlClose()">
   <div class="pq-dlg">
@@ -13216,6 +13590,268 @@ window.confirmTranscriptImport=async function(){
   }catch(e){ try{frToast('Couldn’t save — '+((e&&e.message)||'try again.'));}catch(_e){} }
 };
 try{if(typeof A11Y_MODALS!=='undefined')A11Y_MODALS.push({id:'tiBack',close:'closeTranscriptImport'});}catch(e){}
+/* ============ EDIT PROFILE ============================================================
+   Name, @username and photo. Three things a student authors once and every other surface
+   reads. Needs professify-profiles.sql (avatar_url + username columns, the avatars bucket,
+   and its per-owner storage policies) — without it saving degrades to name-only and says so
+   rather than silently dropping what they typed. */
+var EP_MAX=256;                       // avatars render at 76px at most; 256 covers retina
+var _epPendingBlob=null, _epPendingUrl=null, _epRemove=false, _epUserTimer=null, _epUserOk=null;
+
+function epAvatarUrlFor(prof){
+  var u=prof&&prof.avatar_url;
+  return u?String(u):'';
+}
+function epPaintAva(){
+  var el=document.getElementById('epAva'); if(!el)return;
+  var url=_epPendingUrl||(!_epRemove&&myProfile?epAvatarUrlFor(myProfile):'');
+  var nm=(document.getElementById('epName')||{}).value||myDisplayName()||'?';
+  if(url){ el.style.backgroundImage='url("'+url.replace(/"/g,'%22')+'")'; el.textContent=''; }
+  else { el.style.backgroundImage=''; el.textContent=initials(nm||'?'); }
+  var rm=document.getElementById('epRemove');
+  if(rm)rm.hidden=!(url);
+}
+/* ---- storage diagnosis -----------------------------------------------------------------
+   "I uploaded a photo and it's not showing" has three different causes that all LOOK the
+   same, because a broken photo silently falls back to initials — indistinguishable from
+   never having set one:
+     1. the `avatars` bucket doesn't exist        → upload throws "Bucket not found"
+     2. the bucket exists but isn't Public        → upload succeeds, the URL 400s, <img> fails
+     3. the bucket is fine, the photo just failed → a real, retryable error
+   Guessing between these from the outside is what wasted a round trip. Ask the storage API
+   instead, and say which one it is. */
+function epImgLoads(url,ms){
+  return new Promise(function(resolve){
+    if(!url)return resolve(false);
+    var img=new Image(), done=false;
+    var t=setTimeout(function(){ if(!done){done=true;resolve(false);} },ms||6000);
+    img.onload=function(){ if(!done){done=true;clearTimeout(t);resolve(true);} };
+    img.onerror=function(){ if(!done){done=true;clearTimeout(t);resolve(false);} };
+    img.src=url;
+  });
+}
+/* Does the bucket exist at all?
+   The obvious probe — storage.list() — does NOT answer this. Verified against the live
+   project on 2026-08-21: listing a bucket that does not exist returns 200 with an empty
+   array, exactly like an empty bucket that does. A helper built on list() therefore always
+   answered "yes" and would have mis-diagnosed the very case it was written for.
+   The public-object endpoint is the one that tells the truth: it returns a NoSuchBucket
+   error code for a missing bucket and an object-not-found for a real one. */
+async function epBucketExists(){
+  try{
+    var base=(cfg().SUPABASE_URL||'').replace(/\/+$/,'');
+    if(!base)return null;
+    var r=await fetch(base+'/storage/v1/object/public/avatars/__probe__.jpg',{method:'GET'});
+    var t='';
+    try{ t=await r.text(); }catch(e){}
+    if(/NoSuchBucket|Bucket not found/i.test(t))return false;
+    return true;                       /* object-not-found, or it loaded: the bucket is there */
+  }catch(e){ return null; }            /* offline — don't guess */
+}
+/* Called when the editor opens: if the DB says you have a photo but the browser can't load
+   it, the bucket is not public. Say so where the photo is, not in a toast that's gone. */
+async function epDiagnosePhoto(){
+  var hint=document.getElementById('epPhotoHint'); if(!hint)return;
+  var url=(myProfile&&myProfile.avatar_url)?String(myProfile.avatar_url):'';
+  if(!url)return;
+  var ok=await epImgLoads(url);
+  if(ok)return;
+  var exists=await epBucketExists();
+  hint.className='ep-hint bad';
+  hint.textContent=(exists===false)
+    ? 'Your photo is saved but the “avatars” bucket is gone — recreate it in Supabase → Storage.'
+    : (exists===null)
+      ? 'Couldn’t load your photo — check your connection and reopen this.'
+      : 'Your photo saved but won’t load — the “avatars” bucket isn’t Public. Turn on Public in Supabase → Storage → avatars.';
+}
+window.openEditProfile=function(){
+  if(typeof sbUser==='undefined'||!sbUser){ try{frToast('Log in to set up your profile.');onAuthBtn();}catch(e){} return; }
+  _epPendingBlob=null; _epPendingUrl=null; _epRemove=false; _epUserOk=null;
+  var n=document.getElementById('epName'), u=document.getElementById('epUser');
+  if(n)n.value=(myProfile&&myProfile.display_name)||'';
+  if(u)u.value=(myProfile&&myProfile.username)||'';
+  var e=document.getElementById('epErr'); if(e)e.textContent='';
+  epPaintAva(); epValidate();
+  try{ epDiagnosePhoto(); }catch(e){}
+  document.getElementById('epBack').classList.add('open');
+  setTimeout(function(){ if(n)n.focus(); },50);
+};
+window.closeEditProfile=function(){
+  document.getElementById('epBack').classList.remove('open');
+  if(_epPendingUrl){ try{URL.revokeObjectURL(_epPendingUrl);}catch(e){} }
+  _epPendingBlob=null; _epPendingUrl=null; _epRemove=false;
+};
+try{if(typeof A11Y_MODALS!=='undefined')A11Y_MODALS.push({id:'epBack',close:'closeEditProfile'});}catch(e){}
+
+/* Crop to a centred square and shrink to 256px BEFORE upload. A modern phone photo is 3-6MB;
+   sending that to storage would be slow on campus wifi and pointless for a 76px circle. */
+function epProcessImage(file){
+  return new Promise(function(resolve,reject){
+    if(!file)return reject(new Error('No file'));
+    if(!/^image\/(png|jpe?g|webp)$/i.test(file.type||''))return reject(new Error('Pick a JPG, PNG or WebP image.'));
+    if(file.size>12*1024*1024)return reject(new Error('That image is over 12MB — pick a smaller one.'));
+    var url=URL.createObjectURL(file), img=new Image();
+    img.onload=function(){
+      try{
+        var side=Math.min(img.width,img.height);
+        var sx=Math.round((img.width-side)/2), sy=Math.round((img.height-side)/2);
+        var c=document.createElement('canvas'); c.width=EP_MAX; c.height=EP_MAX;
+        var ctx=c.getContext('2d'); ctx.imageSmoothingQuality='high';
+        ctx.drawImage(img,sx,sy,side,side,0,0,EP_MAX,EP_MAX);
+        URL.revokeObjectURL(url);
+        c.toBlob(function(blob){
+          if(!blob)return reject(new Error('Couldn’t read that image.'));
+          resolve(blob);
+        },'image/jpeg',0.86);
+      }catch(err){ URL.revokeObjectURL(url); reject(new Error('Couldn’t read that image.')); }
+    };
+    img.onerror=function(){ URL.revokeObjectURL(url); reject(new Error('Couldn’t read that image.')); };
+    img.src=url;
+  });
+}
+window.epPickFile=function(input){
+  var f=input&&input.files&&input.files[0]; if(!f)return;
+  var hint=document.getElementById('epPhotoHint');
+  epProcessImage(f).then(function(blob){
+    if(_epPendingUrl){try{URL.revokeObjectURL(_epPendingUrl);}catch(e){}}
+    _epPendingBlob=blob; _epPendingUrl=URL.createObjectURL(blob); _epRemove=false;
+    if(hint){hint.textContent='Ready to save · '+Math.round(blob.size/1024)+'KB';hint.className='ep-hint good';}
+    epPaintAva();
+  }).catch(function(err){
+    if(hint){hint.textContent=(err&&err.message)||'Couldn’t read that image.';hint.className='ep-hint bad';}
+  });
+  input.value='';
+};
+window.epRemovePhoto=function(){
+  if(_epPendingUrl){try{URL.revokeObjectURL(_epPendingUrl);}catch(e){}}
+  _epPendingBlob=null; _epPendingUrl=null; _epRemove=true;
+  var hint=document.getElementById('epPhotoHint');
+  if(hint){hint.textContent='Photo will be removed when you save.';hint.className='ep-hint';}
+  epPaintAva();
+};
+function epUserShape(v){
+  if(!v)return {ok:true,msg:'Optional — but it’s how friends find you.'};   // blank is allowed
+  if(v.length<3)return {ok:false,msg:'At least 3 characters.'};
+  if(v.length>20)return {ok:false,msg:'20 characters max.'};
+  if(!/^[A-Za-z0-9_]+$/.test(v))return {ok:false,msg:'Letters, numbers and underscores only.'};
+  return {ok:true,msg:''};
+}
+window.epValidate=function(){
+  var u=(document.getElementById('epUser')||{}).value||'';
+  u=u.trim();
+  var msg=document.getElementById('epUserMsg'), save=document.getElementById('epSave');
+  var shape=epUserShape(u);
+  epPaintAva();
+  if(!shape.ok){ if(msg){msg.textContent=shape.msg;msg.className='ep-hint bad';} _epUserOk=false; if(save)save.disabled=false; return; }
+  if(!u){ if(msg){msg.textContent='Optional — but it’s how friends find you.';msg.className='ep-hint';} _epUserOk=true; return; }
+  var mine=(myProfile&&myProfile.username)||'';
+  if(u.toLowerCase()===mine.toLowerCase()){ if(msg){msg.textContent='This is your username.';msg.className='ep-hint';} _epUserOk=true; return; }
+  if(msg){msg.textContent='Checking…';msg.className='ep-hint';}
+  _epUserOk=null;
+  /* Debounced so a student typing "tatesims" doesn't fire eight lookups. */
+  if(_epUserTimer)clearTimeout(_epUserTimer);
+  _epUserTimer=setTimeout(function(){ epCheckUsername(u); },420);
+};
+async function epCheckUsername(u){
+  var msg=document.getElementById('epUserMsg');
+  if(typeof sb==='undefined'||!sb){ if(msg){msg.textContent='Can’t check right now — you can still save.';msg.className='ep-hint';} _epUserOk=true; return; }
+  try{
+    var r=await sb.from('profiles').select('id').ilike('username',u).limit(1);
+    if(r.error){
+      /* Column missing = the migration hasn't run. Say that instead of implying it's taken. */
+      if(/column|schema cache|does not exist/i.test(r.error.message||'')){
+        if(msg){msg.textContent='Usernames aren’t switched on yet (run professify-profiles.sql).';msg.className='ep-hint bad';}
+        _epUserOk=false; return;
+      }
+      if(msg){msg.textContent='Couldn’t check that one — try saving.';msg.className='ep-hint';} _epUserOk=true; return;
+    }
+    var taken=(r.data||[]).some(function(x){return x.id!==sbUser.id;});
+    if(msg){ msg.textContent=taken?('@'+u+' is taken.'):('@'+u+' is available.'); msg.className='ep-hint '+(taken?'bad':'good'); }
+    _epUserOk=!taken;
+  }catch(e){ if(msg){msg.textContent='Couldn’t check that one — try saving.';msg.className='ep-hint';} _epUserOk=true; }
+}
+window.epSave=async function(){
+  var btn=document.getElementById('epSave'), err=document.getElementById('epErr');
+  var name=((document.getElementById('epName')||{}).value||'').trim();
+  var user=((document.getElementById('epUser')||{}).value||'').trim();
+  if(err)err.textContent='';
+  var shape=epUserShape(user);
+  if(!shape.ok){ if(err)err.textContent=shape.msg; return; }
+  if(_epUserOk===false){ if(err)err.textContent='Pick a different username — that one isn’t available.'; return; }
+  if(typeof sb==='undefined'||!sb||typeof sbUser==='undefined'||!sbUser){ if(err)err.textContent='You’re signed out.'; return; }
+  if(btn){btn.disabled=true;btn.textContent='Saving…';}
+
+  var patch={display_name:name||null};
+  var noteMissing=[];
+  var bucketMissing=false, notPublic=false;
+
+  /* --- photo first --- */
+  if(_epPendingBlob){
+    try{
+      var path=sbUser.id+'/avatar.jpg';
+      var up=await sb.storage.from('avatars').upload(path,_epPendingBlob,{upsert:true,contentType:'image/jpeg',cacheControl:'3600'});
+      if(up.error)throw up.error;
+      var pub=sb.storage.from('avatars').getPublicUrl(path);
+      /* The path never changes, so a cache-buster is the only way a new photo actually shows. */
+      patch.avatar_url=(pub&&pub.data&&pub.data.publicUrl?pub.data.publicUrl:'')+'?v='+Date.now();
+      /* getPublicUrl builds a URL string offline — it never checks the bucket is Public, so
+         a private bucket produces a perfectly-shaped URL that 400s. Load it once before we
+         claim the photo saved. */
+      if(!(await epImgLoads(patch.avatar_url,7000)))notPublic=true;
+    }catch(e){
+      var m=(e&&e.message)||'';
+      /* Two different failures were treated the same and both blocked the save. A MISSING
+         BUCKET is a setup gap that no amount of retrying fixes — refusing to save the name
+         and username too just means nothing works until the dashboard is touched. Save what
+         can be saved and say plainly what didn't. A transient upload error is different:
+         there, stopping keeps the staged photo so Save actually retries it. */
+      if(/not found|bucket|does not exist/i.test(m)){
+        bucketMissing=true;
+      }else{
+        if(btn){btn.disabled=false;btn.textContent='Save profile';}
+        if(err)err.textContent='Couldn’t upload that photo — '+(m||'try again.');
+        return;
+      }
+    }
+  }else if(_epRemove){
+    patch.avatar_url=null;
+    try{ await sb.storage.from('avatars').remove([sbUser.id+'/avatar.jpg']); }catch(e){}
+  }
+  if(user)patch.username=user; else patch.username=null;
+
+  /* Degrade one column at a time so an un-migrated database still saves the name. */
+  var r=await sb.from('profiles').update(patch).eq('id',sbUser.id);
+  if(r.error&&/column|schema cache|does not exist/i.test(r.error.message||'')){
+    ['username','avatar_url'].forEach(function(k){ if(k in patch){ delete patch[k]; noteMissing.push(k); } });
+    r=await sb.from('profiles').update(patch).eq('id',sbUser.id);
+  }
+  if(btn){btn.disabled=false;btn.textContent='Save profile';}
+  if(r.error){
+    if(err)err.textContent=/duplicate|unique/i.test(r.error.message||'')
+      ? 'That username was just taken — pick another.'
+      : ('Couldn’t save — '+r.error.message);
+    return;
+  }
+  myProfile=Object.assign(myProfile||{},patch);
+  closeEditProfile();
+  try{ epRefreshEverywhere(); }catch(e){}
+  try{ frToast(noteMissing.length
+        ? 'Name saved. Photo and username need professify-profiles.sql run first.'
+        : bucketMissing
+            ? 'Name and username saved — the photo needs an “avatars” bucket in Supabase → Storage.'
+        : notPublic
+            ? 'Saved, but the photo won’t load — turn on Public for the “avatars” bucket in Supabase → Storage.'
+        : 'Profile saved.'); }catch(e){}
+};
+/* One place that repaints every surface showing your identity, so they can't drift apart. */
+function epRefreshEverywhere(){
+  try{ updateAuthUI(); }catch(e){}
+  try{ if(typeof hmRenderRailL==='function')hmRenderRailL(); }catch(e){}
+  try{ if(typeof renderHome==='function')renderHome(); }catch(e){}
+  try{ if(typeof renderFriends==='function')renderFriends(); }catch(e){}
+  try{ if(typeof renderAccountSection==='function')renderAccountSection(); }catch(e){}
+}
+
 /* ---------- waitlist spot: yours to set, friends get to see it ---------- */
 var _wlCode=null;
 window.wlOpen=function(code){
@@ -13550,17 +14186,20 @@ async function hmLoadRecents(){
   }catch(e){}
 }
 /* ---------- pieces ---------- */
-function hmGreeting(){
+/* Greeting text. Split from the painter because the greeting now lives inside the Today
+   card the right rail builds, and hmRenderRailR() has to bake the text in as it writes the
+   card's HTML — painting afterwards into #hmGreeting would race the innerHTML that creates it. */
+function hmGreetText(){
   var h=new Date().getHours();
   var part=(h>=5&&h<12)?'Good morning':(h>=12&&h<17)?'Good afternoon':(h>=17)?'Good evening':'Up late';
   var name=(typeof myDisplayName==='function')?String(myDisplayName()||'').split(' ')[0]:'';
-  var g=document.getElementById('hmGreeting'),s=document.getElementById('hmGreetSub');
-  if(g)g.textContent=name?(part+', '+name):(part);
-  var bits=['Fall 2026 · Cal Poly SLO'];
-  try{if(myClasses.length)bits.push(myClasses.length+(myClasses.length===1?' class':' classes')+' planned');}catch(e){}
-  try{if(typeof FRIENDS!=='undefined'&&FRIENDS.length)bits.push(FRIENDS.length+' friends');}catch(e){}
-  if(s)s.textContent=bits.join(' · ');
+  return {title:(name?(part+', '+name):part)};
 }
+function hmGreeting(){
+  var g=document.getElementById('hmGreeting');
+  if(g)g.textContent=hmGreetText().title;
+}
+try{ window.hmGreetText=hmGreetText; window.hmGreeting=hmGreeting; }catch(e){}
 function hmRenderAlert(){
   // Seat-low alert removed from Home per request — seat tracking lives in Watchlist and
   // (once shipped) the notifications feed, not as a card at the top of the center column.
@@ -13575,12 +14214,15 @@ function hmRenderStrip(){
   var mine={}; try{(myClasses||[]).forEach(function(c){mine[c]=1;});}catch(e){}
   var items=fr.slice(0,12).map(function(f){
     var shared=0; try{(f.classes||[]).forEach(function(c){if(mine[c])shared++;});}catch(e){}
+    /* Only say something if there IS something. "on Professify" was filler under every
+       avatar of a friend who hadn't added classes yet — it told you nothing you didn't
+       already know from them being on the friends strip. */
     var ev=shared?(shared+' class'+(shared===1?'':'es')+' with you')
-      :((f.classes&&f.classes.length)?(f.classes.length+' class'+(f.classes.length===1?'':'es')+' planned'):'on Professify');
+      :((f.classes&&f.classes.length)?(f.classes.length+' class'+(f.classes.length===1?'':'es')+' planned'):'');
     return '<button class="hm-fitem" onclick="openFriendProfile(\''+esc(f.id)+'\')" title="'+esc(f.name||'')+'">'
       +'<span class="ring"><span class="fav" style="background:'+hmFriendColor(f)+'">'+esc(f.ini||hmIni(f.name))+'</span></span>'
       +'<span class="nm">'+esc(f.name||'Friend')+'</span>'
-      +'<span class="ev">'+esc(ev)+'</span></button>';
+      +(ev?('<span class="ev">'+esc(ev)+'</span>'):'<span class="ev"></span>')+'</button>';
   }).join('');
   host.innerHTML='<div class="hm-slabel">Friends activity</div>'
     +'<div class="hm-strip">'+items+'<div class="hm-stripend">That’s everyone ✓</div></div>';
@@ -13609,29 +14251,7 @@ function hmRenderToday(){
   }).join('');
   host.innerHTML='<div class="hm-card"><div class="hm-ct">My classes · Fall<button class="hm-more" onclick="event.stopPropagation();show(\'sched\')">Schedule →</button></div>'+rows+'</div>';
 }
-function hmReviewCard(r){
-  /* Simple card: one tap opens the professor. Three chips max, no button footer. */
-  var pid=hmProfIdForKey(r.professor_key);
-  var col=(typeof colorForId==='function')?colorForId(r.professor_key||r.professor_name||'p'):'#5E7A8A';
-  var score=(r.score!=null)?(Math.round(r.score*10)/10):null;
-  var chips='';
-  if(score!=null)chips+='<span class="hm-chip">Overall <b>'+score+'</b>/5</span>';
-  if(r.difficulty!=null)chips+='<span class="hm-chip">Difficulty <b>'+r.difficulty+'</b></span>';
-  if(r.would_again===true)chips+='<span class="hm-chip">Would take again <b>✓</b></span>';
-  if(r.would_again===false)chips+='<span class="hm-chip">Would take again <b>✕</b></span>';
-  try{(r.tags||[]).slice(0,2).forEach(function(t){chips+='<span class="hm-chip">'+esc(t)+'</span>';});}catch(e){}
-  chips+='<span class="hm-chip v">✓ Verified Cal Poly student</span>';
-  var note=(r.note||'').trim();
-  var body=note?'<p class="hm-fbody">'+esc(note)+'</p>':'';
-  var click=pid?('hmOpenProfKey(\''+esc(r.professor_key)+'\')'):(r.course?('openClassFromFeed(\''+esc(r.course)+'\')'):'');
-  return '<article class="hm-card'+(click?' hm-click" onclick="'+click:'')+'">'
-    +'<div class="hm-fhead"><span class="fav" style="background:'+col+'">'+esc(hmIni(r.professor_name))+'</span>'
-    +'<div style="min-width:0"><div class="nm">'+esc(r.professor_name||'Professor')+'</div>'
-    +'<div class="ctx">'+(r.course?'<span class="hm-code" style="font-size:11px;padding:1px 5px">'+esc(r.course)+'</span> · ':'')+esc(r.department||'')+'</div></div>'
-    +'<span class="time">'+hmAgo(r.created_at)+'</span></div>'
-    +'<div class="hm-chips">'+chips+'</div>'+body
-    +'</article>';
-}
+/* hmReviewCard lived here — the Quad no longer carries reviews. */
 function hmSeatCard(code){
   var a=PROFESSIFY_SEATS[code]; if(!a||!a.cap)return '';
   var color=a.seats===0?'var(--low)':(a.seats<=5?'var(--mid)':'var(--good)');
@@ -13733,11 +14353,26 @@ function hmFriendSchedCard(f){
    column above the fold on phones, back in the right rail on wide screens. */
 function hmPlaceRail(){
   try{
-    var rail=document.getElementById('hmRailR'), slot=document.getElementById('hmRailSlot');
-    if(!rail||!slot)return;
+    var slot=document.getElementById('hmRailSlot');
+    var wrap=document.querySelector('.hm-wrap');
+    if(!slot||!wrap)return;
     var narrow=window.matchMedia('(max-width:1139px)').matches;
-    if(narrow){ if(rail.parentNode!==slot)slot.appendChild(rail); }
-    else{ var wrap=document.querySelector('.hm-wrap'); if(wrap&&rail.parentNode!==wrap)wrap.appendChild(rail); }
+    /* Only the RIGHT rail was ever relocated. The left one — profile card, your four stats,
+       My calendar and the Watchlist — just stayed in the grid, where `.hm-rail{display:none}`
+       hid it outright below 1140px. So a Windows laptop at 1152 (1135 of layout width once the
+       scrollbar takes its cut) silently lost half of Home. Both rails move now.
+       Order in the slot is deliberate: the right rail carries today's date, Rate a professor
+       and friends-in-your-classes, which are worth more on a small screen than a profile card,
+       so it goes first. */
+    var R=document.getElementById('hmRailR'), L=document.getElementById('hmRailL');
+    if(narrow){
+      if(R&&R.parentNode!==slot)slot.appendChild(R);
+      if(L&&L.parentNode!==slot)slot.appendChild(L);
+    }else{
+      /* Back to the grid in DOM order — left rail first, or it lands in the right column. */
+      if(L&&L.parentNode!==wrap)wrap.insertBefore(L,wrap.firstChild);
+      if(R&&R.parentNode!==wrap)wrap.appendChild(R);
+    }
   }catch(e){}
 }
 try{ window.addEventListener('resize',function(){ if(window._hmRailT)clearTimeout(window._hmRailT); window._hmRailT=setTimeout(hmPlaceRail,150); }); }catch(e){}
@@ -13783,12 +14418,11 @@ function hmRenderFeed(){
       }
     });
   }catch(e){}
-  /* latest verified reviews */
-  HM_RECENTS.slice(0,6).forEach(function(r){
-    var t=new Date(r.created_at||0).getTime()||0;
-    var ov=r.course&&typeof isMyClass==='function'&&isMyClass(r.course)?1:0;
-    items.push({score:ov,t:t,html:hmReviewCard(r)});
-  });
+  /* Reviews are out of the Quad (Tate, Aug 2026). They belong on the professor they're about,
+     where a student is deciding — in a scroll of "who's in my classes" a stranger's rating of a
+     class you'll never take is filler. The Quad is friends' schedules now, full stop.
+     HM_RECENTS is still fetched: it's what tells the feed whether the network has SETTLED, so
+     "You're all caught up" can't print over a still-loading list. */
   /* classmates first, then newest — explainable, never engagement */
   items.sort(function(a,b){return (b.score-a.score)||(b.t-a.t);});
   var out=items.slice(0,14).map(function(i){return i.html;}).join('');
@@ -13797,7 +14431,7 @@ function hmRenderFeed(){
      other — two opposite claims about the same state. */
   var pending=false;
   if(!out){
-    if(hmRecentsLoaded||hmPostsLoaded){
+    if(hmRecentsLoaded||hmPostsLoaded||(typeof friendsLoaded!=='undefined'&&friendsLoaded)){
       /* This pointed at the discussion composer, now removed, so the one action offered on an
          empty Quad opened nothing. Point at the thing that actually fills it. */
       out='<div class="hm-card hm-click" onclick="show(\'friends\')"><div class="hm-empty">Quiet out here — add a friend and you\u2019ll see their classes as they plan. <span class="go">Find classmates \u2192</span></div></div>';
@@ -13813,7 +14447,7 @@ function hmRenderFeed(){
       hmArmFeedTimeout();
     }
   }
-  if(!pending)out+=hmCaught('Classmates first, then newest — never ranked by engagement.');
+  if(!pending)out+=hmCaught('Friends who share classes with you first — never ranked by engagement.');
   host.innerHTML=out;
 }
 /* Mini week-at-a-glance calendar for the left rail — click to open the full
@@ -13884,27 +14518,44 @@ function hmRenderRailL(){
      "Classmates you've helped" is out for now: it reads the helpful-vote count, which nothing
      writes yet, so it sat at 0 for everyone and made the whole card look inert. */
   var stats='';
-  function statRow(label,n,go,tip){
-    return '<div class="stat stat-click" role="button" tabindex="0" title="'+tip+'"'
-      +' onclick="'+go+'" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();'+go+'}">'
-      +'<span>'+label+'</span><b>'+n+' ›</b></div>';
+  /* Tiles, not rows. Every one of these navigates, but as a list of text rows only the first
+     read as interactive — a real <button> per number says so without a caption. */
+  function statTile(label,n,go,tip){
+    return '<button type="button" class="tile" title="'+tip+'" onclick="'+go+'">'
+      +'<b>'+n+'</b><span>'+label+'</span></button>';
   }
   try{
-    stats+=statRow('Reviews you’ve written',myRevN,'openMyReviews()','See the reviews you\'ve written');
-    stats+=statRow('Classes saved',((myClasses&&myClasses.length)||0),
+    stats+=statTile('Reviews',myRevN,'openMyReviews()','See the reviews you\'ve written');
+    stats+=statTile('Classes',((myClasses&&myClasses.length)||0),
       "show('sched');setSchedTab('mine')",'Open My Classes');
-    stats+=statRow('Friends',((typeof FRIENDS!=='undefined'&&FRIENDS.length)||0),
+    stats+=statTile('Friends',((typeof FRIENDS!=='undefined'&&FRIENDS.length)||0),
       "show('friends')",'Open Friends');
-    stats+=statRow('Watching',(((watchlist&&watchlist.length)||0)+((watchClasses&&watchClasses.length)||0)),
+    stats+=statTile('Watching',(((watchlist&&watchlist.length)||0)+((watchClasses&&watchClasses.length)||0)),
       "show('sched');setSchedTab('watch')",'Open your Watchlist');
   }catch(e){}
-  var id='<div class="hm-card hm-id"><div class="cover"></div>'
-    +'<span class="fav'+(name?'':' fav-anon')+'">'+myAvatarHtml()+'</span>'
-    +'<div class="nm">'+(name?esc(name):'Welcome')+'</div>'
+  /* The @handle used to be a big outlined pill — the loudest thing on the card after the
+     name, for the least important fact on it. It was loud because it doubled as the "set
+     yourself up" prompt. Split the two: a prompt only while something IS missing, quiet text
+     once it's set. */
+  var uname=(myProfile&&myProfile.username)?String(myProfile.username):'';
+  var idWho=signed
+    ? ('<div class="idwho"><div class="nm">'+(name?esc(name):'Welcome')+'</div>'
+       +(uname
+          ? '<div class="idun">@'+esc(uname)+'</div>'
+          : '<button class="idun-btn" onclick="event.stopPropagation();openEditProfile()">Add a username &amp; photo</button>')
+       +'</div>')
+    : '<div class="idwho"><div class="nm">Welcome</div></div>';
+  var id='<div class="hm-card hm-id">'
+    +'<div class="idhead">'
+      +(signed
+        ? '<button class="fav fav-btn'+(name?'':' fav-anon')+'" title="Edit your profile" onclick="openEditProfile()">'+myAvatarHtml()+'</button>'
+        : '<span class="fav'+(name?'':' fav-anon')+'">'+myAvatarHtml()+'</span>')
+      +idWho
+    +'</div>'
     +(hasMajor
       ? '<div class="mj">'+esc(maj)+(student&&student.standing?' · '+esc(student.standing):'')+'</div>'
       : '<button class="mj mj-setup" onclick="event.stopPropagation();startOnboard()">Set up your plan \u2192</button>')
-    +(signed?('<div class="stats">'+stats+'</div>'):('<button class="signin" onclick="onAuthBtn(event)">Log in · Sign up</button>'))
+    +(signed?('<div class="idgrid">'+stats+'</div>'):('<button class="signin" onclick="onAuthBtn(event)">Log in · Sign up</button>'))
     +'</div>';
   var mini=hmMiniCalHtml();
   /* Watchlist card — both the classes AND the professors you're watching. */
@@ -13914,13 +14565,24 @@ function hmRenderRailL(){
     var wProfs=(watchlist||[]).filter(function(id){return typeof PROFESSORS!=='undefined'&&PROFESSORS[id];}).slice(0,3);
     if(wCodes.length||wProfs.length){
       var rows='';
+      /* A rail glance at your watchlist answers exactly one question — can I get in — and
+         the old row answered it with "73/674 open", a ratio that wrapped onto two lines and
+         pushed the course name down to "Organiza…". Say the state in a word. The exact
+         numbers are one tap away in the Watchlist tab, and stay in the row's tooltip.
+         Open / Waitlist / Full come straight from realSeat(); with no live feed for a course
+         there is no word to say, so nothing is shown rather than a guess. */
       wCodes.forEach(function(code){
         var ci=(typeof classInfo==='function')?classInfo(code):{name:''};
         var seat=(typeof realSeat==='function')?realSeat(code):null;
-        var sb=(seat&&typeof seatBadge==='function')?('<span class="r">'+esc(String(seatBadge(seat)).split('·')[0].trim())+'</span>'):'';
-        rows+='<div class="hm-saved" onclick="event.stopPropagation();show(\'watch\')" title="'+esc(code)+' — on your Watchlist">'
-          +'<span class="hm-code" style="font-size:11px;padding:1px 6px">'+esc(code)+'</span>'
-          +'<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(ci&&ci.name?ci.name:'')+'</span>'+sb+'</div>';
+        var st=(seat&&seat.label)?('<span class="wl-st '+esc(seat.cls)+'">'+esc(seat.label)+'</span>'):'';
+        var tip=code+((seat&&typeof seatBadge==='function')?(' — '+seatBadge(seat)):' — on your Watchlist');
+        /* One line could not hold chip + name + status at this rail width: measured, the
+           name got ~85px and "Organizational Behavior" needs ~140px, so it truncated to
+           "Organiza…" — the exact problem the status word was meant to free up room for.
+           Two short things on the top line, the name given the full width below it. */
+        rows+='<div class="hm-wrow" onclick="event.stopPropagation();show(\'watch\')" title="'+esc(tip)+'">'
+          +'<div class="wl-top"><span class="wl-code">'+esc(code)+'</span>'+st+'</div>'
+          +(ci&&ci.name?('<div class="wl-nm">'+esc(ci.name)+'</div>'):'')+'</div>';
       });
       wProfs.forEach(function(pid){
         var p=PROFESSORS[pid];var r5=(p.rating!=null&&typeof to5==='function')?to5(p.rating):null;
@@ -13949,23 +14611,21 @@ function hmRenderRailR(){
     var d=new Date();
     var WD=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
     var MO=['January','February','March','April','May','June','July','August','September','October','November','December'];
-    out+='<div class="hm-card hm-td"><div class="hm-td-h"><b>'+WD[d.getDay()]+'</b>'
-        +'<span>'+MO[d.getMonth()]+' '+d.getDate()+'</span></div></div>';
+    /* Two lines, one bold thing. The date was split across two weights (bold day, faint
+       date) which read as two facts; it's one fact, so it's one line in one weight, demoted
+       to an eyebrow above the greeting. The old third line — "Fall 2026 · Cal Poly SLO ·
+       N classes planned" — is gone: term and school never change for a Cal Poly student on
+       a Cal Poly app, and the class count belongs in Schedule, one tap away. */
+    out+='<div class="hm-card hm-td">'
+        +'<div class="hm-td-d">'+WD[d.getDay()]+', '+MO[d.getMonth()]+' '+d.getDate()+'</div>'
+        +'<h1 class="hm-tdg" id="hmGreeting">'+esc(hmGreetText().title)+'</h1></div>';
   }catch(e){}
   /* the supply verb — right above Highest rated (Tate's placement) */
   out+='<button class="hm-ratebtn" onclick="openRate()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 17.3l-5.4 3 1-6-4.4-4.2 6-.9L12 3.6l2.8 5.6 6 .9-4.4 4.2 1 6z" stroke-linejoin="round"/></svg>Rate a professor</button>';
-  /* friends in your classes */
-  try{
-    var rows='';
-    (myClasses||[]).forEach(function(code){
-      var ov=(FRIENDS||[]).filter(function(f){return (f.classes||[]).indexOf(code)>=0;});
-      if(ov.length){
-        rows+='<div class="hm-rrow" onclick="show(\'friends\')"><span class="hm-code" style="font-size:11px;padding:1px 6px">'+esc(code)+'</span>'
-          +'<span class="right"><span class="hm-avstack">'+ov.slice(0,4).map(function(f){return '<span class="sav" style="background:'+hmFriendColor(f)+'">'+esc(f.ini||hmIni(f.name))+'</span>';}).join('')+'</span></span></div>';
-      }
-    });
-    if(rows)out+='<div class="hm-card"><div class="hm-ct">Friends in your classes</div>'+rows+'</div>';
-  }catch(e){}
+  /* "Friends in your classes" lived here and was removed 2026-08-21 as repetitive. It said
+     the same thing as the Friends-activity strip at the top of Home ("1 class with you"),
+     which is both more compact and higher on the page — and the Friends tab it linked to
+     says it a third time, per friend, with more detail. Three surfaces for one fact. */
   /* highest + lowest rated — REAL DATA ONLY: professors synced from PolyRatings'
      live API (p.live). Seeded/sample entries can never appear here. */
   try{
@@ -13974,6 +14634,20 @@ function hmRenderRailR(){
     /* small-n honesty: need a real sample before crowning (or condemning) anyone */
     var solid=pool.filter(function(e){return (e.p.evals||0)>=8;});
     if(solid.length>=6)pool=solid;
+
+    /* Campus-wide "highest rated" is a leaderboard of professors a Business senior will never
+       take — the top three are perennially MATH and ENGL. Once a major is set, rank inside the
+       subjects that major actually draws on. Falls back to campus-wide when the filtered pool
+       is too thin to be meaningful, and the heading always says which one you're looking at, so
+       the list is never silently a different thing than it claims. */
+    var majSubs=(typeof student!=='undefined'&&student.major&&typeof majorSubjects==='function')
+      ? majorSubjects(student.major) : [];
+    var scopeLabel='', scoped=null;
+    if(majSubs.length){
+      var want={}; majSubs.forEach(function(x){want[String(x).toUpperCase()]=1;});
+      scoped=pool.filter(function(e){ return want[String(e.p.dept||'').toUpperCase()]; });
+      if(scoped.length>=3){ pool=scoped; scopeLabel=' in your major'; }
+    }
     function ratedRow(e){
       var r5=(typeof to5==='function')?to5(e.p.rating):e.p.rating;
       var bg=(typeof colorForId==='function')?colorForId(e.id):'#5E7A8A';
@@ -13987,14 +14661,17 @@ function hmRenderRailR(){
     pool=(typeof rankProfs==='function')?rankProfs(pool,1):pool.sort(function(a,b){return (b.p.rating-a.p.rating)||((b.p.evals||0)-(a.p.evals||0));});
     var top=pool.slice(0,3);
     if(top.length){
-      out+='<div class="hm-card"><div class="hm-ct">Highest rated right now</div>'+top.map(ratedRow).join('')
-        +'<div class="hm-sortnote">Real data, live from PolyRatings\' public API · 8+ evals required · tap any professor to read their actual reviews</div></div>';
+      out+='<div class="hm-card"><div class="hm-ct">Highest rated'+(scopeLabel||' right now')+'</div>'+top.map(ratedRow).join('')
+        +'<div class="hm-sortnote">'+(scopeLabel
+            ? ('Professors in '+esc(majSubs.slice(0,4).join(', '))+' · live from PolyRatings · 8+ evals required')
+            : 'Real data, live from PolyRatings\' public API · 8+ evals required')
+        +'</div></div>';
     }
     var bottom=pool.slice(-3).reverse();   /* lowest first */
     bottom=bottom.filter(function(e){return top.indexOf(e)<0;});
     if(bottom.length){
-      out+='<div class="hm-card"><div class="hm-ct">Lowest rated right now</div>'+bottom.map(ratedRow).join('')
-        +'<div class="hm-sortnote">Live from PolyRatings · read the reviews before judging</div></div>';
+      out+='<div class="hm-card"><div class="hm-ct">Lowest rated'+(scopeLabel||' right now')+'</div>'+bottom.map(ratedRow).join('')
+        +'<div class="hm-sortnote">Live from PolyRatings · scores weighted by sample size</div></div>';
     }
   }catch(e){}
   host.innerHTML=out;
@@ -14093,6 +14770,101 @@ window.show=function(v){
   if(v==='home'){try{renderHome();}catch(e){}}
   if(!signed && (v==='sched'||v==='watch')){ try{ if(typeof markSignedOutSchedule==='function')markSignedOutSchedule(); }catch(e){} }
 };
+/* ============ BACK BUTTON =============================================================
+   There was no history handling at all, so the browser's Back (and an Android hardware back,
+   and a two-finger swipe on a trackpad) left Professify entirely — from a modal, from a tab,
+   from anywhere. For an app people reach through a shared link that's brutal: one back press
+   and they're gone, having never chosen to leave.
+   Model: each VIEW change and each OVERLAY open pushes one history entry. Back closes the
+   topmost overlay if one is open, otherwise returns to the previous view. Only when there's
+   nothing of ours left on the stack does the browser actually navigate away. */
+var NAV_OVERLAYS=[
+  {sel:'#epBack',      close:'closeEditProfile'},
+  {sel:'#wlBack',      close:'wlClose'},
+  {sel:'#pqBack',      close:'pqClose'},
+  {sel:'#tiBack',      close:'closeTranscriptImport'},
+  {sel:'#siBack',      close:'closeSchedImport'},
+  {sel:'#rlBack',      close:'closeReviewLanding'},
+  {sel:'#frpBack',     close:'closeFriendProfile'},
+  {sel:'#fpBack',      close:'closeFindProf'},
+  {sel:'#authBack',    close:'closeAuth'},
+  {sel:'#settingsBack',close:'closeSettings'},
+  {sel:'#mback',       close:'closeModal'}
+];
+window.navOpenOverlays=function(){
+  var out=[];
+  NAV_OVERLAYS.forEach(function(o){
+    var el=document.querySelector(o.sel);
+    if(el&&el.classList.contains('open'))out.push(o);
+  });
+  /* The notification panel and the onboarding wizard don't use .open, so they're checked on
+     their own terms rather than being missed. */
+  var nt=document.getElementById('notifPanel');
+  if(nt&&(nt.classList.contains('open')||getComputedStyle(nt).display!=='none'&&nt.getBoundingClientRect().height>0))
+    out.push({sel:'#notifPanel',close:'closeNotifs'});
+  var ob=document.getElementById('onboard');
+  if(ob&&ob.style.display!=='none'&&ob.getBoundingClientRect().height>0)out.push({sel:'#onboard',close:null});
+  return out;
+};
+window.navCloseTop=function(){
+  var open=navOpenOverlays();
+  if(!open.length)return false;
+  /* Highest z-index wins; DOM order breaks ties. Whatever is visually on top is what Back
+     should dismiss, which is not necessarily the last one registered. */
+  var top=open[0], bestZ=-1;
+  open.forEach(function(o){
+    var el=document.querySelector(o.sel); if(!el)return;
+    var z=parseInt(getComputedStyle(el).zIndex,10); if(isNaN(z))z=0;
+    if(z>=bestZ){bestZ=z;top=o;}
+  });
+  /* The onboarding wizard is deliberately not dismissable — it's how a new student gets a
+     major, and backing out of it leaves the app in a half-set-up state. */
+  if(top.sel==='#onboard')return true;
+  try{ if(top.close&&typeof window[top.close]==='function'){ window[top.close](); return true; } }catch(e){}
+  try{ var el=document.querySelector(top.sel); if(el){el.classList.remove('open');document.body.style.overflow='';return true;} }catch(e){}
+  return false;
+};
+var _navPushing=false;
+function navPush(kind,val){
+  if(_navPushing)return;
+  try{ history.pushState({pf:1,kind:kind,val:val},''); }catch(e){}
+}
+/* Seed one entry so the very first Back has something of ours to land on instead of leaving. */
+try{ history.replaceState({pf:1,kind:'view',val:'home'},''); }catch(e){}
+
+(function(){
+  var _show=window.show;
+  window.show=function(v){
+    var cur=(document.querySelector('.view.active')||{}).id||'';
+    _show(v);
+    var now=(document.querySelector('.view.active')||{}).id||'';
+    if(now&&now!==cur)navPush('view',v);
+  };
+  /* Opening an overlay is a navigation step too, so Back closes it rather than leaving. */
+  NAV_OVERLAYS.forEach(function(o){
+    var el=document.querySelector(o.sel); if(!el)return;
+    try{
+      new MutationObserver(function(){
+        if(el.classList.contains('open')&&!el._navPushed){ el._navPushed=true; navPush('overlay',o.sel); }
+        else if(!el.classList.contains('open')){ el._navPushed=false; }
+      }).observe(el,{attributes:true,attributeFilter:['class']});
+    }catch(e){}
+  });
+
+  window.addEventListener('popstate',function(ev){
+    /* Overlays first — Back should peel the top layer, not jump views underneath it. */
+    if(navCloseTop()){ navPush('view',(document.querySelector('.view.active')||{}).id||'home'); return; }
+    var st=ev.state;
+    if(st&&st.pf&&st.kind==='view'&&st.val){
+      _navPushing=true;
+      try{ window.show(st.val); }catch(e){}
+      _navPushing=false;
+      return;
+    }
+    /* No state of ours left: the student really is leaving, so let the browser do it. */
+  });
+})();
+
 /* boot: render now, then again as live data (seats, friends, reviews, ratings) arrives */
 try{renderHome();}catch(e){}
 hmLoadRecents().then(function(){try{hmRenderFeed();}catch(e){}});
@@ -14116,6 +14888,8 @@ hmLoadPosts().then(function(){try{hmRenderFeed();}catch(e){}});
      those is reachable from outside. Expose it so it stays testable and callable. */
   try{ window.hmPlaceRail=hmPlaceRail; }catch(e){}
   try{ window.hmRenderRailL=hmRenderRailL; window.hmRenderRailR=hmRenderRailR; }catch(e){}
+  /* the friends strip is rendered lexically too — exposed so its labelling is testable */
+  try{ window.hmRenderStrip=hmRenderStrip; window.renderHome=renderHome; }catch(e){}
 })();
 </script>
 
