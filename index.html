@@ -593,7 +593,61 @@ window.toggleTheme = toggleTheme;
   /* Instruction-mode pills. Shown wherever a section is — search results, section rows,
      My Classes, a friend's list — because "when does it meet" and "do I have to be there"
      are the same question to a student picking a class. */
-  .mode-pill{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;
+    /* Delete account — danger styling, used nowhere else so it stays meaningful */
+  .set-btn.danger{border-color:rgba(226,86,79,.5);color:#e2564f}
+  .set-btn.danger:hover{background:rgba(226,86,79,.1);border-color:#e2564f}
+  .del-dlg{max-width:470px;text-align:left}
+  .del-list{margin:14px 0 0;padding-left:19px;font-size:13.5px;color:var(--text-2);
+    display:flex;flex-direction:column;gap:5px}
+  .del-list b{color:var(--text)}
+  .del-warn{font-size:13px;color:#e2564f;background:rgba(226,86,79,.09);
+    border:1px solid rgba(226,86,79,.3);border-radius:10px;padding:11px 13px;margin:15px 0 4px;
+    line-height:1.5}
+  .del-warn:empty{display:none}
+  /* Reviews are the one thing that survives deletion, so it gets its own block in the
+     app's own accent rather than the red used for irreversible loss. Colouring it red
+     alongside "nobody can restore them" is what made people read it as a threat. */
+  .del-keep{font-size:13px;color:var(--text-2);background:var(--accent-dim);
+    border:1px solid var(--accent);border-radius:10px;padding:11px 13px;margin:13px 0 4px;
+    line-height:1.5}
+  .del-keep b{color:var(--text)}
+  .del-keep:empty{display:none}
+  .del-keep .dk-h{display:block;font-weight:700;color:var(--text);margin-bottom:3px}
+  .del-keep button{background:none;border:0;padding:0;margin-top:7px;font:inherit;font-size:12.5px;
+    color:var(--accent);text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+  .del-go{background:#c9433c;color:#fff}
+  .del-go:hover:not([disabled]){background:#e2564f}
+  .del-go[disabled]{opacity:.4;cursor:not-allowed}
+  /* Terms / Privacy / Security */
+  .foot-legal{display:flex;flex-wrap:wrap;gap:6px 9px;align-items:center;margin-top:6px}
+  .foot-link{background:none;border:0;padding:2px 0;font:inherit;font-size:inherit;
+    color:var(--accent);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+  .foot-link:hover{opacity:.82}
+  .legal-dlg{max-width:680px;width:min(680px,94vw);text-align:left;display:flex;
+    flex-direction:column;max-height:86vh}
+  .legal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+  .legal-head h3{margin:0}
+  .legal-x{background:none;border:0;color:var(--muted);font-size:26px;line-height:1;
+    cursor:pointer;padding:0 4px;min-height:36px}
+  .legal-x:hover{color:var(--text)}
+  .legal-tabs{display:flex;gap:4px;margin:13px 0 4px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .legal-tab{background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);
+    font:600 13.5px inherit;padding:9px 12px;cursor:pointer;min-height:40px}
+  .legal-tab.on{color:var(--text);border-bottom-color:var(--accent)}
+  .legal-tab:hover{color:var(--text-2)}
+  .legal-body{overflow-y:auto;padding:16px 2px 4px;font-size:14px;line-height:1.62;
+    color:var(--text-2);flex:1 1 auto;min-height:0}
+  .legal-body h4{font-size:14.5px;color:var(--text);margin:20px 0 6px;font-weight:700}
+  .legal-body h4:first-child{margin-top:0}
+  .legal-body p{margin:0 0 10px}
+  .legal-body ul{margin:0 0 10px;padding-left:19px}
+  .legal-body li{margin-bottom:5px}
+  .legal-body .lg-date{font-size:12px;color:var(--faint);margin-bottom:16px}
+  .legal-body .lg-key{background:var(--panel-2);border:1px solid var(--line);border-radius:9px;
+    padding:11px 13px;margin:0 0 14px;color:var(--text);font-size:13.5px}
+  .legal-body code{font-family:var(--mono);font-size:12.5px;background:var(--panel-2);
+    padding:1px 5px;border-radius:4px}
+.mode-pill{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;
     letter-spacing:.02em;border-radius:999px;padding:2px 8px;white-space:nowrap;flex:none;
     border:1px solid transparent;line-height:1.35}
   .mode-pill.mp-sm{font-size:9.5px;padding:1px 6px}
@@ -1462,6 +1516,21 @@ if(typeof qrcode==="function")window.qrcode=qrcode;
         <div>Real Cal Poly professors and confirmed Fall 2026 instructors, with ratings synced <b>live from PolyRatings</b>' open API, and seat, waitlist, and meeting-time data scraped daily from Cal Poly Class Search. Pick your major and Professify shows who's teaching each required course, how they're rated, and how full each section is — so you can plan the term around the right professors.</div>
         <div class="disc">Professor ratings are pulled live from PolyRatings' public API (github.com/Polyratings/polyratings), on a 0–4 scale. Not affiliated with or endorsed by Cal Poly, RateMyProfessors, or PolyRatings.</div>
         <div class="disc build-stamp">Build <b id="setBuild">—</b></div>
+        <div class="disc foot-legal" style="margin-top:9px">
+          <button type="button" class="foot-link" onclick="openLegal('terms')">Terms of Service</button>
+          <span aria-hidden="true">·</span>
+          <button type="button" class="foot-link" onclick="openLegal('privacy')">Privacy</button>
+          <span aria-hidden="true">·</span>
+          <button type="button" class="foot-link" onclick="openLegal('security')">Security</button>
+        </div>
+      </div></div>
+      <!-- Danger zone. Only shown to a signed-in account, because there is nothing to
+           delete otherwise and an ominous red button on an empty session is just noise. -->
+      <div class="set-sec" id="setDangerSec" style="display:none"><span class="set-l">Delete account</span><div>
+        <button class="set-btn danger" onclick="openDeleteAccount()">Delete my account</button>
+        <div style="font-size:11.5px;color:var(--faint);margin-top:7px;max-width:430px;line-height:1.5">
+          Removes your profile, classes, sections, past classes, friends and reviews. Permanent.
+        </div>
       </div></div>
       <!-- Why a friend's week is a chip list instead of a calendar has two possible causes
            that need opposite fixes, and reading them off the console is not a thing to ask a
@@ -1622,7 +1691,9 @@ html[data-auth="in"] #schedGuestNote{display:none!important}
 .hm-fitem{display:flex;flex-direction:column;align-items:center;gap:5px;width:74px;flex-shrink:0;text-align:center;background:none;border:0;cursor:pointer;font-family:inherit;color:var(--text);padding:0}
 .hm-fitem .ring{width:60px;height:60px;border-radius:50%;padding:3px;border:2px solid var(--accent);display:flex;align-items:center;justify-content:center}
 .hm-fitem.seen .ring{border-color:var(--line)}
-.hm-fitem .fav{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px;color:#fff}
+.hm-fitem .fav{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px;color:#fff;overflow:hidden}
+/* A .fav may now hold an <img>; clip it to the circle and cover the box. */
+.fav .ava-img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
 .hm-fitem .nm{font-size:12px;font-weight:600;line-height:1.2;max-width:74px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hm-fitem .ev{font-size:10.5px;color:var(--muted);line-height:1.25;max-width:74px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .hm-fitem .ev:empty{min-height:13px}
@@ -1699,6 +1770,14 @@ html[data-auth="in"] #schedGuestNote{display:none!important}
 .qw-nudge:hover{opacity:.85}
 @media (max-width:520px){ .cal-mini .cal-times{width:30px} .cal-mini .cal-block .cb-code{font-size:9px} }
 .hm-stripend{display:flex;align-items:center;justify-content:center;width:70px;flex-shrink:0;font-size:11px;color:var(--faint);text-align:center;line-height:1.3}
+/* The strip used to end in "That's everyone ✓" — an honest cap (no infinite scroll) that
+   answered a question nobody asks. The end of a row of people is the natural place to add
+   one, so it's a tile in the same shape: dashed ring, + instead of a face, and it lands on
+   the Friends tab with the add sheet already open. */
+.hm-fitem.hm-fadd .ring{border-style:dashed;border-color:rgba(var(--accent-rgb),.55)}
+.hm-fitem.hm-fadd:hover .ring{border-color:var(--accent);background:rgba(var(--accent-rgb),.08)}
+.hm-fitem.hm-fadd .fav{background:rgba(var(--accent-rgb),.12);color:var(--accent);font-size:25px;font-weight:400}
+.hm-fitem.hm-fadd .nm{color:var(--accent)}
 /* today rows */
 .hm-trow{display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--line-soft);cursor:pointer}
 .hm-trow:last-child{border-bottom:none;padding-bottom:2px}
@@ -1733,7 +1812,7 @@ html[data-auth="in"] #schedGuestNote{display:none!important}
 .hm-seg button[aria-pressed=true]::after{content:"";position:absolute;bottom:-1px;left:0;right:0;height:2px;background:var(--text);border-radius:1px}
 /* feed cards */
 .hm-fhead{display:flex;align-items:flex-start;gap:10px}
-.hm-fhead .fav{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#fff;flex-shrink:0}
+.hm-fhead .fav{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#fff;flex-shrink:0;overflow:hidden}
 .hm-fhead .nm{font-size:14px;font-weight:600;line-height:1.3}
 .hm-fhead .nm .plink{cursor:pointer;border-bottom:1px dotted var(--faint)}
 .hm-fhead .ctx{font-size:12px;color:var(--muted);margin-top:1px}
@@ -1776,16 +1855,17 @@ html[data-auth="in"] #schedGuestNote{display:none!important}
   font:700 10.5px inherit;border-radius:999px;padding:2px 9px;margin-top:3px;cursor:pointer;
   display:inline-block}
 .hm-id .idun-btn:hover{background:rgba(255,255,255,.26)}
-.hm-id .mj{font-size:12px;color:var(--muted);padding:11px 16px 0}
-.hm-id .mj-setup{display:inline-flex;align-items:center;justify-content:center;background:rgba(var(--accent-rgb),.14);border:1px solid rgba(var(--accent-rgb),.4);color:var(--accent);font:700 12px inherit;border-radius:999px;padding:0 14px;margin:10px 0 0 16px;cursor:pointer;min-height:44px}
+.hm-id .mj{font-size:12px;color:var(--muted);padding:11px 16px 15px}
+.hm-id .mj-setup{display:inline-flex;align-items:center;justify-content:center;background:rgba(var(--accent-rgb),.14);border:1px solid rgba(var(--accent-rgb),.4);color:var(--accent);font:700 12px inherit;border-radius:999px;padding:0 14px;margin:10px 16px 15px;cursor:pointer;min-height:44px}
 .hm-id .mj-setup:hover{background:var(--accent);color:var(--accent-ink)}
-.hm-id .idgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px 16px 16px}
-.hm-id .tile{background:var(--panel-2);border:1px solid var(--line-soft);border-radius:9px;
-  padding:9px 11px;cursor:pointer;text-align:left;font:inherit;color:inherit;min-height:52px}
-.hm-id .tile:hover{background:var(--panel-3)}
-.hm-id .tile b{display:block;font-size:19px;font-weight:650;line-height:1.1;
-  font-variant-numeric:tabular-nums;color:var(--text)}
-.hm-id .tile span{font-size:10.5px;color:var(--faint)}
+/* This card used to end in a 2x2 of counters — Reviews, Classes, Friends, Watching. Every
+   one of them linked to a surface already on this same screen: the week grid is the next card
+   down, the watchlist the one after that, friends run across the middle of Home, and "Rate a
+   professor" is a button on the right rail. Four tiles, no fact you didn't already have, and
+   the largest numeral on the card was usually a 0.
+   A "what's next" row replaced them for one build and went the same way — the week grid
+   directly below already shows the day, and the card's job is to say who you are, not to
+   compete with the two cards under it. It ends at the major line now. */
 .hm-id .signin{margin:12px 14px 14px;width:calc(100% - 28px);min-height:40px;border-radius:8px;background:var(--accent);color:var(--accent-ink);font-weight:600;font-size:13.5px;border:0;cursor:pointer;font-family:inherit}
 /* mini week calendar in the left rail */
 .hmc-grid{display:flex;gap:3px;margin-top:10px}
@@ -2152,6 +2232,80 @@ html[data-auth="in"] #schedGuestNote{display:none!important}
 .wl-tab{background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);font-size:14.5px;font-weight:600;padding:9px 14px;cursor:pointer;margin-bottom:-1px}
 .wl-tab.on{color:var(--text);border-bottom-color:var(--accent)}
 .wl-tab span{color:var(--faint);font-weight:700;font-size:12px}
+/* ── Schedule: sub-nav as a left rail ───────────────────────────────────────
+   Planner / Watchlist / My Classes / Past Classes were a top tab strip. The four panes
+   are SIBLINGS of that strip, so this is done with grid placement rather than by wrapping
+   them in a new container — no DOM surgery around four large, working panes.
+   Auto-placement does the work: the rail is explicitly column 1, each pane explicitly
+   column 2, and since only one pane is ever displayed at a time it lands in the same row
+   as the rail. Hidden panes are display:none and never enter the grid at all. */
+@media(min-width:900px){
+  #view-sched > .wrap{
+    display:grid;
+    grid-template-columns:208px minmax(0,1fr);
+    column-gap:30px;
+    align-items:start;
+  }
+  /* full-width things stay full width */
+  #view-sched > .wrap > #schedGuestNote,
+  #view-sched > .wrap > .phead{grid-column:1 / -1}
+  #view-sched > .wrap > .wl-tabs{
+    grid-column:1;
+    display:flex;flex-direction:column;gap:2px;
+    border-bottom:0;
+    margin-bottom:0;
+    position:sticky;top:78px;
+    /* Pull the rail out past .wrap's 1040px measure so it sits closer to the window edge,
+       but only ever by as much room as actually exists beside the wrap — min()/max() means
+       it eases to 0 on a narrower window instead of sliding off the left of the screen. */
+    margin-left:calc(-1 * min(52px, max(0px, (100vw - 1200px) / 2)));
+  }
+  #view-sched > .wrap > .wl-tabs .wl-tab{
+    width:100%;
+    text-align:left;
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:10px 13px;
+    border-bottom:0;
+    border-radius:9px;
+    margin-bottom:0;
+    line-height:1.3;
+    transition:background .13s ease,color .13s ease;
+  }
+  #view-sched > .wrap > .wl-tabs .wl-tab:hover{background:var(--panel-2);color:var(--text-2)}
+  #view-sched > .wrap > .wl-tabs .wl-tab.on{
+    background:var(--panel-2);
+    color:var(--text);
+    /* the active marker moves from an underline to a left edge, which is what a vertical
+       list reads as — an underline on a stacked item looks like a divider */
+    box-shadow:inset 3px 0 0 var(--accent);
+  }
+  #view-sched > .wrap > .wl-tabs .wl-tab span{
+    font-variant-numeric:tabular-nums;
+    background:var(--panel-3);
+    border-radius:999px;
+    padding:1px 7px;
+    font-size:11px;
+  }
+  #view-sched > .wrap > .wl-tabs .wl-tab.on span{background:var(--panel);color:var(--text-2)}
+  /* The count spans start empty and are filled by updateWatchTabCounts(). As a pill, an
+     empty one still painted a small grey capsule that read as a dash. */
+  #view-sched > .wrap > .wl-tabs .wl-tab span:empty{display:none}
+  #view-sched > .wrap > #schedPlanWrap,
+  #view-sched > .wrap > #schedMineWrap,
+  #view-sched > .wrap > #schedWatchWrap,
+  #view-sched > .wrap > #schedPastWrap{grid-column:2;min-width:0}
+  /* The hero centred itself against the full page width; it now sits above a two-column
+     body, so centre it on the whole grid rather than letting it drift. */
+  #view-sched .phead{padding-bottom:26px}
+}
+/* Schedule matches Home's measure. Home is `.wrap.hm-wrap`, where .hm-wrap overrides the
+   shared 1040px with 1176px at this same breakpoint — so Schedule was ~136px narrower than
+   every other page for no reason anyone chose. Same number, same breakpoint, so the two
+   views line up when you tab between them. */
+@media(min-width:1140px){
+  #view-sched > .wrap{max-width:1176px}
+}
+/* Below 900px the rail would eat half a phone, so the original scrolling top strip stays. */
 .wl-take{background:rgba(var(--accent-rgb),.14);border:1px solid rgba(var(--accent-rgb),.4);color:var(--good-2);font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;cursor:pointer;margin-top:6px}
 .wl-take.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .wc-acts{display:flex;align-items:center;gap:8px;margin-top:9px;flex-wrap:wrap}
@@ -2244,8 +2398,17 @@ html[data-auth="in"] #schedGuestNote{display:none!important}
 .cal-col{flex:1;min-width:0;border-right:1px solid rgba(var(--fg-rgb),.06)}
 .cal-col:last-child{border-right:0}
 .cal-dh{height:30px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid rgba(var(--fg-rgb),.08);background:var(--panel-2)}
-.cal-day{position:relative;background:repeating-linear-gradient(to bottom,transparent,transparent 47px,rgba(var(--fg-rgb),.05) 47px,rgba(var(--fg-rgb),.05) 48px)}
-.cal-block{position:absolute;left:3px;right:3px;background:rgba(var(--accent-rgb),.9);color:#fff;border-radius:7px;padding:4px 6px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.15);display:flex;flex-direction:column;gap:1px}
+/* Hour rules follow --calrow (set inline from CAL_PPM) instead of a hardcoded 48px, so the
+   grid can't drift out of register with the blocks when the scale changes. The unlabelled
+   hours are drawn fainter than the labelled ones — you can still count rows, but your eye
+   lands on the ones with a time next to them. */
+.cal-day{position:relative;
+  background:
+    repeating-linear-gradient(to bottom,transparent,transparent calc(var(--calrow2,64px) - 1px),
+      rgba(var(--fg-rgb),.075) calc(var(--calrow2,64px) - 1px),rgba(var(--fg-rgb),.075) var(--calrow2,64px)),
+    repeating-linear-gradient(to bottom,transparent,transparent calc(var(--calrow,32px) - 1px),
+      rgba(var(--fg-rgb),.032) calc(var(--calrow,32px) - 1px),rgba(var(--fg-rgb),.032) var(--calrow,32px))}
+.cal-block{position:absolute;left:3px;right:3px;background:rgba(var(--accent-rgb),.9);color:#fff;border-radius:6px;padding:3px 6px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.15);display:flex;flex-direction:column;gap:0}
 .cal-block.bad{background:#d9695d;outline:2px solid rgba(217,105,93,.4)}
 .cal-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
 .cal-block .cb-top{display:flex;align-items:baseline;gap:5px;min-width:0;width:100%}
@@ -2253,7 +2416,10 @@ html[data-auth="in"] #schedGuestNote{display:none!important}
    overlapping share a column, and at the app's standard 1040 measure that leaves ~85px — enough
    for "BUS 2207" but not for the code AND the waitlist tag. The tag gives way first; a clipped
    "⏳ #4" still reads, a clipped "BUS 22…" does not. */
-.cal-block .cb-code{font-size:11px;font-weight:800;line-height:1.1;white-space:nowrap;flex:0 0 auto}
+.cal-block .cb-code{font-size:11px;font-weight:800;line-height:1.15;white-space:nowrap;flex:0 0 auto}
+/* Height is set inline per block from the minutes it actually occupies, so a short class
+   shows one clean line of title instead of two clipped halves of a letter. */
+.cal-block .cb-nm{font-size:10px;line-height:12px;opacity:.92;display:block;overflow:hidden;flex:none}
 /* Waitlisted is NOT enrolled. It used to render as the same solid green with a 10px hourglass
    clipped off the bottom edge — the status was carried by a glyph you couldn't see. Now the
    fill and the border carry it, the way every calendar signals "tentative". */
@@ -2353,6 +2519,17 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
 .myr-grade{font-family:var(--mono);color:var(--accent);font-weight:700}
 .myr-note{font-size:13px;color:var(--text-2);margin:8px 0 0;line-height:1.5}
 .myr-link{font-size:12px;color:var(--accent);font-weight:600;margin-top:8px}
+/* A review is the one thing that outlives the account, so removing one has to be
+   possible from inside the app — otherwise "it stays anonymous forever" is a trap
+   rather than a choice. Two taps, no browser confirm() dialog. */
+.myr-foot{display:flex;align-items:center;gap:12px;margin-top:8px}
+.myr-foot .myr-link{margin-top:0;margin-right:auto}
+.myr-del{background:none;border:0;padding:4px 0;font:inherit;font-size:12px;font-weight:600;
+  color:var(--faint);cursor:pointer;flex:none}
+.myr-del:hover{color:#e2564f}
+.myr-del.arm{color:#fff;background:#c9433c;border-radius:999px;padding:4px 11px}
+.myr-del[disabled]{opacity:.5;cursor:default}
+.myr-undo{font-size:11.5px;color:var(--faint);flex:none}
 .myr-empty{font-size:13.5px;color:var(--muted);line-height:1.6;padding:6px 2px 4px}
 /* ===== ⌘K command palette ===== */
 .cmdk-back{position:fixed;inset:0;z-index:9000;background:rgba(8,9,11,.5);backdrop-filter:blur(3px);display:none;align-items:flex-start;justify-content:center;padding:16vh 16px 16px}
@@ -2392,10 +2569,14 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
 <!-- ============ WATCHLIST ============ -->
 <main class="view" id="view-friends">
   <div class="wrap">
-    <div class="phead">
+    <!-- "See who's in your classes / your schedule stays private until you accept" is a
+         pitch for someone deciding whether to sign up. They already did, and the gate card
+         below still carries that copy for anyone who hasn't. A signed-in student gets a
+         title and nothing else. -->
+    <div class="phead" id="frPhead">
       <p class="eyebrow">Friends</p>
-      <h2>See who's in your classes</h2>
-      <p>Compare schedules with friends. Your schedule stays private until you accept.</p>
+      <h2 id="frPheadH">See who's in your classes</h2>
+      <p id="frPheadP">Compare schedules with friends. Your schedule stays private until you accept.</p>
     </div>
 
     <div id="frGate" class="fr-gate">
@@ -2417,84 +2598,77 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
     </div>
 
     <div id="frSignedIn" style="display:none">
-      <!-- ===== the main event: people =====
-           "Recent activity" used to lead this tab, repeating item-for-item what the bell
-           already shows under its Friends filter — same events, same order, two places to
-           mark them seen and two separate "seen" keys that never agreed. Notifications is
-           where news belongs; this tab is for people. Feed removed, not duplicated. -->
-
-      <!-- Incoming: needs your action, so it goes first. -->
-      <div id="frRequestsSec" class="fr-section" style="display:none">
-        <div class="fr-listhead">
-          <div class="grouphead" style="margin:0">Friend requests<span id="frReqCount" class="fr-secount"></span></div>
-        </div>
-        <div id="frRequestsOut" class="fr-grid"></div>
-      </div>
-
-      <!-- Outgoing: waiting on them, nothing for you to do. -->
-      <div id="frSentSec" class="fr-section" style="display:none">
-        <div class="fr-listhead">
-          <div class="grouphead" style="margin:0">Sent — waiting to be accepted<span id="frSentCount" class="fr-secount"></span></div>
-        </div>
-        <div id="frSentOut" class="fr-grid"></div>
-      </div>
-
-      <!-- ===== Invite hero: the primary, fastest way to grow your circle ===== -->
-      <div class="fr-invite-hero">
-        <h3>Invite a friend</h3>
-        <p>Send your link — they tap it and a request lands in your inbox.</p>
-        <div class="fr-invite-row">
-          <input id="frInviteLink" class="fr-invite-input" readonly onclick="this.select()">
-          <button class="btn primary fr-invite-copy" id="frInviteBtn" onclick="shareInviteLink()">Copy link</button>
-        </div>
-        <p id="frInviteNote" class="fr-mut" style="margin:9px 2px 2px"></p>
-        <div class="fr-invite-actions">
-          <button class="fr-chip" id="frShareSched" onclick="shareMySchedule()">🔗 Share my schedule</button>
-          <button class="fr-chip" onclick="showMyQR()">▦ Show my QR</button>
-
-        </div>
-        <div id="frQrArea" style="display:none;margin-top:12px"></div>
-      </div>
-
-      <!-- People you already share classes with — computed by suggest_classmates on sign-in.
-           This section previously lived inside a display:none stub, so it was invisible no
-           matter what the render set on it. -->
-      <div id="frSuggestedSec" class="fr-section" style="display:none">
-        <div class="fr-listhead">
-          <div class="grouphead" style="margin:0">People in your classes</div>
-        </div>
-        <div id="frSuggestedOut" class="fr-grid"></div>
-      </div>
-
-      <!-- ===== Search for someone =====
-           Adding people is the job on this tab, so the two ways to do it — send a link, or
-           look someone up — now sit together above the list. Search used to be buried at the
-           BOTTOM of "Your friends", which meant scrolling past everyone you'd already added
-           to add one more. -->
-      <div class="fr-section">
-        <div class="fr-listhead">
-          <div class="grouphead" style="margin:0">Search for a friend</div>
-        </div>
-        <div class="fr-people" id="frPeopleWrap">
-          <div class="fr-people-row">
-            <input id="frSearchPeople" class="rate-input" style="margin:0" placeholder="Search by name, Cal Poly email, or @handle" onkeydown="if(event.key==='Enter'){event.preventDefault();searchPeople();}" oninput="frPeopleTyping()">
-            <button class="btn primary fr-handle-btn" onclick="searchPeople()">Search</button>
-          </div>
-          <div id="frPeopleErr" class="rate-err" style="min-height:0"></div>
-          <div id="frPeopleOut" class="fr-people-out"></div>
-        </div>
-      </div>
-
-      <!-- ===== Your friends ===== -->
+      <!-- ===== ONE COLUMN =====
+           This tab used to open with a landing pitch, then friend requests, then requests you
+           SENT, then a full-width invite hero, then suggestions, then a search box — and only
+           then your friends. Six things before the people you came for, three of which were
+           different doors to "add someone". That order is correct on exactly one day: the day
+           you sign up with nobody.
+           Now it is one list. Pending requests pin to the top of it because a request is a
+           person, so it gets a person's row. Your friends follow. The last row is a dashed
+           empty slot where the next person would go, which opens every way of adding one.
+           Everything that isn't a person — sent requests, suggestions — sits underneath. -->
       <div class="fr-section">
         <div class="fr-listhead">
           <div class="grouphead" style="margin:0">Your friends<span id="frFriendCount" class="fr-secount"></span></div>
         </div>
         <div id="frFriendsOut" class="fr-list"></div>
+        <!-- Requests you SENT can't be acted on beyond a nudge, so they get one line, not a
+             section with its own heading competing with the list above it. -->
+        <div id="frSentLine" class="fr-sentline" style="display:none"></div>
       </div>
 
-      <!-- Profile fields kept as hidden stubs so guarded code never null-refs; not shown on the tab. -->
+      <!-- People you might know: mutual friends (suggest_friends) and classmates
+           (suggest_classmates) merged into one ranked list, each row carrying the single
+           strongest reason it's there. -->
+      <div id="frSuggestedSec" class="fr-section" style="display:none">
+        <div class="fr-listhead">
+          <div class="grouphead" style="margin:0">People you might know<span id="frSugCount" class="fr-secount"></span></div>
+        </div>
+        <div id="frSuggestedOut" class="fr-grid"></div>
+      </div>
+
+      <!-- ===== the add-a-friend sheet, opened by the dashed slot at the end of the list ===== -->
+      <div id="frAddSheet" class="fr-addsheet" style="display:none">
+        <div class="fr-as-head">
+          <h3>Add a friend</h3>
+          <button class="legal-x" onclick="closeAddFriend()" aria-label="Close">&times;</button>
+        </div>
+
+        <div class="fr-as-block">
+          <div class="fr-as-lab">Search for someone</div>
+          <div class="fr-people-row">
+            <input id="frSearchPeople" class="rate-input" style="margin:0" placeholder="Name, Cal Poly email, or @handle" onkeydown="if(event.key==='Enter'){event.preventDefault();searchPeople();}" oninput="frPeopleTyping()">
+            <button class="btn primary fr-handle-btn" onclick="searchPeople()">Search</button>
+          </div>
+          <div id="frPeopleErr" class="rate-err" style="min-height:0"></div>
+          <div id="frPeopleOut" class="fr-people-out"></div>
+        </div>
+
+        <div class="fr-as-block">
+          <div class="fr-as-lab">Send them your link</div>
+          <div class="fr-invite-row">
+            <input id="frInviteLink" class="fr-invite-input" readonly onclick="this.select()">
+            <button class="btn primary fr-invite-copy" id="frInviteBtn" onclick="shareInviteLink()">Copy link</button>
+          </div>
+          <p id="frInviteNote" class="fr-mut" style="margin:8px 2px 0"></p>
+        </div>
+
+        <div class="fr-as-block" style="border-bottom:0;padding-bottom:0">
+          <div class="fr-as-lab">Or in person</div>
+          <div class="fr-invite-actions">
+            <button class="fr-chip" onclick="showMyQR()">&#9638; Show my QR</button>
+            <button class="fr-chip" id="frShareSched" onclick="shareMySchedule()">&#128279; Share my schedule</button>
+          </div>
+          <div id="frQrArea" style="display:none;margin-top:12px"></div>
+        </div>
+      </div>
+
+      <!-- Stubs kept in the DOM so every guarded getElementById still resolves. The two request
+           sections are rendered into the single list above; these are never shown. -->
       <div style="display:none">
+        <div id="frRequestsSec"><span id="frReqCount"></span><div id="frRequestsOut"></div></div>
+        <div id="frSentSec"><span id="frSentCount"></span><div id="frSentOut"></div></div>
         <div id="frMatchesSec"><div id="frMatchesOut"></div></div>
         <input id="frName"><input id="frHandle"><button id="frProfileSaveBtn"></button><div id="frProfileErr"></div>
       </div>
@@ -2551,9 +2725,13 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
 .fr-cc-row input{flex:1;min-width:0}
 .fr-privacy{font-size:12.5px;color:var(--faint);line-height:1.5;margin:2px 2px 26px}
 .fr-section{margin-bottom:8px}
+/* The sent line ends the friends block, so the next heading needs air between them —
+   without it "People you might know" reads as a caption on the sent line. */
+.fr-section + .fr-section{margin-top:26px}
 .fr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
 .fr-card{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--panel)}
-.fr-card .ini{width:38px;height:38px;border-radius:11px;flex:none;display:grid;place-items:center;font-size:13px;font-weight:700;color:#fff}
+.fr-card .ini{width:38px;height:38px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:13px;font-weight:700;color:#fff;overflow:hidden}
+.fr-card .ini .ava-img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
 .fr-main{flex:1;min-width:0}
 .fr-main h4{margin:0 0 3px;font-size:14px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
 .fr-src{font-size:10px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:2px 7px;border-radius:999px;color:var(--text-2);border:1px solid var(--line)}
@@ -2689,7 +2867,8 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
 .fr-addtoggle:hover{border-color:var(--accent);color:var(--text)}
 .fr-list{display:flex;flex-direction:column;gap:10px}
 .fr-row{display:flex;align-items:flex-start;gap:14px;padding:15px 17px;border:1px solid var(--line);border-radius:15px;background:var(--panel)}
-.fr-row .ini{width:42px;height:42px;border-radius:12px;flex:none;display:grid;place-items:center;font-size:14px;font-weight:700;color:#fff}
+.fr-row .ini{width:42px;height:42px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:14px;font-weight:700;color:#fff;overflow:hidden}
+.fr-row .ini .ava-img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
 .fr-rowmain{flex:1;min-width:0}
 .fr-rowtop{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
 .fr-rowtop h4{margin:0;font-size:14.5px}
@@ -2704,6 +2883,73 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
 .fr-chip-took{border-color:rgba(192,103,79,.4);background:rgba(192,103,79,.10)}
 .fr-chip-took .fr-txt{color:#d69a72}
 .fr-qr-img svg{width:200px;height:200px;background:#fff;padding:8px;border-radius:10px;display:block}
+
+/* ================= FRIENDS TAB, ONE COLUMN =================
+   Everything below shares .fr-row so a pending request, a friend and the invite slot are the
+   same object at three states. Giving each its own component was what produced three stacked
+   sections for what is, on almost every visit, one person. */
+
+/* Shared class codes are the point of the tab, so they get the mono face the rest of the app
+   uses for course numbers and sit where the email used to. */
+.fr-shcodes{display:block;font-size:12px;color:var(--muted);font-family:var(--mono);margin-top:3px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* "No classes in common" is prose, not a course code — the mono face made it read like data. */
+.fr-shcodes.fr-none{font-family:inherit;color:var(--faint)}
+.fr-shcodes b{color:var(--text-2);font-weight:600}
+/* Only stated when a shared class NUMBER proves it — a shared course code does not. */
+.fr-nexttog{display:block;font-size:11.5px;color:var(--accent);margin-top:3px}
+.fr-nexttog::before{content:'';display:inline-block;width:5px;height:5px;border-radius:50%;
+  background:var(--accent);margin-right:6px;vertical-align:middle}
+
+/* A pending request: same row, tinted, with the decision where the classes go. */
+.fr-row.fr-pending{border-color:rgba(var(--accent-rgb),.45);background:rgba(var(--accent-rgb),.06)}
+.fr-row.fr-pending .fr-rowmain{align-self:center}
+.fr-why{display:block;font-size:12px;color:var(--muted);margin-top:3px}
+.fr-decide{display:flex;gap:7px;flex:none;align-self:center}
+.fr-yes{border:0;border-radius:999px;background:var(--accent);color:var(--accent-ink);
+  font:700 12.5px inherit;padding:8px 16px;cursor:pointer;min-height:36px}
+.fr-yes:hover{filter:brightness(1.08)}
+.fr-no{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:none;
+  color:var(--faint);font-size:17px;line-height:1;cursor:pointer;flex:none}
+.fr-no:hover{color:#e2564f;border-color:#e2564f}
+
+/* The empty slot. Dashed because it is not a person yet — it is where one goes. */
+.fr-slot{display:flex;align-items:center;gap:14px;padding:15px 17px;cursor:pointer;width:100%;
+  text-align:left;font:inherit;color:inherit;
+  border:1px dashed rgba(var(--accent-rgb),.45);border-radius:15px;
+  background:rgba(var(--accent-rgb),.045)}
+.fr-slot:hover{background:rgba(var(--accent-rgb),.09);border-color:rgba(var(--accent-rgb),.7)}
+/* It now sits above your friends rather than after them, so the gap goes below it —
+   otherwise the first friend reads as the first result of tapping the slot. */
+.fr-slot{margin-bottom:6px}
+.fr-slot .plus{width:42px;height:42px;border-radius:50%;flex:none;display:grid;place-items:center;
+  border:1px dashed rgba(var(--accent-rgb),.6);color:var(--accent);font-size:20px;line-height:1}
+.fr-slot b{display:block;font-size:14px;font-weight:650;color:var(--accent)}
+.fr-slot span{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+
+/* Requests you sent: one line, because a nudge is the only thing you can do about them. */
+.fr-sentline{font-size:12px;color:var(--faint);padding:11px 4px 2px;line-height:1.5}
+.fr-sentline b{color:var(--text-2);font-weight:600}
+.fr-sentbtn{background:none;border:0;padding:0;font:inherit;font-size:12px;color:var(--accent);
+  cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.fr-pdot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--mid);
+  margin-right:7px;vertical-align:middle}
+
+/* Suggestions carry ONE reason each — the strongest, chosen server-side. */
+.fr-card .fr-reason{font-size:12px;color:var(--muted);margin-top:2px}
+.fr-card .fr-dismiss{background:none;border:0;color:var(--faint);font-size:16px;line-height:1;
+  cursor:pointer;padding:2px 4px;align-self:flex-start}
+.fr-card .fr-dismiss:hover{color:#e2564f}
+
+/* The add sheet. Not a modal — it opens in place under the list, so the list you were
+   looking at stays on screen behind your decision. */
+.fr-addsheet{border:1px solid var(--line);border-radius:16px;background:var(--panel);
+  padding:4px 20px 20px;margin:18px 0 22px;box-shadow:0 20px 44px rgba(0,0,0,.35)}
+.fr-as-head{display:flex;align-items:center;gap:10px;padding:14px 0 4px}
+.fr-as-head h3{margin:0;font-size:16px;flex:1}
+.fr-as-block{padding:15px 0;border-bottom:1px solid var(--line-soft)}
+.fr-as-lab{font-size:10px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--faint);margin-bottom:9px}
 .fh-prof,.fh-add{grid-column:1/-1}
 </style>
 
@@ -2819,9 +3065,60 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
   <div class="wrap">
     <div class="about-h"><button type="button" onclick="openSettings()" style="background:none;border:0;color:inherit;font:inherit;cursor:pointer;padding:0;text-decoration:underline;text-underline-offset:3px">About Professify</button></div>
     <div class="disc">Professor ratings live from PolyRatings; seats and meeting times refreshed daily from Cal Poly. Not affiliated with or endorsed by Cal Poly, RateMyProfessors, or PolyRatings. See <button type="button" onclick="openSettings()" style="background:none;border:0;color:var(--accent);font:inherit;cursor:pointer;padding:0">Settings → About</button> for details.</div>
+    <div class="disc foot-legal">
+      <button type="button" class="foot-link" onclick="openLegal('terms')">Terms of Service</button>
+      <span aria-hidden="true">·</span>
+      <button type="button" class="foot-link" onclick="openLegal('privacy')">Privacy</button>
+      <span aria-hidden="true">·</span>
+      <button type="button" class="foot-link" onclick="openLegal('security')">Security</button>
+    </div>
     <div class="disc build-stamp">Build <b id="footBuild">—</b></div>
   </div>
 </footer>
+
+<!-- ============ DELETE ACCOUNT ============
+     Deliberately not a one-tap action: it itemises what goes, names how many of each the
+     account actually has, and requires typing DELETE. A destructive, irreversible action
+     should cost more effort than the thing it undoes. -->
+<div class="pq-back" id="delBack" onclick="if(event.target===this)closeDeleteAccount()">
+  <div class="pq-dlg del-dlg">
+    <h3>Delete your account?</h3>
+    <div class="d">This can't be undone. Here's exactly what gets removed:</div>
+    <ul class="del-list" id="delList"></ul>
+    <div class="del-keep" id="delKeep"></div>
+    <div class="del-warn" id="delWarn"></div>
+    <label class="ep-lab" for="delConfirm">Type <b>DELETE</b> to confirm</label>
+    <input id="delConfirm" class="rate-input ep-in" autocomplete="off" autocapitalize="characters"
+           spellcheck="false" placeholder="DELETE" oninput="delValidate()">
+    <div id="delErr" class="rate-err" style="min-height:0"></div>
+    <div class="acts">
+      <button class="no" onclick="closeDeleteAccount()">Cancel</button>
+      <button class="go del-go" id="delGo" onclick="delRun()" disabled>Delete my account</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ TERMS · PRIVACY · SECURITY ============
+     One dialog, three tabs, reachable from the footer and from Settings. Written for what
+     Professify actually does — a Cal Poly student handling other Cal Poly students' .edu
+     addresses, schedules and opinions about named staff. Deliberately specific: a generic
+     policy that doesn't name the data you hold is worse than none, because it reads as
+     though nobody checked. -->
+<div class="pq-back" id="legalBack" onclick="if(event.target===this)closeLegal()">
+  <div class="pq-dlg legal-dlg">
+    <div class="legal-head">
+      <h3 id="legalTitle">Terms of Service</h3>
+      <button class="legal-x" onclick="closeLegal()" aria-label="Close">&times;</button>
+    </div>
+    <div class="legal-tabs" role="tablist">
+      <button role="tab" id="legalTabTerms" class="legal-tab on" onclick="openLegal('terms')">Terms</button>
+      <button role="tab" id="legalTabPrivacy" class="legal-tab" onclick="openLegal('privacy')">Privacy</button>
+      <button role="tab" id="legalTabSecurity" class="legal-tab" onclick="openLegal('security')">Security</button>
+    </div>
+    <div class="legal-body" id="legalBody"></div>
+    <div class="acts"><button class="go" onclick="closeLegal()">Close</button></div>
+  </div>
+</div>
 
 <script>
 /* ============ BUILD STAMP ============
@@ -2830,7 +3127,7 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
    them apart from inside the app. Now there is: this string is written at build time and shown
    in Settings → About and the landing footer. If the date here isn't the one you expect, the
    tab is stale — reload the right file, not this one. */
-window.PROFESSIFY_BUILD='2026-08-24 16:40';
+window.PROFESSIFY_BUILD='2026-08-25 05:30';
 /* Paint the build stamp everywhere it appears. */
 try{
   (function(){
@@ -7186,7 +7483,18 @@ async function loadReviews(id){
   const p=PROFESSORS[id];if(!p||!backendReady())return;
   const key=profKey(p);
   try{
-    const {data,error}=await sb.from('reviews').select('*').eq('professor_key',key).order('created_at',{ascending:false}).limit(200);
+    /* Explicit columns, NOT select('*') — deliberately excluding user_id.
+       Verified live 2026-08-23: an anonymous client built from the publishable key in this
+       page's own source could read the reviews table including user_id, linking every review
+       to the account that wrote it. On a rate-your-professor product that is the one column
+       that must never be public: the same user_id also appears on schedule rows, so a named
+       professor could work out which student wrote a bad review. The app never needed it
+       here — nothing below reads r.user_id. Paired with a REVOKE on the column (see
+       professify-rls-hardening.sql); listing columns here keeps this query working once the
+       grant is gone, instead of erroring and showing no reviews at all. */
+    const REVIEW_COLS='id,professor_key,professor_name,department,course,score,would_again,'
+      +'tags,note,helpful,created_at,difficulty,teach_ability,hours,format,course_key,grade';
+    const {data,error}=await sb.from('reviews').select(REVIEW_COLS).eq('professor_key',key).order('created_at',{ascending:false}).limit(200);
     if(error)throw error;
     if(Array.isArray(data)){
       dbReviews[key]=data.map(r=>({id:r.id,course:r.course||'',term:(r.term||'').trim(),score:r.score,difficulty:r.difficulty,teach:r.teach_ability,hours:r.hours||'',format:r.format||'',grade:(r.grade||'').trim(),again:r.would_again,/* verified means "written through an authenticated, domain-checked account", which is
@@ -7524,6 +7832,8 @@ function updateAuthUI(){
      repainted here, or it keeps whatever it decided before the session existed.
      refreshGuestChrome() existed for exactly this and was never called from anywhere. */
   try{ if(typeof refreshGuestChrome==='function')refreshGuestChrome(); }catch(e){}
+  /* Delete-account only exists for a signed-in account; sign out and it goes away. */
+  try{ if(typeof refreshDangerZone==='function')refreshDangerZone(); }catch(e){}
   try{ if(typeof renderFriends==='function'&&document.getElementById('view-friends')
         &&document.getElementById('view-friends').classList.contains('active'))renderFriends(); }catch(e){}
   /* Re-running the current Schedule sub-tab repaints the Past Classes gate too, which has
@@ -7810,7 +8120,26 @@ async function submitRate(id){
   const term=String((d.term||'')).trim();
   const review={course:course,course_key:courseKey,term:term,score:d.score,difficulty:d.difficulty||null,teach:d.teach||null,hours:d.hours||'',format:d.format||'',grade:d.grade||'',again:d.again,verified:!window._previewOnly,helpful:0,text:(d.text||'').trim(),tags:tags,badTags:badTags,_mine:true};
   if(backendReady()&&sbUser){
-    if(sbBusy)return;sbBusy=true;
+    if(sbBusy)return;
+    /* Rate limiting, client half. The REAL control is server-side (a unique index on
+       user_id+professor_key+course_key, and an INSERT policy capping reviews per hour) —
+       see professify-review-integrity.sql. Anyone can skip this check by calling the API
+       directly, so it is here to give an honest answer before someone writes 200 words,
+       not to be the thing standing between a spammer and the table. */
+    var _rlProf=(typeof profKeyName==='function')?profKeyName(p):profKey(p);
+    if(window.MY_REVIEWED&&MY_REVIEWED[_rlProf]){
+      rfErr('You\u2019ve already reviewed '+p.name+'. Edit your existing review from Your reviews instead \u2014 one per professor keeps the average honest.');
+      return;
+    }
+    var _rlNow=Date.now(), _rlHits=[];
+    try{ _rlHits=JSON.parse(localStorage.getItem('professify_rev_times')||'[]'); }catch(_e){}
+    _rlHits=(Array.isArray(_rlHits)?_rlHits:[]).filter(function(t){return _rlNow-t<3600000;});
+    if(_rlHits.length>=5){
+      var _mins=Math.max(1,Math.ceil((3600000-(_rlNow-_rlHits[0]))/60000));
+      rfErr('That\u2019s 5 reviews in an hour \u2014 the limit. Try again in '+_mins+' minute'+(_mins===1?'':'s')+'.');
+      return;
+    }
+    sbBusy=true;
     const btn=document.getElementById('rfSubmit');if(btn){btn.disabled=true;btn.textContent='Posting…';}
     const row={professor_key:profKey(p),professor_name:p.name,department:p.dept,course:course||null,score:d.score,difficulty:d.difficulty||null,teach_ability:d.teach||null,hours:d.hours||null,format:d.format||null,grade:d.grade||null,would_again:d.again===true,tags:tags,note:review.text||null};
     try{
@@ -7821,11 +8150,19 @@ async function submitRate(id){
       if(error)throw error;
       (dbReviews[profKey(p)]=dbReviews[profKey(p)]||[]).unshift({...review,_db:true});
       reviewsGiven++;sbBusy=false;try{rfClearDraft();}catch(e){}
+      try{ _rlHits.push(Date.now()); localStorage.setItem('professify_rev_times',JSON.stringify(_rlHits)); }catch(_e){}
       try{ window.MY_REVIEWED=window.MY_REVIEWED||{}; MY_REVIEWED[profKeyName(p)]=1; }catch(_e){}
       renderThanks(id,true);
     }catch(e){
       sbBusy=false;
-      rfErr((e&&/duplicate|unique/i.test(e.message||''))?'You\'ve already reviewed this class — thank you!':((e&&e.message)||'Could not post your review. Try again.'));
+      /* Two different server refusals, two different fixes for the student. A row-level
+         security refusal on insert is the hourly cap; a unique violation is a duplicate. */
+      var _m=(e&&e.message)||'';
+      rfErr(/duplicate|unique/i.test(_m)
+        ? ('You\u2019ve already reviewed '+p.name+' for this course. Edit it from Your reviews.')
+        : (/row-level security|policy/i.test(_m)
+            ? 'You\u2019ve hit the limit of 5 reviews an hour. Try again shortly.'
+            : (_m||'Could not post your review. Try again.')));
       if(btn){btn.disabled=false;btn.textContent='Submit review';}
     }
     return;
@@ -7971,18 +8308,105 @@ function renderMyReviews(){
     var note=r.note?('<p class="myr-note">'+escapeHtml(r.note)+'</p>'):'';
     var sub=[course?('Took '+escapeHtml(course)):'', grade].filter(Boolean).join(' · ');
     var openable=!!id;
+    /* Only a row that actually exists on the server can be deleted from it. A `_local`
+       row is a preview that never synced, so there is nothing to delete — offering the
+       button there would fail silently and teach the student the button doesn't work. */
+    var delable=!!r.id&&!r._local;
+    var foot=(openable||delable)
+      ? ('<div class="myr-foot">'
+         +(openable?'<span class="myr-link">View professor →</span>':'<span class="myr-link" style="visibility:hidden"></span>')
+         +(delable?('<button type="button" class="myr-del" data-id="'+escapeHtml(String(r.id))+'" onclick="event.stopPropagation();myrDelete(this)">Delete</button>'):'')
+         +'</div>')
+      : '';
+    /* The row-wide click opens the professor; the delete button stops propagation above so
+       arming it doesn't also navigate away from the thing you're trying to remove. */
     return '<div class="myr-row"'+(openable?' onclick="closeMyReviews();openProf(\''+id+'\')" style="cursor:pointer"':'')+'>'
       +'<div class="myr-top"><span class="myr-nm">'+escapeHtml(r.professor_name||'Professor')+'</span><span class="myr-score" style="color:'+col+'">'+sc+'<small>/5</small></span></div>'
       +(sub?'<div class="myr-sub">'+sub+'</div>':'')
       +note
-      +(openable?'<div class="myr-link">View professor →</div>':'')
+      +foot
     +'</div>';
   }).join('');
   var body=list.length
     ? '<div class="myr-list">'+rows+'</div>'
     : '<div class="myr-empty">You haven’t written any reviews yet. Rate a professor and it’ll show up here so you can find it again.</div>';
-  host.innerHTML='<div class="sl-card"><button class="sl-x" onclick="closeMyReviews()">&times;</button><div class="sl-kick">Your reviews</div><h2 class="sl-h">'+(list.length?(list.length+' review'+(list.length===1?'':'s')+' you’ve written'):'Your reviews')+'</h2>'+body+'<p class="sl-fine">Only you can see this list. Your reviews post anonymously to other students.</p></div>';
+  host.innerHTML='<div class="sl-card"><button class="sl-x" onclick="closeMyReviews()">&times;</button><div class="sl-kick">Your reviews</div><h2 class="sl-h">'+(list.length?(list.length+' review'+(list.length===1?'':'s')+' you’ve written'):'Your reviews')+'</h2>'+body+'<p class="sl-fine">Only you can see this list. Your reviews post anonymously to other students.<br>'
+    +'Deleting your account leaves your reviews up, permanently unlinked from you — delete any you don’t want kept before you close the account.</p></div>';
 }
+/* ---- Delete one of your own reviews ----
+   Two taps rather than a browser confirm(): a native dialog blocks the page and, on iOS
+   Safari inside a modal, can be dismissed by the same tap that opened it. First tap arms,
+   second tap deletes, and it disarms itself after five seconds so a stray tap on a phone
+   can't sit there loaded.
+
+   The server is the real gate — the "own reviews deletable" RLS policy in
+   professify-delete-account.sql restricts DELETE to user_id = auth.uid(). This function
+   can't remove anyone else's review even if the id were tampered with in the DOM. */
+var _myrArmed=null, _myrArmT=null;
+window.myrDelete=async function(btn){
+  if(!btn)return;
+  var id=btn.getAttribute('data-id'); if(!id)return;
+
+  if(_myrArmed!==id){
+    if(_myrArmT)clearTimeout(_myrArmT);
+    try{ var prev=document.querySelector('.myr-del.arm');
+         if(prev){prev.classList.remove('arm');prev.textContent='Delete';} }catch(e){}
+    _myrArmed=id; btn.classList.add('arm'); btn.textContent='Delete for good?';
+    _myrArmT=setTimeout(function(){
+      if(_myrArmed===id){ _myrArmed=null;
+        try{ btn.classList.remove('arm'); btn.textContent='Delete'; }catch(e){} }
+    },5000);
+    return;
+  }
+
+  if(_myrArmT)clearTimeout(_myrArmT);
+  _myrArmed=null;
+  btn.disabled=true; btn.textContent='Deleting…';
+  if(typeof sb==='undefined'||!sb||typeof sbUser==='undefined'||!sbUser){
+    btn.disabled=false; btn.classList.remove('arm'); btn.textContent='Sign in first'; return; }
+
+  var row=null;
+  try{ (window.MY_REVIEWS||[]).forEach(function(x){ if(String(x.id)===String(id))row=x; }); }catch(e){}
+
+  var r;
+  try{ r=await sb.from('reviews').delete().eq('id',id).eq('user_id',sbUser.id); }
+  catch(e){ r={error:{message:(e&&e.message)||'network error'}}; }
+
+  if(r&&r.error){
+    btn.disabled=false; btn.classList.remove('arm'); btn.textContent='Delete';
+    /* No DELETE policy on the table yet means the request is refused rather than failing —
+       say which it is, because "try again" is wrong advice for a missing policy. */
+    try{ frToast(/policy|row-level security|permission/i.test(r.error.message||'')
+      ? 'Deleting reviews isn’t switched on for this deploy yet.'
+      : ('Couldn’t delete that review: '+r.error.message), 6000); }catch(e){}
+    return;
+  }
+
+  /* Drop it from every in-memory copy, or the professor page repaints the deleted review
+     from cache and the student thinks it failed. */
+  try{ window.MY_REVIEWS=(window.MY_REVIEWS||[]).filter(function(x){return String(x.id)!==String(id);}); }catch(e){}
+  try{
+    if(row&&row.professor_key&&window.dbReviews&&dbReviews[row.professor_key]){
+      dbReviews[row.professor_key]=dbReviews[row.professor_key].filter(function(x){
+        return String(x.id||'')!==String(id) && !(x._mine&&String(x.course||'')===String(row.course||''));
+      });
+    }
+  }catch(e){}
+  /* Clear the one-per-professor lock so they can write a fresh one — the unique index
+     is gone with the row, so the app must stop claiming they already reviewed them. */
+  try{
+    if(row&&row.professor_name&&window.MY_REVIEWED){
+      var pk=String(row.professor_key||'').split('|')[0]||row.professor_name;
+      delete MY_REVIEWED[pk];
+    }
+  }catch(e){}
+  try{ if(typeof reviewsGiven==='number'&&reviewsGiven>0)reviewsGiven--; }catch(e){}
+
+  try{ renderMyReviews(); }catch(e){}
+  try{ frToast('Review deleted. The professor’s average has been recalculated.',5000); }catch(e){}
+  try{ if(typeof renderHome==='function')renderHome(); }catch(e){}
+};
+
 /* keyed by NAME only — the same professor can carry different dept strings between
    the curated roster and the live PolyRatings feed, and the badge must survive that */
 function profKeyName(p){return String((typeof profKey==='function'?profKey(p):'')).split('|')[0];}
@@ -9255,8 +9679,20 @@ function renderMyCalendar(codes,conf,meta){
       hi=(typeof CAL_DAY_HI!=='undefined')?CAL_DAY_HI:22*60;   // expands to fit
   placed.forEach(function(m){lo=Math.min(lo,m.meet.start);hi=Math.max(hi,m.meet.end);});
   lo=Math.floor(lo/60)*60; hi=Math.ceil(hi/60)*60;
-  var PPM=0.8, gridH=(hi-lo)*PPM;
-  var hourRows=''; for(var t=lo;t<=hi;t+=60){var top=(t-lo)*PPM;var hr=t/60;var lab=(hr%12===0?12:hr%12)+(hr<12||hr===24?'AM':'PM');hourRows+='<div class="cal-hr" style="top:'+top+'px">'+lab+'</div>';}
+  var PPM=(typeof CAL_PPM!=='undefined')?CAL_PPM:0.56, gridH=(hi-lo)*PPM;
+  var rowPx=60*PPM;                       // one hour, in px — drives the grid rules
+  var every=(typeof CAL_LABEL_EVERY!=='undefined')?CAL_LABEL_EVERY:2;
+  var dayStyle='height:'+gridH+'px;--calrow:'+rowPx.toFixed(2)+'px;--calrow2:'+(rowPx*every).toFixed(2)+'px';
+  /* Label every `every`-th hour, counted from the top of the window so the first hour is
+     always labelled — anchoring off the clock instead would leave the top row unlabelled
+     half the time, depending on where the window happens to start. */
+  var hourRows='',hi_=0;
+  for(var t=lo;t<=hi;t+=60,hi_++){
+    if(hi_%every)continue;
+    var top=(t-lo)*PPM;var hr=(t/60)%24;
+    var lab=(hr%12===0?12:hr%12)+(hr<12?'AM':'PM');
+    hourRows+='<div class="cal-hr" style="top:'+top+'px">'+lab+'</div>';
+  }
   var cols=DAYS.map(function(d){
     var day=placed.filter(function(m){return m.meet.days.indexOf(d)>=0;}).sort(function(a,b){return a.meet.start-b.meet.start||a.meet.end-b.meet.end;});
     // split overlapping blocks into side-by-side lanes, cluster by cluster
@@ -9269,14 +9705,26 @@ function renderMyCalendar(codes,conf,meta){
       cluster.forEach(function(m){
         var top=(m.meet.start-lo)*PPM,h=(m.meet.end-m.meet.start)*PPM,bad=!!conf.bad[m.key||m.code];
         var w=100/nLanes,left=m._lane*w;
+        /* At a compressed scale the block is a budget, not a canvas. Spend it in priority
+           order: the code always, then as many lines of title as fit, then the friends who
+           are in it with you. Overflowing and letting overflow:hidden guillotine a row of
+           avatars is how you get a block with half a face poking out of the bottom. */
+        var room=h-6-13;                                   // padding + the code line
+        var nmLines=Math.max(0,Math.min(2,Math.floor(room/12)));
         var calFr=(typeof friendsInClass==='function')?friendsInClass(m.code):[];
-        var calFrHtml=calFr.length?'<span class="cb-fr" title="'+escAcc(calFr.map(function(f){return f.name;}).join(', ')+' — in this class with you')+'">'+calFr.slice(0,3).map(function(f){return '<span class="cb-frav" style="background:'+f.color+'">'+escAcc(f.ini)+'</span>';}).join('')+(calFr.length>3?'<span class="cb-frmore">+'+(calFr.length-3)+'</span>':'')+'</span>':'';
+        var showFr=calFr.length&&(room-nmLines*12)>=17;
+        var calFrHtml=showFr?'<span class="cb-fr" title="'+escAcc(calFr.map(function(f){return f.name;}).join(', ')+' — in this class with you')+'">'+calFr.slice(0,3).map(function(f){return '<span class="cb-frav" style="background:'+f.color+'">'+escAcc(f.ini)+'</span>';}).join('')+(calFr.length>3?'<span class="cb-frmore">+'+(calFr.length-3)+'</span>':'')+'</span>':'';
         var wlTag=m.wl?'<span class="cb-wl" title="You\'re on the waitlist'+(m.wlPos?' — #'+m.wlPos:'')+'">⏳'+(m.wlPos?' #'+m.wlPos:'')+'</span>':'';
-        html+='<div class="cal-block'+(bad?' bad':'')+(m.wl?' wl':'')+'" style="top:'+top+'px;height:'+Math.max(h,20)+'px;left:calc('+left+'% + 3px);width:calc('+w+'% - 6px)" title="'+escAcc(m.code+' · '+m.name)+(m.wl?' · waitlisted'+(m.wlPos?' #'+m.wlPos:''):'')+'"><span class="cb-top"><span class="cb-code">'+escAcc(m.code)+'</span>'+wlTag+'</span><span class="cb-nm">'+escAcc(String(m.name||'').slice(0,26))+'</span>'+calFrHtml+'</div>';
+        var nmHtml=(nmLines&&m.name)?('<span class="cb-nm" style="height:'+(nmLines*12)+'px">'+escAcc(String(m.name||'').slice(0,44))+'</span>'):'';
+        /* The tooltip still carries everything the block had to drop, so nothing is lost —
+           it's only not shouted. Friends who didn't fit are named there too. */
+        var tip=m.code+' · '+m.name+(m.wl?' · waitlisted'+(m.wlPos?' #'+m.wlPos:''):'')
+          +((calFr.length&&!showFr)?(' · with '+calFr.map(function(f){return f.name;}).join(', ')):'');
+        html+='<div class="cal-block'+(bad?' bad':'')+(m.wl?' wl':'')+'" style="top:'+top+'px;height:'+Math.max(h,18)+'px;left:calc('+left+'% + 3px);width:calc('+w+'% - 6px)" title="'+escAcc(tip)+'"><span class="cb-top"><span class="cb-code">'+escAcc(m.code)+'</span>'+wlTag+'</span>'+nmHtml+calFrHtml+'</div>';
       });
       i=j;
     }
-    return '<div class="cal-col"><div class="cal-dh">'+DAY_LABEL[d]+'</div><div class="cal-day" style="height:'+gridH+'px">'+html+'</div></div>';
+    return '<div class="cal-col"><div class="cal-dh">'+DAY_LABEL[d]+'</div><div class="cal-day" style="'+dayStyle+'">'+html+'</div></div>';
   }).join('');
   /* Split "never meets" from "not scheduled yet" — an async class isn't missing data, it's a
      class with no hour, and it belongs on the calendar in its own rail rather than in a
@@ -9284,7 +9732,7 @@ function renderMyCalendar(codes,conf,meta){
   var asyncOnes=noTime.filter(function(m){return typeof courseIsAsync==='function'&&courseIsAsync(m.code);});
   var stillTba=noTime.filter(function(m){return !(typeof courseIsAsync==='function'&&courseIsAsync(m.code));});
   var anyCol=asyncOnes.length?('<div class="cal-col cal-any"><div class="cal-dh">Anytime</div>'
-    +'<div class="cal-day cal-anyday" style="height:'+gridH+'px">'
+    +'<div class="cal-day cal-anyday" style="'+dayStyle+'">'
     +asyncOnes.map(function(m){
         return '<div class="cal-block cal-anyblk" title="'+escAcc(m.code+' — asynchronous, no set meeting time')+'">'
           +'<span class="cb-top"><span class="cb-code">'+escAcc(m.code)+'</span></span>'
@@ -9747,6 +10195,7 @@ async function syncProfileToBackend(){
 /* ============ SETTINGS ============ */
 function escAcc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 function openSettings(){
+  try{ if(typeof refreshDangerZone==='function')refreshDangerZone(); }catch(e){}
   document.getElementById('setMajor').innerHTML=majorOptionsHtml(student.major||'');
   renderSetConc();
   var st=document.getElementById('setStanding');
@@ -13848,27 +14297,179 @@ function openSetup(focus){
    tap — but the chips themselves don't.
    edu_email is shown only for ACCEPTED friends and never in search results. If the column is
    missing or blank we say nothing rather than invent a placeholder address. */
+/* ---- one friend, as a row ----------------------------------------------------------------
+   The tab's headline is "see who's in your classes" and the row used to show none of them:
+   name, "2 classes with you", and their email. The count was the answer to a question nobody
+   asks ("how many?") in place of the one everybody does ("which?"). Codes go where the email
+   was; the email drops to the tooltip, since it is contact info, not a reason to tap. */
+function friendSharedCodes(f){
+  try{
+    if(!savedClasses||!savedClasses.size)return [];
+    return (f.classes||[]).filter(function(c){return savedClasses.has(c);});
+  }catch(e){ return []; }
+}
+/* "You're next in this together" is a SECTION-level claim, so it is made only from a shared
+   class number. Two people in different sections of BUS 3438 do not sit in a room together,
+   and the row said so for weeks by counting shared course codes. The time itself comes from
+   MY section — a section I recorded — never from theirs and never from the catalog. */
+function friendNextTogether(f){
+  try{
+    if(typeof myClassMeta==='undefined')return null;
+    var theirs={}; ((f.crns||f.sections)||[]).forEach(function(x){theirs[String(x)]=1;});
+    if(!Object.keys(theirs).length)return null;
+    var DAY=['Su','Mo','Tu','We','Th','Fr','Sa'];
+    var now=new Date(), nowDay=now.getDay(), nowMin=now.getHours()*60+now.getMinutes();
+    var best=null;
+    (typeof myClasses!=='undefined'?myClasses:[]).forEach(function(code){
+      var m=myClassMeta[code]; var secs=(m&&Array.isArray(m.secs))?m.secs:[];
+      secs.forEach(function(sec){
+        var crn=sec&&(sec.class_nbr||sec.crn);
+        if(!crn||!theirs[String(crn)])return;
+        var mt=parseMeet(sec.days); if(!mt)return;
+        for(var d=0;d<7;d++){
+          var di=(nowDay+d)%7;
+          if(mt.days.indexOf(DAY[di])<0)continue;
+          if(d===0&&mt.start<=nowMin)continue;
+          var rank=d*1440+mt.start;
+          if(!best||rank<best.rank)best={rank:rank,code:code,d:d,start:mt.start};
+          break;
+        }
+      });
+    });
+    if(!best)return null;
+    var WD=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    var when=best.d===0?'today':(best.d===1?'tomorrow':WD[(nowDay+best.d)%7]);
+    return best.code+' together '+when+' at '+fmtMin(best.start);
+  }catch(e){ return null; }
+}
 function friendRowHtml(f){
-  const shared=savedClasses.size?f.classes.filter(c=>savedClasses.has(c)):[];
-  const sub=f.email
-    ? `<div class="fr-rowmail">${escapeHtml(f.email)}</div>`
-    : (f.handle?`<div class="fr-rowmail fr-rowmail-alt">@${escapeHtml(f.handle)}</div>`:'');
+  const shared=friendSharedCodes(f);
+  const contact=f.email||(f.handle?('@'+f.handle):'');
+  /* No shared classes is a real state, not a blank one — say which it is rather than leaving
+     the line empty, which reads as data that failed to load. */
+  const codeLine=shared.length
+    ? `<span class="fr-shcodes" title="${escAcc(shared.join(', '))}"><b>${escapeHtml(shared.slice(0,3).join(' · '))}</b>${shared.length>3?(' +'+(shared.length-3)+' more'):''}</span>`
+    : `<span class="fr-shcodes fr-none">No classes in common this term</span>`;
+  const nxt=friendNextTogether(f);
   const meta=shared.length
-    ? `<span class="fr-shared">${shared.length} class${shared.length>1?'es':''} with you</span>`
+    ? `<span class="fr-shared">${shared.length} shared</span>`
     : '';
   return `<div class="fr-row fr-row-tap" role="button" tabindex="0"
       onclick="openFriendProfile('${f.id}')"
       onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openFriendProfile('${f.id}')}"
-      title="See ${escapeHtml(f.name)}'s classes">
+      title="${escAcc(f.name+(contact?' · '+contact:'')+" — see their classes")}">
     <div class="ini" style="background:${f.color||colorForId(f.id)}">${avaHtml(f.avatar_url,f.name)}</div>
     <div class="fr-rowmain">
       <div class="fr-rowtop"><h4>${escapeHtml(f.name)}</h4>${meta}</div>
-      ${sub}
+      ${codeLine}
+      ${nxt?`<span class="fr-nexttog">${escapeHtml(nxt)}</span>`:''}
     </div>
-    <span class="fr-rowgo" aria-hidden="true">\u203a</span>
+    <span class="fr-rowgo" aria-hidden="true">›</span>
     <button class="save-ico fr-rm" title="Remove friend" onclick="event.stopPropagation();removeFriend('${f.id}')">&times;</button>
   </div>`;
 }
+
+/* ---- an incoming request, as the same row one state earlier ---- */
+function friendReqRowHtml(r){
+  /* Say why they might be worth accepting, when we actually know. suggest_friends already
+     computes this server-side for suggestions; a raw request row only has what the loader
+     attached, so anything missing simply isn't claimed. */
+  var why=r.reason||(r.overlap?(r.overlap+' class'+(r.overlap>1?'es':'')+' in common')
+        :(r.mutuals?(r.mutuals+' mutual friend'+(r.mutuals>1?'s':'')):'Wants to be friends'));
+  return `<div class="fr-row fr-pending">
+    <div class="ini" style="background:${colorForId(r.from_user)}">${avaHtml(r.avatar_url,r.name)}</div>
+    <div class="fr-rowmain">
+      <div class="fr-rowtop"><h4>${escapeHtml(r.name)}</h4></div>
+      <span class="fr-why">${escapeHtml(why)}</span>
+    </div>
+    <span class="fr-decide">
+      <button class="fr-yes" onclick="acceptRequest('${r.id}')">Accept</button>
+      <button class="fr-no" title="Decline" onclick="declineRequest('${r.id}')">&times;</button>
+    </span>
+  </div>`;
+}
+
+/* ---- the empty slot at the end of the list ---- */
+function friendSlotHtml(hasFriends){
+  return `<button type="button" class="fr-slot" onclick="openAddFriend()">
+    <span class="plus" aria-hidden="true">+</span>
+    <span style="min-width:0">
+      <b>${hasFriends?'Invite a friend':'Invite your first friend'}</b>
+      <span>Search for them, send your link, or show your QR</span>
+    </span>
+  </button>`;
+}
+
+window.openAddFriend=function(){
+  var el=document.getElementById('frAddSheet'); if(!el)return;
+  var open=el.style.display!=='none';
+  el.style.display=open?'none':'';
+  if(!open){
+    try{ if(typeof refreshInviteLink==='function')refreshInviteLink(); }catch(e){}
+    try{ el.scrollIntoView({behavior:'smooth',block:'nearest'}); }catch(e){}
+    setTimeout(function(){ var i=document.getElementById('frSearchPeople'); if(i)i.focus(); },220);
+  }
+};
+window.closeAddFriend=function(){
+  var el=document.getElementById('frAddSheet'); if(el)el.style.display='none';
+};
+
+/* ---- people you might know: mutuals + classmates, merged and ranked ----------------------
+   suggest_friends() has been installed and locked to `authenticated` since 2026-08-23 and
+   nothing called it. It returns ONE reason per person — the strongest, decided server-side —
+   so the row never has to guess which of "5 mutuals" and "same section" to lead with. */
+window.friendSuggestions=window.friendSuggestions||[];
+window.FR_SUG_FAILED=false;
+async function loadFriendSuggestions(){
+  window.FR_SUG_FAILED=false;
+  var out=[];
+  try{
+    if(!(typeof backendReady==='function'&&backendReady()&&typeof sbUser!=='undefined'&&sbUser))return out;
+    var r=await sb.rpc('suggest_friends',{p_limit:6});
+    if(r.error){
+      /* Not installed on this deploy is a different thing from "nobody to suggest", and the
+         difference decides whether the section should be silent or should say something. */
+      if(!/function|does not exist|schema/i.test(r.error.message||''))window.FR_SUG_FAILED=true;
+    } else if(Array.isArray(r.data)){
+      out=r.data.map(function(x){
+        return {id:x.id,display_name:x.display_name,username:x.username,avatar_url:x.avatar_url,
+                reason:x.reason,mutuals:x.mutuals,score:x.score,_src:'mutual'};
+      });
+    }
+  }catch(e){ window.FR_SUG_FAILED=true; }
+  window.friendSuggestions=out;
+  return out;
+}
+/* Dismissing is permanent by design — the row said "not this person", and re-offering them
+   next week is how a suggestion list turns into noise you learn to scroll past. */
+window.dismissSuggestion=async function(id,btn){
+  try{
+    if(btn){btn.disabled=true;btn.textContent='·';}
+    window.friendSuggestions=(window.friendSuggestions||[]).filter(function(x){return x.id!==id;});
+    if(typeof classmateSuggestions!=='undefined')
+      classmateSuggestions=classmateSuggestions.filter(function(x){return x.id!==id;});
+    try{ renderFriends(); }catch(e){}
+    await sb.from('friend_suggestion_dismissals').insert({user_id:sbUser.id,dismissed_id:id});
+  }catch(e){}
+};
+function frMergedSuggestions(){
+  var seen={},out=[];
+  (window.friendSuggestions||[]).forEach(function(x){
+    if(!x||!x.id||seen[x.id])return; seen[x.id]=1;
+    out.push({id:x.id,name:x.display_name||'Classmate',avatar_url:x.avatar_url||'',
+              reason:x.reason||'',score:x.score||0});
+  });
+  /* suggest_classmates() only knows about shared courses, so anyone it finds who is already
+     above — with a stronger reason — is dropped rather than listed twice with a weaker one. */
+  (typeof classmateSuggestions!=='undefined'?classmateSuggestions:[]).forEach(function(x){
+    if(!x||!x.id||seen[x.id])return; seen[x.id]=1;
+    out.push({id:x.id,name:x.display_name||'Classmate',avatar_url:x.avatar_url||'',
+              reason:(x.overlap?(x.overlap+' class'+(x.overlap>1?'es':'')+' in common'):'In one of your classes'),
+              score:(x.overlap||1)*10});
+  });
+  return out.sort(function(a,b){return b.score-a.score;}).slice(0,6);
+}
+
 
 function updateFriendsBadge(){
   const n=(typeof incomingRequests!=='undefined'?incomingRequests.length:0);
@@ -13886,6 +14487,11 @@ function renderFriends(){
   const gw=document.getElementById('frGoogleWrap');if(gw)gw.style.display=cfg().GOOGLE_SIGNIN_ENABLED?'':'none';
   if(!signedIn)return;
 
+  /* The header pitch is for someone deciding whether to sign up. They did. */
+  var _ph=document.getElementById('frPheadH'), _pp=document.getElementById('frPheadP');
+  if(_ph)_ph.textContent='Friends';
+  if(_pp)_pp.style.display='none';
+
   renderMyHistory();
   refreshInviteLink();
   const nameEl=document.getElementById('frName');if(nameEl&&document.activeElement!==nameEl)nameEl.value=(myProfile&&myProfile.display_name)||'';
@@ -13894,12 +14500,20 @@ function renderFriends(){
   var shareBtn=document.getElementById('frShareSched');
   if(shareBtn)shareBtn.style.display=(typeof myClasses!=='undefined'&&myClasses.length)?'':'none';
 
+  /* Fetched once per session, then repainted from memory — this runs on every tab render. */
+  if(!window._frSugLoaded&&typeof loadFriendSuggestions==='function'){
+    window._frSugLoaded=true;
+    try{ loadFriendSuggestions().then(function(){ try{renderFriends();}catch(e){} }); }catch(e){}
+  }
   const sugSec=document.getElementById('frSuggestedSec'),sugOut=document.getElementById('frSuggestedOut');
-  if(sugSec)sugSec.style.display=classmateSuggestions.length?'':'none';
-  if(sugOut)sugOut.innerHTML=classmateSuggestions.map(p=>`<div class="fr-card">
-      <div class="ini" style="background:${colorForId(p.id)}">${initials(p.display_name||'?')}</div>
-      <div class="fr-main"><h4>${escapeHtml(p.display_name||'Classmate')}</h4><div class="fr-mut">${p.overlap} class${p.overlap>1?'es':''} in common</div></div>
-      <button class="btn primary fr-add" onclick="sendFriendRequest('${p.id}')">Send request</button>
+  const merged=(typeof frMergedSuggestions==='function')?frMergedSuggestions():[];
+  if(sugSec)sugSec.style.display=merged.length?'':'none';
+  setSecCount('frSugCount',merged.length);
+  if(sugOut)sugOut.innerHTML=merged.map(p=>`<div class="fr-card">
+      <div class="ini" style="background:${colorForId(p.id)}">${avaHtml(p.avatar_url,p.name)}</div>
+      <div class="fr-main"><h4>${escapeHtml(p.name)}</h4><div class="fr-reason">${escapeHtml(p.reason)}</div></div>
+      <button class="btn primary fr-add" onclick="sendFriendRequest('${p.id}')">Add</button>
+      <button class="fr-dismiss" title="Don't suggest ${escAcc(p.name)} again" onclick="dismissSuggestion('${p.id}',this)">&times;</button>
     </div>`).join('');
 
   const matSec=document.getElementById('frMatchesSec'),matOut=document.getElementById('frMatchesOut');
@@ -13910,27 +14524,25 @@ function renderFriends(){
       <button class="btn primary fr-add" onclick="sendFriendRequest('${p.id}')">Send request</button>
     </div>`).join('');
 
-  // --- incoming: someone asked you (needs your action) ---
-  const reqSec=document.getElementById('frRequestsSec'),reqOut=document.getElementById('frRequestsOut');
-  if(reqSec)reqSec.style.display=incomingRequests.length?'':'none';
+  /* Incoming requests are rendered INTO the friends list below, as pinned rows — they are
+     people, and a person already has a row. Outgoing requests become one line under it. */
   setSecCount('frReqCount',incomingRequests.length);
-  if(reqOut)reqOut.innerHTML=incomingRequests.map(r=>`<div class="fr-card">
-      <div class="ini" style="background:${colorForId(r.from_user)}">${initials(r.name)}</div>
-      <div class="fr-main"><h4>${escapeHtml(r.name)}</h4><div class="fr-mut">Wants to be friends</div>
-        <div class="fr-reqrow"><button class="btn primary fr-add" onclick="acceptRequest('${r.id}')">Accept</button><button class="save-ico fr-rm" title="Decline" onclick="declineRequest('${r.id}')">&times;</button></div>
-      </div></div>`).join('');
-
-  // --- outgoing: you asked them (waiting on them) ---
-  const sentSec=document.getElementById('frSentSec'),sentOut=document.getElementById('frSentOut');
-  if(sentSec)sentSec.style.display=outgoingRequests.length?'':'none';
   setSecCount('frSentCount',outgoingRequests.length);
-  if(sentOut)sentOut.innerHTML=outgoingRequests.map(r=>`<div class="fr-card fr-card-pending">
-      <div class="ini" style="background:${colorForId(r.to_user)}">${initials(r.name)}</div>
-      <div class="fr-main"><h4>${escapeHtml(r.name)}${r.handle?`<span class="fr-src instagram">@${escapeHtml(r.handle)}</span>`:''}</h4>
-        <div class="fr-mut"><span class="fr-pending-dot"></span>Waiting for them to accept${r.created_at?` · sent ${timeAgo(r.created_at)}`:''}</div></div>
-      <button class="fr-remind" title="Send them a reminder with your invite link" onclick="remindRequest('${escapeHtml(r.name||'')}')">Remind</button>
-      <button class="save-ico fr-rm" title="Cancel request" onclick="cancelRequest('${r.id}')">&times;</button>
-    </div>`).join('');
+  const sentLine=document.getElementById('frSentLine');
+  if(sentLine){
+    if(!outgoingRequests.length){ sentLine.style.display='none'; sentLine.innerHTML=''; }
+    else{
+      sentLine.style.display='';
+      var names=outgoingRequests.map(function(r){return r.name;}).filter(Boolean);
+      var who=names.length===1?escapeHtml(names[0])
+             :(names.length===2?(escapeHtml(names[0])+' and '+escapeHtml(names[1]))
+             :(escapeHtml(names[0])+' and '+(names.length-1)+' others'));
+      /* Remind is the only thing you can do about a sent request, so it's the only control —
+         cancelling lives on the row inside the sheet, not on a summary line. */
+      sentLine.innerHTML='<span class="fr-pdot"></span><b>'+outgoingRequests.length+' sent</b> — waiting on '+who
+        +' · <button class="fr-sentbtn" onclick="remindRequest('+JSON.stringify(names[0]||'').replace(/"/g,'&quot;')+')">Remind</button>';
+    }
+  }
 
   const out=document.getElementById('frFriendsOut');
   if(out){
@@ -13958,36 +14570,40 @@ function renderFriends(){
           }
         },8000);
       }
-    }else if(!friendsList.length){
-      // Cold start: a brand-new user has no friends and no classes, so the
-      // friends feature can't show them anything. Point them at the two things
-      // that pay off solo first — filling in classes, and reviewing past ones.
-      const noClasses=!(typeof myClasses!=='undefined'&&myClasses.length);
-      out.innerHTML=`<div class="fr-empty">
-        <h3>No friends yet</h3>
-        <p>Send your invite link — they tap it and you're connected.</p>
-        <div class="fr-emptybtns">
-          <button class="btn primary" onclick="shareInviteLink()">Send my invite link</button>
-        </div>
-        ${noClasses?`<div class="fr-coldstart">
-          <p class="fr-cold-t"><b>Add your classes first</b> — that's what friends see.</p>
-          <button class="fr-addtoggle primary" onclick="openSchedImport()">Import my schedule</button>
-        </div>`:''}
-      </div>`;
     }else{
-      out.innerHTML=friendsList.map(friendRowHtml).join('');
+      /* ONE column: pending requests, then friends, then the slot where the next person goes.
+         Requests pin to the top because they're the only rows carrying a decision. Sorting
+         friends by how many classes you share puts the people this app exists for first —
+         alphabetical order is a filing system, not a ranking. */
+      const pending=incomingRequests.map(friendReqRowHtml).join('');
+      const people=friendsList.slice().sort(function(a,b){
+        var d=friendSharedCodes(b).length-friendSharedCodes(a).length;
+        return d||String(a.name||'').localeCompare(String(b.name||''));
+      }).map(friendRowHtml).join('');
+      /* The cold-start nudge stays, but as a line under the slot rather than a card replacing
+         it — a new student still needs telling that friends see their CLASSES, and that
+         importing a schedule is what makes this tab worth anything. */
+      const noClasses=!(typeof myClasses!=='undefined'&&myClasses.length);
+      const cold=(!friendsList.length&&noClasses)
+        ? `<div class="fr-sentline" style="padding-top:13px"><b>Add your classes first</b> — your schedule is what friends see.
+             <button class="fr-sentbtn" onclick="openSchedImport()">Import my schedule</button></div>`
+        : '';
+      /* Both jobs sit at the top: the decisions you owe someone, then the way to add the
+         next person. Friends follow. The slot was at the END for one build — it read as a
+         footer and fell below the fold at ~8 friends, which is the same mistake the invite
+         hero made from the other direction. Anything you go to this tab TO DO belongs above
+         the list you go to it to READ. */
+      out.innerHTML=pending+friendSlotHtml(friendsList.length>0)+people+cold;
     }
   }
+  /* The count in the heading has to match the list under it. Pending requests are rendered
+     into that list but are NOT friends yet, so they are named separately rather than folded
+     into one number that would be wrong the moment anyone asked. */
   setSecCount('frFriendCount',friendsLoaded?friendsList.length:0);
-  // Suggestions and contact matches now live inside the collapsed drawer, so
-  // advertise them on the toggle — otherwise nobody would ever find them.
-  const sub=document.getElementById('frSetupSub');
-  if(sub){
-    const n=classmateSuggestions.length+contactMatches.length;
-    sub.innerHTML=n
-      ? `<b style="color:#9fd09a">${n} ${n===1?'person':'people'} you might know</b> · name, handle, ways to add friends`
-      : 'Name, handle, and ways to add friends';
-  }
+  /* frSetupSub belonged to a collapsed "setup" drawer that no longer exists; the suggestions
+     it advertised now have their own section with its own count. Guarded, not deleted, in
+     case an older cached shell still has the element. */
+  const sub=document.getElementById('frSetupSub'); if(sub)sub.textContent='';
 }
 
 async function signInWithGoogle(){
@@ -14134,7 +14750,22 @@ async function loadMySavedClasses(){
   // The old per-code loop was N+M sequential round-trips inside the sign-in
   // path — a big chunk of why "loading friends" felt stuck.
   const toPush=[...cur].filter(c=>dbCodes.indexOf(c)<0).map(c=>({user_id:sbUser.id,code:c}));
-  const toDrop=dbCodes.filter(c=>!cur.has(c));
+  let toDrop=dbCodes.filter(c=>!cur.has(c));
+  /* A DELETE that runs inside the sign-in path is the most dangerous statement in this file:
+     it fires before anyone has touched anything, it is keyed off client state, and if that
+     state is wrong it silently destroys a schedule the student spent real time importing.
+     Every dbCode is hydrated into myClasses above, so toDrop should ALWAYS be empty here —
+     which means a non-empty one is a bug in this function, not a student removing a class.
+     Removing a class goes through toggleMyClass(), which deletes that one code on its own.
+     Verified 2026-08-23: a friend's six saved_classes rows vanished from the database after
+     he signed in again, while his my_sections row survived — exactly the shape a stray bulk
+     delete leaves. I could not reproduce the trigger, so this refuses the whole class of
+     outcome instead of guessing at the cause. */
+  if(toDrop.length){
+    console.warn('[professify] sign-in sync wanted to delete '+toDrop.length+' saved class(es) — refused. '
+      +'This should be unreachable; toDrop must be empty after hydration. Codes: '+toDrop.join(', '));
+    toDrop=[];
+  }
   try{
     const ops=[];
     if(toPush.length)ops.push(sb.from('saved_classes').upsert(toPush));
@@ -14773,11 +15404,266 @@ function epProcessImage(file){
     img.src=url;
   });
 }
+/* ============ DELETE ACCOUNT ============
+   Counts what this account actually holds before asking, because "are you sure?" over an
+   unspecified amount of work is not informed consent — "your 4 reviews and 41 past classes"
+   is. The row deletion itself happens server-side in delete_my_account(): a browser cannot
+   delete its own auth.users row, and doing it table-by-table from the client would leave a
+   half-deleted account behind the moment one request failed. */
+window.openDeleteAccount=async function(){
+  if(typeof sbUser==='undefined'||!sbUser){ try{frToast('You’re already signed out.');}catch(e){} return; }
+  var list=document.getElementById('delList');
+  var warn=document.getElementById('delWarn');
+  var keep=document.getElementById('delKeep');
+  var inp=document.getElementById('delConfirm'), err=document.getElementById('delErr');
+  if(inp)inp.value=''; if(err)err.textContent='';
+  var go=document.getElementById('delGo'); if(go)go.disabled=true;
+  if(list)list.innerHTML='<li>Counting what’s on your account…</li>';
+  if(warn)warn.textContent=''; if(keep)keep.innerHTML='';
+  document.getElementById('delBack').classList.add('open');
+  /* Real numbers, read live — not the app's in-memory copies, which can be stale. */
+  var n={};
+  try{
+    var q=async function(tbl,col){
+      try{ var r=await sb.from(tbl).select('*',{count:'exact',head:true}).eq(col||'user_id',sbUser.id);
+           return r.error?null:(r.count||0); }catch(e){ return null; }
+    };
+    n.classes=await q('saved_classes');
+    n.sections=await q('my_sections');
+    n.past=await q('class_history');
+    n.reviews=await q('reviews');
+    n.watch=await q('watch_sections');
+    var fr=await sb.from('friend_requests').select('*',{count:'exact',head:true})
+             .or('from_user.eq.'+sbUser.id+',to_user.eq.'+sbUser.id);
+    n.friends=fr.error?null:(fr.count||0);
+  }catch(e){}
+  var row=function(v,one,many){
+    if(v==null)return '';                    // couldn't count — say nothing rather than "0"
+    return '<li><b>'+v+'</b> '+(v===1?one:many)+'</li>';
+  };
+  if(list){
+    var html=row(n.classes,'saved class','saved classes')
+      +row(n.sections,'imported section','imported sections')
+      +row(n.past,'past class','past classes')
+      +row(n.watch,'watched section','watched sections')
+      +row(n.friends,'friend connection','friend connections')
+      +'<li>Your profile, name, username and photo</li>';
+    list.innerHTML=html;
+  }
+  /* Reviews do NOT go. They're what another student came here to read, and they're already
+     part of a professor's average — deleting them rewrites a number other people acted on.
+     What goes is the link to you: user_id is set to null, so afterwards nothing anywhere
+     connects the review to a person. Two things this screen owes the student: that the
+     review outlives the account, and that once anonymous it can never be taken back. If
+     they don't want that, the way out is to delete the reviews first, so we point at it. */
+  if(keep&&n.reviews){
+    var one=(n.reviews===1);
+    keep.innerHTML='<span class="dk-h">Your '+n.reviews+' review'+(one?'':'s')+' stay'+(one?'s':'')+', without your name</span>'
+      +'Other students are using '+(one?'it':'them')+', and '+(one?'it\u2019s':'they\u2019re')+' already part of the '
+      +'professor'+(one?'\u2019s':'s\u2019')+' average. We remove the link to you, so afterwards nothing connects '
+      +(one?'it':'them')+' to you — which also means <b>'+(one?'it':'they')+' can\u2019t be edited or taken down later</b>.'
+      +'<br><button type="button" onclick="closeDeleteAccount();openMyReviews()">Delete '+(one?'it':'them')+' first instead →</button>';
+  }
+  if(warn){
+    warn.innerHTML='Everything in the list above is gone for good the moment you confirm. '
+      +'There is no undo and no backup we can restore from.';
+  }
+  setTimeout(function(){ if(inp)inp.focus(); },60);
+};
+window.closeDeleteAccount=function(){
+  var b=document.getElementById('delBack'); if(b)b.classList.remove('open');
+};
+window.delValidate=function(){
+  var v=((document.getElementById('delConfirm')||{}).value||'').trim().toUpperCase();
+  var go=document.getElementById('delGo'); if(go)go.disabled=(v!=='DELETE');
+};
+window.delRun=async function(){
+  var go=document.getElementById('delGo'), err=document.getElementById('delErr');
+  var v=((document.getElementById('delConfirm')||{}).value||'').trim().toUpperCase();
+  if(v!=='DELETE')return;
+  if(typeof sb==='undefined'||!sb||typeof sbUser==='undefined'||!sbUser){
+    if(err)err.textContent='You’re signed out.'; return; }
+  if(go){go.disabled=true;go.textContent='Deleting…';}
+  if(err)err.textContent='';
+  var uid=sbUser.id;
+  /* Storage isn't reachable from SQL, so the photo goes first. A failure here must not stop
+     the deletion — an orphaned image is a far smaller problem than an account that says it
+     deleted itself and didn't. */
+  try{ await sb.storage.from('avatars').remove([uid+'/avatar.jpg']); }catch(e){}
+  var r;
+  try{ r=await sb.rpc('delete_my_account'); }
+  catch(e){ r={error:{message:(e&&e.message)||'network error'}}; }
+  if(r&&r.error){
+    if(go){go.disabled=false;go.textContent='Delete my account';}
+    if(err)err.textContent=/function|does not exist|schema/i.test(r.error.message||'')
+      ? 'Account deletion isn’t switched on for this deploy yet — email us and we’ll do it by hand.'
+      : ('Couldn’t delete your account: '+r.error.message);
+    return;
+  }
+  /* Wipe this device too, or the next load repaints a signed-in shell from cache for an
+     account that no longer exists. */
+  try{
+    var keep={};
+    try{ keep['professify-theme']=localStorage.getItem('professify-theme'); }catch(_t){}
+    Object.keys(localStorage).forEach(function(k){
+      if(/^(professify|sb-)/.test(k))localStorage.removeItem(k);
+    });
+    if(keep['professify-theme'])localStorage.setItem('professify-theme',keep['professify-theme']);
+  }catch(e){}
+  try{ await sb.auth.signOut(); }catch(e){}
+  try{ sessionStorage.clear(); }catch(e){}
+  location.replace(location.pathname+'?deleted=1');
+};
+/* The danger section only exists for a signed-in account. */
+window.refreshDangerZone=function(){
+  var el=document.getElementById('setDangerSec'); if(!el)return;
+  el.style.display=(typeof sbUser!=='undefined'&&sbUser)?'':'none';
+};
+try{if(typeof A11Y_MODALS!=='undefined')A11Y_MODALS.push({id:'delBack',close:'closeDeleteAccount'});}catch(e){}
+/* Confirmation after the redirect — the account is gone, so there's nothing to show but this. */
+try{
+  if(/[?&]deleted=1/.test(location.search)){
+    setTimeout(function(){
+      /* Precise, because the previous wording ("everything on it") was no longer true once
+         reviews began surviving — and a farewell message that overstates what was deleted is
+         exactly the sentence someone screenshots later. */
+      try{ frToast('Your account has been deleted. Any reviews you wrote are still up, no longer linked to you.',8000); }catch(e){}
+      try{ history.replaceState(null,'',location.pathname); }catch(e){}
+    },700);
+  }
+}catch(e){}
+
+/* ============ TERMS · PRIVACY · SECURITY ============
+   Specific to what Professify actually holds. A policy that doesn't name the data is worse
+   than none: it reads as boilerplate nobody checked, which is exactly the impression a
+   product handling other students' .edu addresses cannot afford. */
+var LEGAL_UPDATED='23 August 2026';
+var LEGAL_CONTACT='tdogtate@icloud.com';
+var LEGAL_DOCS={
+  terms:{title:'Terms of Service',html:
+    '<div class="lg-date">Last updated '+LEGAL_UPDATED+'</div>'
+    +'<div class="lg-key">Professify is a student project, not a Cal Poly service. It is not affiliated with, endorsed by, or reviewed by California Polytechnic State University, PolyRatings, or RateMyProfessors.</div>'
+    +'<h4>Who can use it</h4>'
+    +'<p>You need a current <code>@calpoly.edu</code> address, and you must be 13 or older. One account per person. Don’t share your account or sign in as someone else.</p>'
+    +'<h4>What you post</h4>'
+    +'<p>Reviews must be your own first-hand experience of a class you actually took. Write about the teaching, not the person. Specifically, don’t post:</p>'
+    +'<ul>'
+    +'<li>Anything about a professor’s appearance, race, gender, religion, disability, age, or personal life.</li>'
+    +'<li>Claims of fact you can’t stand behind — accusations of misconduct belong with the university, not a rating site.</li>'
+    +'<li>Threats, harassment, or anything meant to organise a pile-on.</li>'
+    +'<li>Someone else’s personal information, including contact details or schedules.</li>'
+    +'<li>Reviews for a class you didn’t take, or written in exchange for anything.</li>'
+    +'</ul>'
+    +'<p>You keep ownership of what you write. By posting, you give Professify permission to display it in the app. We can remove a review that breaks these rules, and repeated breaches can end your account.</p>'
+    +'<h4>If you are the professor</h4>'
+    +'<p>Reviews are students’ personal opinions, not statements of fact by Professify. If a review about you is abusive, names something private, or states something as fact that is false, email <b>'+LEGAL_CONTACT+'</b> and it will be looked at by a person. You don’t need an account to ask.</p>'
+    +'<h4>The class data is not official</h4>'
+    +'<p>Seat counts, waitlists, meeting times and instructors come from a scrape of Cal Poly’s public class search, refreshed roughly once a day. It can be stale, incomplete, or wrong. Ratings come from PolyRatings’ public API and are theirs, not ours.</p>'
+    +'<p><b>Register through Cal Poly’s own system and check it there.</b> Don’t make a registration decision on Professify’s numbers alone. If a seat count here costs you a class, that’s on the scrape being a day old — which is why we stamp when it last ran.</p>'
+    +'<h4>What friends can see</h4>'
+    +'<p>Adding someone as a friend lets them see your class list, and — if you’ve imported your schedule — your sections, meeting times and instructors. Remove the friend and that access stops. Details in Privacy.</p>'
+    +'<h4>Availability and liability</h4>'
+    +'<p>This runs on a student budget. It may break, lose data, or go away. It is provided as-is, without warranty. To the extent the law allows, Professify and its author aren’t liable for losses arising from using it — including a class you didn’t get.</p>'
+    +'<h4>Ending it</h4>'
+    +'<p>Delete your account any time from Settings and your data goes with it — except your reviews, which stay up permanently unlinked from you, because other students are relying on them. Delete individual reviews from <b>Your reviews</b> first if you don’t want them kept. Privacy explains this in full. We can suspend accounts that break these terms.</p>'
+    +'<h4>Changes and law</h4>'
+    +'<p>These terms can change; the date at the top moves when they do, and significant changes will be announced in the app. Governed by the laws of the State of California.</p>'
+    +'<p>Questions: <b>'+LEGAL_CONTACT+'</b></p>'},
+
+  privacy:{title:'Privacy',html:
+    '<div class="lg-date">Last updated '+LEGAL_UPDATED+'</div>'
+    +'<div class="lg-key">Professify does not sell your data, does not run ads, and has no advertising or analytics trackers in the page.</div>'
+    +'<h4>What is collected</h4>'
+    +'<ul>'
+    +'<li><b>Your Cal Poly email</b> — to verify you’re a student and to sign you in. Sign-in uses a one-time code; no password is ever stored.</li>'
+    +'<li><b>Profile</b> — display name, username, optional photo, optional Instagram handle, major, concentration, class standing.</li>'
+    +'<li><b>Classes</b> — the courses you save, and if you import your schedule, your exact sections: class number, instructor, meeting days and times, and whether you’re enrolled or waitlisted (including your waitlist position, if you enter it).</li>'
+    +'<li><b>Past classes</b> — courses you mark as taken, with term and professor.</li>'
+    +'<li><b>Friends</b> — who you’re connected to, and pending requests.</li>'
+    +'<li><b>Reviews</b> — your ratings and written notes, stored with your account so you can edit or delete them.</li>'
+    +'<li><b>A phone number hash</b>, if you used contact matching — a one-way hash, not the number.</li>'
+    +'</ul>'
+    +'<h4>Who can see what</h4>'
+    +'<ul>'
+    +'<li><b>Your email address:</b> your accepted friends, and no one else.</li>'
+    +'<li><b>Your classes and schedule:</b> your accepted friends. Remove a friend and their access ends.</li>'
+    +'<li><b>Your reviews:</b> the rating and text are public and visible without an account. Your identity is not attached to them publicly, and never shown to anyone — including your friends.</li>'
+    +'<li><b>Your past classes and watchlist:</b> only you, except where a friend shares a class with you.</li>'
+    +'</ul>'
+    +'<h4>Where it lives</h4>'
+    +'<p>In a Supabase-hosted Postgres database on servers in the United States. Traffic is encrypted in transit. Photos are stored in Supabase Storage; a photo you upload is publicly reachable by its URL, so treat it as public.</p>'
+    +'<h4>Who else is involved</h4>'
+    +'<ul>'
+    +'<li><b>Supabase</b> — database, sign-in and file storage.</li>'
+    +'<li><b>Resend</b> — sends your sign-in codes; sees your email address.</li>'
+    +'<li><b>PolyRatings</b> — their public API supplies professor ratings. Your data is never sent to them.</li>'
+    +'<li><b>jsDelivr and Google Fonts</b> — serve code and fonts to your browser, and therefore see your IP address, as any site’s CDN does.</li>'
+    +'</ul>'
+    +'<p>Nobody else receives your data. It is not sold, rented, or shared for advertising.</p>'
+    +'<h4>How long it is kept</h4>'
+    +'<p>While your account exists. Delete your account and your profile, classes, sections, past classes, watchlist and friend links are deleted with it. Backups may keep copies for a short period before rolling off.</p>'
+    +'<h4>Reviews are the one exception</h4>'
+    +'<p><b>Your reviews stay up when you delete your account — but they stop being yours.</b> We set the author field to null, so afterwards no record anywhere links a review to you. It is not merely displayed anonymously; there is nothing left to look up, by us or by anyone asking us.</p>'
+    +'<p>Why: a review is what another student came here to read, and it is already part of a professor’s average. Removing it would silently change a number other people made decisions on, and would mean every professor’s rating shifted whenever an unrelated student graduated and closed their account.</p>'
+    +'<p>The trade is that an anonymised review can’t be edited or taken down afterwards, because nothing identifies who wrote it. So <b>if you want a review gone, delete it before you delete your account</b> — open <b>Your reviews</b> from Settings and remove any you don’t want kept. You can do that at any time, for any reason, without deleting your account. The delete screen says this too, before you confirm.</p>'
+    +'<h4>Your choices</h4>'
+    +'<ul>'
+    +'<li>Edit or remove almost everything yourself — photo, name, classes, reviews, friends.</li>'
+    +'<li>Delete your account from Settings.</li>'
+    +'<li>Want a copy of your data, or something corrected? Email <b>'+LEGAL_CONTACT+'</b>.</li>'
+    +'</ul>'
+    +'<h4>Students under 18</h4>'
+    +'<p>Some first-years are 17. Professify is not designed for children under 13 and does not knowingly collect their data. If you believe someone under 13 has an account, email us and it will be removed.</p>'
+    +'<h4>Changes</h4>'
+    +'<p>If what is collected or who can see it changes, the date above changes and you’ll be told in the app. Questions: <b>'+LEGAL_CONTACT+'</b></p>'},
+
+  security:{title:'Security',html:
+    '<div class="lg-date">Last updated '+LEGAL_UPDATED+'</div>'
+    +'<div class="lg-key">No system is secure, and nobody honest will tell you otherwise. What follows is what Professify actually does, so you can judge for yourself what to put in it.</div>'
+    +'<h4>Signing in</h4>'
+    +'<p>There is no password to steal — sign-in is a one-time code emailed to your <code>@calpoly.edu</code> address. Sessions are held in your browser and refresh in the background; signing out clears them.</p>'
+    +'<h4>How your data is separated</h4>'
+    +'<p>Every table uses database-level row policies, so who can read a row is decided by the database rather than by the app asking nicely. Friend access is checked against an accepted friendship each time, not cached and trusted.</p>'
+    +'<h4>What we do not do</h4>'
+    +'<ul>'
+    +'<li>No advertising or analytics trackers.</li>'
+    +'<li>No selling or sharing of personal data.</li>'
+    +'<li>No storing of passwords or phone numbers.</li>'
+    +'<li>No reading of your Cal Poly account — the class data comes from Cal Poly’s public class search, not from your portal. Professify never asks for your Cal Poly password, and you should never give it to us or anyone else.</li>'
+    +'</ul>'
+    +'<h4>Honest limits</h4>'
+    +'<ul>'
+    +'<li>This is a student project maintained by one person, not a company with a security team.</li>'
+    +'<li>It has not had an independent penetration test.</li>'
+    +'<li>Anything you post as a review is public. Treat it as permanently public.</li>'
+    +'<li>A profile photo you upload is reachable by anyone with its link.</li>'
+    +'</ul>'
+    +'<h4>Found a problem?</h4>'
+    +'<p>Please report it rather than testing how far it goes. Email <b>'+LEGAL_CONTACT+'</b> with what you found and how to reproduce it. Reports made in good faith are welcome, and you won’t be pursued for reporting one. Please don’t access, change or keep other students’ data while investigating.</p>'
+    +'<h4>If something goes wrong</h4>'
+    +'<p>If student data is exposed, affected people will be emailed at the address on their account, with what happened and what to do, as soon as the facts are established.</p>'}
+};
+window.openLegal=function(which){
+  which=LEGAL_DOCS[which]?which:'terms';
+  var doc=LEGAL_DOCS[which];
+  var t=document.getElementById('legalTitle'); if(t)t.textContent=doc.title;
+  var body=document.getElementById('legalBody'); if(body){ body.innerHTML=doc.html; body.scrollTop=0; }
+  ['terms','privacy','security'].forEach(function(k){
+    var el=document.getElementById('legalTab'+k.charAt(0).toUpperCase()+k.slice(1));
+    if(el){ el.classList.toggle('on',k===which); el.setAttribute('aria-selected',k===which?'true':'false'); }
+  });
+  var back=document.getElementById('legalBack'); if(back)back.classList.add('open');
+};
+window.closeLegal=function(){
+  var back=document.getElementById('legalBack'); if(back)back.classList.remove('open');
+};
+try{if(typeof A11Y_MODALS!=='undefined')A11Y_MODALS.push({id:'legalBack',close:'closeLegal'});}catch(e){}
+
 /* ---- Position your photo ----------------------------------------------------------------
    A centred square crop is right about half the time. Group shots, off-centre faces and
    anything portrait all came out wrong with no way to fix it. Drag to move, scroll/pinch/
    slider to zoom, and the circle you see is exactly the circle we cut. */
-var _epC={img:null,url:'',S:0,fit:1,z:1,tx:0,ty:0,natW:0,natH:0,ptrs:{},pinch:null};
+var _epC={img:null,url:'',S:0,fit:1,z:1,tx:0,ty:0,natW:0,natH:0,ptrs:{},pinch:null,measured:false};
 function epCropOpen(file){
   var hint=document.getElementById('epPhotoHint');
   if(!/^image\/(png|jpe?g|webp)$/i.test(file.type||'')){
@@ -14790,18 +15676,36 @@ function epCropOpen(file){
     _epC.img=img; _epC.url=url; _epC.natW=img.naturalWidth||img.width; _epC.natH=img.naturalHeight||img.height;
     var el=document.getElementById('epcImg'); if(el)el.src=url;
     document.getElementById('epCropBack').classList.add('open');
-    /* Measure AFTER the dialog is on screen — a display:none stage measures 0 and every
-       offset computed from it would be wrong. */
-    requestAnimationFrame(function(){ epCropReset(); });
+    epCropArm();
   };
   img.onerror=function(){ try{URL.revokeObjectURL(url);}catch(e){}
     if(hint){hint.textContent='Couldn’t read that image.';hint.className='ep-hint bad';} };
   img.src=url;
 }
+/* Measure AFTER the dialog is actually laid out — a hidden or not-yet-painted stage measures
+   0 and every offset derived from it is wrong (the image renders at natural size and pan
+   clamping does nothing). This used to be a single requestAnimationFrame, which does NOT
+   fire while a tab is in the background — caught live on professify.app driving the dialog
+   from a non-foreground tab: the stage measured 0, epCropReset never completed, and the
+   previous session's zoom was still in place. Poll for a real width instead, and fall back
+   to resetting anyway so the dialog is never left uninitialised. */
+function epCropArm(){
+  var tries=0, done=false;
+  var go=function(){
+    if(done)return;
+    var stage=document.getElementById('epcStage');
+    var w=stage?stage.getBoundingClientRect().width:0;
+    if(w>0||++tries>40){ done=true; epCropReset(); return; }
+    setTimeout(go,50);
+  };
+  try{ requestAnimationFrame(go); }catch(e){}
+  setTimeout(go,60);                 // the path that works in a background tab
+}
 function epCropReset(){
   var stage=document.getElementById('epcStage'); if(!stage||!_epC.img)return;
   var S=stage.getBoundingClientRect().width||280;
   _epC.S=S;
+  _epC.measured=(stage.getBoundingClientRect().width>0);
   /* "fit" is the scale at which the image just COVERS the square — zoom 1 can never
      reveal a transparent corner. */
   _epC.fit=Math.max(S/_epC.natW,S/_epC.natH);
@@ -14819,6 +15723,13 @@ function epCropClamp(){
 }
 function epCropApply(){
   var el=document.getElementById('epcImg'); if(!el)return;
+  /* Self-heal: if the stage was unmeasurable when the dialog opened, the first real
+     interaction is a second chance to get it right rather than dragging a broken frame. */
+  if(!_epC.measured||!(_epC.S>0)){
+    var stage=document.getElementById('epcStage');
+    var w=stage?stage.getBoundingClientRect().width:0;
+    if(w>0){ epCropReset(); return; }
+  }
   epCropClamp();
   var d=epCropDims();
   el.style.width=d.w+'px'; el.style.height=d.h+'px';
@@ -15450,13 +16361,43 @@ function hmRenderStrip(){
     var ev=shared?(shared+' class'+(shared===1?'':'es')+' with you')
       :((f.classes&&f.classes.length)?(f.classes.length+' class'+(f.classes.length===1?'':'es')+' planned'):'');
     return '<button class="hm-fitem" onclick="openFriendProfile(\''+esc(f.id)+'\')" title="'+esc(f.name||'')+'">'
-      +'<span class="ring"><span class="fav" style="background:'+hmFriendColor(f)+'">'+esc(f.ini||hmIni(f.name))+'</span></span>'
+      /* Friends have photos — the Friends tab has shown them all along while this strip and
+         the Quad card heads rendered initials only, so the same person looked like two
+         different people on two screens. */
+      +'<span class="ring"><span class="fav" style="background:'+hmFriendColor(f)+'">'
+        +((typeof avaHtml==='function')?avaHtml(f.avatar_url,f.name):esc(f.ini||hmIni(f.name)))+'</span></span>'
       +'<span class="nm">'+esc(f.name||'Friend')+'</span>'
       +(ev?('<span class="ev">'+esc(ev)+'</span>'):'<span class="ev"></span>')+'</button>';
   }).join('');
+  /* The cap is now an action. A row of faces that ends in a dashed one reads as "and you
+     could add another" without a caption saying so, and it's the same 74px tile, so the row
+     rhythm doesn't break at the end. */
+  var addTile='<button class="hm-fitem hm-fadd" onclick="hmAddFriend()" title="Add a friend">'
+    +'<span class="ring"><span class="fav">+</span></span>'
+    +'<span class="nm">Add friend</span><span class="ev"></span></button>';
   host.innerHTML='<div class="hm-slabel">Friends activity</div>'
-    +'<div class="hm-strip">'+items+'<div class="hm-stripend">That’s everyone ✓</div></div>';
+    +'<div class="hm-strip">'+items+addTile+'</div>';
 }
+/* Home → Friends, add sheet open. show() paints the tab, but renderFriends() runs inside it
+   and the sheet element only exists once that has happened, so opening it has to wait a beat
+   rather than being called in the same tick. */
+window.hmAddFriend=function(){
+  try{ if(typeof show==='function')show('friends'); }catch(e){}
+  var tries=0;
+  var go=function(){
+    var el=document.getElementById('frAddSheet');
+    /* Signed out there is no sheet — the gate is showing instead, which is the correct
+       destination for someone with no account. Stop rather than retrying for two seconds. */
+    var gate=document.getElementById('frGate');
+    if(gate&&gate.style.display!=='none')return;
+    if(el){ el.style.display=''; 
+            try{ el.scrollIntoView({behavior:'smooth',block:'center'}); }catch(e){}
+            setTimeout(function(){ var i=document.getElementById('frSearchPeople'); if(i)i.focus(); },250);
+            return; }
+    if(++tries<25)setTimeout(go,40);
+  };
+  setTimeout(go,40);
+};
 function hmRenderToday(){
   var host=document.getElementById('hmToday'); if(!host)return;
   var codes=(typeof myClasses!=='undefined')?myClasses.slice(0,6):[];
@@ -15496,7 +16437,8 @@ function hmFriendItemCard(it){
   var verb=it.type==='saved'?('added <span class="hm-code" style="font-size:11px;padding:1px 5px">'+esc(it.code)+'</span> for Fall')
     :('took <span class="hm-code" style="font-size:11px;padding:1px 5px">'+esc(it.code)+'</span>'+(it.professor?' with '+esc(it.professor):'')+(it.term?' · '+esc(it.term)+(it.year?' '+esc(String(it.year)):''):''));
   return '<article class="hm-card hm-click" onclick="openFriendProfile(\''+esc(f.id)+'\')">'
-    +'<div class="hm-fhead"><span class="fav" style="background:'+hmFriendColor(f)+'">'+esc(f.ini||hmIni(f.name))+'</span>'
+    +'<div class="hm-fhead"><span class="fav" style="background:'+hmFriendColor(f)+'">'
+      +((typeof avaHtml==='function')?avaHtml(f.avatar_url,f.name):esc(f.ini||hmIni(f.name)))+'</span>'
     +'<div style="min-width:0"><div class="nm">'+esc(f.name||'Classmate')+'</div>'
     +'<div class="ctx">'+verb+'</div></div>'
     +'<span class="time">'+hmAgo(it.at)+'</span></div>'
@@ -15744,6 +16686,16 @@ function hmDropImpossible(meets){
 /* The shared day window. 7AM-10PM covers a 7am lab and a 9pm night class, which the old
    8AM-9PM default clipped away entirely. */
 var CAL_DAY_LO=7*60, CAL_DAY_HI=22*60;
+/* Px per minute for the full Schedule calendar. The 7AM-10PM window is fixed so that your
+   week and a friend's week are the same shape — but that's 15 hours to cover, and at the old
+   0.8 the grid was 720px, most of it empty air above 9AM and below 6PM. 0.56 puts a normal
+   day on one screen without scrolling; a 50-minute class is still 28px, which is enough for
+   the code and the course name. Compressing the window instead of the scale was the wrong
+   fix: it would have broken the shape that makes two schedules comparable. */
+var CAL_PPM=0.56;
+/* Only label every other hour. Fifteen labels down the gutter read as a ruler you're meant
+   to measure against; you only ever need enough of them to anchor a block. */
+var CAL_LABEL_EVERY=2;
 /* px per minute. Lower than it was, because the window is now 15 hours rather than a cropped
    5 or 6 — this keeps a feed card around 300px instead of 450. */
 var HM_CAL_PPM=0.335;
@@ -15849,7 +16801,8 @@ function hmSchedPostCard(p){
 function hmFriendSchedCard(f){
   var ov=hmOverlap(f.classes);
   return '<article class="hm-card hm-click" onclick="openFriendProfile(\''+esc(f.id)+'\')">'
-    +'<div class="hm-fhead"><span class="fav" style="background:'+hmFriendColor(f)+'">'+esc(f.ini||hmIni(f.name))+'</span>'
+    +'<div class="hm-fhead"><span class="fav" style="background:'+hmFriendColor(f)+'">'
+      +((typeof avaHtml==='function')?avaHtml(f.avatar_url,f.name):esc(f.ini||hmIni(f.name)))+'</span>'
     +'<div style="min-width:0"><div class="nm">'+esc(f.name)+'</div>'
     +'<div class="ctx">is taking '+f.classes.length+' class'+(f.classes.length===1?'':'es')+' this term'+(ov?' · <b style="color:var(--accent)">'+ov+' with you</b>':'')+'</div></div>'
     +'<span class="time">friend</span></div>'
@@ -16088,43 +17041,11 @@ function hmRenderRailL(){
      skipped or lost. Make it the action, not a description of one. */
   var hasMajor=!!(typeof student!=='undefined'&&student.major);
   var maj=hasMajor?student.major:'';
-  // Load the real "your reviews" list once so the count is accurate (not the per-session tally).
-  if(signed && !window._myRevLoaded && typeof loadMyReviews==='function'){ window._myRevLoaded=true; try{ loadMyReviews().then(function(){ try{ if(window._myRevLoaded)hmRenderRailL(); }catch(e){} }); }catch(e){} }
-  var myRevLoading=!!(signed&&window.MY_REVIEWS==null);
-  var myRevFailed=!!window.MY_REVIEWS_FAILED;
-  var myRevN=(window.MY_REVIEWS!=null)?window.MY_REVIEWS.length:(reviewsGiven||0);
-  /* Every row is a number the student already wants to act on, so every row goes somewhere.
-     Only "Reviews you've written" used to be clickable while the four below it looked
-     identical and did nothing — a list where one item responds to a tap teaches you the rest
-     are broken, not that they're labels.
-     "Classmates you've helped" is out for now: it reads the helpful-vote count, which nothing
-     writes yet, so it sat at 0 for everyone and made the whole card look inert. */
-  var stats='';
-  /* Tiles, not rows. Every one of these navigates, but as a list of text rows only the first
-     read as interactive — a real <button> per number says so without a caption. */
-  function statTile(label,n,go,tip){
-    return '<button type="button" class="tile" title="'+tip+'" onclick="'+go+'">'
-      +'<b>'+n+'</b><span>'+label+'</span></button>';
-  }
-  try{
-    /* A number nobody has fetched yet is not zero. "0 reviews" and "we couldn't reach the
-       server" used to render identically, and a tile that paints 0 before its data lands
-       states a fact it hasn't checked. The Friends page already does this properly — copy it. */
-    stats+=statTile('Reviews', myRevFailed?'—':(myRevLoading?'·':myRevN), 'openMyReviews()',
-      myRevFailed?'Couldn\'t load your reviews — tap to retry':'See the reviews you\'ve written');
-    /* These two used to count COURSES while the tabs they open count SECTIONS, so tapping
-       "Classes 1" landed on "My Classes 2". A course you're both enrolled in and waitlisted
-       for is two sections. myClassSectionCount() and watchTotal() are the formulas the rest
-       of the app already agreed on — use them here instead of a third and fourth. */
-    stats+=statTile('Classes',
-      (typeof myClassSectionCount==='function')?myClassSectionCount():((myClasses&&myClasses.length)||0),
-      "show('sched');setSchedTab('mine')",'Open My Classes');
-    stats+=statTile('Friends',((typeof FRIENDS!=='undefined'&&FRIENDS.length)||0),
-      "show('friends')",'Open Friends');
-    stats+=statTile('Watching',
-      (typeof watchTotal==='function')?watchTotal():(((watchlist&&watchlist.length)||0)+((watchClasses&&watchClasses.length)||0)),
-      "show('sched');setSchedTab('watch')",'Open your Watchlist');
-  }catch(e){}
+  /* The eager loadMyReviews() that used to run here existed only to make the "Reviews" tile
+     accurate. The tile is gone, so the fetch is too — every Home render was paying for a
+     round-trip to print a number nobody needed. "Your reviews" loads its own list when you
+     open it, and MY_REVIEWED (the one-per-professor guard) is populated separately. */
+
   /* The @handle used to be a big outlined pill — the loudest thing on the card after the
      name, for the least important fact on it. It was loud because it doubled as the "set
      yourself up" prompt. Split the two: a prompt only while something IS missing, quiet text
@@ -16147,7 +17068,7 @@ function hmRenderRailL(){
     +(hasMajor
       ? '<div class="mj">'+esc(maj)+(student&&student.standing?' · '+esc(student.standing):'')+'</div>'
       : '<button class="mj mj-setup" onclick="event.stopPropagation();startOnboard()">Set up your plan \u2192</button>')
-    +(signed?('<div class="idgrid">'+stats+'</div>'):('<button class="signin" onclick="onAuthBtn(event)">Log in · Sign up</button>'))
+    +(signed?'':('<button class="signin" onclick="onAuthBtn(event)">Log in · Sign up</button>'))
     +'</div>';
   var mini=hmMiniCalHtml();
   /* Watchlist card — both the classes AND the professors you're watching. */
