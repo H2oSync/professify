@@ -48,6 +48,10 @@ jobs:
           - 'COMS,AGC,DSCI,JPNS,WLC'
           - 'ME,WGQS'
           - 'CE,JOUR,TH'
+          - 'HIST,AEPS,ENGR,ESCI'
+          - 'RPTA,HCSA,EIM,GSE,GS,SS,UNIV,HNRC,CI,ELAP,AG,WGS'
+          - 'ATHL,CEP,CHE,CLA,COM,CRU,DAT,DL,ECO,EGL,EM,ENG,EPO,ET,FF,GMA'
+          - 'GOV,HIS,HUM,IBL,LAN,LAW,LDR,LIB,MPM,MTH,NAU,NSC,OCN,PE,PHY,TEM'
     steps:
       - uses: actions/checkout@v4
 
