@@ -804,10 +804,27 @@ window.toggleTheme = toggleTheme;
 .ep-hint.bad{color:var(--low)}
 .ep-hint.good{color:var(--accent)}
 .ep-lab{display:block;font-size:12.5px;font-weight:700;color:var(--text-2);margin:14px 0 6px}
+/* NOTE ON SPECIFICITY — this is why the @ looked wrong.
+   `.ep-in`, `.ep-userin` and friends are declared here at line ~807; `.rate-input` is
+   declared at ~1059. Same specificity, later wins — so on every element carrying BOTH
+   classes, every property they share has been coming from `.rate-input` since the day this
+   was written. `.ep-in{font-size:16px}` never applied (the field rendered at 15px, and on
+   iOS a sub-16px input makes Safari zoom the page on focus). `.ep-in{margin:0}` never
+   applied, so the wrapper stood 14px taller than the input inside it — which is what threw
+   the @ off centre, because it was centring on the wrapper. `.ep-userin{padding-left}` never
+   applied either, leaving 15px of padding under a glyph that needs ~29px, so a typed
+   username started underneath the @.
+   Scoping to #epBack settles all four. */
 .ep-in{width:100%;margin:0;font-size:16px}
-.ep-userwrap{position:relative;display:flex;align-items:center}
-.ep-at{position:absolute;left:12px;color:var(--faint);font-size:16px;font-weight:600;pointer-events:none}
-.ep-userin{padding-left:26px}
+#epBack .ep-in{font-size:16px}
+/* The wrapper carries the field's bottom margin now, so the wrapper's box IS the input's box
+   and `top:50%` centres on the thing the reader sees. */
+.ep-userwrap{position:relative;display:flex;align-items:center;margin-bottom:14px}
+#epBack .ep-userwrap .ep-userin{margin-bottom:0;padding-left:31px}
+#epBack .ep-at{position:absolute;left:13px;top:50%;transform:translateY(-50%);line-height:1;
+  color:var(--faint);font-size:16px;font-weight:600;pointer-events:none}
+.ep-at{position:absolute;color:var(--faint);font-weight:600;pointer-events:none}
+.ep-userin{padding-left:31px}
 .ep-rm{color:var(--low)}
 .wl-off{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
 .wl-off-q{font-size:13px;color:var(--muted);margin-right:2px}
@@ -1135,12 +1152,81 @@ window.toggleTheme = toggleTheme;
 .frp-row.on{border-color:rgba(111,158,106,.45);background:rgba(111,158,106,.07)}
 .frp-main{flex:1;min-width:0}
 .frp-t{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+/* Same badge as My Classes uses for your own section, so one fact looks like one fact. */
+.frp-secid{font-size:10.5px;font-weight:600;color:var(--muted);border:1px solid var(--line);
+  border-radius:6px;padding:1px 6px;letter-spacing:.02em;white-space:nowrap}
+.frp-view{display:flex;justify-content:flex-end;margin:-4px 0 12px}
+.frp-cal{margin-bottom:4px}
+/* The friend calendar reuses My Classes' grid, so it inherits its scale — but this one sits
+   in a modal with no side rails, and the extra width is what makes room for course names. */
+.frp-cal .cal-block{border-radius:9px}
+/* ---- click feel ----------------------------------------------------------------------
+   Every tappable thing here answered a tap by navigating and nothing else — no press, no
+   lift, so a click that took a moment to land read as a click that didn't register. */
+.frp-row{transition:border-color .14s ease,background .14s ease,transform .1s ease}
+.frp-row.frp-tap{cursor:pointer}
+.frp-row.frp-tap:hover{border-color:rgba(var(--accent-rgb),.42);background:var(--panel-2)}
+.frp-row.frp-tap:active{transform:scale(.994)}
+.frp-row.frp-tap:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.frp-row .fh-review{transition:border-color .14s ease,color .14s ease,background .14s ease}
+.frp-row.frp-tap:hover .fh-review{border-color:rgba(var(--accent-rgb),.6)}
+.wl-tab{transition:color .14s ease,border-color .14s ease}
+.mc-viewtog button{transition:background .14s ease,color .14s ease}
 .frp-tog{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#9fd09a;border:1px solid rgba(111,158,106,.4);border-radius:999px;padding:1px 7px}
 .fr-feed{display:flex;flex-direction:column;gap:7px}
 .fr-askbtn{margin-left:8px;background:transparent;border:1px solid rgba(192,103,79,.5);color:#d69a72;border-radius:999px;padding:2px 10px;font-size:11px;font-weight:700;cursor:pointer}
 .fr-askbtn:hover{background:rgba(192,103,79,.15)}
 .fr-toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(14px);background:var(--panel-3);border:1px solid var(--line);color:var(--text);padding:12px 18px;border-radius:12px;font-size:13px;max-width:min(90vw,460px);box-shadow:0 10px 30px rgba(0,0,0,.4);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:9999}
 .fr-toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+/* Two ways in, shown as two tabs — the screenshot path was the only door and the modal was
+   titled after it, so a student whose OCR read badly had nowhere to go but out. */
+/* A course we know exists but hold no sections for. Deliberately not styled as an error:
+   nothing the student did was wrong, and the class really is running. */
+/* Component badge on a section row — Lab / Activity / Seminar. Deliberately not the accent
+   colour: it's a fact about the section, not a recommendation. */
+.mode-pill.comp{background:rgba(var(--fg-rgb),.10);color:var(--text-2);
+  border:1px solid rgba(var(--fg-rgb),.16)}
+.cs-group{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--text-2);padding:14px 2px 8px;margin-top:6px;border-top:1px solid var(--line-soft)}
+.cs-group .faint{font-weight:500;letter-spacing:0;text-transform:none;color:var(--faint)}
+.ex-gap{border:1px solid rgba(var(--accent-rgb),.3);background:rgba(var(--accent-rgb),.06);
+  border-radius:14px;padding:16px 18px;margin:4px 0 14px}
+.ex-gap .t{margin:0 0 6px;font-size:14px;font-weight:650;color:var(--text);line-height:1.45}
+.ex-gap .s{margin:0 0 12px;font-size:12.5px;color:var(--muted);line-height:1.5}
+.ex-gap-btn{display:inline-block;background:var(--accent);color:var(--accent-ink);
+  border-radius:999px;padding:9px 16px;font-size:12.5px;font-weight:700;text-decoration:none}
+/* A class we couldn't fully read. Marked, not hidden — and the marking sits next to the
+   control that resolves it. */
+.si-item.needs{border-color:rgba(205,167,101,.5);background:rgba(205,167,101,.06)}
+.si-needs{font-size:9.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;
+  color:#cda765;background:rgba(205,167,101,.15);border-radius:999px;padding:2px 8px}
+.si-fixed{font-size:9.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--accent);background:var(--accent-dim);border-radius:999px;padding:2px 8px}
+.si-anyt{font-size:9.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--muted);background:var(--panel-3);border-radius:999px;padding:2px 8px}
+.si-gapbar{border:1px solid rgba(205,167,101,.4);background:rgba(205,167,101,.08);
+  border-radius:12px;padding:11px 13px;margin:0 0 13px;font-size:12.5px;color:var(--text-2);line-height:1.5}
+.si-gapbar b{color:var(--text)}
+.si-fix{margin:9px 0 2px;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.si-fixl{font-size:11.5px;color:var(--muted);flex-basis:100%}
+.si-sel{flex:1;min-width:200px;background:var(--panel-2);border:1px solid var(--line);
+  border-radius:9px;color:var(--text);font:inherit;font-size:12.5px;padding:8px 10px}
+.si-sel:focus{outline:0;border-color:var(--accent)}
+.si-fixbtn{background:var(--panel-2);border:1px solid var(--line);border-radius:999px;
+  color:var(--text-2);font:600 12px inherit;padding:7px 13px;cursor:pointer}
+.si-fixbtn:hover{border-color:var(--accent);color:var(--text)}
+.si-fixnote{font-size:11px;color:var(--faint);flex-basis:100%}
+.si-change{background:none;border:0;padding:0 0 0 4px;font:inherit;font-size:11.5px;
+  color:var(--accent);cursor:pointer;text-decoration:underline;text-underline-offset:2px;margin-left:auto}
+.si-tabs{display:flex;gap:2px;background:var(--panel-2);border:1px solid var(--line-soft);
+  border-radius:999px;padding:3px;margin:0 0 14px;width:fit-content}
+.si-tabs .si-tab{border:0;background:none;color:var(--muted);font:650 12.5px inherit;
+  padding:7px 15px;border-radius:999px;cursor:pointer}
+.si-tabs .si-tab.on{background:var(--panel);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.35)}
+.si-paste{width:100%;min-height:170px;resize:vertical;background:var(--panel-2);
+  border:1px solid var(--line);border-radius:12px;color:var(--text);
+  font:13px/1.5 var(--mono);padding:12px 13px;margin-bottom:12px}
+.si-paste:focus{outline:0;border-color:var(--accent)}
 .si-drop{border:1.5px dashed var(--line);border-radius:14px;padding:30px 24px;text-align:center;cursor:pointer;background:var(--panel)}
 .si-drop:hover{border-color:var(--accent)}
 .si-ico{font-size:30px;margin-bottom:8px}
@@ -1510,7 +1596,6 @@ if(typeof qrcode==="function")window.qrcode=qrcode;
       <div class="set-sec"><span class="set-l">Major</span><div class="selwrap"><select id="setMajor" onchange="setChangeMajor(this.value)"></select></div></div>
       <div class="set-sec" id="setConcSec"><span class="set-l">Concentration</span><div class="selwrap"><select id="setConc" onchange="setChangeConc(this.value)"></select></div></div>
       <div class="set-sec"><span class="set-l">Class standing</span><div class="selwrap"><select id="setStanding" onchange="setChangeStanding(this.value)"></select></div></div>
-      <div class="set-sec"><span class="set-l">Professor matching</span><div><button class="set-btn ghost" onclick="openLearningPrefs()">How you learn best →</button><div style="font-size:11.5px;color:var(--faint);margin-top:7px;max-width:420px">Optional. Pick how you like to learn and we'll highlight professors who actually do those things.</div></div></div>
       <div class="set-sec"><span class="set-l">Theme</span><div class="set-seg" id="setTheme"><button type="button" data-theme-val="light" onclick="setTheme('light')">Light</button><button type="button" data-theme-val="dark" onclick="setTheme('dark')">Dark</button><button type="button" data-theme-val="cream" onclick="setTheme('cream')">Cream</button></div></div>
       <div class="set-sec"><span class="set-l">About Professify</span><div class="set-about">
         <div>Real Cal Poly professors and confirmed Fall 2026 instructors, with ratings synced <b>live from PolyRatings</b>' open API, and seat, waitlist, and meeting-time data scraped daily from Cal Poly Class Search. Pick your major and Professify shows who's teaching each required course, how they're rated, and how full each section is — so you can plan the term around the right professors.</div>
@@ -1531,13 +1616,6 @@ if(typeof qrcode==="function")window.qrcode=qrcode;
         <div style="font-size:11.5px;color:var(--faint);margin-top:7px;max-width:430px;line-height:1.5">
           Removes your profile, classes, sections, past classes, friends and reviews. Permanent.
         </div>
-      </div></div>
-      <!-- Why a friend's week is a chip list instead of a calendar has two possible causes
-           that need opposite fixes, and reading them off the console is not a thing to ask a
-           person to do. Answer it in the app. -->
-      <div class="set-sec"><span class="set-l">Friends' schedules</span><div>
-        <button class="set-btn ghost" onclick="setCheckFriendSecs()">Check section data</button>
-        <div id="setSecOut" style="font-size:12px;color:var(--muted);margin-top:9px;max-width:460px;line-height:1.55"></div>
       </div></div>
     </div>
   </div>
@@ -1564,7 +1642,9 @@ if(typeof qrcode==="function")window.qrcode=qrcode;
         <div id="hmRailSlot"></div>
         <div id="hmStripWrap"></div>
         <div id="hmQuadWrap">
-          <div class="hm-slabel" style="margin-top:14px">The Quad — your friends' schedules</div>
+          <!-- The "The Quad — your friends' schedules" label was removed 2026-08-24: every card
+               below it is a named person with a week under their name, which says what this is
+               far better than a heading naming it twice. -->
           <div id="hmComposer"></div>
           <div id="hmFeed"></div>
         </div>
@@ -1647,6 +1727,22 @@ if(typeof qrcode==="function")window.qrcode=qrcode;
    relocated rails sit under it. */
 @media(max-width:1139px){
   #hmRailSlot .hm-rail{display:block;position:static;top:auto;margin-top:14px}
+  /* PHONE ORDER (Tate, Aug 2026): faces, then their schedules, then everything else.
+     The rail slot sat ABOVE the strip, so mobile Home opened on the greeting, the Rate
+     button and two professor leaderboards — three cards of context before a single thing
+     that had changed since yesterday. On a phone this app is a feed of your friends' weeks;
+     that has to be the first thing on the screen. Ordering rather than moving the node keeps
+     one DOM for both layouts, so a rotate or a resize needs no re-render. */
+  .hm-center{display:flex;flex-direction:column}
+  .hm-center > #hmAlert{order:0}
+  .hm-center > #hmStripWrap{order:1}
+  .hm-center > #hmQuadWrap{order:2}
+  .hm-center > #hmRailSlot{order:3}
+  /* Highest / Lowest rated are a browse surface, not a check-in one. They stay on desktop
+     where the right rail is free real estate beside the feed; on a phone they were 60% of
+     the first screen and neither is about you or anyone you know. Explore is one tap away
+     in the bottom bar, which is where browsing belongs. */
+  .hm-desk{display:none!important}
 }
 /* Phone: the mini calendar has to survive ~390px. Trim the gutter and the type rather than
    letting five day columns squeeze the course code out; .cal-scroll still allows a sideways
@@ -1769,6 +1865,20 @@ html[data-auth="in"] #schedGuestNote{display:none!important}
   cursor:pointer;text-decoration:underline;text-underline-offset:2px}
 .qw-nudge:hover{opacity:.85}
 @media (max-width:520px){ .cal-mini .cal-times{width:30px} .cal-mini .cal-block .cb-code{font-size:9px} }
+/* The card head is a <button> so the name is a real target with a focus ring; it has to keep
+   looking like the row it replaced. */
+.hm-fhead-btn{width:100%;background:none;border:0;padding:0;font:inherit;color:inherit;
+  cursor:pointer;text-align:left}
+.hm-fhead-btn:hover .nm{text-decoration:underline;text-underline-offset:2px}
+.hm-fhead .fhead-t{min-width:0;display:block}
+.hm-fhead .fhead-t .nm,.hm-fhead .fhead-t .ctx{display:block}
+/* A class block goes somewhere now, so it has to look like it does. */
+.cb-tap{cursor:pointer;transition:filter .14s ease,transform .1s ease,box-shadow .14s ease}
+.cb-tap:hover{filter:brightness(1.14);transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.28);z-index:3}
+.cb-tap:active{transform:translateY(0) scale(.985);box-shadow:none}
+.cb-tap:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+/* "You" reads as you everywhere else in the app; it should here too. */
+.cb-frav.me{background:var(--accent)!important;color:var(--accent-ink);font-weight:800}
 .hm-stripend{display:flex;align-items:center;justify-content:center;width:70px;flex-shrink:0;font-size:11px;color:var(--faint);text-align:center;line-height:1.3}
 /* The strip used to end in "That's everyone ✓" — an honest cap (no infinite scroll) that
    answered a question nobody asks. The end of a row of people is the natural place to add
@@ -2420,6 +2530,7 @@ html[data-auth="in"] #schedGuestNote{display:none!important}
 /* Height is set inline per block from the minutes it actually occupies, so a short class
    shows one clean line of title instead of two clipped halves of a letter. */
 .cal-block .cb-nm{font-size:10px;line-height:12px;opacity:.92;display:block;overflow:hidden;flex:none}
+.cal-block .cb-nmc{display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;font-style:normal}
 /* Waitlisted is NOT enrolled. It used to render as the same solid green with a 10px hourglass
    clipped off the bottom edge — the status was carried by a glyph you couldn't see. Now the
    fill and the border carry it, the way every calendar signals "tentative". */
@@ -2427,7 +2538,7 @@ html[data-auth="in"] #schedGuestNote{display:none!important}
 .cal-block.wl .cb-nm{opacity:.8}
 .cal-block.wl.bad{background:rgba(217,105,93,.32);border-color:rgba(217,105,93,.9);color:var(--text)}
 .cal-block .cb-wl{font-size:9.5px;font-weight:800;white-space:nowrap;opacity:.95;flex:0 1 auto;min-width:0;overflow:hidden;margin-left:auto}
-.cal-block .cb-fr{display:flex;margin-top:2px}
+.cal-block .cb-fr{display:flex;margin-top:auto;padding-top:2px;flex:none}
 .cal-block .cb-frav{width:16px;height:16px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;color:#fff;border:1.5px solid rgba(255,255,255,.7);margin-left:-4px}
 .cal-block .cb-frav:first-child{margin-left:0}
 .cal-block .cb-frmore{font-size:9px;font-weight:700;margin-left:3px;opacity:.85;align-self:center}
@@ -2882,6 +2993,24 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
 .fr-empty p{margin:0 auto 16px;font-size:13px;color:var(--faint);max-width:420px;line-height:1.5}
 .fr-chip-took{border-color:rgba(192,103,79,.4);background:rgba(192,103,79,.10)}
 .fr-chip-took .fr-txt{color:#d69a72}
+/* Friend profile, one scrolling page: section headers instead of a tab bar. */
+.frp-sec{margin-bottom:22px}
+.frp-sec:last-child{margin-bottom:4px}
+.frp-sect{display:flex;align-items:center;gap:8px;font-size:10px;font-weight:800;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--faint);
+  padding-bottom:8px;margin-bottom:4px;border-bottom:1px solid var(--line-soft)}
+.frp-secn{background:var(--panel-3);color:var(--text-2);border-radius:999px;padding:1px 7px;
+  font-size:9.5px;letter-spacing:.02em}
+.frp-none{padding:12px 2px 2px;font-size:12.5px}
+/* "Fall 2025" and the professor's name were adjacent spans with no separator, so they read
+   as one string: "Fall 2025D Keeling". */
+.fh-dot{color:var(--faint);margin:0 6px}
+/* Every course row goes to that course in Explore, same gesture as a calendar block. */
+.frp-tap{cursor:pointer}
+.frp-tap:hover{border-color:rgba(var(--accent-rgb),.45)}
+.frp-tap:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.frp-head .ini{overflow:hidden}
+.frp-head .ini .ava-img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
 .fr-qr-img svg{width:200px;height:200px;background:#fff;padding:8px;border-radius:10px;display:block}
 
 /* ================= FRIENDS TAB, ONE COLUMN =================
@@ -3127,7 +3256,7 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
    them apart from inside the app. Now there is: this string is written at build time and shown
    in Settings → About and the landing footer. If the date here isn't the one you expect, the
    tab is stale — reload the right file, not this one. */
-window.PROFESSIFY_BUILD='2026-08-25 05:30';
+window.PROFESSIFY_BUILD='2026-08-24 05:00';
 /* Paint the build stamp everywhere it appears. */
 try{
   (function(){
@@ -3420,8 +3549,11 @@ function prereqChipHtml(code, plannedBefore){
   if(st.state==='met')return '<span class="pq-chip pq-met" title="You\'ve completed the prerequisites">✓ Prereqs done</span>';
   /* Distinct from "done" on purpose — you could still drop or fail it — and distinct from
      "unmet", which is what this used to say to a student sitting in the class. */
+  /* "↻ Taking BUS 3431 now" on a BUS 3443 card is a true sentence about the wrong subject —
+     it reads as if you were somehow taking 3431 in this row. The chip is about THIS course's
+     prerequisite; say so, or it's a non sequitur. */
   if(st.state==='inprogress'){ var ng=st.inProgress.map(function(g){return pqDedupeGroup(g).join(' or ');}).join(', ');
-    return '<span class="pq-chip pq-conc" title="You\'re enrolled in the prerequisite this term">\u21bb Taking '+esc(ng)+' now</span>'; }
+    return '<span class="pq-chip pq-conc" title="'+esc(ng)+' is a prerequisite for this class and you\'re enrolled in it this term">\u21bb Prereq '+esc(ng)+' \u2014 taking it now</span>'; }
   if(st.state==='concurrent'){ var cg=st.concurrent.map(function(g){return pqDedupeGroup(g).join(' or ');}).join(', '); return '<span class="pq-chip pq-conc" title="May be taken at the same time">↔ Can take with '+esc(cg)+'</span>'; }
   if(st.state!=='unmet')return '';
   /* --- unmet: compact chip, expandable to a structured checklist --- */
@@ -6337,8 +6469,23 @@ function courseLevel(code){var m=/\s([1-4])\d{3}\b/.exec(code||'');return m?pars
 //    ordered so the ones matching their standing surface first.
 //  • Otherwise               -> the big-lecture, high-enrollment courses everyone takes,
 //    ranked by total seat capacity across all sections this term (huge intro lectures first).
+/* A class you already passed is not a recommendation — it's a receipt. Explore's default
+   list was happily leading with three courses that each carried a green "\u2713 You've taken
+   this" chip. Same source of truth as that chip (logged Past Classes, resolved through the
+   course-equivalence table) so the two can never disagree. Search still finds these; only
+   the unsolicited suggestion lists skip them. */
+function exTakenSet(){
+  var s={};
+  try{ (typeof completedCodes==='function'?completedCodes():[]).forEach(function(c){ if(c)s[c]=1; }); }catch(e){}
+  return s;
+}
+function exIsTaken(set,code){
+  if(!set||!code)return false;
+  var c=code; try{ if(typeof canonCode==='function')c=canonCode(code); }catch(e){}
+  return !!(set[c]||set[code]);
+}
 function exDefaultClasses(){
-  var out=[],seen={};
+  var out=[],seen={},takenSet=exTakenSet();
   // Personalize off major + class standing only — never graduation year (which was
   // never actually collected and defaulted everyone to the same value).
   if(student.major){
@@ -6348,12 +6495,12 @@ function exDefaultClasses(){
       var core=cat.core.map(function(c,i){return {c:c,i:i,d:Math.abs(courseLevel(c.code)-tgt)};});
       core.sort(function(a,b){return a.d!==b.d?a.d-b.d:a.i-b.i;});
       // Only surface courses actually offered this term — never a class a student can't take now.
-      core.forEach(function(o){var c=o.c;if(seen[c.code]||!isOffered(c.code))return;seen[c.code]=1;out.push({code:c.code,name:c.name,prof:c.prof||'__tbd',units:(c.units!=null?c.units:null),type:c.type||null});});
+      core.forEach(function(o){var c=o.c;if(seen[c.code]||exIsTaken(takenSet,c.code)||!isOffered(c.code))return;seen[c.code]=1;out.push({code:c.code,name:c.name,prof:c.prof||'__tbd',units:(c.units!=null?c.units:null),type:c.type||null});});
       // Top up toward ~20 with the major's concentration courses so there's enough to scroll.
       if(out.length<20&&cat.concentrations){
         Object.keys(cat.concentrations).forEach(function(cn){
           (cat.concentrations[cn].classes||[]).forEach(function(a){
-            if(out.length>=20)return; var code=a&&a[0]; if(!code||seen[code]||!isOffered(code))return; seen[code]=1;
+            if(out.length>=20)return; var code=a&&a[0]; if(!code||seen[code]||exIsTaken(takenSet,code)||!isOffered(code))return; seen[code]=1;
             out.push({code:code,name:a[1]||'',prof:a[2]||'__tbd',units:(a[3]!=null?a[3]:null),type:null});
           });
         });
@@ -6372,7 +6519,7 @@ function exDefaultClasses(){
         }).filter(function(x){return x.cap>=200;}).sort(function(a,b){return b.cap-a.cap;});
         var bseen={}, bout=[];
         for(var bi=0; bi<big.length&&bout.length<16; bi++){
-          var bc=big[bi].code; if(bseen[bc])continue;
+          var bc=big[bi].code; if(bseen[bc]||exIsTaken(takenSet,bc))continue;
           var bsub=((/^([A-Za-z]{2,4})/.exec(bc)||[])[1]||'').toUpperCase();
           if(bout.filter(function(z){return z._sub===bsub;}).length>=3)continue;   // keep it varied
           bseen[bc]=1;
@@ -6401,7 +6548,7 @@ function exDefaultClasses(){
       arr.sort(function(a,b){return (b.anyOpen-a.anyOpen)||(b.openSeats-a.openSeats)||(b.cap-a.cap);});
       var anyOpen=false;
       for(var i=0;i<arr.length&&out.length<20;i++){
-        var code=arr[i].code; if(seen[code])continue;
+        var code=arr[i].code; if(seen[code]||exIsTaken(takenSet,code))continue;
         var subj=(/^([A-Za-z]{2,4})/.exec(code)||[])[1]||''; subj=subj.toUpperCase();
         if((subjCount[subj]||0)>=3)continue;     // keep it varied across departments
         seen[code]=1; subjCount[subj]=(subjCount[subj]||0)+1;
@@ -6614,6 +6761,20 @@ function modePillsHtml(r,opts){
   if(md.virtual&&!md.hybrid)out+='<span class="mode-pill virtual'+cls+'" title="Taught online">Virtual</span>';
   return out;
 }
+/* Cal Poly encodes the COMPONENT in the section token: "S01-LEC Regular", "S02-ACT Regular".
+   PSY 3333 lists six sections — three lectures and three activities — and the app showed all
+   six as one flat list of identical-looking rows, so "6 sections, 1 professor, varies by
+   section" gave a student no way to see that half of them are labs they ALSO need rather than
+   alternatives they choose between. The token already says which; it just wasn't read. */
+var SEC_COMPONENTS={LEC:'',LAB:'Lab',ACT:'Activity',SEM:'Seminar',DIS:'Discussion',
+                    IND:'Independent',SUP:'Supervision',FLD:'Field work',STU:'Studio'};
+function secComponent(sectionToken){
+  var m=/-\s*([A-Za-z]{2,4})\b/.exec(String(sectionToken||''));
+  if(!m)return {code:'',label:''};
+  var k=m[1].toUpperCase();
+  if(!(k in SEC_COMPONENTS))return {code:k,label:''};
+  return {code:k,label:SEC_COMPONENTS[k]};
+}
 function clsSections(code){
   var secs=(typeof SEAT_SECTIONS!=='undefined'&&SEAT_SECTIONS&&SEAT_SECTIONS[code])?SEAT_SECTIONS[code]:[];
   return secs.map(function(r){
@@ -6623,6 +6784,7 @@ function clsSections(code){
     return {
       class_nbr:String((r.class_nbr||'')).trim(),
       section:String((r.section||'')).trim(),
+      comp:secComponent(r.section),
       name:isStaff?'':nm,
       pid:(pid&&PROFESSORS[pid])?pid:null,
       rating:(pid&&PROFESSORS[pid])?PROFESSORS[pid].rating:null,
@@ -6852,6 +7014,22 @@ try{
 function clsSectionRows(code){
   var secs=clsSections(code);
   secs.sort(function(a,b){var r=seatRank(b.seat)-seatRank(a.seat); if(r)return r; return (b.rating==null?-1:b.rating)-(a.rating==null?-1:a.rating);});
+  /* Lectures and labs are not alternatives to each other, so they don't belong in one
+     undifferentiated list. Split by component and label the second group.
+     What this deliberately does NOT do is pair a specific lab to a specific lecture. Cal Poly
+     encodes that with PeopleSoft's "associated class" number, which our scrape doesn't
+     capture — so any lecture->lab pairing drawn here would be invented. Grouping by TYPE is
+     something the data does support; claiming "this lab goes with that lecture" isn't. */
+  var main=secs.filter(function(x){return !x.comp||!x.comp.label;});
+  var extra=secs.filter(function(x){return x.comp&&x.comp.label;});
+  if(!main.length||!extra.length)return clsSecRowsFor(secs,code);
+  var kinds={}; extra.forEach(function(x){kinds[x.comp.label]=1;});
+  var kindTxt=Object.keys(kinds).join(' & ');
+  return clsSecRowsFor(main,code)
+    +'<div class="cs-group">'+escapeHtml(kindTxt)+' sections <span class="faint">· listed separately by Cal Poly — check which one goes with your lecture</span></div>'
+    +clsSecRowsFor(extra,code);
+}
+function clsSecRowsFor(secs,code){
   return secs.map(function(s){
     var num=s.class_nbr||s.section||'';
     var rt=s.rating!=null?'<span class="rt" style="color:'+scoreColor(s.rating)+'">'+to5(s.rating).toFixed(1)+'</span>':'';
@@ -6872,6 +7050,8 @@ function clsSectionRows(code){
     }
     var conf=secConflictChip(code,s), frs=friendSecChip(code,s);
     var pills=(typeof modePillsHtml==='function')?modePillsHtml(s):'';
+    /* A lecture needs no badge — it's the default and badging everything badges nothing. */
+    if(s.comp&&s.comp.label)pills='<span class="mode-pill comp mp-sm">'+escapeHtml(s.comp.label)+'</span>'+pills;
     var rowchips=(frs||conf)?('<span class="cs-rowchips">'+frs+conf+'</span>'):'';
     /* An asynchronous section has no meeting time by design — "Time TBA" reads as "we don't
        know yet", which is the opposite of the truth. */
@@ -6885,36 +7065,37 @@ function clsRow(c){
   const ci=(typeof classInfo==='function')?classInfo(c.code):null;
   const allSecs=clsSections(c.code);
   const nSec=allSecs.length;
-  // Headline professor: prefer the curated/recommended prof IF they actually teach a
-  // section this term; otherwise the best-rated professor who IS teaching — so the
-  // professor, meeting time, and seats on the collapsed row all describe ONE real section.
-  let dispPid=null,dispName=null,dispRating=null;
-  const curatedPid=(c.prof&&c.prof!=='__tbd'&&PROFESSORS[c.prof])?c.prof:null;
-  const curatedTeaches=curatedPid&&allSecs.some(s=>s.pid===curatedPid);
-  if(curatedPid&&curatedTeaches){ dispPid=curatedPid; dispName=PROFESSORS[curatedPid].name; dispRating=PROFESSORS[curatedPid].rating; }
-  else{
-    const ratedSecs=allSecs.filter(s=>s.pid).sort((a,b)=>((b.rating==null?-1:b.rating)-(a.rating==null?-1:a.rating)));
-    if(ratedSecs.length){ dispPid=ratedSecs[0].pid; dispName=ratedSecs[0].name; dispRating=ratedSecs[0].rating; }
-    else if(nSec&&allSecs[0].name){ dispName=allSecs[0].name; }
-    else if(curatedPid){ dispPid=curatedPid; dispName=PROFESSORS[curatedPid].name; dispRating=PROFESSORS[curatedPid].rating; }
-    else{ const instrs=(ci&&ci.instrs)?ci.instrs.slice():[]; if(instrs.length){ instrs.sort((a,b)=>((b.rating==null?-1:b.rating)-(a.rating==null?-1:a.rating))); dispPid=instrs[0].pid; dispName=instrs[0].name; dispRating=instrs[0].rating; } }
-  }
-  /* Classes mode shows the CLASS, not one professor — every section (each with its
-     own professor, time, and seats) lives one tap away in the expansion. */
+  /* The "headline professor" selection that used to live here — curated pick if teaching,
+     else the highest-rated instructor of any section — is gone with the row that displayed
+     it. Nothing else read it, and keeping a "which professor represents this course" answer
+     around invites someone to print it again. There isn't one. */
+  /* NO HEADLINE PROFESSOR (Tate, Aug 2026 — reverting a change that shouldn't have shipped).
+     This row printed one professor and their rating beside the course: "Benjamin Alexander
+     2.3 · +5 more" on a course with twelve sections. Which one is that? Whichever the code
+     picked — the curated pick if they happened to be teaching, otherwise the HIGHEST RATED of
+     the twelve. So a student scanning the list read 2.3 as the rating of a course taught by
+     six different people, and 5.0 beside BUS 4404 was the best of seven, not what they'd get.
+     It is the same defect already fixed on the My Classes card, which used to headline a
+     course with its best-rated instructor and the first section's time as though both were
+     yours. A rating belongs to a professor teaching a SECTION; the collapsed row is about the
+     class. So the row now says how many sections there are and stops — the professors, each
+     with their own rating, seats and time, are one tap down in the expansion where they can
+     be compared honestly. */
   const nProfs=(function(){var s={};allSecs.forEach(function(x){if(x.name)s[x.name]=1;});return Object.keys(s).length;})();
   let profHtml;
   if(nSec){
-    var _r5=(dispRating!=null&&typeof to5==='function')?to5(dispRating):null;
-    var _more=nProfs>1?` <span class="cls-more">+${nProfs-1} more</span>`:'';
-    profHtml=dispName
-      ? `<span class="tbd cls-prof" style="cursor:pointer">${escapeHtml(dispName)}${_r5!=null?` <span class="cls-prate" style="color:${scoreColor(dispRating)}">${_r5.toFixed(1)}</span>`:''}${_more}</span>`
-      : `<span class="tbd" style="cursor:pointer">${nProfs?(nProfs+' professor'+(nProfs===1?'':'s')+' · '):''}view sections ▾</span>`;
+    profHtml=`<span class="tbd" style="cursor:pointer">${nProfs?(nProfs+' professor'+(nProfs===1?'':'s')+' · '):''}view sections ▾</span>`;
   }
   /* "Checking this term's sections…" consulted only seatFeedLoaded(), never the failure
      flag — which is set by a timer on the default-list path and read nowhere else. A searched
      row therefore sat on "checking…" indefinitely with no error and no retry. A spinner that
      never resolves is worse than an error: it tells the student to keep waiting. */
-  else if(seatFeedLoaded()) profHtml=`<span class="tbd">Not offered this term</span>`;
+  /* We cannot tell "Cal Poly isn't running this" apart from "our daily scrape missed it" —
+     they look identical from here (zero rows), and they are opposite facts. Verified against
+     the live feed on 2026-08-24: HIST holds 43 sections and not one of them is full or
+     waitlisted, which is impossible for a real department — the scrape is dropping every
+     non-open section, so HIST 2202 has no rows at all. Say what we know. */
+  else if(seatFeedLoaded()) profHtml=`<span class="tbd" title="Cal Poly may still be running this — our section scrape has no rows for it this term">No section data this term · <a href="https://cmsweb.pscs.calpoly.edu/psc/CSLOPRD/EMPLOYEE/SA/s/WEBLIB_HCX_CM.H_CLASS_SEARCH.FieldFormula.IScript_Main" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" style="color:var(--accent)">check Cal Poly →</a></span>`;
   else if(window._seatLoadFailed) profHtml=`<span class="tbd" title="Couldn’t reach the class schedule — tap Retry above">Seat data unavailable</span>`;
   else profHtml=`<span class="tbd">Checking this term’s sections…</span>`;
   const sv=isWatchedClass(c.code);
@@ -7071,6 +7252,12 @@ function renderExplore(){
   if(exMode==='classes'){
     const q0=(exQuery||'').trim();
     if(q0){
+      /* Does the query LOOK like a course code — subject + number? Then it is a specific
+         request, not a keyword search, and the subject is half of what was asked for.
+         Reported live: "HIST 2202" returned ANT 2202 "World History Before Writing" and
+         nothing else, because the token "hist" matched inside the word "History" and 2202
+         matched the number. A student reads that as "Professify thinks this is my class". */
+      var _codeQ=/^([a-z]{2,4})\s*([0-9]{3,4}[a-z]?)$/i.test(q0.replace(/\s+/g,' ').trim());
       // GLOBAL class search — every class we've added across all 65 majors, plus any course
       // currently in the live seat feed. Any class is findable by code or name, regardless of
       // the major selected in the dropdown.
@@ -7091,16 +7278,55 @@ function renderExplore(){
         const aliasCodeHit=(function(){try{return codeAliases(code).some(function(a){return a.toLowerCase().replace(/\s+/g,'').indexOf(qcode)>=0;});}catch(e){return false;}})();
         const codeHit=code.toLowerCase().replace(/\s+/g,'').indexOf(qcode)>=0||aliasCodeHit;
         const tokHit=qtok.length>0&&qtok.every(function(t){return hay.indexOf(t)>=0;});
-        if(hay.indexOf(q0)>=0||codeHit||tokHit){ seen[code]=1; res.push({code:code,name:name||'',prof:prof||'__tbd',units:(units!=null?units:null),type:null}); }
+        /* A code-shaped query accepts ONLY a code match — never a name-token one. */
+        const ok=_codeQ?codeHit:(hay.indexOf(q0)>=0||codeHit||tokHit);
+        if(ok){ seen[code]=1; res.push({code:code,name:name||'',prof:prof||'__tbd',units:(units!=null?units:null),type:null}); }
       };
+      /* SEARCH THE WHOLE CATALOG WE HOLD, not two of the five places we keep courses.
+         This read only CLASS_INDEX and the live seat feed, while the autocomplete's pool
+         (allClassOptions) also reads COURSE_NAME, GE_COURSES and FLOW_INDEX. HIST 2202 lives
+         in one of those and not in CLASS_INDEX — so the "Did you mean HIST 2202" chip offered
+         a course that, when tapped, answered "No classes offered this term match HIST 2202".
+         The app knew the course and told the student it didn't exist, and because nothing
+         matched, `dropped` was empty too, so the honest scrape-gap card never fired either.
+         One pool, so what the app can suggest is exactly what it can find. */
       if(typeof CLASS_INDEX!=='undefined') Object.values(CLASS_INDEX).forEach(c=>add(c.code,c.name,c.prof,c.units));
       if(typeof SEAT_SECTIONS!=='undefined'&&SEAT_SECTIONS) Object.keys(SEAT_SECTIONS).forEach(code=>{ var s=SEAT_SECTIONS[code]; add(code,(s&&s[0]&&s[0].title)||''); });
+      try{ if(typeof COURSE_NAME!=='undefined') Object.keys(COURSE_NAME).forEach(code=>add(code,COURSE_NAME[code])); }catch(e){}
+      try{ if(typeof GE_COURSES!=='undefined') GE_COURSES.forEach(g=>add(g.code,g.name,null,g.units)); }catch(e){}
+      try{ if(typeof FLOW_INDEX!=='undefined') Object.keys(FLOW_INDEX).forEach(code=>{var f=FLOW_INDEX[code];add(code,f&&f.name,null,f&&f.units);}); }catch(e){}
       // Hide anything not actually offered this term — if you can't take it now, it shouldn't show.
-      const resO=res.filter(r=>isOffered(r.code));
+      /* ...but remember what got dropped. A course in OUR catalog with no rows in the live seat
+         feed is a hole in the scrape, not a course Cal Poly stopped offering, and those are not
+         the same sentence. HIST 2202 is real, has two full sections and a 91-deep waitlist on
+         Cal Poly's own class search, and this app answered "no classes match" — which reads as
+         "that class doesn't exist" and is the one thing the data rules here forbid. */
+      const dropped=res.filter(r=>!isOffered(r.code)).map(r=>r.code);
+      /* Typing an exact course code is a request for THAT COURSE. Hiding it because our seat
+         scrape has no rows for it turns "our data is incomplete" into "that class doesn't
+         exist" — which is the one thing the data rules here forbid, and it is what a student
+         hit on HIST 2202: a real class with full sections and a 91-deep waitlist on Cal Poly's
+         own search. A code query keeps the course and says plainly what we don't have.
+         A keyword search still filters, so browsing isn't padded with courses you can't take. */
+      const resO=_codeQ?res.slice():res.filter(r=>isOffered(r.code));
       res.length=0; resO.forEach(r=>res.push(r));
       res.sort((a,b)=>a.code.localeCompare(b.code));
       if(!res.length){
-        out.innerHTML=`<p class="emptyq">No classes offered this term match “${escapeHtml(raw)}”.</p>`
+        /* Name the course, not just its number — "HIST 2202 · United States History Since
+           1877" is the app proving it knows the class, which is the whole difference between
+           "our data is incomplete" and "that class doesn't exist". */
+        var _dropLbl=dropped.slice(0,3).map(function(cd){
+          var nm=''; try{ nm=(typeof fp_name==='function')?fp_name(cd):''; }catch(_e){}
+          return escapeHtml(cd)+(nm?(' \u00b7 '+escapeHtml(nm)):'');
+        }).join('<br>');
+        out.innerHTML=(dropped.length
+          ? '<div class="ex-gap"><p class="t">'+_dropLbl
+            +(dropped.length>3?('<br>and '+(dropped.length-3)+' more'):'')
+            +'<br>'+(dropped.length===1?'is':'are')+' in the Cal Poly catalog, but we have no live section data '
+            +(dropped.length===1?'for it':'for them')+' this term.</p>'
+            +'<p class="s">That\u2019s a gap in our daily scrape \u2014 not a class that isn\u2019t running. Check Cal Poly\u2019s class search for the real sections and seats.</p>'
+            +'<a class="ex-gap-btn" href="https://cmsweb.pscs.calpoly.edu/psc/CSLOPRD/EMPLOYEE/SA/s/WEBLIB_HCX_CM.H_CLASS_SEARCH.FieldFormula.IScript_Main" target="_blank" rel="noopener noreferrer">Open Cal Poly Class Search \u2192</a></div>'
+          : '<p class="emptyq">No classes offered this term match \u201c'+escapeHtml(raw)+'\u201d.</p>')
           +((typeof exRecoveryHtml==='function')?exRecoveryHtml(raw,'classes'):'');
         return;
       }
@@ -7163,7 +7389,9 @@ function renderExplore(){
         const inDept=exDept==='All'||pdept(p)===exDept;
         // When someone is actively searching a name, don't hide professors just because
         // PolyRatings has no score for them yet — an exact name should always surface.
-        return inDept&&profFit(p)&&nameHit(p);
+        // Placeholders for unrated instructors are rendered from scrapedProfPool() below;
+        // without this they'd appear twice the moment someone watched or reviewed one.
+        return inDept&&!p.scraped&&profFit(p)&&nameHit(p);
       }));
       list.sort((a,b)=>(b[1].rating??-1)-(a[1].rating??-1));
     }
@@ -7187,8 +7415,12 @@ if(!list.length && !scraped.length){
     }
     const guestChrome=(!exQuery&&window._gpNote&&typeof guestProfToggleHtml==='function')
       ? guestProfToggleHtml()+'<div class="gp-note">'+escapeHtml(window._gpNote)+'</div>' : '';
-    const cmpBar=(typeof compareBarHtml==='function')?compareBarHtml():'';
-    const header=cmpBar+(exQuery ? '' : guestChrome+'<div class="grouphead">'+headLabel+'</div>');
+    /* The "2 professors on your watchlist · Compare 2 →" bar was pinned above every Explore
+       result, including a plain class search that has nothing to do with comparing anyone.
+       Compare still lives where the comparing happens — the Watchlist tab, and the prompt
+       inside a professor's own card — which is where a student is actually deciding between
+       two people. On a browse screen it was furniture. */
+    const header=(exQuery ? '' : guestChrome+'<div class="grouphead">'+headLabel+'</div>');
     // ONE unified professor list — rated (PolyRatings) and current-term instructors
     // who simply don't have a score yet are shown together in the same grid, not in a
     // separate "unrated" section. A search covers everyone.
@@ -7205,7 +7437,7 @@ if(!list.length && !scraped.length){
         </div>
       </div>`).join('');
     const scrapedCards=scraped.map((sp,i)=>`
-      <div class="pcard" onclick="openScrapedProf(${i})">
+      <div class="pcard" onclick="openScrapedProf(${i})">${spWatchBtn(i)}
         <div class="ini">${initials(sp.name)}</div>
         <div style="flex:1;min-width:0">
           <h3>${escapeHtml(sp.name)}</h3>
@@ -8821,10 +9053,65 @@ let watchlist=[];
 try{const _w=JSON.parse(localStorage.getItem('professify_watch')||'[]');if(Array.isArray(_w))watchlist=_w;}catch(e){}
 let wlDiffOnly=false;
 function saveWatch(){try{localStorage.setItem('professify_watch',JSON.stringify(watchlist));}catch(e){}}
+/* An instructor with no PolyRatings score is exactly the person you most want to keep an eye
+   on — there's nothing to read about them yet. They have no PROFESSORS record until someone
+   watches or reviews them, so the watchlist stores their name alongside the id: rebuilding it
+   from the seat feed would leave the list empty until the feed lands, and empty reads as
+   "you're not watching anyone". */
+let watchSpMeta={};
+try{const _spm=JSON.parse(localStorage.getItem('professify_watch_sp')||'{}');if(_spm&&typeof _spm==='object')watchSpMeta=_spm;}catch(e){}
+function saveWatchSp(){try{localStorage.setItem('professify_watch_sp',JSON.stringify(watchSpMeta));}catch(e){}}
+function spRegister(id,name,dept){
+  if(typeof PROFESSORS==='undefined'||!id||!name)return;
+  if(!PROFESSORS[id])PROFESSORS[id]={name:name,dept:dept||'',field:dept||'',rating:null,evals:null,scraped:true};
+}
+function spHydrateWatch(){
+  try{ Object.keys(watchSpMeta).forEach(function(id){
+    if(watchlist.indexOf(id)>=0)spRegister(id,watchSpMeta[id].name,watchSpMeta[id].dept);
+  }); }catch(e){}
+}
+function spWatchId(sp){ return 'sp:'+(sp&&sp.id); }
+function spWatchBtn(i){
+  var sp=(window._scrapedShown||[])[i]; if(!sp)return '';
+  var id=spWatchId(sp), on=isWatched(id);
+  return '<button class="wl-btn '+(on?'on':'')+'" title="'+(on?'On your watchlist':'Add to watchlist')
+    +'" aria-label="Watchlist toggle" onclick="spWatchToggle('+i+',event)">'+(on?WL_ON:WL_OFF)+'</button>';
+}
+function spWatchToggle(i,ev){
+  if(ev){ev.stopPropagation();}
+  spWatchRecord((window._scrapedShown||[])[i],ev);
+}
+function spWatchCurrent(ev){ spWatchRecord(window._scrapedCurrent,ev); }
+function spWatchRecord(sp,ev){
+  if(ev){ev.stopPropagation();}
+  if(!sp)return;
+  var id=spWatchId(sp);
+  if(watchlist.indexOf(id)<0){
+    watchSpMeta[id]={name:sp.name,dept:(sp.subjects&&sp.subjects[0])||''};
+    saveWatchSp(); spRegister(id,sp.name,watchSpMeta[id].dept);
+  }
+  toggleWatch(id,null);
+  try{ if(window._scrapedCurrent===sp&&document.getElementById('mback').classList.contains('open'))openScrapedProf(sp); }catch(e){}
+}
+/* The watchlist holds ids, not records. A rated professor opens the rating profile; an
+   unrated one has no ratings to show, so it opens the instructor card — the same one Explore
+   opens — found by id in the live pool. */
+function openWatchedProf(id){
+  var p=(typeof PROFESSORS!=='undefined')?PROFESSORS[id]:null;
+  if(p&&p.scraped){
+    var pool=(typeof scrapedProfPool==='function')?(scrapedProfPool()||[]):[];
+    for(var k=0;k<pool.length;k++){ if(spWatchId(pool[k])===id)return openScrapedProf(pool[k]); }
+    return;   // the seat feed hasn't landed yet — nothing honest to open
+  }
+  openProf(id);
+}
 function isWatched(id){return watchlist.indexOf(id)>=0;}
 function watchBtn(id){const on=isWatched(id);return `<button class="wl-btn ${on?'on':''}" title="${on?'On your watchlist':'Add to watchlist'}" aria-label="Watchlist toggle" onclick="toggleWatch('${id}',event)">${on?WL_ON:WL_OFF}</button>`;}
-function toggleWatch(id,ev){if(ev){ev.stopPropagation();}const i=watchlist.indexOf(id);if(i>=0)watchlist.splice(i,1);else{watchlist.push(id);if(typeof watchLandOn==='function')watchLandOn('profs');}saveWatch();updateWatchUI();}
-function clearWatch(){watchlist=[];saveWatch();updateWatchUI();}
+function toggleWatch(id,ev){if(ev){ev.stopPropagation();}const i=watchlist.indexOf(id);
+  if(i>=0){watchlist.splice(i,1);if(/^sp:/.test(id)&&watchSpMeta[id]){delete watchSpMeta[id];saveWatchSp();}}
+  else{watchlist.push(id);if(typeof watchLandOn==='function')watchLandOn('profs');}
+  saveWatch();updateWatchUI();}
+function clearWatch(){watchlist=[];watchSpMeta={};saveWatchSp();saveWatch();updateWatchUI();}
 /* ONE count, ONE formula. There used to be three answers to "how many things are on my
    watchlist": the nav badge counted COURSES (watchClasses.length), the Schedule tab counted
    SECTIONS, and the two subtabs counted their own panes — so a student watching 2 professors
@@ -8988,6 +9275,7 @@ function wpCompareTable(ids){
 }
 function renderWatch(){
   const out=document.getElementById('watchOut');if(!out)return;
+  spHydrateWatch();
   const profs=watchlist.filter(id=>PROFESSORS[id]).map(id=>({id,p:PROFESSORS[id]}));
   wpCompareSet=wpCompareSet.filter(id=>watchlist.indexOf(id)>=0&&PROFESSORS[id]);
   if(!profs.length){
@@ -9015,8 +9303,12 @@ function renderWatch(){
     const _bn=(typeof blendCount==='function')?blendCount(p):(p.evals||0);
     const nrev=_bn?(_bn.toLocaleString()+' rating'+(_bn===1?'':'s')):'No ratings yet';
     const fit=matchesStudent(p)?' · <span style="color:var(--good-2)">✓ Fits your style</span>':'';
-    return `<div class="mc-card wc-card${on?' incmp':''}"><div class="mc-main"><div class="mc-code" style="cursor:pointer" onclick="openProf('${id}')">${escapeHtml(p.name)}</div><div class="mc-name">${pdept(p)||p.dept||''}</div><div class="mc-sub">${nrev}${fit}</div></div>`
-      +`<button class="wc-cmp${on?' on':''}" onclick="wpToggleCompare('${id}',event)">${on?'✓ In compare':'⇄ Compare'}</button>`
+    /* Comparing a professor with no ratings against one with ratings is a table of blanks;
+       the button is hidden rather than offered and then disappointing. */
+    const cmpBtn=p.scraped?'<span class="wc-cmp" style="visibility:hidden"></span>'
+      :`<button class="wc-cmp${on?' on':''}" onclick="wpToggleCompare('${id}',event)">${on?'✓ In compare':'⇄ Compare'}</button>`;
+    return `<div class="mc-card wc-card${on?' incmp':''}"><div class="mc-main"><div class="mc-code" style="cursor:pointer" onclick="openWatchedProf('${id}')">${escapeHtml(p.name)}</div><div class="mc-name">${pdept(p)||p.dept||''}</div><div class="mc-sub">${nrev}${fit}</div></div>`
+      +cmpBtn
       +rate
       +`<button class="mc-x" title="Remove from watchlist" onclick="toggleWatch('${id}',event)">&times;</button></div>`;
   }).join('');
@@ -9066,6 +9358,39 @@ function wcWatchSec(code,crn,ev,quiet){ if(ev){ev.stopPropagation();}
   try{if(typeof updateWatchTabCounts==='function')updateWatchTabCounts();}catch(e){}
   try{if(typeof renderWatchClasses==='function')renderWatchClasses();}catch(e){}
 }
+/* ONE answer to "is this student waitlisted for this course", derived from the sections.
+   There were four copies of this rule and all four got the same two things wrong:
+     • They set the course-level waitlist flag whenever ANY section was waitlisted. Being
+       enrolled in the Wednesday-morning lecture and waitlisted for the Wednesday-afternoon
+       lab is not "waitlisted for PLSC 1175" — but that is what My Classes showed, and what
+       wlPush() told your friends. Two different facts.
+     • They required a POSITION NUMBER to notice the waitlist at all
+       (status==='waitlisted' && s.wlPos), so a student who is genuinely waitlisted but whose
+       spot we couldn't read counted as enrolled everywhere.
+   meta.wl stays a position, because that's what the rest of the app reads. The two states it
+   can't express get their own flags. */
+function mcSyncWaitlist(code){
+  var meta=(typeof myClassMeta!=='undefined')?myClassMeta[code]:null; if(!meta)return null;
+  var secs=Array.isArray(meta.secs)?meta.secs:[];
+  var waited=secs.filter(function(s){return s.status==='waitlisted';});
+  var enrolled=secs.filter(function(s){return s.status!=='waitlisted';});
+  delete meta.wl; delete meta.wlUnknown; delete meta.wlMix;
+  if(!waited.length)return {state:'enrolled',n:0};
+  if(enrolled.length){
+    /* Mixed: they're IN the course. Name the section they're still waiting on. */
+    meta.wlMix=waited.map(function(s){return s.section||'another section';}).join(', ');
+    return {state:'mixed',n:waited.length,secs:meta.wlMix};
+  }
+  var pos=waited.filter(function(s){return s.wlPos;})[0];
+  if(pos)meta.wl=pos.wlPos; else meta.wlUnknown=true;
+  return {state:'waitlisted',n:waited.length,pos:(pos?pos.wlPos:null)};
+}
+/* Push the course-level spot to friends only when it IS the course-level spot. */
+function mcSyncWaitlistAndPush(code){
+  var r=mcSyncWaitlist(code);
+  try{ if(r&&r.state==='waitlisted'&&r.pos&&typeof wlPush==='function')wlPush(code,r.pos); }catch(e){}
+  return r;
+}
 /* ---- "I'm enrolled" on a specific section -> confirm status, then My Classes ---- */
 function mcEnrollSec(code,crn,ev){ if(ev){ev.stopPropagation();}
   var s=secByCrn(code,crn); if(!s)return;
@@ -9080,9 +9405,7 @@ function mcCommitSection(code,s,status,wlPos){
   var ix=arr.findIndex(function(x){return rec.crn&&String(x.crn)===rec.crn;});
   if(ix>=0)arr[ix]=rec; else arr.push(rec);
   var first=arr[0]; if(first){myClassMeta[code].prof=first.prof||myClassMeta[code].prof; if(first.days)myClassMeta[code].time=first.days;}
-  var wlSec=arr.filter(function(x){return x.status==='waitlisted'&&x.wlPos;})[0];
-  if(wlSec){ myClassMeta[code].wl=wlSec.wlPos; try{if(typeof wlPush==='function')wlPush(code,wlSec.wlPos);}catch(e){} }
-  else if(arr.every(function(x){return x.status==='enrolled';})){ delete myClassMeta[code].wl; }
+  mcSyncWaitlistAndPush(code);
   try{if(typeof saveMyClassMeta==='function')saveMyClassMeta();}catch(e){}
   try{if(typeof pushMySecToDb==='function')pushMySecToDb(code,rec);}catch(e){}
   try{if(typeof syncSavedSection==='function')syncSavedSection(code);}catch(e){}
@@ -9393,7 +9716,9 @@ function renderWatchClasses(){
         ? (ci.sections+' sections — pick which one you want')
         : ((typeof seatFeedLoaded==='function'&&!seatFeedLoaded())
             ? 'Checking this term\u2019s sections\u2026'
-            : 'Not offered this term');
+            /* Same rule as the search row: zero rows means we have no data, which is not the
+               same sentence as "Cal Poly isn't running it". */
+            : 'No section data this term \u2014 check Cal Poly\u2019s class search');
       cardArr.push('<div class="mc-card wc-card'+(pickOpen?' picking':'')+'"><div class="mc-main"><div class="mc-code">'+escAcc(code)+(ci.units!=null?' · '+unitStr(ci.units):'')+'</div><div class="mc-name">'+escAcc(ci.name||'')+'</div><div class="mc-sub">'+offeredTxt+'</div>'
         +(cFr?'<div style="margin-top:6px">'+cFr+'</div>':'')
         +(cPq?'<div class="course-pq">'+cPq+'</div>':'')
@@ -9539,8 +9864,7 @@ function mcRemoveSection(code,ix,ev){ if(ev){ev.stopPropagation&&ev.stopPropagat
   if(meta&&Array.isArray(meta.secs)&&meta.secs.length>1){
     var gone=meta.secs[ix];
     meta.secs.splice(ix,1);
-    var wlSec=meta.secs.filter(function(s){return s.status==='waitlisted'&&s.wlPos;})[0];
-    if(wlSec)meta.wl=wlSec.wlPos; else delete meta.wl;
+    mcSyncWaitlist(code);
     var f=meta.secs[0]; if(f){meta.prof=f.prof||meta.prof; if(f.days)meta.time=f.days;}
     try{saveMyClassMeta();}catch(e){}
     try{if(gone&&gone.crn&&typeof deleteMySecFromDb==='function')deleteMySecFromDb(gone.crn);}catch(e){}
@@ -9576,7 +9900,9 @@ function renderMyClasses(){
         var clash=conf.bad[key]?'<span class="mc-clash" title="Overlaps another class time">⚠ Time clash</span>':'';
         // personal status — the student's own, kept DISTINCT from the section's live seats
         var status=sec.status==='waitlisted'
-          ? '<button class="mc-status wl" title="Tap to update your waitlist spot" onclick="event.stopPropagation();wlOpen(\''+escAcc(i.code)+'\')">⏳ #'+(sec.wlPos||'?')+' on waitlist</button>'
+          /* "#? on waitlist" is a number-shaped way of saying we don't know the number.
+             Say we don't know it, and make it the thing you tap to fill in. */
+          ? '<button class="mc-status wl" title="Tap to update your waitlist spot" onclick="event.stopPropagation();wlOpen(\''+escAcc(i.code)+'\')">⏳ '+(sec.wlPos?('#'+sec.wlPos+' on waitlist'):'On the waitlist · add your spot')+'</button>'
           : '<span class="mc-status enr">✓ Enrolled</span>';
         var secBadge=sec.section?'<span class="mc-secid">'+escAcc(sec.section)+'</span>':'';
         var mSwapOpen=!!secSwapOpen[swapKey('mine',i.code,sec.crn||'')];
@@ -9628,8 +9954,19 @@ function renderMyClasses(){
        secFull was permanently false and the "+ waitlist spot" button could never render for
        the students who needed it. The real state lives on prim.seat. */
     var secFull=!!(prim&&prim.seat&&(prim.seat.cls==='full'||prim.seat.cls==='wait'));
-    var wlChip=wlPos?'<button class="mc-wl" title="Tap to update your waitlist spot" onclick="event.stopPropagation();wlOpen(\''+escAcc(i.code)+'\')">⏳ #'+wlPos+' on waitlist</button>'
-      :(secFull?'<button class="mc-wl ghost" title="Let friends see your waitlist spot" onclick="event.stopPropagation();wlOpen(\''+escAcc(i.code)+'\')">+ waitlist spot</button>':'');
+    /* Three different facts, three different chips. "Enrolled in one section, waitlisted for
+       another" used to render as plain "waitlisted for the course", which is not what the
+       student's schedule says and not what their friends should read. */
+    var wlChip;
+    if(wlPos){
+      wlChip='<button class="mc-wl" title="Tap to update your waitlist spot" onclick="event.stopPropagation();wlOpen(\''+escAcc(i.code)+'\')">⏳ #'+wlPos+' on waitlist</button>';
+    }else if(meta&&meta.wlUnknown){
+      wlChip='<button class="mc-wl" title="Add your spot so friends can see it" onclick="event.stopPropagation();wlOpen(\''+escAcc(i.code)+'\')">⏳ On the waitlist · add your spot</button>';
+    }else if(meta&&meta.wlMix){
+      wlChip='<span class="mc-wl mix" title="You\u2019re enrolled in this course and still waiting on another section of it">⏳ Also waitlisted for '+escAcc(meta.wlMix)+'</span>';
+    }else{
+      wlChip=secFull?'<button class="mc-wl ghost" title="Let friends see your waitlist spot" onclick="event.stopPropagation();wlOpen(\''+escAcc(i.code)+'\')">+ waitlist spot</button>':'';
+    }
     var frChip=(typeof friendChipHtml==='function')?friendChipHtml(i.code,mcProf||null):'';
     return '<div class="mc-card'+(conf.bad[i.code]?' clash':'')+'"><div class="mc-main"><div class="mc-code">'+escAcc(i.code)+(i.units!=null?' · '+unitStr(i.units):'')+clash+wlChip+'</div><div class="mc-name">'+escAcc(i.name||'')+'</div><div class="mc-sub">'+subLine+'</div>'+(frChip?'<div style="margin-top:6px">'+frChip+'</div>':'')+(pq?'<div class="course-pq">'+pq+'</div>':'')+'</div>'+seat+'<button class="mc-x" title="Remove" onclick="toggleMyClass(\''+i.code+'\')">&times;</button></div>';
   }).join('');
@@ -9654,12 +9991,27 @@ function renderMyClasses(){
   var toggle='<div class="mc-viewtog"><button class="'+(myClassesView==='list'?'on':'')+'" onclick="setMyClassesView(\'list\')">List</button><button class="'+(myClassesView==='calendar'?'on':'')+'" onclick="setMyClassesView(\'calendar\')">Calendar</button></div>';
   var body=myClassesView==='calendar'?renderMyCalendar(codes,conf):('<div class="mc-list">'+cards+'</div>');
   var countTxt=(nCards>codes.length)?(codes.length+' course'+(codes.length===1?'':'s')+' · '+nCards+' sections'):(codes.length+' class'+(codes.length===1?'':'es'));
-  out.innerHTML='<div class="mc-head"><div><b>'+countTxt+'</b>'+unitsTxt+' — enrolled &amp; waitlisted this term</div><div class="mc-headr">'+toggle+'<button class="fr-addtoggle" onclick="shareMySchedule()" title="Send a link that opens your schedule on Professify — friends can see it and add you">🔗 Share schedule</button><button class="fr-addtoggle" onclick="openSchedImport()" title="Screenshot your PASS / Student Center schedule — we read the classes, seats, and waitlist spots">📷 Import schedule</button><button class="wl-clear" onclick="clearMyClasses()">Clear</button></div></div>'
+  /* Once the schedule is in, "Import schedule" is an instruction to redo work you've already
+     done, and "Clear" is a one-tap way to lose it sitting next to the controls you use every
+     day. Both are gone from the header. Import still leads the empty state, which is where a
+     student who has nothing actually is, and re-importing is offered from the calendar. */
+  out.innerHTML='<div class="mc-head"><div><b>'+countTxt+'</b>'+unitsTxt+' — enrolled &amp; waitlisted this term</div><div class="mc-headr">'+toggle+'<button class="fr-addtoggle" onclick="shareMySchedule()" title="Send a link that opens your schedule on Professify — friends can see it and add you">🔗 Share schedule</button></div></div>'
     +banner+body
-    +'<div class="wl-insight" style="margin-top:16px">These are the classes Cal Poly officially has you <b style="color:var(--text-2)">enrolled in or waitlisted for</b> — imported from your schedule. Comparing sections you haven’t locked in? Those live in your <b style="color:var(--text-2)">Watchlist</b>. This is the schedule your friends see.</div>';
+    +'<div class="wl-insight" style="margin-top:16px">These are the classes Cal Poly officially has you <b style="color:var(--text-2)">enrolled in or waitlisted for</b> — imported from your schedule. Comparing sections you haven’t locked in? Those live in your <b style="color:var(--text-2)">Watchlist</b>. This is the schedule your friends see.'
+    /* Add/drop runs for two weeks. Taking the import button out of the header was right — it
+       was nagging you to redo finished work — but leaving NO way back would strand anyone
+       whose schedule changed. It sits at the end of the list, where someone who has just
+       noticed their list is stale is already looking. */
+    +' <button class="mc-reimport" onclick="openSchedImport()">Schedule changed? Re-import it</button></div>';
 }
 /* Weekly Mon–Fri calendar grid of My Classes. Blocks placed by parsed start/end; conflicting blocks flagged red. */
-function renderMyCalendar(codes,conf,meta){
+/* opts.peopleFor(code) -> [{name,ini,color}] overrides "which of MY friends is in this",
+   so a friend's profile can render the same calendar and answer "who else is in this with
+   them" instead. opts.tapPrefix is unused; kept out deliberately — every block taps through
+   to the same place. A section may also arrive with `meet` already parsed (a friend's
+   resolved section), in which case there is no days string to re-parse. */
+function renderMyCalendar(codes,conf,meta,opts){
+  opts=opts||{};
   meta=meta||myClassMeta;
   var DAYS=['Mo','Tu','We','Th','Fr'];
   // One block PER section the student is in — so both sections of a course (incl. a
@@ -9669,7 +10021,7 @@ function renderMyCalendar(codes,conf,meta){
     var ci=classInfo(c);
     var m=meta[c];
     var secs=(m&&Array.isArray(m.secs)&&m.secs.length)?m.secs:null;
-    if(secs){ secs.forEach(function(sec,ix){ meets.push({code:c,key:c+'#'+ix,name:ci.name,meet:parseMeet(sec.days),wl:sec.status==='waitlisted',wlPos:sec.wlPos||null}); }); }
+    if(secs){ secs.forEach(function(sec,ix){ meets.push({code:c,key:c+'#'+ix,name:ci.name,meet:(sec.meet||parseMeet(sec.days)),wl:sec.status==='waitlisted',wlPos:sec.wlPos||null}); }); }
     else { meets.push({code:c,key:c,name:ci.name,meet:parseMeet(myClassTime(c))}); }
   });
   var placed=meets.filter(function(m){return m.meet;});
@@ -9711,16 +10063,27 @@ function renderMyCalendar(codes,conf,meta){
            avatars is how you get a block with half a face poking out of the bottom. */
         var room=h-6-13;                                   // padding + the code line
         var nmLines=Math.max(0,Math.min(2,Math.floor(room/12)));
-        var calFr=(typeof friendsInClass==='function')?friendsInClass(m.code):[];
+        var calFr=opts.peopleFor?(opts.peopleFor(m.code)||[])
+                 :((typeof friendsInClass==='function')?friendsInClass(m.code):[]);
         var showFr=calFr.length&&(room-nmLines*12)>=17;
-        var calFrHtml=showFr?'<span class="cb-fr" title="'+escAcc(calFr.map(function(f){return f.name;}).join(', ')+' — in this class with you')+'">'+calFr.slice(0,3).map(function(f){return '<span class="cb-frav" style="background:'+f.color+'">'+escAcc(f.ini)+'</span>';}).join('')+(calFr.length>3?'<span class="cb-frmore">+'+(calFr.length-3)+'</span>':'')+'</span>':'';
+        /* Three faces and "+4" hid most of the answer to the one question these are here to
+           answer. Five fit comfortably at this scale; the rest still roll into the counter. */
+        var FACE_MAX=5;
+        var calFrHtml=showFr?'<span class="cb-fr" title="'+escAcc(calFr.map(function(f){return f.name;}).join(', ')+(opts.peopleFor?' — also in this class':' — in this class with you'))+'">'+calFr.slice(0,FACE_MAX).map(function(f){return '<span class="cb-frav'+(f.me?' me':'')+'" style="background:'+(f.color||'#5E7A8A')+'">'+escAcc(f.ini||'?')+'</span>';}).join('')+(calFr.length>FACE_MAX?'<span class="cb-frmore">+'+(calFr.length-FACE_MAX)+'</span>':'')+'</span>':'';
         var wlTag=m.wl?'<span class="cb-wl" title="You\'re on the waitlist'+(m.wlPos?' — #'+m.wlPos:'')+'">⏳'+(m.wlPos?' #'+m.wlPos:'')+'</span>':'';
-        var nmHtml=(nmLines&&m.name)?('<span class="cb-nm" style="height:'+(nmLines*12)+'px">'+escAcc(String(m.name||'').slice(0,44))+'</span>'):'';
+        /* The clamp has to sit on a CHILD of the flex item: .cal-block is display:flex, which
+           blockifies a flex item's display:-webkit-box into flow-root and silently kills
+           -webkit-line-clamp — which is how "The Economics of Equity and Social" ended up with
+           its third line sliced in half by the block's edge. max-height, not height, so a
+           one-line title doesn't reserve two. */
+        var nmHtml=(nmLines&&m.name)?('<span class="cb-nm" style="max-height:'+(nmLines*12)+'px">'
+          +'<i class="cb-nmc" style="-webkit-line-clamp:'+nmLines+'">'+escAcc(String(m.name||''))+'</i></span>'):'';
         /* The tooltip still carries everything the block had to drop, so nothing is lost —
            it's only not shouted. Friends who didn't fit are named there too. */
         var tip=m.code+' · '+m.name+(m.wl?' · waitlisted'+(m.wlPos?' #'+m.wlPos:''):'')
           +((calFr.length&&!showFr)?(' · with '+calFr.map(function(f){return f.name;}).join(', ')):'');
-        html+='<div class="cal-block'+(bad?' bad':'')+(m.wl?' wl':'')+'" style="top:'+top+'px;height:'+Math.max(h,18)+'px;left:calc('+left+'% + 3px);width:calc('+w+'% - 6px)" title="'+escAcc(tip)+'"><span class="cb-top"><span class="cb-code">'+escAcc(m.code)+'</span>'+wlTag+'</span>'+nmHtml+calFrHtml+'</div>';
+        var tapCode=String(m.code).replace(/'/g,"\\'");
+        html+='<div class="cal-block cb-tap'+(bad?' bad':'')+(m.wl?' wl':'')+'" role="button" tabindex="0" onclick="event.stopPropagation();gotoSection(\''+tapCode+'\')" style="top:'+top+'px;height:'+Math.max(h,18)+'px;left:calc('+left+'% + 3px);width:calc('+w+'% - 6px)" title="'+escAcc(tip+' \u2014 tap for sections & seats')+'"><span class="cb-top"><span class="cb-code">'+escAcc(m.code)+'</span>'+wlTag+'</span>'+nmHtml+calFrHtml+'</div>';
       });
       i=j;
     }
@@ -9794,15 +10157,52 @@ function majorFromCodes(codes){
 // The real set of Cal Poly subject prefixes, derived from the app's own course data.
 // Used to reject OCR tokens that look like codes but aren't (e.g. "ROOM 226", "TR 1400").
 let __knownSubs=null;
+/* WGQS 2201 sat on a student's schedule export, parsed cleanly, and was then thrown away —
+   because WGQS was not a "known subject". This set was built ONLY from the curated majors
+   data (SCHED_MAJORS / MAJOR_CATALOG / GE_COURSES / COURSE_NAME), so any subject Cal Poly
+   offers that nobody hand-added to a flowchart did not exist as far as the importer was
+   concerned. The live seat feed IS the authoritative list of what the university is running
+   this term; it belongs in here more than the curated lists do.
+   The memo has to key off the feed's size too — seats load asynchronously AFTER first call,
+   so a set computed at boot was permanently missing every subject that arrived with them. */
+/* A course code and a room number are the same shape, and every subject test in this file
+   waves the room straight through. Tristan's export prints "Room: Baker Ctr Sci & Math 180
+   -0102" — a building and a room number — and the importer offered him "MATH 180" as a class.
+   Two rules kill it without touching real courses:
+     1) a code token sitting AFTER the word "Room" on its line is a room, not a course;
+     2) the semester catalog numbers courses with FOUR digits. A three-digit number is legacy
+        quarter numbering, and we hold that numbering in full in COURSE_EQUIV — so a
+        three-digit token that resolves to nothing isn't a course we happen not to know about,
+        it isn't a course. Four-digit unknowns are still kept and flagged (WGQS 2201 is real
+        and isn't in our curated data); this only refuses the ones that can't be. */
+function schedRoomCut(line){ var m=/\bRoom\b\s*[:.]/i.exec(String(line||'')); return m?m.index:-1; }
+function schedCodeIsReal(code){
+  var c=String(code||'').toUpperCase().replace(/\s+/g,' ').trim();
+  var m=/^([A-Z]{2,5}) (\d{3,4})([A-Z]?)$/.exec(c);
+  if(!m)return false;
+  if(m[2].length>=4)return true;
+  try{ if(typeof COURSE_EQUIV!=='undefined'&&COURSE_EQUIV[c])return true; }catch(e){}
+  try{ if(typeof COURSE_NAME!=='undefined'&&COURSE_NAME[c])return true; }catch(e){}
+  try{ if(typeof CLASS_INDEX!=='undefined'&&CLASS_INDEX[c])return true; }catch(e){}
+  try{ if(typeof SEAT_SECTIONS!=='undefined'&&SEAT_SECTIONS&&SEAT_SECTIONS[c])return true; }catch(e){}
+  return false;
+}
+/* True when EITHER the code as read or its canonical form is a course we can believe in. */
+function schedCodePlausible(raw,canon){ return schedCodeIsReal(raw)||schedCodeIsReal(canon); }
+let __knownSubsSeatN=-1;
 function knownSubjects(){
-  if(__knownSubs)return __knownSubs;
+  var _seatN=0;
+  try{ if(typeof SEAT_SECTIONS!=='undefined'&&SEAT_SECTIONS)_seatN=Object.keys(SEAT_SECTIONS).length; }catch(e){}
+  if(__knownSubs&&_seatN===__knownSubsSeatN)return __knownSubs;
   const s=new Set();
   function add(code){const m=String(code||'').toUpperCase().match(/^[A-Z]{2,5}/);if(m)s.add(m[0]);}
   try{ if(typeof SCHED_MAJORS!=='undefined')Object.values(SCHED_MAJORS).forEach(m=>(m.terms||[]).forEach(t=>(t.slots||[]).forEach(sl=>{if(sl.code)add(sl.code);}))); }catch(e){}
   try{ if(typeof MAJOR_CATALOG!=='undefined')Object.values(MAJOR_CATALOG).forEach(c=>{(c.core||[]).forEach(x=>add(x.code));Object.values(c.concentrations||{}).forEach(cc=>(cc.classes||[]).forEach(a=>add(a[0])));}); }catch(e){}
   try{ if(typeof GE_COURSES!=='undefined')GE_COURSES.forEach(c=>add(c.code)); }catch(e){}
   try{ if(typeof COURSE_NAME!=='undefined')Object.keys(COURSE_NAME).forEach(add); }catch(e){}
-  __knownSubs=s; return s;
+  try{ if(typeof SEAT_SECTIONS!=='undefined'&&SEAT_SECTIONS)Object.keys(SEAT_SECTIONS).forEach(add); }catch(e){}
+  try{ if(typeof PROFESSIFY_SEATS!=='undefined'&&PROFESSIFY_SEATS)Object.keys(PROFESSIFY_SEATS).forEach(add); }catch(e){}
+  __knownSubs=s; __knownSubsSeatN=_seatN; return s;
 }
 function renderDetected(codes,major){
   if(typeof legacyPlannerInert==='function'&&legacyPlannerInert())return;   // its host DOM is gone
@@ -10066,17 +10466,10 @@ function obShowStep(n){
   document.getElementById('obDot2').classList.toggle('on',n>=2);
   var steps=document.querySelector('.ob-steps'); if(steps)steps.style.display=(n===2)?'flex':'none';
 }
-/* Learning preferences, opened from Settings. Same step-2 UI the signup wizard used to force
-   on every new account — kept in full, just no longer taxed against the signup moment. */
-function openLearningPrefs(){
-  try{ if(typeof closeSettings==='function')closeSettings(); }catch(e){}
-  startOnboard();
-  try{
-    var k=document.querySelector('#obStep1 .k'); if(k)k.textContent='Professor matching';
-    obShowStep(2);
-    var back=document.querySelector('#obStep2 .ob-skip'); if(back)back.style.display='none';
-  }catch(e){}
-}
+/* openLearningPrefs() — the Settings shortcut into the learning-style picker — was removed
+   on 2026-08-24 along with its Settings row. The picker itself is untouched: it is still
+   step 2 of the signup wizard, and a style already chosen still drives the "Fits you" badge
+   and Explore's Fit filter. Only the second door into it is gone. */
 function obNext(){
   const note=document.getElementById('obMajorNote');
   if(!document.getElementById('obMajor').value){if(note)note.style.display='block';document.getElementById('obMajor').focus();return;}
@@ -10888,6 +11281,30 @@ window.SCHED_COMING=[["College of Liberal Arts","Anthropology-Geography","Art & 
 .mc-wl{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;border-radius:999px;padding:3px 9px;background:rgba(205,167,101,.13);color:var(--mid);border:0;cursor:pointer;font-family:inherit;margin-left:6px}
 .mc-wl.ghost{background:transparent;border:1px dashed rgba(var(--fg-rgb),.2);color:var(--faint);font-weight:600}
 .mc-wl.ghost:hover{color:var(--mid);border-color:var(--mid)}
+/* Enrolled in one section, still waiting on another — a statement, not a button. */
+.mc-wl.mix{cursor:default;background:transparent;border:1px solid rgba(205,167,101,.35);font-weight:600}
+.mc-reimport{background:none;border:0;padding:0;font:inherit;font-weight:600;color:var(--accent);
+  cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.mc-reimport:hover{opacity:.8}
+/* ---- "Share my schedule": one strip fused to the bottom of the calendar card ----
+   It was two outlined buttons inside an outlined card above a divider — three nested borders
+   fighting each other at the bottom of a 230px card. One surface now, no inner boxes, and the
+   card's own bottom corners are its corners. */
+.hmc-card{overflow:hidden}
+.hmc-share{display:flex;width:calc(100% + 32px);align-items:center;gap:9px;text-align:left;
+  margin:14px -16px -16px;padding:12px 16px;cursor:pointer;font-family:inherit;
+  background:rgba(var(--accent-rgb),.10);
+  border:0;border-top:1px solid rgba(var(--accent-rgb),.22);
+  transition:background .15s}
+.hmc-share:hover{background:rgba(var(--accent-rgb),.19)}
+.hmc-share-ring{width:27px;height:27px;border-radius:50%;flex:none;font-size:13px;line-height:1;
+  background:rgba(var(--accent-rgb),.2);display:flex;align-items:center;justify-content:center}
+.hmc-share-txt{flex:1;min-width:0}
+.hmc-share-txt b{display:block;font-size:12px;font-weight:700;color:var(--accent);line-height:1.25;
+  letter-spacing:-.005em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hmc-share-txt small{display:block;font-size:10.5px;color:var(--muted);margin-top:1px;line-height:1.3}
+@media(max-width:1139px){ .hm-card{padding:13px} .hmc-share{width:calc(100% + 26px);margin:13px -13px -13px;padding:12px 13px} }
+
 .fp-watchbtn{flex:none;width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;border:1.5px solid rgba(var(--fg-rgb),.18);background:transparent;color:var(--muted);cursor:pointer}
 .fp-watchbtn svg{width:16px;height:16px}
 .fp-watchbtn:hover{border-color:rgba(var(--fg-rgb),.34)}
@@ -10967,6 +11384,10 @@ let historyTableMissing=false;
 let myHistory=[];
 let pendingRateCourse='';
 let profileFriendId=null,profileTab='overlap';
+/* Calendar or list on a friend's classes, remembered across profiles — someone who thinks in
+   weeks keeps getting weeks. Calendar leads, because "when are they free" is why you opened
+   this. Declared here, beside the other profile state, so it exists before any render. */
+let frpView=(function(){try{return localStorage.getItem('professify_frp_view')==='list'?'list':'cal';}catch(e){return 'cal';}})();
 let qrCanvas=null,qrCtx=null;   // qrStream/qrRAF went with the deleted in-app scanner
 let rlMajor='',rlPrefix='',rlNum='',rlMajorLocked=true;
 let rlT=null;
@@ -11416,10 +11837,9 @@ function confirmSchedImport(){
     // primary fields (first section) — kept for friends view + older code paths
     var first=meta.secs[0];
     meta.prof=first.prof||meta.prof; if(first.days)meta.time=first.days;
-    // waitlist spot friends can see = the waitlisted section's position, if any
-    var wlSec=meta.secs.filter(function(s){return s.status==='waitlisted'&&s.wlPos;})[0];
-    if(wlSec){ meta.wl=wlSec.wlPos; wl++; try{if(typeof wlPush==='function')wlPush(c.code,wlSec.wlPos);}catch(e){} }
-    else if(meta.secs.every(function(s){return s.status==='enrolled';})){ delete meta.wl; }
+    // waitlist state friends can see — derived from the sections, in one place
+    var _wlr=mcSyncWaitlistAndPush(c.code);
+    if(_wlr&&_wlr.state==='waitlisted'&&_wlr.pos)wl++;
   });
   try{if(typeof saveMyClassMeta==='function')saveMyClassMeta();}catch(e){}
   /* The second route friends can read: stamp the section's class number onto saved_classes.
@@ -11572,7 +11992,195 @@ function resolveOcrCode(sub,num){
   }
   return hits.length===1?hits[0]:'';   /* ambiguous means unknown, not a coin flip */
 }
+/* ============ THE CARD-LAYOUT SCHEDULE EXPORT ============================================
+   Cal Poly's "Class Schedule" print/PDF export is not a table — it is one card per section
+   with label/value pairs, laid out in two columns:
+
+       WGQS 2201
+       Section: S05              Instructor: Ednie Garrison
+       Description: Gender &…    Days: Tu
+       Wait List Position: -     Start: 4:30 PM
+       Units: 3                  End:   5:50 PM
+                                 Room:  Arch & Envr Design 005 -0225
+                                 Dates: 08/24 - 12/11
+
+   Fed to the table parser, a real five-class export produced: WGQS silently dropped, a
+   PHANTOM "MATH 180" invented out of the room "Baker Ctr Sci & Math 180 -0102", every one of
+   the five marked WAITLISTED because each card contains the words "Wait List Position", a
+   fabricated waitlist position of #10 read out of "End 10:20AM", a fabricated class number
+   1877 read out of "U.S. History Since 1877", and not one section token parsed. Two classes
+   survived recognisably. That is the report we got.
+
+   None of that is fixable by tuning the table parser, because the two formats disagree about
+   what a line means. This reads the cards as cards:
+     · a card STARTS only on a line that is nothing but a course code, so room text can never
+       open one;
+     · every value is read from its own label, so "Wait List Position: -" means not
+       waitlisted rather than the opposite;
+     · Start and End are separate labels here, not one "9:10AM-10:30AM" cell;
+     · there is no class number anywhere in this export, so none is invented — matchSection()
+       then confirms the section from days + start time against the live feed, which is what
+       it exists for. */
+function schedLooksLikeCards(text){
+  var t=String(text||'');
+  var labels=0;
+  ['Section','Description','Wait\\s*L[il1]st\\s*Pos','Units','Room','Dates','Days','Start','End']
+    .forEach(function(l){ if(new RegExp('(^|\\n)[^\\n]{0,40}\\b'+l,'i').test(t))labels++; });
+  return labels>=6;
+}
+function parseSchedCards(text){
+  var raw=String(text||'').replace(/ /g,' ');
+  var lines=raw.split(/\n/).map(function(l){return l.replace(/\s+/g,' ').trim();});
+  var subs=(typeof knownSubjects==='function')?knownSubjects():null;
+
+  /* A card opens ONLY on a line that is a course code and nothing else. This single rule is
+     what kills the phantom MATH 180: "Room: Baker Ctr Sci & Math 180 -0102" is not a bare
+     code, so it cannot start anything. */
+  var starts=[];
+  for(var i=0;i<lines.length;i++){
+    var m=/^([A-Za-z]{2,5})\s?-?\s?(\d{3,4}[A-Za-z]?)\s*$/.exec(lines[i]);
+    if(!m)continue;
+    var sub=m[1].toUpperCase(), code=sub+' '+m[2].toUpperCase();
+    var known=subs?(subs.has(sub)||(typeof COURSE_NAME!=='undefined'&&COURSE_NAME[code])
+                 ||(typeof CLASS_INDEX!=='undefined'&&CLASS_INDEX[code])):true;
+    if(!known&&typeof resolveOcrCode==='function'){
+      var fixed=resolveOcrCode(sub,m[2].toUpperCase());
+      if(fixed){ code=fixed; known=true; }
+    }
+    /* In the TABLE format a subject check is the only thing separating a course code from a
+       room number, so an unknown subject has to be dropped. Here the format itself guarantees
+       it: a line holding nothing but a code, between two cards, is a course. Requiring the
+       subject on top of that is what silently deleted WGQS 2201 off a real student's schedule
+       — WGQS is a real Cal Poly subject that simply isn't in our curated majors data.
+       An unrecognised one is kept and flagged; the review screen already prints "not in
+       catalog" beside it and leaves it unticked, which is the honest outcome — the student
+       can see we read it and decide. */
+    if(!known&&!/^[A-Z]{2,5}$/.test(sub))continue;
+    var canonC=(typeof canonCode==='function'?(canonCode(code)||code):code);
+    if(!schedCodePlausible(code,canonC))continue;      // room number, not a course
+    starts.push({idx:i,code:canonC});
+  }
+  if(!starts.length)return [];
+
+  /* Labels, longest/most specific first — "Wait List Position" has to win before "Position",
+     and the OCR of this export routinely drops the leading I of "Instructor" and the colon
+     after "Start". */
+  var LABELS=[
+    ['wlpos', /\bWait\s*L[il1|]st\s*Pos[il1|]t[il1|]on\b\s*[:.]?/i],
+    ['section', /\bSect[il1|]?on\b\s*[:.]?/i],
+    ['instructor', /\b[il1|]?nstructor\b\s*[:.]?/i],
+    ['description',/\bDescr[il1|]pt[il1|]on\b\s*[:.]?/i],
+    ['days', /\bDays\b\s*[:.]?/i],
+    ['start', /\bStart\b\s*[:.]?/i],
+    ['end', /\bEnd\b\s*[:.]?/i],
+    ['room', /\bRoom\b\s*[:.]?/i],
+    ['dates', /\bDates\b\s*[:.]?/i],
+    ['units', /\bUn[il1|]ts\b\s*[:.]?/i]
+  ];
+  function fields(block){
+    var hits=[];
+    LABELS.forEach(function(pair){
+      var re=new RegExp(pair[1].source,'gi'), mm;
+      while((mm=re.exec(block))){ hits.push({key:pair[0],at:mm.index,end:mm.index+mm[0].length}); }
+    });
+    hits.sort(function(a,b){return a.at-b.at||b.end-a.end;});
+    /* Drop a label that starts inside a longer one already taken — "Position" inside
+       "Wait List Position", "End" inside a description that happens to contain it. */
+    var kept=[],lastEnd=-1;
+    hits.forEach(function(h){ if(h.at<lastEnd)return; kept.push(h); lastEnd=h.end; });
+    var out={};
+    kept.forEach(function(h,ix){
+      var stop=(ix+1<kept.length)?kept[ix+1].at:block.length;
+      var v=block.slice(h.end,stop).replace(/\s+/g,' ').trim();
+      if(out[h.key]==null)out[h.key]=v;      // first occurrence wins
+    });
+    return out;
+  }
+
+  var DAYRE=/((?:Mo|Tu|We|Th|Fr|Sa|Su)+)/i;
+  function normDays(v){
+    if(!v)return '';
+    var m=DAYRE.exec(String(v).replace(/\s+/g,''));
+    if(!m)return '';
+    var out='',t=m[1];
+    for(var k=0;k<t.length;k+=2){ out+=t.charAt(k).toUpperCase()+t.charAt(k+1).toLowerCase(); }
+    return out;
+  }
+  function normTime(v){
+    if(!v)return '';
+    var m=/(\d{1,2})\s*[:.]\s*(\d{2})\s*([AaPp])\.?\s*[Mm]?/.exec(String(v));
+    if(!m)return '';
+    return m[1]+':'+m[2]+' '+m[3].toUpperCase()+'M';
+  }
+  /* A waitlist POSITION is a number and nothing else. The export prints "-" when you are not
+     waitlisted, and the old parser's "does the block contain the words wait list" test marked
+     every single card as waitlisted — the opposite of what the card says. */
+  function normWl(v){
+    if(!v)return null;
+    var first=String(v).split(/\s{2,}|\n/)[0];
+    var m=/^[^0-9A-Za-z]*(\d{1,3})(?!\s*[:.]\d)\b/.exec(first);
+    if(!m)return null;
+    var n=parseInt(m[1],10);
+    return (n>0&&n<400)?n:null;
+  }
+  /* Section tokens come through OCR bent: S05 as "$05", S01 as "SOL", V11 as "VAL". Repair
+     only what is unambiguous ($ -> S, and O/l/I -> 0/1 inside the numeric tail). Anything
+     still not letter+2-digits is kept AS READ and flagged fuzzy, so the review screen shows
+     the student what we actually saw instead of a confident guess. */
+  function normSection(v){
+    if(!v)return {section:'',fuzzy:false};
+    var t=String(v).replace(/^[=:.\-\s]+/,'').split(' ')[0].trim();
+    if(!t||/^[-–—]$/.test(t))return {section:'',fuzzy:false};
+    if(t.charAt(0)==='$')t='S'+t.slice(1);
+    var m=/^([A-Za-z])([A-Za-z0-9]{1,3})$/.exec(t);
+    if(m){
+      /* A Cal Poly section is a letter plus digits, so a non-numeric tail is an OCR misread —
+         "S01" arrives as "SOL", "V11" as "VAL". Repair it, but ONLY through the confusions
+         that are about letter SHAPE and have one plausible reading: O/Q/D->0, I/l/L/|->1,
+         S->5, B->8, Z->2, G->6.
+         The app's general OCR_D map also carries A->4, T->7 and g->9, which are fine when a
+         class number can be checked against the live feed but not here. Run through the full
+         map, "VAL" becomes "V41" — a section that looks completely real, reads as fact, and
+         is wrong; the true section is V11. A guess that can't be distinguished from data is
+         worse than no guess, so an ambiguous tail keeps the RAW token and stays flagged:
+         "VAL" at least tells the student what we actually saw. */
+      var SEC_D={O:'0',o:'0',Q:'0',D:'0',I:'1',l:'1',i:'1','|':'1','!':'1',L:'1',
+                 S:'5',s:'5',B:'8',Z:'2',z:'2',G:'6'};
+      var clean=/^\d+$/.test(m[2]);
+      var tail=clean?m[2]:m[2].split('').map(function(c){return /[0-9]/.test(c)?c:(SEC_D[c]||c);}).join('');
+      if(/^\d+$/.test(tail))return {section:m[1].toUpperCase()+tail,fuzzy:!clean};
+    }
+    return {section:t.toUpperCase(),fuzzy:true};
+  }
+
+  var rows=[];
+  for(var sIx=0;sIx<starts.length;sIx++){
+    var from=starts[sIx].idx+1;
+    var to=(sIx+1<starts.length)?starts[sIx+1].idx:lines.length;
+    var block=lines.slice(from,to).join('\n');
+    var f=fields(block);
+    var sec=normSection(f.section);
+    var wl=normWl(f.wlpos);
+    rows.push({
+      code:starts[sIx].code, _card:true,
+      section:sec.section, _secFuzzy:sec.fuzzy,
+      /* This export carries NO class number. Not one is invented — "History Since 1877" used
+         to become class number 1877. */
+      crn:'', crnRaw:'',
+      days:normDays(f.days), start:normTime(f.start), end:normTime(f.end),
+      /* The OCR of "Instructor: Ednie Garrison" routinely leaves a stray leading comma or
+         period behind the label. Strip LEADING punctuation only — the comma inside
+         "Garrison, Ednie" is meaningful and matchProfId reads it. */
+      instructor:(f.instructor||'').replace(/^[=:.,\-\s]+/,'').trim(),
+      status:wl?'waitlisted':'enrolled', wlPos:wl
+    });
+  }
+  return rows;
+}
 function parseSchedRows(text){
+  /* The card export and the table export disagree about what a line means, so they get
+     different parsers rather than one parser with a pile of exceptions. */
+  try{ if(schedLooksLikeCards(text)){ var cards=parseSchedCards(text); if(cards.length)return cards; } }catch(e){}
   var lines=(text||'').split(/\n+/).map(function(l){return l.replace(/ /g,' ').trim();}).filter(Boolean);
   /* OCR is not typography. Tesseract returns lowercase whenever the source text is small,
      thin, or low-contrast — a phone screenshot of PASS very often is — and this pattern was
@@ -11604,18 +12212,23 @@ function parseSchedRows(text){
       continue;
     }
     codeRe.lastIndex=0; var m, chosen=null;
+    /* Everything after "Room:" on this line is a location. Cutting at the label rather than
+       skipping the whole line keeps real rows that print their room inline
+       ("BUS 4404 Investments S02-LEC MoWe 2:10PM Room: 3-213"). */
+    var _roomAt=schedRoomCut(lines[i]);
     while((m=codeRe.exec(lines[i]))){
+      if(_roomAt>=0&&m.index>_roomAt)continue;          // "…Room: Baker Ctr Sci & Math 180"
       if(m[2].charAt(0)==='0')continue;                 // room suffix like 003, not a course
       var sub=m[1].toUpperCase(), code=(m[1]+' '+m[2]).toUpperCase();
       // A row starts on a REAL subject — never on the section token's "LEC 2747".
       var ok=subs?(subs.has(sub)||(typeof COURSE_NAME!=='undefined'&&COURSE_NAME[code])||(typeof CLASS_INDEX!=='undefined'&&CLASS_INDEX[code])):!/^(LEC|LAB|SEM|ACT|DIS|IND)$/.test(sub);
       /* Legacy 3-digit numbers ("BUS 404") are what Canvas and older exports print; the
          catalog is 4-digit. Without this the course parsed but never matched anything. */
-      if(ok){ chosen=canonCode(code)||code; break; }
+      if(ok){ var cn=canonCode(code)||code; if(!schedCodePlausible(code,cn))continue; chosen=cn; break; }
       /* Not a known subject as read — but OCR may have bent one character. */
       if(subs&&!/^(LEC|LAB|SEM|ACT|DIS|IND)$/.test(sub)){
         var fixed=resolveOcrCode(sub,m[2].toUpperCase());
-        if(fixed){ chosen=canonCode(fixed)||fixed; break; }
+        if(fixed){ var cf=canonCode(fixed)||fixed; if(!schedCodePlausible(fixed,cf))continue; chosen=cf; break; }
       }
     }
     if(chosen)starts.push({idx:i,code:chosen});
@@ -11707,7 +12320,14 @@ function parseSchedRows(text){
             dm=[dm[0],_canon[dm[1].toUpperCase()]||dm[1]]; }
     var tm=block.match(/\d{1,2}:\d{2}\s*[AP]\.?\s*M/gi)||[];
     // explicit waitlist wording if the OCR happened to catch it
-    var wl=/WAIT\s*-?\s*LIST|WAITLIST|WTLST/i.test(block);
+    /* PeopleSoft — which is what Cal Poly's Student Center runs — does NOT print "Wait List"
+       in the Status column. It prints the single word "Waiting". So a student who was
+       waitlisted imported as ENROLLED: a wrong value that looks right, on the one field that
+       decides whether they think they have a seat. Only a compact/printable export uses the
+       words "Wait List"; the normal Student Center view says "Waiting". Match both, plus the
+       "Waitlisted" spelling other exports use. Found by the paste path, but the screenshot
+       path had it too — same parser. */
+    var wl=/WAIT\s*-?\s*LIST(?:ED)?|WAITLIST(?:ED)?|WTLST|\bWAITING\b/i.test(block);
     var pm=block.match(/(?:POSITION|POS)[^0-9]{0,6}(\d{1,3})/i);
     /* Keep the raw OCR read of the class number too: matchSection() can try its digit
        variants against real class numbers and confirm one, which is far better than
@@ -11757,24 +12377,258 @@ function matchSection(code,crn,section,days,start,crnRaw){
   if(days&&start){var dl=days.toLowerCase();var byT=secs.filter(function(r){return (r.days||'').toLowerCase().indexOf(dl)>=0;})[0];if(byT)return byT;}
   return null;
 }
+/* ============ MAKING THE IMAGE READABLE BEFORE ASKING TESSERACT ==========================
+   Handing a phone screenshot straight to Tesseract is the single biggest reason imports come
+   back half-empty. Measured on this project earlier: a full-resolution capture matched 4 of 4
+   sections; the SAME capture at half resolution matched 1 of 4. Tesseract wants tall, high
+   contrast, dark-on-light glyphs, and a phone screenshot is often none of those.
+   So the image is prepared first, and more than one preparation is tried — the app keeps
+   whichever read produced the most complete schedule rather than trusting the first. */
+function schedLoadImage(file){
+  return new Promise(function(res,rej){
+    var url=URL.createObjectURL(file), im=new Image();
+    im.onload=function(){ res({im:im,url:url}); };
+    im.onerror=function(){ try{URL.revokeObjectURL(url);}catch(e){} rej(new Error('Couldn’t open that image.')); };
+    im.src=url;
+  });
+}
+/* Draw the image through a canvas with the treatments OCR actually benefits from.
+   · scale   — small screenshots are upscaled; Tesseract's models are trained near 300dpi and
+               a 700px-wide phone capture of a table is far below that.
+   · gray    — colour carries no information here and costs the binariser accuracy.
+   · invert  — a DARK-MODE screenshot is light-on-dark, which Tesseract reads badly. Decided
+               by measuring the image, never assumed.
+   · contrast— a mild S-curve; anti-aliased UI text sits in a narrow band around mid-grey. */
+function schedPrepCanvas(im,o){
+  o=o||{};
+  var MAXPX=2800;                                   // guard a phone's memory on huge captures
+  var scale=o.scale||1;
+  var w=Math.round(im.width*scale), h=Math.round(im.height*scale);
+  var big=Math.max(w,h);
+  if(big>MAXPX){ var k=MAXPX/big; w=Math.round(w*k); h=Math.round(h*k); }
+  if(w<1||h<1)return null;
+  var c=document.createElement('canvas'); c.width=w; c.height=h;
+  var ctx=c.getContext('2d',{willReadFrequently:true});
+  ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='high';
+  ctx.drawImage(im,0,0,w,h);
+  if(o.gray||o.contrast||o.autoInvert){
+    var d,a;
+    try{ d=ctx.getImageData(0,0,w,h); a=d.data; }catch(e){ return c.toDataURL('image/png'); }
+    var invert=false;
+    if(o.autoInvert){
+      /* Sample rather than sum 8 million pixels — this runs on a phone. */
+      var sum=0,n=0;
+      for(var i=0;i<a.length;i+=4*97){ sum+=(a[i]*0.299+a[i+1]*0.587+a[i+2]*0.114); n++; }
+      invert=(n&&(sum/n)<115);
+    }
+    var k2=o.contrast||1;
+    for(var j=0;j<a.length;j+=4){
+      var v=a[j]*0.299+a[j+1]*0.587+a[j+2]*0.114;
+      if(invert)v=255-v;
+      if(k2!==1)v=(v-128)*k2+128;
+      v=v<0?0:(v>255?255:v);
+      a[j]=a[j+1]=a[j+2]=v;
+    }
+    ctx.putImageData(d,0,0);
+  }
+  return c;
+}
+function schedPrepImage(im,o){
+  var c=schedPrepCanvas(im,o);
+  return c?c.toDataURL('image/png'):null;
+}
+
+/* ---- TWO COLUMNS ------------------------------------------------------------------------
+   Cal Poly's schedule export prints cards in two columns. Tesseract's page segmentation
+   handles that at the image's native size, but the moment the image is upscaled it starts
+   reading ACROSS the gutter — measured on a real 1104x485 export: at native size every card
+   header landed on its own line, and at 1600px wide the text came back interleaved, with
+   "Days: Tu HIST 2202" on one line. The right column's classes then vanish (their headers are
+   no longer alone on a line) and, worse, values from one column attach to the other card.
+
+   So the columns are separated BEFORE OCR rather than hoped for afterwards. Find the vertical
+   gutters — runs of near-zero ink spanning the full height — and read each panel top to
+   bottom as its own image. Reading order stops being a guess. */
+function schedColumnCuts(canvas){
+  try{
+    var w=canvas.width,h=canvas.height;
+    if(w<400||h<120)return [];
+    var ctx=canvas.getContext('2d',{willReadFrequently:true});
+    var a=ctx.getImageData(0,0,w,h).data;
+    var thr=Math.max(1,Math.round(h*0.004));      // a column is "empty" below this much ink
+    var ink=new Uint32Array(w);
+    /* Every 3rd row is plenty to find a gutter and keeps this off the main thread's budget. */
+    for(var y=0;y<h;y+=3){
+      var row=y*w*4;
+      for(var x=0;x<w;x++){ if(a[row+x*4]<170)ink[x]++; }
+    }
+    var scale=3;                                   // we sampled 1 row in 3
+    var runs=[],st=null;
+    for(var x2=0;x2<w;x2++){
+      var empty=(ink[x2]*scale)<=thr;
+      if(empty&&st===null)st=x2;
+      else if(!empty&&st!==null){ runs.push([st,x2]); st=null; }
+    }
+    if(st!==null)runs.push([st,w]);
+    /* Ignore the page margins, and demand a gutter wide enough to be a real column break
+       rather than the space between two words. */
+    var cuts=runs.filter(function(r){
+      return r[0]>w*0.06 && r[1]<w*0.94 && (r[1]-r[0])>=w*0.02;
+    }).map(function(r){ return Math.round((r[0]+r[1])/2); });
+    /* Panels must each be a meaningful share of the page — three thin slivers is a table with
+       generous cell padding, not a column layout, and slicing it would be worse than not. */
+    if(!cuts.length||cuts.length>3)return [];
+    var xs=[0].concat(cuts,[w]);
+    for(var i=0;i<xs.length-1;i++){ if((xs[i+1]-xs[i])<w*0.18)return []; }
+    return cuts;
+  }catch(e){ return []; }
+}
+function schedSplitCanvas(canvas,cuts){
+  var out=[],w=canvas.width,h=canvas.height;
+  var xs=[0].concat(cuts,[w]);
+  for(var i=0;i<xs.length-1;i++){
+    var cw=xs[i+1]-xs[i];
+    var c=document.createElement('canvas'); c.width=cw; c.height=h;
+    c.getContext('2d').drawImage(canvas,xs[i],0,cw,h,0,0,cw,h);
+    out.push(c.toDataURL('image/png'));
+  }
+  return out;
+}
+/* How complete is this read? Used only to choose between passes of the SAME image, so the
+   scale is arbitrary — what matters is that a schedule with times beats one without. */
+function schedScore(rows){
+  if(!rows||!rows.length)return 0;
+  var s=0;
+  rows.forEach(function(r){
+    s+=10;                                  // a course we could name at all
+    if(r.days)s+=4;                         // ...on days we could read
+    if(r.start)s+=4;                        // ...at a time we could read
+    if(r.section)s+=2;
+    if(r.crn)s+=2;
+  });
+  return s;
+}
+function schedComplete(rows){
+  return !!(rows&&rows.length&&rows.every(function(r){return r.days&&r.start;}));
+}
+
+/* ---- one pipeline, two front doors --------------------------------------------------------
+   The screenshot path is: image -> Tesseract -> TEXT -> parseSchedRows(text) -> everything
+   below. Only the first two steps are about images; the rest is text handling. Splitting it
+   here lets a student PASTE their Student Center schedule and get the identical result — and
+   the pasted text is strictly better input, because nothing had to be guessed from pixels.
+   `wlByKey` is the OCR-only geometry pass over word boxes (it reads the WAIT LIST POSITION
+   column by x-position); pasted text has no boxes, so it passes {} and the status/position
+   parsed out of the text itself stands. */
 async function handleSchedImport(files){
   if(!files||!files.length)return;
   const f=files[0];
   renderSchedImport('busy','Loading text recognition…');
   try{ await loadOcr(); }
   catch(e){ renderSchedImport('done','Text recognition didn’t load — check your connection and try again.'); return; }
-  renderSchedImport('busy','Reading '+f.name+'…');
   try{
-    const url=URL.createObjectURL(f);
-    const res=await Tesseract.recognize(url,'eng');
-    URL.revokeObjectURL(url);
-    const data=(res&&res.data)||{};
-    const text=data.text||'';
-    let rows=parseSchedRows(text);
-    // Geometry pass reads the WAIT LIST POSITION column reliably when word boxes exist.
-    let wlByKey={}; try{ wlByKey=parseSchedWaitlist(data); }catch(_e){ wlByKey={}; }
+    var loaded=await schedLoadImage(f);
+    var im=loaded.im, rawUrl=loaded.url;
+    /* Upscale anything under ~1500px on its long edge. A screenshot taken on a phone and then
+       shared through Messages or Instagram arrives resized more often than not, and that
+       resize is exactly what turned 4-of-4 into 1-of-4 in earlier testing. */
+    var longEdge=Math.max(im.width||0,im.height||0);
+    var up=longEdge<1500?Math.min(2.5,1600/Math.max(longEdge,1)):1;
+
+    /* Three passes, best-guess first, and STOP as soon as one produces a schedule where every
+       class has a day and a time — there is no point spending eight more seconds of a
+       student's life confirming a result that is already complete. */
+    /* Pass 0 is the column split, when the page has columns. It runs FIRST because it is the
+       only pass that can't silently drop half the page. */
+    var prepped=null,cuts=[];
+    try{
+      prepped=schedPrepCanvas(im,{scale:up,gray:true,autoInvert:true,contrast:1.25});
+      if(prepped)cuts=schedColumnCuts(prepped);
+    }catch(_c){ cuts=[]; }
+
+    var PASSES=[];
+    if(prepped&&cuts.length){
+      PASSES.push({label:' (columns)',panels:schedSplitCanvas(prepped,cuts)});
+    }
+    PASSES.push({label:'',            src:prepped?prepped.toDataURL('image/png'):null,
+                                      opts:{scale:up,gray:true,autoInvert:true,contrast:1.25}});
+    PASSES.push({label:' (sharpening)',opts:{scale:up*1.4,gray:true,autoInvert:true,contrast:1.9}});
+    PASSES.push({label:' (original)', opts:null});   // processing can hurt a clean, high-res capture
+
+    var best=null;
+    for(var pi=0;pi<PASSES.length;pi++){
+      renderSchedImport('busy','Reading your schedule'+PASSES[pi].label+'…');
+      var text='',data={};
+      if(PASSES[pi].panels){
+        /* Each column is its own image, read top to bottom, then joined in reading order. */
+        var okAny=false;
+        for(var qi=0;qi<PASSES[pi].panels.length;qi++){
+          try{
+            var pr=await Tesseract.recognize(PASSES[pi].panels[qi],'eng');
+            text+=((pr&&pr.data&&pr.data.text)||'')+'\n';
+            okAny=true;
+          }catch(_pp){}
+        }
+        if(!okAny)continue;
+      }else{
+        var src=PASSES[pi].src||rawUrl;
+        if(!PASSES[pi].src&&PASSES[pi].opts){ try{ src=schedPrepImage(im,PASSES[pi].opts)||rawUrl; }catch(_p){ src=rawUrl; } }
+        var res;
+        try{ res=await Tesseract.recognize(src,'eng'); }catch(_t){ continue; }
+        data=(res&&res.data)||{};
+        text=data.text||'';
+      }
+      var rows=[]; try{ rows=parseSchedRows(text); }catch(_r){ rows=[]; }
+      var sc=schedScore(rows);
+      if(!best||sc>best.score)best={score:sc,text:text,data:data,rows:rows};
+      /* NEVER stop after the first pass. A pass that reads only ONE COLUMN produces a result
+         that is internally complete — every class it found has a day and a time — so
+         "complete" was letting a half-read schedule win before a better pass ever ran. That
+         is exactly what shipped: a five-class export imported as two, with both of them
+         perfectly formed. Complete is only trustworthy once something else has been tried. */
+      if(pi>=1&&schedComplete(rows)&&rows.length>=best.rows.length)break;
+    }
+    try{ URL.revokeObjectURL(rawUrl); }catch(e){}
+    if(!best){ renderSchedImport('done','Couldn’t read that image. Try a clearer screenshot — or paste the text instead.'); return; }
+    /* The geometry pass reads the WAIT LIST POSITION column by x-position, so it belongs to
+       the winning pass's word boxes and no other. */
+    var wlByKey={}; try{ wlByKey=parseSchedWaitlist(best.data); }catch(_e){ wlByKey={}; }
+    schedTextToImport(best.text,wlByKey,'image');
+  }catch(e){
+    console.error('[professify] schedule OCR failed:',e);
+    renderSchedImport('done','Couldn’t read that image. Try a clearer screenshot — or paste the text instead.');
+  }
+}
+
+/* Paste path: same parser, no Tesseract, no network. Select the schedule table in PASS or
+   Student Center, copy, paste. Works on a laptop with no screenshot to hand, and is the
+   recovery when OCR misreads — which it does, measurably, on a resized screenshot. */
+window.pasteSchedImport=function(){
+  var ta=document.getElementById('siPaste');
+  var txt=(ta&&ta.value||'').trim();
+  if(!txt){ renderSchedImport('paste','Paste your schedule first — select the table in Student Center and copy it.'); return; }
+  try{ schedTextToImport(txt,{},'paste'); }
+  catch(e){ console.error('[professify] schedule paste failed:',e);
+            renderSchedImport('paste','Couldn’t read that. Copy the whole schedule table, not just one row.'); }
+};
+
+function schedTextToImport(text,wlByKey,source){
+  {
+    let rows=parseSchedRows(text||'');
+    wlByKey=wlByKey||{};
+    /* This subject gate exists to strip the TABLE parser's false positives — room numbers and
+       building codes that happen to look like course codes. A CARD row is different: the
+       format guarantees it, because a card only opens on a line holding nothing but a code.
+       Applying the gate to those deleted WGQS 2201 a second time, after parseSchedCards had
+       deliberately kept it — the same silent-drop this whole thread started with, moved one
+       function downstream. Card rows pass; they carry `known` and the review screen labels an
+       unrecognised one "not in catalog" rather than pretending it was never there. */
     const _subs=(typeof knownSubjects==='function')?knownSubjects():null;
-    rows=rows.filter(function(r){var sub=r.code.split(' ')[0];return !_subs||_subs.has(sub)||(typeof COURSE_NAME!=='undefined'&&COURSE_NAME[r.code])||(typeof CLASS_INDEX!=='undefined'&&CLASS_INDEX[r.code]);});
+    rows=rows.filter(function(r){
+      if(r._card)return true;
+      var sub=r.code.split(' ')[0];
+      return !_subs||_subs.has(sub)||(typeof COURSE_NAME!=='undefined'&&COURSE_NAME[r.code])||(typeof CLASS_INDEX!=='undefined'&&CLASS_INDEX[r.code]);
+    });
     const mine=(typeof myClasses!=='undefined'?myClasses:[]);
     schImportCodes=rows.map(function(r){
       const ci=(typeof classInfo==='function')?classInfo(r.code):null;
@@ -11783,7 +12637,15 @@ async function handleSchedImport(files){
       const geo=wlByKey[r.code+'|'+r.crn];
       let status=r.status, wlPos=r.wlPos;
       if(geo){ status=geo.status; wlPos=geo.wlPos; }               // geometry wins when available
-      const prof=(match&&match.instructor)||'';
+      const haveFeed=!!(typeof SEAT_SECTIONS!=='undefined'&&SEAT_SECTIONS&&SEAT_SECTIONS[r.code]&&SEAT_SECTIONS[r.code].length);
+      const unverified=haveFeed&&!match;
+      /* The export prints the instructor in plain text — "Instructor: Patrick Frazier" — and
+         this threw it away whenever the section couldn't be matched, so a schedule naming
+         four professors imported as four rows of "Instructor TBA". Same rule the section and
+         the class number already follow: the feed wins when it confirms the section; the read
+         is the fallback, and is suppressed only when a feed exists that could have confirmed
+         it and didn't. */
+      const prof=(match&&match.instructor)||(unverified?'':(r.instructor||''));
       /* Tesseract read STAT 3120's "1:30PM" as "4:30PM" — a wrong value that looks right,
          which is worse than a missing one. When the section is confirmed, show ITS real
          meeting time and never the OCR'd one. */
@@ -11797,8 +12659,6 @@ async function handleSchedImport(files){
          showing nothing. (A dense printable export merges rows; that is how STAT 3120 picked
          up BUS 4404's class number in testing.) With no feed to check against, the OCR read
          is the best available and is shown as-is. */
-      const haveFeed=!!(typeof SEAT_SECTIONS!=='undefined'&&SEAT_SECTIONS&&SEAT_SECTIONS[r.code]&&SEAT_SECTIONS[r.code].length);
-      const unverified=haveFeed&&!match;
       /* A fuzzy-read section was blanked even when there was NO feed to check it against —
          so with no live section data we threw away a section we had actually read correctly.
          Same rule as the class number: suppress an unconfirmed value only when a feed exists
@@ -11807,10 +12667,23 @@ async function handleSchedImport(files){
         section:(match&&match.section)||(unverified?'':r.section)||'',
         crn:(match?String(match.class_nbr||''):'')||(unverified?'':r.crn)||'',
         prof:prof,days:days,matched:!!match,hadFeed:haveFeed,
+        /* What the SCHEDULE said, before matchSection had an opinion. Dedupe keys off this:
+           two cards are two sections even when the matcher pointed them at the same one. */
+        _read:(r.section||'')+'|'+(r.days||'')+'|'+(r.start||''),
         pick:known,status:status||'enrolled',wlPos:wlPos||null};
     });
     // Drop exact duplicate sections (same code + class number).
-    var seenK={}; schImportCodes=schImportCodes.filter(function(c){var k=c.code+'|'+(c.crn||c.section||Math.random());if(seenK[k])return false;seenK[k]=1;return true;});
+    /* Drop a section only when it is the SAME SECTION READ TWICE — a column split can put
+       one card in both panels. Keying on the matched class number instead meant that when
+       matchSection pointed two different cards at one feed section (which it will whenever
+       the section token is misread, and always for a course the scrape has no rows for), the
+       second card was deleted as a duplicate. That is exactly the lecture-plus-lab case:
+       PLSC 1175 S01 Wed 10:00 and PLSC 1175 S03 Wed 3:00 are two real enrolments, and one of
+       them silently vanished. What the schedule printed decides identity. */
+    var seenK={}; schImportCodes=schImportCodes.filter(function(c){
+      var k=c.code+'|'+(c._read&&c._read!=='||'?c._read:(c.crn||c.section||('r'+Math.random())));
+      if(seenK[k])return false; seenK[k]=1; return true;
+    });
     const dupNote=schImportCodes.length>new Set(schImportCodes.map(function(c){return c.code;})).size?' Two sections of one course stay separate.':'';
     /* Say when the read was poor. A blurry screenshot doesn't fail loudly — it quietly
        returns two classes out of five, and "Found 2 classes" reads like success. Measured on
@@ -11824,12 +12697,22 @@ async function handleSchedImport(files){
        screenshot can fix. Seen for real on the live site during an end-to-end test. */
     var checkable=schImportCodes.filter(function(c){return c.hadFeed;});
     var unmatched=checkable.filter(function(c){return !c.matched;}).length;
-    var quality=unmatched?(' '+unmatched+' of '+checkable.length+' couldn’t be matched to a real section — if that looks wrong, retake the screenshot at full size (not zoomed out, not a photo of your screen).'):'';
+    /* "Found 5 classes. 3 of 3 couldn’t be matched" is arithmetic nonsense to read: the 5
+       and the 3 count different things, and nothing on screen says so. Name the denominator. */
+    var _some=(unmatched===checkable.length)
+      ? ('None of the '+checkable.length+' we have section data for')
+      : (unmatched+' of the '+checkable.length+' we have section data for');
+    var quality=unmatched?(' '+_some+' matched a specific section — if that looks wrong, retake the screenshot at full size (not zoomed out, not a photo of your screen).'):'';
+    /* The "retake the screenshot at full size" advice is about pixels, so it is wrong for a
+       paste — nothing was read from an image. An unmatched row from pasted text means the
+       class number genuinely isn't in our section feed. */
+    if(source==='paste')quality=unmatched?(' '+_some+' matched a specific section — you can still add them; the section will fill in once the seat feed catches up.'):'';
     schImportMsg=schImportCodes.length?('Found '+schImportCodes.length+' class'+(schImportCodes.length===1?'':'es')+'.'+dupNote+quality+' Confirm your status on each — tap Enrolled / Waitlist.'):'';
+    if(!schImportCodes.length&&source==='paste'){
+      renderSchedImport('paste','No class codes in that text. Copy the whole schedule table — it needs to include codes like BUS 3306.');
+      return;
+    }
     renderSchedImport('done',schImportMsg);
-  }catch(e){
-    console.error('[professify] schedule OCR failed:',e);
-    renderSchedImport('done','Couldn’t read that image. Try a clearer screenshot.');
   }
 }
 function initPastClassTypeahead(){
@@ -12074,63 +12957,240 @@ function removeClassEntirely(code,ev){
    items from buildNotifications(), so this was a second view of one list. Gone with it:
    markActivitySeen / updateFeedBadge / unseenActivityCount / lastSeenActivity and the
    'professify_feed_seen' key — a second seen-state that could disagree with the bell's. */
+/* ---- a friend's profile: one page, no tabs ------------------------------------------------
+   It was three tabs — Overlap / Their classes / Already took — and Overlap led. That meant the
+   first thing you saw on a friend's profile was a two-colour grid of free hours whose headline
+   fact was usually "0 classes together", i.e. the least useful sentence available about them.
+   Their classes were one tap away behind it, and their waitlist wasn't shown anywhere at all.
+   Now: their classes, then what they're waitlisted for, then what they've already taken, top
+   to bottom. Nothing hidden, nothing to discover. Every course row is tappable through to
+   Explore, same as a block on the calendar. */
 function renderFriendProfile(){
   const f=findFriend(profileFriendId);if(!f)return;
   const el=document.getElementById('frpModal');if(!el)return;
   const mine=(typeof myClasses!=='undefined'?myClasses:[]);
   const shared=(f.classes||[]).filter(c=>mine.indexOf(c)>=0);
   const hist=(f.history||[]).slice().sort((a,b)=>(b.year-a.year)||((TERM_ORDER[b.term]??0)-(TERM_ORDER[a.term]??0)));
-  const tabs=[['overlap','Overlap'],['classes','Their classes ('+(f.classes||[]).length+')'],['took','Already took ('+hist.length+')']];
-  let body='';
-  if(profileTab==='overlap'){
-    body=scheduleOverlapHtml(f);
-  }else if(profileTab==='classes'){
-    /* Their times, not the course's. See friendMeetsResolved(). */
-    const FR=friendMeetsResolved(f);
-    body=(f.classes||[]).length
-      ? `<div class="frp-list">${f.classes.map(c=>{
-          const ci=(typeof classInfo==='function')?classInfo(c):null;
-          const together=mine.indexOf(c)>=0;
-          const mm=FR.byCode[c];
-          const confirmed=!!(mm&&mm.meet&&!mm.assumed);
-          const t=confirmed
-            ? (mm.meet.days.join('')+' '+fmtMin(mm.meet.start)+'–'+fmtMin(mm.meet.end)
-               +(mm.instructor?(' · '+mm.instructor):''))
-            : '';
-          return `<div class="frp-row${together?' on':''}">
-            <div class="frp-main"><div class="frp-t"><span class="hc">${escapeHtml(c)}</span>${ci&&ci.name?`<span class="fh-name">${escapeHtml(ci.name)}</span>`:''}${together?'<span class="frp-tog">together</span>':''}${f.wl&&f.wl[c]?`<span class="mc-wl" style="cursor:default">⏳ #${f.wl[c]} on waitlist</span>`:''}</div>
-            <div class="fh-s">${t?escapeHtml(t)
-              :(mm||FR.dropped.indexOf(c)>=0
-                 ? '<span class="fh-nomatch">Section not confirmed — this course runs several</span>'
-                 : '<span class="fh-nomatch">Time TBA</span>')}</div></div>
-            ${together?'':`<button class="fh-review" onclick="addClassFromFriend('${escapeHtml(c)}')">Add to mine</button>`}
-          </div>`;}).join('')}</div>`
-      : `<p class="fr-mut" style="padding:18px 2px">${escapeHtml(f.name.split(' ')[0])} hasn't added any classes yet.</p>`;
-  }else{
-    body=hist.length
+  const first=escapeHtml(String(f.name||'').split(' ')[0]||'They');
+  /* Their times, not the course's. See friendMeetsResolved(). */
+  const FR=friendMeetsResolved(f);
+  const wl=(f.wl&&typeof f.wl==='object')?f.wl:{};
+
+  /* A waitlisted course is still one of their classes — it just carries a position. Split the
+     list rather than duplicating: a course appears in exactly one of the two sections. */
+  const wlCodes=(f.classes||[]).filter(c=>wl[c]!=null);
+  const enrolled=(f.classes||[]).filter(c=>wl[c]==null);
+
+  const tap=(c)=>`onclick="closeFriendProfile();gotoSection('${escapeHtml(c).replace(/'/g,"\\'")}')"`;
+
+  function courseRow(c,opts){
+    opts=opts||{};
+    const ci=(typeof classInfo==='function')?classInfo(c):null;
+    const together=mine.indexOf(c)>=0;
+    const mm=FR.byCode[c];
+    const confirmed=!!(mm&&mm.meet&&!mm.assumed);
+    const t=confirmed
+      ? (mm.meet.days.join('')+' '+fmtMin(mm.meet.start)+'–'+fmtMin(mm.meet.end)
+         +(mm.instructor?(' · '+mm.instructor):''))
+      : '';
+    /* This is where the whole class goes — the full name, the section, the time, the
+       professor — because the calendar block deliberately carries only the code. The section
+       is printed ONLY when the section is actually known: an assumed one already says
+       "Section not confirmed" below, and a badge reading "S01" beside that would be the app
+       contradicting itself in two lines. */
+    const secBadge=(confirmed&&mm.section)?`<span class="frp-secid">${escapeHtml(String(mm.section))}</span>`:'';
+    return `<div class="frp-row${together?' on':''} frp-tap" role="button" tabindex="0" ${tap(c)}
+        title="${escAcc(c+(ci&&ci.name?' · '+ci.name:'')+' — sections, seats & professors')}">
+      <div class="frp-main"><div class="frp-t"><span class="hc">${escapeHtml(c)}</span>${secBadge}${ci&&ci.name?`<span class="fh-name">${escapeHtml(ci.name)}</span>`:''}${together?'<span class="frp-tog">together</span>':''}${opts.wlPos!=null?`<span class="mc-wl" style="cursor:default">⏳ #${escapeHtml(String(opts.wlPos))} on the list</span>`:''}</div>
+      <div class="fh-s">${t?escapeHtml(t)
+        :(mm||FR.dropped.indexOf(c)>=0
+           ? '<span class="fh-nomatch">Section not confirmed — this course runs several</span>'
+           : '<span class="fh-nomatch">Time TBA</span>')}</div></div>
+      ${together?'':`<button class="fh-review" onclick="event.stopPropagation();addClassFromFriend('${escapeHtml(c).replace(/'/g,"\\'")}')">Add to mine</button>`}
+    </div>`;
+  }
+
+  /* TWO TABS AGAIN (Tate, Aug 2026). One stacked page read fine for a friend with three
+     classes and badly for a real one: Tristan has 26 past courses, so "Already took" became a
+     wall you scroll through to reach nothing. Tabs put one list on screen at a time.
+     Waitlisted is NOT its own tab — being waitlisted is a state of a class they're taking,
+     not a separate collection, so it rides on the row as a badge. That is also how your own
+     My Classes shows it, and the same fact should not look like two different things. */
+  /* Their week, at the SAME scale as your own My Classes calendar — course code, course
+     name, and the faces of everyone else who's in it. A list of six rows tells you what they
+     take; a week tells you when they're free, which is the question people actually open a
+     friend's profile with. The list is still one tap away and still carries "Add to mine". */
+  function frpPeopleFor(code){
+    var out=[];
+    try{
+      /* Your own initials, not the word "YOU" — three characters do not fit a 16px circle,
+         and the accent fill plus the tooltip already say which one is you. */
+      if(typeof isMyClass==='function'&&isMyClass(code)){
+        var meNm=(typeof myDisplayName==='function'&&myDisplayName())||'You';
+        out.push({name:'You',ini:(typeof hmIni==='function'?hmIni(meNm):meNm.slice(0,2).toUpperCase()),
+                  color:'var(--accent)',me:true});
+      }
+      (typeof FRIENDS!=='undefined'?FRIENDS:[]).forEach(function(o){
+        if(!o||o.id===f.id)return;
+        if((o.classes||[]).indexOf(code)<0)return;
+        out.push({name:o.name,ini:o.ini||(typeof hmIni==='function'?hmIni(o.name):'?'),
+                  color:o.color||(typeof hmFriendColor==='function'?hmFriendColor(o):'#5E7A8A')});
+      });
+    }catch(e){}
+    return out;
+  }
+  function frpCalendarHtml(){
+    var codes=[],meta={};
+    (f.classes||[]).forEach(function(c){
+      var mm=FR.byCode[c];
+      /* Only CONFIRMED meetings may be drawn on a grid — a guessed section placed at an hour
+         is a confidently wrong answer to "when are they busy?". Unconfirmed ones fall through
+         to the note under the grid, named, so nothing disappears. */
+      if(!mm||!mm.meet||mm.assumed)return;
+      codes.push(c);
+      meta[c]={secs:[{meet:mm.meet,section:mm.section||'',prof:mm.instructor||'',
+                      status:(wl[c]!=null?'waitlisted':'enrolled'),wlPos:(wl[c]!=null?wl[c]:null)}]};
+    });
+    if(!codes.length)return '';
+    return renderMyCalendar(codes,{bad:{}},meta,{peopleFor:frpPeopleFor});
+  }
+  const frpCal=frpCalendarHtml();
+  const unplaced=(f.classes||[]).filter(c=>{var mm=FR.byCode[c];return !(mm&&mm.meet&&!mm.assumed);});
+  const unplacedNote=unplaced.length
+    ? `<div class="cal-tba">Not on the grid: ${unplaced.map(c=>escapeHtml(c)).join(', ')} — ${first} hasn’t confirmed which section, or it has no set time.</div>`
+    : '';
+  /* Same control My Classes uses for the same choice, so it looks and behaves identically. */
+  const frpToggle=frpCal?`<div class="frp-view"><div class="mc-viewtog">
+      <button type="button" class="${frpView==='list'?'':'on'}" onclick="setFrpView('cal')">Calendar</button>
+      <button type="button" class="${frpView==='list'?'on':''}" onclick="setFrpView('list')">List</button>
+    </div></div>`:'';
+  const listHtml=(f.classes||[]).length
+    ? `<div class="frp-list">${(f.classes||[]).map(c=>courseRow(c,{wlPos:(wl[c]!=null?wl[c]:null)})).join('')}</div>`
+    : `<p class="fr-mut frp-none">${first} hasn’t added any classes yet.</p>`;
+  const classesBlock=(f.classes||[]).length
+    ? frpToggle+((frpCal&&frpView!=='list')
+        ? `<div class="frp-cal">${frpCal}</div>${unplacedNote}`
+        : listHtml)
+    : `<p class="fr-mut frp-none">${first} hasn’t added any classes yet.</p>`;
+  const tookBlock=(
+    hist.length
       ? `<div class="frp-list">${hist.map(h=>{
           const ci=(typeof classInfo==='function')?classInfo(h.code):null;
           const pid=(h.professor&&typeof matchProfId==='function')?matchProfId(h.professor):null;
-          return `<div class="frp-row">
+          return `<div class="frp-row frp-tap" role="button" tabindex="0" ${tap(h.code)}
+              title="${escAcc(h.code+' — sections, seats & professors')}">
             <div class="frp-main"><div class="frp-t"><span class="hc">${escapeHtml(h.code)}</span>${ci&&ci.name?`<span class="fh-name">${escapeHtml(ci.name)}</span>`:''}</div>
-            <div class="fh-s"><span class="ht">${escapeHtml(h.term)} ${h.year}</span>${h.professor?(pid?`<span class="fh-profl" onclick="closeFriendProfile();openProf('${pid}')">${escapeHtml(h.professor)}</span>`:`<span class="hp">${escapeHtml(h.professor)}</span>`):''}</div></div>
-            <button class="fh-review" onclick="askFriendAbout('${f.id}','${escapeHtml(h.code)}')">Ask about it</button>
+            <div class="fh-s"><span class="ht">${escapeHtml(h.term)} ${h.year}</span>${h.professor?`<span class="fh-dot">·</span>`+(pid?`<span class="fh-profl" onclick="event.stopPropagation();closeFriendProfile();openProf('${pid}')">${escapeHtml(h.professor)}</span>`:`<span class="hp">${escapeHtml(h.professor)}</span>`):''}</div></div>
+            <button class="fh-review" onclick="event.stopPropagation();askFriendAbout('${f.id}','${escapeHtml(h.code).replace(/'/g,"\\'")}')">Ask about it</button>
           </div>`;}).join('')}</div>`
-      : `<p class="fr-mut" style="padding:18px 2px">${escapeHtml(f.name.split(' ')[0])} hasn't logged any past classes yet.</p>`;
-  }
+      : `<p class="fr-mut frp-none">${first} hasn’t logged any past classes yet.</p>`);
+
   el.innerHTML=`<div class="frp-wrap">
     <button class="mclose" onclick="closeFriendProfile()">&times;</button>
     <div class="frp-head">
-      <div class="ini" style="background:${f.color||colorForId(f.id)}">${initials(f.name)}</div>
+      <div class="ini" style="background:${f.color||colorForId(f.id)}">${(typeof avaHtml==='function')?avaHtml(f.avatar_url,f.name):initials(f.name)}</div>
       <div>
         <h2>${escapeHtml(f.name)}</h2>
         <div class="frp-sub">${f.handle?`<a class="fr-src instagram" href="https://instagram.com/${encodeURIComponent(f.handle)}" target="_blank" rel="noopener noreferrer">@${escapeHtml(f.handle)}</a>`:''}
           <span class="fr-shared">${shared.length} class${shared.length===1?'':'es'} with you</span></div>
       </div>
     </div>
-    <div class="frp-tabs">${tabs.map(([k,label])=>`<button class="wl-tab ${profileTab===k?'on':''}" onclick="setProfileTab('${k}')">${escapeHtml(label)}</button>`).join('')}</div>
-    <div class="frp-body">${body}</div>
+    <div class="frp-tabs">
+      <button class="wl-tab ${profileTab==='took'?'':'on'}" onclick="setProfileTab('classes')">Their classes (${(f.classes||[]).length})</button>
+      <button class="wl-tab ${profileTab==='took'?'on':''}" onclick="setProfileTab('took')">Already took (${hist.length})</button>
+    </div>
+    <div class="frp-body">${profileTab==='took'?tookBlock:classesBlock}</div>
   </div>`;
+}
+/* ---- one row of the review screen -------------------------------------------------------
+   A class the OCR could not fully read is not a failure to hide — it is the one thing on this
+   screen that needs the student. It gets said plainly and it gets a control that FIXES it,
+   built from real section data wherever we hold any, so completing an import never means
+   typing a time the app then treats as fact. */
+function siNeedsFix(c){
+  if(!c||!c.pick)return false;
+  if(c._noTime)return false;              // they told us it has no set time — that IS the answer
+  return !c.days;                          // no meeting string at all
+}
+function siSectionOptions(code){
+  try{
+    if(typeof SEAT_SECTIONS==='undefined'||!SEAT_SECTIONS)return [];
+    return (SEAT_SECTIONS[code]||[]).map(function(r,ix){
+      var t=(typeof prettyTime==='function')?prettyTime(r.days):(r.days||'');
+      return {ix:ix,label:[(r.section||('Section '+(ix+1))),t||'time TBA',r.instructor||''].filter(Boolean).join(' · ')};
+    });
+  }catch(e){ return []; }
+}
+window.siPickSection=function(i,v){
+  var c=schImportCodes[i]; if(!c)return;
+  if(v===''){ c._wantPick=false; renderSchedImport('done',schImportMsg); return; }
+  if(v==='__none'){
+    /* "No set meeting time" is a real answer, not a skip: an async class genuinely never
+       meets, and recording that is different from leaving a hole. */
+    c._noTime=true; c.days=''; c._wantPick=false;
+    renderSchedImport('done',schImportMsg); return;
+  }
+  try{
+    var r=(SEAT_SECTIONS[c.code]||[])[parseInt(v,10)];
+    if(r){
+      /* Everything here comes from the live feed, so the row stops being an OCR guess and
+         becomes a confirmed section — same standard as a section we matched automatically. */
+      c.section=r.section||c.section; c.crn=String(r.class_nbr||'')||c.crn;
+      c.prof=r.instructor||c.prof;
+      c.days=(typeof prettyTime==='function')?prettyTime(r.days):(r.days||'');
+      c._noTime=false; c.matched=true; c._fixed=true; c._wantPick=false;
+    }
+  }catch(e){}
+  renderSchedImport('done',schImportMsg);
+};
+window.siWantPick=function(i){
+  var c=schImportCodes[i]; if(!c)return;
+  c._wantPick=!c._wantPick;
+  renderSchedImport('done',schImportMsg);
+};
+function siItemHtml(c,i){
+  var opts=siSectionOptions(c.code);
+  var needs=siNeedsFix(c);
+  var showPicker=(needs||c._wantPick)&&c.pick;
+  var meta=[c.prof,c.days].filter(Boolean).join(' · ');
+  var picker='';
+  if(showPicker){
+    picker=opts.length
+      ? '<div class="si-fix"><label class="si-fixl" for="siSec'+i+'">Which section are you in?</label>'
+        +'<select id="siSec'+i+'" class="si-sel" onchange="siPickSection('+i+',this.value)">'
+        +'<option value="">Choose…</option>'
+        +opts.map(function(o){return '<option value="'+o.ix+'">'+escapeHtml(o.label)+'</option>';}).join('')
+        +'<option value="__none">This class has no set meeting time</option>'
+        +'</select></div>'
+      /* No live sections for this course — which right now means our scrape is missing it, not
+         that the class isn't running. Don't ask them to type a time we'd then present as
+         verified; offer the one answer we can record honestly and say why. */
+      : '<div class="si-fix"><span class="si-fixl">We don’t have this term’s sections for '+escapeHtml(c.code)+' yet, so we can’t offer a list.</span>'
+        +'<button type="button" class="si-fixbtn" onclick="siPickSection('+i+',\'__none\')">It has no set meeting time</button>'
+        +'<span class="si-fixnote">Otherwise add it now and set the time later from My Classes.</span></div>';
+  }
+  return '<div class="si-item'+(c.known?'':' unknown')+(needs?' needs':'')+'">'
+    +'<label class="si-pick"><input type="checkbox" '+(c.pick?'checked':'')+' onchange="schImportCodes['+i+'].pick=this.checked;renderSchedImport(\'done\',schImportMsg)"></label>'
+    +'<div class="si-body">'
+      +'<div class="si-top"><span class="hc">'+escapeHtml(c.code)+'</span>'
+        +(c.section?'<span class="si-sec">'+escapeHtml(c.section)+'</span>':'')
+        +(c.known?'':'<span class="fh-nomatch">not in catalog</span>')
+        +(needs?'<span class="si-needs">needs a time</span>':'')
+        +(c._fixed?'<span class="si-fixed">✓ you set this</span>':'')
+        +(c._noTime?'<span class="si-anyt">no set meeting time</span>':'')+'</div>'
+      +(c.name?'<div class="fh-name">'+escapeHtml(c.name)+'</div>':'')
+      +(meta?'<div class="si-prof">'+escapeHtml(meta)+'</div>':'')
+      +picker
+      +'<div class="si-status">'
+        +'<button type="button" class="si-seg'+(c.status==='enrolled'?' on':'')+'" onclick="siSetStatus('+i+',\'enrolled\')">✓ Enrolled</button>'
+        +'<button type="button" class="si-seg wl'+(c.status==='waitlisted'?' on':'')+'" onclick="siSetStatus('+i+',\'waitlisted\')">⏳ Waitlist</button>'
+        +(c.status==='waitlisted'?'<span class="si-pos">#<input type="number" min="1" max="199" value="'+(c.wlPos||'')+'" placeholder="?" onchange="siSetPos('+i+',this.value)"></span>':'')
+        /* Changing a section the app READ correctly has to be possible too — OCR misread a
+           section token as S02 when the schedule said S01 during testing, and without this
+           the student's only recourse was to redo the whole import. */
+        +((!showPicker&&opts.length>1&&c.pick)?'<button type="button" class="si-change" onclick="siWantPick('+i+')">Change section</button>':'')
+      +'</div>'
+    +'</div></div>';
 }
 function renderSchedImport(state,msg){
   const el=document.getElementById('siModal');if(!el)return;
@@ -12144,41 +13204,58 @@ function renderSchedImport(state,msg){
        codes like BUS 3306"). Two different explanations for one failure, the second of which
        blamed the student's screenshot for a problem in our code. When there's a specific
        message, it stands alone. */
+    /* Say what is INCOMPLETE before saying what was found. "Found 5 classes" reads as success
+       even when two of them have no meeting time — and a class with no time is the one that
+       will silently be missing from the student's week later, which is when they'll conclude
+       the app doesn't work. Name it here, while they can still fix it in two taps. */
+    const _gaps=schImportCodes.filter(siNeedsFix).length;
     body=`${msg?`<p class="fr-mut" style="margin:0 0 14px">${escapeHtml(msg)}</p>`:''}
+      ${_gaps?`<div class="si-gapbar"><b>${_gaps} class${_gaps===1?'':'es'} need${_gaps===1?'s':''} a meeting time.</b>
+        We couldn’t read one, so pick the section you’re actually in — or mark it as having no set time.</div>`:''}
       ${schImportCodes.length?`
-        <div class="si-list">${schImportCodes.map((c,i)=>`
-          <div class="si-item${c.known?'':' unknown'}">
-            <label class="si-pick"><input type="checkbox" ${c.pick?'checked':''} onchange="schImportCodes[${i}].pick=this.checked;renderSchedImportCount()"></label>
-            <div class="si-body">
-              <div class="si-top"><span class="hc">${escapeHtml(c.code)}</span>${c.section?`<span class="si-sec">${escapeHtml(c.section)}</span>`:''}${c.known?'':'<span class="fh-nomatch">not in catalog</span>'}</div>
-              ${c.name?`<div class="fh-name">${escapeHtml(c.name)}</div>`:''}
-              ${(c.prof||c.days)?`<div class="si-prof">${escapeHtml([c.prof,c.days].filter(Boolean).join(' · '))}</div>`:''}
-              <div class="si-status">
-                <button type="button" class="si-seg${c.status==='enrolled'?' on':''}" onclick="siSetStatus(${i},'enrolled')">✓ Enrolled</button>
-                <button type="button" class="si-seg wl${c.status==='waitlisted'?' on':''}" onclick="siSetStatus(${i},'waitlisted')">⏳ Waitlist</button>
-                ${c.status==='waitlisted'?`<span class="si-pos">#<input type="number" min="1" max="199" value="${c.wlPos||''}" placeholder="?" onchange="siSetPos(${i},this.value)"></span>`:''}
-              </div>
-            </div>
-          </div>`).join('')}</div>
+        <div class="si-list">${schImportCodes.map((c,i)=>siItemHtml(c,i)).join('')}</div>
         <div class="si-actions">
           <span id="siCount" class="fr-mut"></span>
           <button class="btn primary" onclick="confirmSchedImport()">Add selected</button>
         </div>`
-      : (msg ? '' : `<div class="si-empty"><b>No class codes found.</b><p>Make sure the screenshot shows codes like <code>BUS 3306</code>. You can also add classes by hand from Explore.</p></div>`)}
-      <button class="fr-addtoggle" style="margin-top:12px" onclick="renderSchedImport('idle')">Try another image</button>`;
+      : (msg ? '' : `<div class="si-empty"><b>No class codes found.</b><p>Make sure the screenshot shows codes like <code>BUS 3306</code> — or <button class="qw-nudge" onclick="renderSchedImport('paste')">paste the text instead</button>, which doesn’t depend on image quality at all.</p></div>`)}
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="fr-addtoggle" onclick="renderSchedImport('idle')">Try another image</button>
+        <button class="fr-addtoggle" onclick="renderSchedImport('paste')">Paste the text instead</button>
+      </div>`;
+  }else if(state==='paste'){
+    /* The paste box is deliberately plain. Students reach it after OCR has let them down, or
+       because they're on a laptop with the schedule open in another tab and no screenshot to
+       take — neither of those moments wants a second file picker. */
+    body=`<div class="si-tabs">
+        <button class="si-tab" onclick="renderSchedImport('idle')">Screenshot</button>
+        <button class="si-tab on">Paste text</button>
+      </div>
+      ${msg?`<p class="fr-mut" style="margin:0 0 12px">${escapeHtml(msg)}</p>`:''}
+      <p class="fr-mut" style="margin:0 0 10px">Open your schedule in PASS or Student Center, select the table, copy it, and paste it here. Nothing is uploaded.</p>
+      <textarea id="siPaste" class="si-paste" placeholder="Paste your schedule here" spellcheck="false"></textarea>
+      <div class="si-actions"><span class="fr-mut">Class codes, days, times and waitlist positions are all read from the text.</span>
+        <button class="btn primary" onclick="pasteSchedImport()">Read it</button></div>`;
   }else{
-    body=`<div class="si-drop" onclick="document.getElementById('siFile').click()">
+    body=`<div class="si-tabs">
+        <button class="si-tab on">Screenshot</button>
+        <button class="si-tab" onclick="renderSchedImport('paste')">Paste text</button>
+      </div>
+      <div class="si-drop" onclick="document.getElementById('siFile').click()">
         <div class="si-ico">🗓️</div>
         <b>Upload a screenshot of your schedule</b>
         <p>Your Cal Poly schedule, a photo of it, anything with class codes on it. We'll pull out the classes and you pick which to keep.</p>
         <button class="btn primary">Choose image</button>
       </div>
-      <input id="siFile" type="file" accept="image/*" style="display:none" onchange="handleSchedImport(this.files)">`;
+      <input id="siFile" type="file" accept="image/*" style="display:none" onchange="handleSchedImport(this.files)">
+      <p class="fr-mut" style="margin:11px 2px 0">On a laptop with no screenshot handy? <button class="qw-nudge" onclick="renderSchedImport('paste')">Paste the text instead</button></p>`;
   }
+  /* The heading said "Import from a screenshot" when a screenshot is now one of two ways in.
+     A title that names one method makes the other look like a workaround. */
   el.innerHTML=`<div class="rate-wrap"><button class="mclose" onclick="closeSchedImport()">&times;</button>
     <div class="rate-step" style="text-align:left">
       <div class="rate-kicker">Add classes fast</div>
-      <h2 class="rate-h" style="margin-bottom:6px">Import from a screenshot</h2>
+      <h2 class="rate-h" style="margin-bottom:6px">Import your schedule</h2>
       ${body}
     </div></div>`;
   if(state==='done')renderSchedImportCount();
@@ -12322,7 +13399,11 @@ function setClassStatus(code,status,ev){
   updateWatchUI();renderWatchClasses();updateWatchTabCounts();
   if(typeof renderExplore==='function')renderExplore();
 }
+/* The profile is one page now, so there is no tab to set. Kept as a no-op that still repaints
+   because openFriendProfile(id, tab) is called with a tab argument from several places, and a
+   missing function there would throw rather than degrade. */
 function setProfileTab(t){profileTab=t;renderFriendProfile();}
+function setFrpView(v){ frpView=(v==='list')?'list':'cal'; try{localStorage.setItem('professify_frp_view',frpView);}catch(e){} renderFriendProfile(); }
 function setSecCount(id,n){const el=document.getElementById(id);if(el)el.textContent=n?' ('+n+')':'';}
 async function showLoadDiagnostics(){
   const out=document.getElementById('frFriendsOut');if(!out)return;
@@ -13004,11 +14085,43 @@ function prettyTime(days){ if(!days)return ''; if(/^\s*tba\s*$/i.test(days))retu
 //     return null (unrated) rather than guessing the wrong same-surname professor.
 var _profByName=null;
 function _normName(s){return String(s||'').toLowerCase().replace(/[.,]/g,' ').replace(/\s+/g,' ').trim();}
+/* Common short forms, so a real match isn't thrown away over "Bill" vs "William".
+   Deliberately small: every entry here is a licence to call two different strings the same
+   person, and a wrong rating is worse than a missing one. */
+var _NICK={al:'albert',alex:'alexander',alexa:'alexandra',andy:'andrew',ben:'benjamin',beth:'elizabeth',
+ betty:'elizabeth',bill:'william',billy:'william',bob:'robert',bobby:'robert',cathy:'catherine',
+ kathy:'catherine',kate:'catherine',katie:'catherine',charlie:'charles',chuck:'charles',
+ chris:'christopher',dan:'daniel',danny:'daniel',dave:'david',debbie:'deborah',deb:'deborah',
+ dick:'richard',rick:'richard',ricky:'richard',don:'donald',doug:'douglas',ed:'edward',
+ eddie:'edward',ted:'edward',fred:'frederick',greg:'gregory',hank:'henry',jake:'jacob',
+ coby:'jacob',jeff:'jeffrey',jen:'jennifer',jenny:'jennifer',jim:'james',jimmy:'james',
+ joe:'joseph',ken:'kenneth',larry:'lawrence',liz:'elizabeth',lisa:'elisabeth',matt:'matthew',
+ meg:'margaret',peggy:'margaret',mike:'michael',nick:'nicholas',pat:'patrick',pete:'peter',
+ phil:'philip',ron:'ronald',sam:'samuel',steve:'steven',stephen:'steven',sue:'susan',
+ susie:'susan',tom:'thomas',tony:'anthony',vince:'vincent',will:'william',zach:'zachary'};
+function _firstKey(f){f=String(f||'').toLowerCase();return _NICK[f]||f;}
+/* Could these two first names be the same person? An EMPTY side can't contradict anything,
+   so it stays compatible; two spelled-out names that disagree are a hard no. */
+function _firstCompat(a,b){
+  a=String(a||'').toLowerCase().replace(/[^a-z]/g,'');
+  b=String(b||'').toLowerCase().replace(/[^a-z]/g,'');
+  if(!a||!b)return true;                                  // nothing to contradict
+  if(a===b)return true;
+  if(a.length===1||b.length===1)return a.charAt(0)===b.charAt(0);   // one side is an initial
+  if(_firstKey(a)===_firstKey(b))return true;             // Bill / William
+  if(a.charAt(0)!==b.charAt(0))return false;
+  return a.indexOf(b)===0||b.indexOf(a)===0;              // truncation: "Cath" / "Catherine"
+}
 function matchProfId(name){
   if(!name||typeof PROFESSORS==='undefined')return null;
   if(!_profByName){
     var full={}, byLast={};
     for(var id in PROFESSORS){
+      /* Unrated instructors get a PROFESSORS entry once someone watches or reviews them.
+         They must NOT enter this index: matchProfId answers "which RATED professor is this",
+         and scrapedProfPool() calls it to decide who still needs a placeholder — so indexing
+         them here would make a watched instructor match himself and vanish from the pool. */
+      if(PROFESSORS[id]&&PROFESSORS[id].scraped)continue;
       var nm=_normName(PROFESSORS[id].name); if(!nm)continue;
       if(!full[nm])full[nm]=id;
       var parts=nm.split(' ');
@@ -13028,12 +14141,18 @@ function matchProfId(name){
   if(canon&&_profByName.full[canon])return _profByName.full[canon];   // exact full-name
   var bucket=_profByName.byLast[last];
   if(!bucket||!bucket.length)return null;
-  if(bucket.length===1)return bucket[0].id;                          // unique surname
-  var fi=first.charAt(0);
-  if(fi){
-    var byFi=bucket.filter(function(x){return x.fi===fi;});
-    if(byFi.length===1)return byFi[0].id;                            // unique by first initial
-    if(first.length>1){ var byFn=bucket.filter(function(x){return x.first===first;}); if(byFn.length===1)return byFn[0].id; }
+  /* A shared surname is not an identification. This used to return the single rated prof with
+     that surname outright, so the seat feed's "Coby Snyder" resolved to PolyRatings' Susan
+     Snyder — his sections then showed her 4.5, her name appeared on his course cards, and he
+     was skipped from the unrated pool so he had no profile of his own. Require the first names
+     to at least be compatible; when they aren't, say nothing. */
+  var cands=bucket.filter(function(x){return _firstCompat(first,x.first);});
+  if(cands.length===1)return cands[0].id;
+  /* Still more than one after the first-name filter: prefer an exact first-name hit before
+     giving up ("James Lee" over "Jamie Lee" and "J. Lee"). */
+  if(cands.length>1&&first.length>1){
+    var exact=cands.filter(function(x){return x.first===first;});
+    if(exact.length===1)return exact[0].id;
   }
   return null;                                                       // ambiguous → unrated, never guess
 }
@@ -13125,7 +14244,9 @@ function scrapedProfPool(){
    (real time + real seat status), and a path to leave the first review. Self-contained
    so it doesn't touch the rated-professor review modal. */
 function openScrapedProf(i){
-  var sp=(window._scrapedShown||[])[i]; if(!sp)return;
+  /* Called with an index from the Explore grid, and with the record itself from the
+     watchlist — where there is no grid to index into. */
+  var sp=(i&&typeof i==='object')?i:(window._scrapedShown||[])[i]; if(!sp)return;
   window._scrapedCurrent=sp;
   var rows=sp.teaches.map(function(t){
     return '<div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;padding:10px 0;border-bottom:1px solid '+PFC.line+'">'
@@ -13142,7 +14263,10 @@ function openScrapedProf(i){
     +'<div style="background:'+PFC.panel+';border:1px solid '+PFC.line+';border-radius:10px;padding:12px;margin-bottom:16px;font-size:13px;color:'+PFC.ink2+';font-style:italic">No student ratings yet — be the first to review this professor.</div>'
     +'<div style="font-size:12px;color:'+PFC.ink2+';letter-spacing:.5px;margin-bottom:6px">CLASSES THIS TERM ('+sp.teaches.length+')</div>'
     +'<div style="margin-bottom:16px">'+(rows||'<div style="font-size:13px;color:'+PFC.ink2+';font-style:italic;padding:10px 0">No sections on the schedule right now.</div>')+'</div>'
-    +'<button class="rate-open" onclick="reviewScrapedProf()" style="width:100%;background:'+PFC.green+';color:'+PFC.greenInk+';border:none;border-radius:10px;padding:13px;font-size:14px;font-weight:500;cursor:pointer">Be the first to review</button>'
+    +'<div style="display:flex;gap:8px">'
+    +'<button class="rate-open" onclick="reviewScrapedProf()" style="flex:1;background:'+PFC.green+';color:'+PFC.greenInk+';border:none;border-radius:10px;padding:13px;font-size:14px;font-weight:500;cursor:pointer">Be the first to review</button>'
+    +'<button onclick="spWatchCurrent(event)" style="flex:none;background:transparent;color:'+PFC.ink+';border:1px solid '+PFC.line+';border-radius:10px;padding:13px 16px;font-size:14px;font-weight:500;cursor:pointer">'
+    +(isWatched(spWatchId(sp))?'\u2713 Watching':'\u2606 Watch')+'</button></div>'
     +'</div>';
   document.getElementById('mback').classList.add('open'); document.body.style.overflow='hidden';
 }
@@ -13218,10 +14342,12 @@ function fp_anyOpenSection(code,excludeId){
 function fp_card(o){
   var key=fp_key(o.code,o.profId), sel=fpIsChosen(o);
   var s=o.seat;
-  // "Not offered this term" = the course has NO section in the current-term class feed.
-  // These are real catalog courses (they count toward the degree) that simply aren't on
-  // this term's schedule — so we must NOT dress them up as an offered class with a
-  // roster instructor + "Time TBA / check class schedule". Show them plainly as not offered.
+  // No section in this term's feed. These are real catalog courses (they count toward the
+  // degree) that we hold no sections for — so we must NOT dress them up as an offered class
+  // with a roster instructor + "Time TBA / check class schedule". But we also can't say Cal
+  // Poly isn't running them: zero rows is our scrape coming back empty, and on 2026-08-24 the
+  // live feed held 43 HIST sections with not one full or waitlisted, so it demonstrably does
+  // come back empty for whole departments. Say what we have, not what the university is doing.
   var notOffered = !o.real && s && (s.unknown || s.cls==='unknown');
   var pname=notOffered?'':(o.p?o.p.name:'Instructor TBA');
   var fit=!notOffered&&o.p&&typeof matchesStudent==='function'&&matchesStudent(o.p);
@@ -13253,7 +14379,7 @@ function fp_card(o){
     +'<div class="fp-cmeta"><div class="fp-cn">'+fpEsc(o.code)+(pname?' · '+fpEsc(pname):'')+(fit?'<span class="fp-fit">Fits you</span>':'')+'</div>'
     +'<div class="fp-cs">'+(o.name?fpEsc(o.name)+' · ':'')+(notOffered?'Not on the Fall 2026 class schedule':(o.time?fpEsc(o.time):(o.real?'Time to be arranged (async / by arrangement)':'Time TBA · check class schedule')))+'</div></div>'
     +'<div class="fp-cstat">'+(notOffered?'':(o.p&&typeof rateHtmlBlend==='function'?rateHtmlBlend(o.p):(typeof rateHtml==='function'?rateHtml(o.p?o.p.rating:null):'—')))+'</div>'
-    +'<div class="fp-seat '+s.cls+'" title="'+(notOffered?'This course is not on the current class schedule — likely offered a different term':(s.real?(seatSourceLine()+' — open seats, class size, and waitlist depth'):'Not posted yet — check the official class schedule'))+'">'+fpEsc(notOffered?(typeof seatFeedLoaded==='function'&&!seatFeedLoaded()?'Checking this term\u2019s sections\u2026':'Not offered this term'):seatBadge(s))+'</div>'
+    +'<div class="fp-seat '+s.cls+'" title="'+(notOffered?'We have no sections for this course this term — Cal Poly may still be running it; check the official class search':(s.real?(seatSourceLine()+' — open seats, class size, and waitlist depth'):'Not posted yet — check the official class schedule'))+'">'+fpEsc(notOffered?(typeof seatFeedLoaded==='function'&&!seatFeedLoaded()?'Checking this term\u2019s sections\u2026':'No section data'):seatBadge(s))+'</div>'
     +'</div>'+backup;
 }
 
@@ -13975,12 +15101,25 @@ function schedShareLink(){
   try{ if(typeof sbUser!=='undefined'&&sbUser&&sbUser.id)qs+='&add='+encodeURIComponent(sbUser.id); }catch(e){}
   return base?(base+'/?'+qs):('professify:sched:'+payload);
 }
+/* The send animation (a flying schedule card) was built on 2026-08-24 and pulled the same
+   day — removed outright rather than left dead behind a flag, so nothing can render it by
+   accident. Feedback is the toast, and it still only claims success once the browser
+   confirms it: the clipboard promise decides what the message says, never the click. */
 function shareMySchedule(){
   if(!(myClasses&&myClasses.length)){ if(typeof frToast==='function')frToast('Add a class to My Classes first, then share your schedule.'); return; }
   var link=schedShareLink(); if(!link)return;
-  if(navigator.share){ navigator.share({title:'My Professify schedule',text:'Here’s my Cal Poly schedule — see if we overlap:',url:link}).catch(function(){}); return; }
+  /* navigator.share and clipboard.writeText both want to be called inside the click. */
+  if(navigator.share){
+    navigator.share({title:'My Professify schedule',text:'Here’s my Cal Poly schedule — see if we overlap:',url:link})
+      .catch(function(){});
+    return;
+  }
   try{
-    if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(link).then(function(){if(typeof frToast==='function')frToast('Schedule link copied — send it to a friend.');},function(){if(typeof frToast==='function')frToast('Couldn’t copy automatically — long-press to copy the link.');}); }
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(link).then(
+        function(){ if(typeof frToast==='function')frToast('Schedule link copied — send it to a friend.'); },
+        function(){ if(typeof frToast==='function')frToast('Couldn’t copy automatically — long-press to copy the link.'); });
+    }
     else if(typeof frToast==='function')frToast('Long-press the link to copy it.');
   }catch(e){}
 }
@@ -14834,8 +15973,7 @@ async function loadMySectionsFromDb(){
       var arr=myClassMeta[code].secs, ix=arr.findIndex(function(x){return String(x.crn)===rec.crn&&rec.crn;});
       if(ix>=0)arr[ix]=rec; else arr.push(rec);
       var f=arr[0]; if(f){myClassMeta[code].prof=f.prof||myClassMeta[code].prof; if(f.days)myClassMeta[code].time=f.days;}
-      var wlSec=arr.filter(function(x){return x.status==='waitlisted'&&x.wlPos;})[0];
-      if(wlSec)myClassMeta[code].wl=wlSec.wlPos;
+      mcSyncWaitlist(code);
     });
     try{saveMyClasses();saveMyClassMeta();}catch(e){}
     try{if(typeof renderMyClasses==='function')renderMyClasses();}catch(e){}
@@ -15042,13 +16180,19 @@ loadSeats();  // pull real seat status from Supabase on load
       <input type="file" id="epFile" accept="image/png,image/jpeg,image/webp" hidden onchange="epPickFile(this)">
     </div>
 
+    <!-- These two placeholders were "Tate Sims" and "tatesims" — the developer's own name and
+         handle, hardcoded, shown to every student who ever opened this dialog. A greyed value
+         in an empty field reads as a suggestion, so every new account was being nudged toward
+         someone else's identity. Neither field gets an example now: the label says what it is
+         and the hint under it says the rules. A username is the one thing here that must be
+         the person's own choice, so the app proposes nothing. -->
     <label class="ep-lab" for="epName">Name</label>
-    <input id="epName" class="rate-input ep-in" maxlength="40" placeholder="Tate Sims" oninput="epValidate()">
+    <input id="epName" class="rate-input ep-in" maxlength="40" autocomplete="name" oninput="epValidate()">
     <div class="ep-hint">Your real name — how friends recognise you.</div>
 
     <label class="ep-lab" for="epUser">Username</label>
-    <div class="ep-userwrap"><span class="ep-at">@</span>
-      <input id="epUser" class="rate-input ep-in ep-userin" maxlength="20" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="tatesims" oninput="epValidate()"></div>
+    <div class="ep-userwrap"><span class="ep-at" aria-hidden="true">@</span>
+      <input id="epUser" class="rate-input ep-in ep-userin" maxlength="20" autocapitalize="none" autocorrect="off" autocomplete="off" spellcheck="false" oninput="epValidate()"></div>
     <div class="ep-hint" id="epUserMsg">3–20 characters · letters, numbers and underscores.</div>
 
     <div id="epErr" class="rate-err" style="min-height:0"></div>
@@ -16571,14 +17715,15 @@ function hmClassPeople(code,excludeId){
 function hmFaceRow(people){
   if(!people||!people.length)return '';
   var esc2=(typeof escapeHtml==='function')?escapeHtml:function(x){return x;};
-  var shown=people.slice(0,3);
+  var FACE_MAX=4;                     // was 3 — "+N" was swallowing most of the answer
+  var shown=people.slice(0,FACE_MAX);
   var html=shown.map(function(p){
     var inner=p.img
       ? '<img src="'+esc2(p.img)+'" alt="" loading="lazy">'
       : esc2(String(p.ini||'?').slice(0,2));
     return '<i class="qw-face'+(p.me?' me':'')+'" style="background:'+esc2(p.bg||'#5E7A8A')+'" title="'+esc2(p.name||'')+'">'+inner+'</i>';
   }).join('');
-  if(people.length>3)html+='<i class="qw-face more">+'+(people.length-3)+'</i>';
+  if(people.length>FACE_MAX)html+='<i class="qw-face more">+'+(people.length-FACE_MAX)+'</i>';
   return '<span class="qw-faces">'+html+'</span>';
 }
 /* Assign a lane to every meeting on a day so two classes at the same hour sit SIDE BY SIDE
@@ -16608,59 +17753,6 @@ function hmLaneOut(day){
    GUESS collides with anything else in the week, we stop drawing it and name it underneath
    instead. Confirmed sections are never dropped: if two of those collide that is real, and
    the student's own registrar data gets to say so. */
-/* Answers "why is my friend's week a chip list?" without a console. Three possible states,
-   three different fixes, and they are indistinguishable from the card alone:
-     1. the my_sections read is refused        -> the row-level policy isn't applied
-     2. it reads fine but nobody has sections  -> they added courses, never picked a section
-     3. sections exist                         -> the week draws; nothing to fix
-   Read-only: it reports what the loader already fetched, it doesn't write anything. */
-window.setCheckFriendSecs=async function(){
-  var out=document.getElementById('setSecOut'); if(!out)return;
-  out.textContent='Checking…';
-  var lines=[];
-  try{
-    if(typeof sbUser==='undefined'||!sbUser){ out.textContent='Log in first — this reads your own friends list.'; return; }
-    var list=(typeof friendsList!=='undefined'&&Array.isArray(friendsList))?friendsList:[];
-    if(!list.length){ out.textContent='No friends loaded yet. Open Friends, let it load, then check again.'; return; }
-    /* Ask the database directly rather than trusting a cached list, so a stale cache can't
-       report a problem that no longer exists. */
-    var readable=null, rows=0, err='';
-    try{
-      var r=await sb.from('my_sections').select('user_id,code,class_nbr')
-              .in('user_id',list.map(function(f){return f.id;}));
-      if(r.error){ readable=false; err=r.error.message||''; }
-      else { readable=true; rows=(r.data||[]).length; }
-    }catch(e){ readable=null; err=(e&&e.message)||''; }
-    var withSecs=list.filter(function(f){
-      return (f.secs||[]).some(function(x){return x&&x.crn;});
-    });
-    lines.push('<b style="color:var(--text)">'+withSecs.length+' of '+list.length
-      +' friend'+(list.length===1?'':'s')+'</b> '+(withSecs.length===1?'has':'have')
-      +' section-level data.');
-    lines.push(list.map(function(f){
-      var n=(f.secs||[]).filter(function(x){return x&&x.crn;}).length;
-      return escapeHtml(f.name)+' — '+n+' of '+(f.classes||[]).length+' classes with a section';
-    }).join('<br>'));
-    if(readable===false){
-      lines.push('<b style="color:var(--low)">The my_sections read was refused</b>'
-        +(err?(' ('+escapeHtml(err)+')'):'')
-        +'. Friends\u2019 sections can\u2019t be read on this deploy — apply the row-level policy '
-        +'in professify-friend-sections.sql, then check again.');
-    }else if(readable===true&&rows===0&&!withSecs.length){
-      lines.push('The read works — there is simply nothing stored. Your friends added courses '
-        +'without picking sections, so nobody knows which one they\u2019re in. They fix this by '
-        +'importing their schedule or choosing their sections.');
-    }else if(readable===true&&rows>0&&withSecs.length<list.length){
-      lines.push('The read works and '+rows+' section row'+(rows===1?'':'s')+' came back. '
-        +'Anyone showing 0 above hasn\u2019t picked their sections yet.');
-    }else if(withSecs.length===list.length){
-      lines.push('<b style="color:var(--good-2)">Nothing to fix</b> — every friend has sections, '
-        +'so their weeks should draw as calendars.');
-    }
-    if(readable===null)lines.push('Couldn\u2019t reach the server — check your connection.');
-  }catch(e){ lines=['Couldn\u2019t check: '+escapeHtml((e&&e.message)||'unknown error')]; }
-  out.innerHTML=lines.join('<br><br>');
-};
 function hmDropImpossible(meets){
   var bad={};
   for(var i=0;i<meets.length;i++){
@@ -16736,11 +17828,11 @@ function hmMiniWeekHtml(meets,opts){
       var cls='cal-block'+(mine?'':' theirs')+(m.assumed?' guess':'');
       var nm=''; try{ nm=(typeof classInfo==='function')?(classInfo(m.code).name||''):''; }catch(_e){}
       var people=hmClassPeople(m.code,opts.excludeId);
-      /* Fit the course title to the block instead of clamping at two lines and letting the
-         second one get sliced in half by the block's own edge. ~10.2px a line, after the
-         padding and the course-code line are taken out. */
-      var room=h-21;
-      var nmLines=Math.max(0,Math.min(2,Math.floor(room/10.2)));
+      /* The title used to be fitted to whatever height the block happened to have, so an
+         80-minute class showed "The Economics of" and a 50-minute one showed nothing — the
+         same week rendered as two different kinds of card, and the long titles were cut
+         mid-phrase. At this scale a course code is the identifier; the full name, section and
+         professor are one tap away on the friend's profile, whole rather than sliced. */
       /* Faces ride on the SAME line as the course code, tucked right. As their own row they
          needed a third line, and at half your calendar's scale an 80-minute class is 40px —
          so they almost never appeared, which is the opposite of the point of them. A split
@@ -16754,14 +17846,20 @@ function hmMiniWeekHtml(meets,opts){
         +(mine?' · you too':'')
         +(people.length?(' · also '+people.map(function(p){return p.name;}).join(', ')):'')
         +(m.assumed?' · section not confirmed — this course has several':'');
-      return '<div class="'+cls+'" style="top:'+top.toFixed(1)+'px;height:'+Math.max(h,18).toFixed(1)+'px;'
-        +'left:calc('+left.toFixed(3)+'% + 2px);width:calc('+w.toFixed(3)+'% - 4px)" title="'+esc2(tip)+'">'
+      /* Tapping a class on a schedule is the most natural thing to do and it did nothing.
+         gotoSection() already exists for the Planner hand-off: Explore, filtered to the
+         course, section list open, row scrolled to. stopPropagation so it can never also
+         fire whatever sits around it. */
+      var tapCode=String(m.code).replace(/'/g,"\\'");
+      return '<div class="'+cls+' cb-tap" role="button" tabindex="0"'
+        +' onclick="event.stopPropagation();gotoSection(\''+tapCode+'\')"'
+        +' onkeydown="if(event.key===\'Enter\'){event.preventDefault();event.stopPropagation();gotoSection(\''+tapCode+'\')}"'
+        +' style="top:'+top.toFixed(1)+'px;height:'+Math.max(h,18).toFixed(1)+'px;'
+        +'left:calc('+left.toFixed(3)+'% + 2px);width:calc('+w.toFixed(3)+'% - 4px)" title="'+esc2(tip+' \u2014 tap for sections & seats')+'">'
         +'<span class="cb-top"><span class="cb-code">'+esc2(m.code)+'</span>'+faces+'</span>'
         /* An explicit clip height, not -webkit-line-clamp: .cal-block is display:flex, which
            blockifies a child's display:-webkit-box into flow-root — so the clamp silently did
            nothing and a second line was left half-sliced under the first. */
-        +((nmLines&&nm)?('<span class="cb-nm" style="height:'+(nmLines*10.2).toFixed(1)+'px">'
-            +esc2(String(nm).slice(0,44))+'</span>'):'')
         +'</div>';
     }).join('');
     return '<div class="cal-col"><div class="cal-dh">'+DAY_LABEL[d]+'</div>'
@@ -16798,14 +17896,41 @@ function hmSchedPostCard(p){
     +hmClassChips(p.classes)
     +'</article>';
 }
+/* When did this friend last build their schedule? The max created_at across their saved
+   classes — a real timestamp from a real row. Returns 0 when the column isn't there (older
+   deploys) rather than guessing, so those cards sort last instead of pretending to be new. */
+function hmSchedAt(f){
+  var best=0;
+  try{
+    (f.classAdds||[]).forEach(function(a){
+      var t=a&&a.at?new Date(a.at).getTime():0;
+      if(t&&t>best)best=t;
+    });
+  }catch(e){}
+  return best||0;
+}
+/* The WHOLE card used to be one button opening their profile — so every tap on the calendar,
+   including one aimed at a class block, bounced you into a modal you didn't ask for. Two
+   targets now, and only two: their NAME opens the profile, a CLASS BLOCK opens that class in
+   Explore. The card's background does nothing, which is correct for a surface that is
+   mostly a chart. */
+/* This block is IIFE-wrapped, so a plain `function` here is private. gotoSection and
+   openFriendProfile are globals (declared in earlier, unwrapped blocks) so the inline
+   handlers these emit resolve fine — but the builders themselves have to be exported to be
+   reachable from anywhere else, tests included. */
+try{ window.hmSchedAt=hmSchedAt; }catch(e){}
 function hmFriendSchedCard(f){
   var ov=hmOverlap(f.classes);
-  return '<article class="hm-card hm-click" onclick="openFriendProfile(\''+esc(f.id)+'\')">'
-    +'<div class="hm-fhead"><span class="fav" style="background:'+hmFriendColor(f)+'">'
+  var when=hmSchedAt(f);
+  return '<article class="hm-card">'
+    +'<button type="button" class="hm-fhead hm-fhead-btn" onclick="openFriendProfile(\''+esc(f.id)+'\')" title="Open '+esc(f.name)+'\u2019s profile">'
+    +'<span class="fav" style="background:'+hmFriendColor(f)+'">'
       +((typeof avaHtml==='function')?avaHtml(f.avatar_url,f.name):esc(f.ini||hmIni(f.name)))+'</span>'
-    +'<div style="min-width:0"><div class="nm">'+esc(f.name)+'</div>'
-    +'<div class="ctx">is taking '+f.classes.length+' class'+(f.classes.length===1?'':'es')+' this term'+(ov?' · <b style="color:var(--accent)">'+ov+' with you</b>':'')+'</div></div>'
-    +'<span class="time">friend</span></div>'
+    +'<span class="fhead-t"><span class="nm">'+esc(f.name)+'</span>'
+    +'<span class="ctx">is taking '+f.classes.length+' class'+(f.classes.length===1?'':'es')+' this term'+(ov?' · <b style="color:var(--accent)">'+ov+' with you</b>':'')+'</span></span>'
+    /* The feed is newest-first now, so the card has to SAY when — an order whose reason you
+       can't see reads as shuffled. No timestamp (older rows) prints "friend", not a guess. */
+    +'<span class="time">'+(when?esc(timeAgo(new Date(when).toISOString())):'friend')+'</span></button>'
     +(function(){
       var fm=hmFriendMeets(f);
       /* ONE standard, everywhere. This card used to draw unconfirmed sections as dashed
@@ -16904,6 +18029,7 @@ function hmRetryFeed(btn){
   try{ if(typeof hmLoadPosts==='function'&&!hmPostsMissing)jobs.push(hmLoadPosts()); }catch(e){}
   Promise.all(jobs).catch(function(){}).then(function(){ try{ hmRenderFeed(); }catch(e){} });
 }
+try{ window.hmFriendSchedCard=hmFriendSchedCard; window.hmOverlap=hmOverlap; }catch(e){}
 function hmRenderFeed(){
   var host=document.getElementById('hmFeed'); if(!host)return;
   var items=[];
@@ -16918,11 +18044,16 @@ function hmRenderFeed(){
     schedUsers[p.user_id]=1;
     items.push({score:hmOverlap(p.classes),t:t,html:hmSchedPostCard(p)});
   });
-  /* friends' schedules count as posted (they shared them with you in-app) */
+  /* friends' schedules count as posted (they shared them with you in-app).
+     They used to carry t:1 — a constant — so a friend who built their schedule an hour ago
+     sorted identically to one who did it in June, and neither could ever reach the top. The
+     loader already keeps `classAdds` ({code, at}) from saved_classes.created_at, so the real
+     answer is there: when they last added a class. Friends whose rows predate that column
+     score 0 and fall to the bottom rather than being given a made-up recent time. */
   try{
     (friendsList||[]).forEach(function(f){
       if(f.classes&&f.classes.length&&!schedUsers[f.id]){
-        items.push({score:hmOverlap(f.classes)+0.5,t:1,html:hmFriendSchedCard(f)});
+        items.push({score:hmOverlap(f.classes),t:hmSchedAt(f),html:hmFriendSchedCard(f)});
       }
     });
   }catch(e){}
@@ -16931,8 +18062,13 @@ function hmRenderFeed(){
      class you'll never take is filler. The Quad is friends' schedules now, full stop.
      HM_RECENTS is still fetched: it's what tells the feed whether the network has SETTLED, so
      "You're all caught up" can't print over a still-loading list. */
-  /* classmates first, then newest — explainable, never engagement */
-  items.sort(function(a,b){return (b.score-a.score)||(b.t-a.t);});
+  /* NEWEST FIRST (Tate, Aug 2026). It was overlap-first, newest as a tiebreak — which meant
+     a friend who imported their schedule five minutes ago sat below someone you happen to
+     share three classes with and whose card you'd already seen every day for a week. A feed
+     you check for what CHANGED has to be ordered by what changed. Overlap stays as the
+     tiebreak, so same-day schedules still surface the people you share classes with first.
+     Still not engagement: both keys are facts about the schedule, not about attention. */
+  items.sort(function(a,b){return (b.t-a.t)||(b.score-a.score);});
   var out=items.slice(0,14).map(function(i){return i.html;}).join('');
   /* "You're all caught up" belongs to a SETTLED feed. It used to print unconditionally, so a
      first load showed "Loading the Quad…" and "You're all caught up" stacked on top of each
@@ -16955,7 +18091,7 @@ function hmRenderFeed(){
       hmArmFeedTimeout();
     }
   }
-  if(!pending)out+=hmCaught('Friends who share classes with you first — never ranked by engagement.');
+  if(!pending)out+=hmCaught('Newest schedules first, then whoever shares the most classes with you — never ranked by engagement.');
   host.innerHTML=out;
 }
 /* Mini week-at-a-glance calendar for the left rail — click to open the full
@@ -16967,11 +18103,26 @@ function hmMiniCalHtml(){
   var meetsAll=(typeof myClassMeets==='function')?myClassMeets(codes):[];
   var meets=meetsAll.filter(function(m){return m.meet&&m.meet.days&&m.meet.start!=null&&m.meet.end!=null;});
   var head='<div class="hm-ct">My calendar<button class="hm-more" onclick="event.stopPropagation();hmOpenCal()">Open →</button></div>';
+  /* Sharing a week is the thing people actually do with a week. It sits under the calendar
+     rather than in a menu, and doubles as the re-import path now that My Classes' header
+     doesn't carry one. */
+  /* One action, fused to the bottom edge of the card rather than floating inside it as a
+     second bordered box. It also says what sharing is FOR — the reason to tap is the whole
+     point of the feature, and a bare "Share" never carried it. */
+  var foot='<button class="hmc-share" onclick="event.stopPropagation();shareMySchedule()">'
+    +'<span class="hmc-share-ring">🔗</span>'
+    +'<span class="hmc-share-txt"><b>Share my schedule</b><small>See who\u2019s in your classes</small></span>'
+    +'</button>';
   if(!meets.length){
     var msg=codes.length
       ? 'Your classes don’t have set times yet — add sections to see your week.'
       : 'Add your classes and they’ll show up on your week here.';
-    return '<div class="hm-card hm-click" onclick="hmOpenCal()" title="Open your calendar">'+head+'<div class="hm-empty">'+esc(msg)+'</div></div>';
+    /* Nothing to share yet — the same strip, offering the step that comes first. */
+    return '<div class="hm-card hm-click hmc-card" onclick="hmOpenCal()" title="Open your calendar">'+head+'<div class="hm-empty">'+esc(msg)+'</div>'
+      +'<button class="hmc-share" onclick="event.stopPropagation();openSchedImport()">'
+      +'<span class="hmc-share-ring">📷</span>'
+      +'<span class="hmc-share-txt"><b>Import my schedule</b><small>Screenshot it and we\u2019ll read it</small></span>'
+      +'</button></div>';
   }
   /* Sa/Su parse fine but both grids only ever iterated Mo–Fr, so a weekend class was
      silently absent — and because it HAD a parsed meeting it wasn't listed under the
@@ -17030,7 +18181,7 @@ function hmMiniCalHtml(){
     }
     return '<div class="hmc-col"><div class="hmc-dh">'+DL[di]+'</div><div class="hmc-day" style="height:'+H+'px">'+blocks+'</div></div>';
   }).join('');
-  return '<div class="hm-card hm-click hmc-card" onclick="hmOpenCal()" title="Open your full calendar">'+head+'<div class="hmc-grid">'+cols+'</div></div>';
+  return '<div class="hm-card hm-click hmc-card" onclick="hmOpenCal()" title="Open your full calendar">'+head+'<div class="hmc-grid">'+cols+'</div>'+foot+'</div>';
 }
 function hmRenderRailL(){
   var host=document.getElementById('hmRailL'); if(!host)return;
@@ -17179,7 +18330,7 @@ function hmRenderRailR(){
     pool=(typeof rankProfs==='function')?rankProfs(pool,1):pool.sort(function(a,b){return (b.p.rating-a.p.rating)||((b.p.evals||0)-(a.p.evals||0));});
     var top=pool.slice(0,3);
     if(top.length){
-      out+='<div class="hm-card"><div class="hm-ct">Highest rated'+(scopeLabel||' right now')+'</div>'+top.map(ratedRow).join('')
+      out+='<div class="hm-card hm-desk"><div class="hm-ct">Highest rated'+(scopeLabel||' right now')+'</div>'+top.map(ratedRow).join('')
         +'<div class="hm-sortnote">'+(scopeLabel
             ? ('Professors in '+esc(majSubs.slice(0,4).join(', '))+' · live from PolyRatings')
             : 'Real data, live from PolyRatings\' public API')
@@ -17193,7 +18344,7 @@ function hmRenderRailR(){
     if(bottom.length){
       /* Branding someone "Lowest rated" off three ratings is the more damaging half of this
          pair, and it was the half with no sample-size caveat at all. */
-      out+='<div class="hm-card"><div class="hm-ct">Lowest rated'+(scopeLabel||' right now')+'</div>'+bottom.map(ratedRow).join('')
+      out+='<div class="hm-card hm-desk"><div class="hm-ct">Lowest rated'+(scopeLabel||' right now')+'</div>'+bottom.map(ratedRow).join('')
         +'<div class="hm-sortnote">Live from PolyRatings · scores weighted by sample size'
         +(evalFilterApplied?'':' · small sample — some have only a few ratings')+'</div></div>';
     }
