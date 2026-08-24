@@ -90,6 +90,46 @@ async function dismissOversize(page) {
 }
 
 // Detect a "nothing here" / error state after a search, for logging + diagnostics.
+// Uncheck "Show Open Classes Only" and PROVE it stuck. Returns a string for the log:
+//   'off'            already off
+//   'on->off'        unchecked cleanly
+//   'on->off(retry2)'unchecked, but only after the form re-rendered under us
+//   'STUCK-ON'       could not clear it — the caller treats this as a failed search
+//   'absent'         no such control on this page
+async function setOpenOnlyOff(page) {
+  let before = null;
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    // Let any postback triggered by the previous field edit finish before we touch anything.
+    await page.waitForLoadState('networkidle', { timeout: 4000 }).catch(() => {});
+    const state = await page.evaluate(() => {
+      const o = document.querySelector('input[type="checkbox"][id^="SSR_CLSRCH_WRK_SSR_OPEN_ONLY$"]');
+      if (!o) return { absent: true };
+      const was = o.checked;
+      if (o.checked) o.click();                                  // native click; syncs $chk via PeopleSoft JS
+      if (o.checked) { o.checked = false; o.dispatchEvent(new Event('change', { bubbles: true })); }
+      // The hidden partner is what actually rides the form post. Clear it explicitly rather
+      // than trusting that the framework's own handler ran.
+      const hidden = document.querySelector('input[id^="SSR_CLSRCH_WRK_SSR_OPEN_ONLY$"][type="hidden"]')
+                  || document.getElementById(o.id + '$chk')
+                  || document.querySelector('input[name="' + o.name + '$chk"]');
+      if (hidden) hidden.value = 'N';
+      return { absent: false, was, now: o.checked, hidden: hidden ? hidden.value : null };
+    });
+    if (state.absent) return 'absent';
+    if (before === null) before = state.was ? 'on' : 'off';
+    if (!state.now && state.hidden !== 'Y') {
+      // Read it back one more time — a postback landing in this gap is the whole bug.
+      await page.waitForTimeout(250);
+      const still = await page.evaluate(() => {
+        const o = document.querySelector('input[type="checkbox"][id^="SSR_CLSRCH_WRK_SSR_OPEN_ONLY$"]');
+        return o ? o.checked : null;
+      });
+      if (still === false || still === null) return before + '->off' + (attempt > 1 ? `(retry${attempt})` : '');
+    }
+  }
+  return 'STUCK-ON';
+}
+
 async function searchOutcome(page) {
   return page.evaluate(() => {
     const t = document.body.innerText || '';
@@ -186,12 +226,27 @@ async function fetchDetail(page, index) {
       const e = rest.search(stopRe);
       return (e < 0 ? rest : rest.slice(0, e)).replace(/\s+/g, ' ').trim();
     };
+    /* INSTRUCTION MODE + LOCATION. PeopleSoft prints both in the Class Details block of this
+       same detail page, so they cost nothing extra — no additional page load, no extra time.
+       They are the ONLY thing that says whether a class is asynchronous or online; a blank
+       meeting time does not, because "not scheduled yet" looks identical. */
+    const label = (re) => {
+      const m = t.match(re); if (!m) return '';
+      const v = (m[1] || '').replace(/\s+/g, ' ').trim();
+      // Reject a capture that is really the next label (empty value rows shift the text).
+      if (!v || /^(Career|Dates|Grading|Units|Campus|Location|Session|Status|Class Number|Class Components|Instruction Mode|Add Consent|Drop Consent)$/i.test(v)) return '';
+      return v.slice(0, 60);
+    };
+    const instruction_mode = label(/Instruction Mode\s*[:\n\r]*\s*([^\n\r]{1,60})/i);
+    const location = label(/(?:^|\n)\s*Location\s*[:\n\r]*\s*([^\n\r]{1,60})/i);
+    const room = label(/(?:^|\n)\s*Room\s*[:\n\r]*\s*([^\n\r]{1,60})/i);
     const prereq = grab(/Enrollment Requirements/i, /(Class Availability|Class Capacity|Description|Textbook|View Search Results)/i).slice(0, 700);
     const description = grab(/\bDescription\b/i, /(Textbook\s*\/?\s*Other|Special Instructions|Course Materials|View Search Results)/i).slice(0, 1500);
     return {
       capacity: g('Class Capacity') ?? g('Enrollment Capacity'), enrolled: g('Enrollment Total'),
       available: g('Available Seats'), waitlist_capacity: g('Wait List Capacity'), waitlist_total: g('Wait List Total'),
       days_detail, prereq, description,
+      instruction_mode, location, room,
     };
   });
   await page.evaluate(() => { const b = document.getElementById('CLASS_SRCH_WRK2_SSR_PB_BACK'); if (b) b.click(); });
@@ -294,17 +349,24 @@ async function run() {
     const criterionState = await setCourseNum(op, num);
 
     // Turn OFF "Show Open Classes Only" so FULL / WAITLISTED / CLOSED sections are included.
-    // The real checkbox id has a "$N" suffix (SSR_CLSRCH_WRK_SSR_OPEN_ONLY$4) with decoy
-    // siblings (a hidden "$chk" input and a "_LBL" label) — target the actual checkbox input
-    // directly and uncheck it. Client-side filter, applied at Search time.
-    const openOnlyState = await page.evaluate(() => {
-      const o = document.querySelector('input[type="checkbox"][id^="SSR_CLSRCH_WRK_SSR_OPEN_ONLY$"]');
-      if (!o) return 'absent';
-      const before = o.checked ? 'on' : 'off';
-      if (o.checked) o.click();                                   // native click unchecks
-      if (o.checked) { o.checked = false; o.dispatchEvent(new Event('change', { bubbles: true })); }
-      return before + '->' + (o.checked ? 'on' : 'off');
-    });
+    //
+    // THIS LEAKED, AND THE DATA PROVED IT (2026-08-25). Term 2268 in course_seats held 1,090
+    // sections with 0 seats available — so the uncheck plainly worked for most subjects. But
+    // HIST came back 41 sections, 100% status "Open", ZERO full; same for ANT, SPAN and GEOG,
+    // and ECON had exactly one non-Open row in the entire subject. HIST 2202 — two sections,
+    // 0/120 open, 91 deep on the waitlist on Cal Poly's own class search — was simply absent
+    // from the app. Per-subject, not global: the uncheck is racing something.
+    //
+    // Two causes, both handled below rather than guessed between:
+    //   1. setCourseNum() dispatches a `change`, and PeopleSoft answers some field changes
+    //      with a postback that re-renders the form. If that lands AFTER we uncheck, the
+    //      freshly rendered checkbox is back to its default (checked) when Search fires.
+    //      Fix: settle first, then uncheck, then VERIFY, and redo if it came back checked.
+    //   2. PeopleSoft submits the paired hidden "$chk" input, not the visible checkbox. The
+    //      old comment dismissed that input as a decoy; it is what the server reads. Clicking
+    //      the visible box normally syncs it via PeopleSoft's own JS — but only if that JS
+    //      ran, which after a re-render it may not have. Fix: set the hidden field too.
+    const openOnlyState = await setOpenOnlyOff(page);
     await postback(page, () => page.evaluate(() => { const b = window.__pf_find('CLASS_SRCH_WRK2_SSR_PB_CLASS_SRCH'); if (b) b.click(); }));
     await dismissOversize(page);
 
@@ -371,12 +433,30 @@ async function run() {
       console.log(`  ${subj}: ${list.length} sections / ${codeSet.size} courses  (bands=${bandsUsed}, crit=${r.criterionState}, open-only=${r.openOnlyState}, statuses=${JSON.stringify(statusMix)}${blanks ? `, ${blanks} BLANK-code` : ''}${r.diag.capNote ? ', CAP-NOTE!' : ''}, msg=${r.outcome.msg || 'none'})${CFG.FETCH_DETAILS && list.length ? ' — fetching counts…' : ''}`);
       if (list.length === 0) await dumpDiag(page, subj.toLowerCase());
 
+      /* INTEGRITY CHECK — the one that would have caught this the day it started.
+         A subject of any size that comes back 100% "Open" is not a subject where nothing is
+         full; it is a subject where the open-only filter leaked. Real ones are mixed: across
+         term 2268 about a quarter of all sections are Waitlist or Closed. HIST returned 41
+         sections, every single one Open, and nothing anywhere in the log said so — the run
+         looked completely healthy while the app was silently missing every full class in the
+         subject, which are exactly the ones a student needs a waitlist position for.
+         This does not throw: a partial subject is still worth writing. It makes the failure
+         VISIBLE and names the fix, which is what a nightly log is for. */
+      const nonOpen = list.filter(x => { const st = statusBadge(x.status_raw); return st && st !== 'Open'; }).length;
+      if (list.length >= 8 && nonOpen === 0) {
+        console.warn(`    !! ${subj}: ${list.length} sections and NOT ONE is full or waitlisted — "Show Open Classes Only" almost certainly leaked for this subject (open-only=${r.openOnlyState}). Every full section is missing from this lane. Re-run this subject.`);
+        await dumpDiag(page, subj.toLowerCase() + '-openonly-leak');
+      }
+      if (r.openOnlyState === 'STUCK-ON') {
+        console.warn(`    !! ${subj}: could not clear "Show Open Classes Only" after 4 attempts — this lane's data is open-classes-only and INCOMPLETE.`);
+      }
+
       if (CFG.FETCH_DETAILS) {
         for (let i = 0; i < list.length; i++) {
           const c = await fetchDetail(page, i);
           Object.assign(list[i], c);
           if (!String(list[i].days || '').trim() && c.days_detail) list[i].days = c.days_detail;  // detail-page fallback
-          if (i === 0) console.log(`    ↳ sample: ${list[0].course_code} — seats cap=${list[0].capacity} avail=${list[0].available} · time="${list[0].days || 'none'}" · instr="${list[0].instructor || 'none'}"`);
+          if (i === 0) console.log(`    ↳ sample: ${list[0].course_code} — seats cap=${list[0].capacity} avail=${list[0].available} · time="${list[0].days || 'none'}" · instr="${list[0].instructor || 'none'}" · mode="${list[0].instruction_mode || 'NOT FOUND'}" · loc="${list[0].location || 'none'}"`);
           if ((i + 1) % 25 === 0) console.log(`    …${i + 1}/${list.length}`);
         }
       }
@@ -454,6 +534,7 @@ async function upsertSupabase(rows) {
     section: r.section, instructor: r.instructor, days: r.days, dates: r.dates, status: r.status,
     capacity: r.capacity ?? null, enrolled: r.enrolled ?? null, available: r.available ?? null,
     waitlist_total: r.waitlist_total ?? null, waitlist_capacity: r.waitlist_capacity ?? null, updated_at: r.updated_at,
+    instruction_mode: r.instruction_mode || null, location: r.location || null, room: r.room || null,
   }));
   // Dedupe by (term, class_nbr): a cross-listed course can appear under two
   // subjects in the same lane with the same class number. Postgres rejects an
@@ -464,15 +545,39 @@ async function upsertSupabase(rows) {
   for (const r of clean) byKey.set(r.term + '|' + r.class_nbr, r);
   const deduped = [...byKey.values()];
   if (deduped.length !== clean.length) console.log(`• Collapsed ${clean.length - deduped.length} cross-listed duplicate class number(s) before upsert.`);
+  /* The three new columns may not exist yet. PostgREST rejects the WHOLE batch with a 400
+     naming the unknown column, which would take the entire seat feed down — the one failure
+     mode this scraper must never have. Detect that specific error once and fall back to the
+     original column set, so the order you apply the SQL in cannot break the nightly run. */
+  const NEW_COLS = ['instruction_mode', 'location', 'room'];
+  let dropNew = false;
+  const strip = rows => rows.map(r => { const c = { ...r }; NEW_COLS.forEach(k => delete c[k]); return c; });
+  const send = async batch => fetch(url, {
+    method: 'POST',
+    headers: { apikey: CFG.SUPABASE_SERVICE_KEY, Authorization: `Bearer ${CFG.SUPABASE_SERVICE_KEY}`, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify(batch),
+  });
   for (let i = 0; i < deduped.length; i += 500) {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { apikey: CFG.SUPABASE_SERVICE_KEY, Authorization: `Bearer ${CFG.SUPABASE_SERVICE_KEY}`, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify(deduped.slice(i, i + 500)),
-    });
+    const batch = deduped.slice(i, i + 500);
+    let res = await send(dropNew ? strip(batch) : batch);
+    if (!res.ok && !dropNew) {
+      const body = (await res.text()).slice(0, 400);
+      if (/PGRST204|could not find|column .* does not exist|schema cache/i.test(body) &&
+          NEW_COLS.some(k => body.includes(k))) {
+        console.log('• course_seats has no instruction_mode/location/room column yet — upserting without them.');
+        console.log('  Run: alter table public.course_seats add column if not exists instruction_mode text, add column if not exists location text, add column if not exists room text;');
+        dropNew = true;
+        res = await send(strip(batch));
+      } else {
+        throw new Error(`Supabase upsert failed: HTTP ${res.status}\n${body}`);
+      }
+    }
     if (!res.ok) throw new Error(`Supabase upsert failed: HTTP ${res.status}\n${(await res.text()).slice(0, 300)}`);
   }
-  console.log(`• Upserted ${deduped.length} rows into Supabase.`);
+  const withMode = deduped.filter(r => r.instruction_mode).length;
+  console.log(`• Upserted ${deduped.length} rows into Supabase.` +
+    (dropNew ? ' (instruction_mode/location/room skipped — column missing)'
+             : ` ${withMode} of them carry an instruction mode.`));
 }
 
 run().catch(e => { console.error('FATAL:', e.message); process.exit(1); });
