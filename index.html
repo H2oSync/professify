@@ -72,7 +72,14 @@ window.PROFESSIFY_CONFIG = {
   // Leave blank to keep it hidden. Set to Cal Poly's real priority-registration and
   // quarter-end dates to turn it on.
   REGISTRATION_OPENS: '',
-  QUARTER_END: ''
+  QUARTER_END: '',
+  /* Both halves of the link-preview path now exist (see SHARE-PREVIEW-SETUP.md): the public
+     `schedule-cards` Storage bucket was created 2026-08-28, and netlify/edge-functions/share.ts
+     ships in the same commit as this line, so /s is live the moment this file is.
+     If /s ever stops being served, set this back to false immediately — a shared link would
+     404, which is worse than no preview. The picture itself never depends on this flag: the
+     share sheet attaches the PNG either way. */
+  SHARE_PREVIEW: true
 };
 </script>
 <script>
@@ -1830,7 +1837,12 @@ if(typeof qrcode==="function")window.qrcode=qrcode;
 .hm-wrap{padding-top:16px}
 .hm-rail{display:none}
 @media(min-width:1140px){
-  .hm-wrap{display:grid;grid-template-columns:225px minmax(0,555px) 300px;gap:24px;align-items:start;max-width:1176px;justify-content:center}
+  /* 250, not 225. The extra 25px goes straight into the mini week's day columns — 35.8px to
+     40.8px — which is the difference between a shared slot that can be SPLIT with a readable
+     course number on it and one that cannot. (Tate, 2026-08-28: "having the waitlist and
+     enrolled class split like it has in the right view".) The grid still fits: 250+555+300
+     plus two 24px gaps is 1153, inside the 1176 max-width. */
+  .hm-wrap{display:grid;grid-template-columns:250px minmax(0,555px) 300px;gap:24px;align-items:start;max-width:1176px;justify-content:center}
   /* Sticky with a FIXED top pinned the rails immediately, so only the middle column moved.
      Plain static scrolled all three together and left a full screen of nothing but friends'
      calendars once the rails ran out. hmStickRails() sets each rail's sticky `top` from its own
@@ -3306,6 +3318,20 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
            without a second place to remember. It hides completely when there is nothing to
            suggest — no empty state — because on a young graph that is most of the time, and an
            empty box at the top of the page is the first thing every new student would see. -->
+      <!-- ===== Messages =============================================================
+           Option B from the mockups, which is what Tate picked: no sixth bottom tab, and the
+           threads sit directly above the people they are with. Hidden entirely until there is
+           a backend AND at least one thread — a student who has never messaged anyone should
+           not be shown an empty inbox at the top of their Friends tab. -->
+      <div id="frMsgSec" class="fr-section" style="display:none">
+        <div class="fr-listhead">
+          <div class="grouphead" style="margin:0">Messages<span id="frMsgCount" class="fr-secount"></span></div>
+          <button class="fr-addtoggle" onclick="msgNewGroup()">+ New group</button>
+        </div>
+        <div id="frMsgNew" class="msg-new" style="display:none"></div>
+        <div id="frMsgOut" class="msg-list"></div>
+      </div>
+
       <div id="frSuggestedSec" class="fr-section" style="display:none">
         <div class="fr-listhead">
           <div class="grouphead" style="margin:0">People you might know<span id="frSugCount" class="fr-secount"></span></div>
@@ -3321,45 +3347,52 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
         <!-- Requests you SENT can't be acted on beyond a nudge, so they get one line, not a
              section with its own heading competing with the list above it. -->
         <div id="frSentLine" class="fr-sentline" style="display:none"></div>
+        <!-- ===== add a friend =========================================================
+             Lives INSIDE the friends section, immediately under the list, so the dashed
+             "Invite a friend" slot at the end of that list opens it right where the slot is
+             instead of revealing a panel further down that the page then had to scroll to.
+             (Tate, 2026-08-28: "it should just pop up when you click invite a friend on the
+             same invite a friend pill".)
+             No close X: the slot that opens it is a toggle and sits directly above, so the way
+             out is the way in, and an X floating in a panel with no backdrop reads as a modal
+             this is not. -->
+        <div id="frAddSheet" class="fr-addsheet" style="display:none">
+          <div class="fr-as-head"><h3>Add a friend</h3></div>
+
+          <!-- The two ways to hand someone your invite, kept at the top because they are what
+               this panel is FOR. The URL itself is gone: a 60-character uuid in a read-only box
+               is not information anyone reads, it is just something to be intimidated by, and
+               the button did the copying either way. -->
+          <div class="fr-as-block">
+            <div class="fr-invite-actions">
+              <button class="btn primary fr-invite-send" id="frInviteBtn" onclick="shareInviteLink()">Send invite link</button>
+              <button class="fr-chip" onclick="showMyQR()">&#9638; Show my QR</button>
+            </div>
+            <div id="frQrArea" style="display:none;margin-top:12px"></div>
+            <p id="frInviteNote" class="fr-mut" style="margin:8px 2px 0"></p>
+            <!-- Kept so refreshInviteLink() still has somewhere to put the link, and so anything
+                 that wants to read it can. Never shown. -->
+            <input id="frInviteLink" type="hidden">
+          </div>
+
+          <div class="fr-as-block" style="border-bottom:0;padding-bottom:0">
+            <div class="fr-as-lab">Search for someone</div>
+            <div class="fr-people-row">
+              <input id="frSearchPeople" class="rate-input" style="margin:0" placeholder="Start typing a name &mdash; or a Cal Poly email or @handle" onkeydown="if(event.key==='Enter'){frPeopleEnter(event);}" oninput="frPeopleTyping()" autocomplete="off">
+              <button class="btn primary fr-handle-btn" onclick="searchPeople()">Search</button>
+            </div>
+            <div id="frPeopleErr" class="rate-err" style="min-height:0"></div>
+            <div id="frPeopleOut" class="fr-people-out"></div>
+          </div>
+        </div>
+
       </div>
 
       </div><!-- /frFriendsPane -->
 
-      <!-- ===== the add-a-friend sheet, opened by the dashed slot at the end of the list ===== -->
-      <div id="frAddSheet" class="fr-addsheet" style="display:none">
-        <div class="fr-as-head">
-          <h3>Add a friend</h3>
-          <button class="legal-x" onclick="closeAddFriend()" aria-label="Close">&times;</button>
-        </div>
-
-        <div class="fr-as-block">
-          <div class="fr-as-lab">Search for someone</div>
-          <div class="fr-people-row">
-            <input id="frSearchPeople" class="rate-input" style="margin:0" placeholder="Start typing a name \u2014 or a Cal Poly email or @handle" onkeydown="if(event.key==='Enter'){frPeopleEnter(event);}" oninput="frPeopleTyping()" autocomplete="off">
-            <button class="btn primary fr-handle-btn" onclick="searchPeople()">Search</button>
-          </div>
-          <div id="frPeopleErr" class="rate-err" style="min-height:0"></div>
-          <div id="frPeopleOut" class="fr-people-out"></div>
-        </div>
-
-        <div class="fr-as-block">
-          <div class="fr-as-lab">Send them your link</div>
-          <div class="fr-invite-row">
-            <input id="frInviteLink" class="fr-invite-input" readonly onclick="this.select()">
-            <button class="btn primary fr-invite-copy" id="frInviteBtn" onclick="shareInviteLink()">Copy link</button>
-          </div>
-          <p id="frInviteNote" class="fr-mut" style="margin:8px 2px 0"></p>
-        </div>
-
-        <div class="fr-as-block" style="border-bottom:0;padding-bottom:0">
-          <div class="fr-as-lab">Or in person</div>
-          <div class="fr-invite-actions">
-            <button class="fr-chip" onclick="showMyQR()">&#9638; Show my QR</button>
-            <button class="fr-chip" id="frShareSched" onclick="shareMySchedule()">&#128279; Share my schedule</button>
-          </div>
-          <div id="frQrArea" style="display:none;margin-top:12px"></div>
-        </div>
-      </div>
+      <!-- One open thread at a time, taking the whole pane. A thread is a place you are IN,
+           not a panel beside the list — and on a phone there is no room for both anyway. -->
+      <div id="frThreadPane" style="display:none"></div>
 
       <!-- Stubs kept in the DOM so every guarded getElementById still resolves. The two request
            sections are rendered into the single list above; these are never shown. -->
@@ -3867,8 +3900,8 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
    tab is stale — reload the right file, not this one. */
 /* Feature flags. Groups ships dark: the code is in the file and the toggle does not render
    until this is true, so it can be reviewed and merged without appearing to students. */
-window.PROFESSIFY_FLAGS={groups:true};   /* Groups ON — Tate, 2026-08-25. Friends-only; groups are device-local (localStorage). */
-window.PROFESSIFY_BUILD='2026-08-27 11:30';
+window.PROFESSIFY_FLAGS={groups:true,messages:true};   /* Groups ON — Tate, 2026-08-25. Friends-only; groups are device-local (localStorage). */
+window.PROFESSIFY_BUILD='2026-08-28 19:05';
 /* Paint the build stamp everywhere it appears. */
 try{
   (function(){
@@ -8531,7 +8564,10 @@ if(!list.length && !scraped.length){
 
 /* ============ MODAL ============ */
 let currentProf=null,revSort='helpful';
-function openProf(id){currentProf=id;revSort='helpful';renderModal();document.getElementById('mback').classList.add('open');document.body.style.overflow='hidden';loadReviews(id);try{if(PROFESSORS[id]&&PROFESSORS[id].live&&typeof loadPolyProfDetail==='function')loadPolyProfDetail(id);}catch(e){}}
+function openProf(id){currentProf=id;revSort='helpful';renderModal();document.getElementById('mback').classList.add('open');document.body.style.overflow='hidden';loadReviews(id);/* Who among your friends suggested or reviewed them. Fetched after the card is already on
+   screen — neither answer is worth a frame of blank page, and both are additive. */
+  try{ if(typeof psugLoad==='function')psugLoad(id).then(function(){ if(currentProf===id&&modalMode==='profile')renderModal(); }); }catch(e){}
+  try{if(PROFESSORS[id]&&PROFESSORS[id].live&&typeof loadPolyProfDetail==='function')loadPolyProfDetail(id);}catch(e){}}
 function closeModal(){document.getElementById('mback').classList.remove('open');document.body.style.overflow='';}
 function setRevSort(s){revSort=s;renderModal();}
 function claimProfile(){document.getElementById('claimNote').innerHTML=`<div class="claim-note">Profile claiming is coming soon. Professors will verify with their <b>@calpoly.edu</b> email, then can edit their background, add an “About me,” and respond to reviews — a simple way to keep faculty involved and on your side.</div>`;}
@@ -8786,7 +8822,7 @@ async function initBackend(){
       const uid=sbUser?sbUser.id:null;
       const notLoaded=(typeof friendsLoaded==='undefined')||!friendsLoaded;
       if(uid&&(uid!==lastAuthUid||notLoaded)){lastAuthUid=uid;try{if(typeof kickFriendsLoad==='function')kickFriendsLoad();}catch(_e){}}
-      if(!uid){lastAuthUid=null;try{FRIENDS=[];myProfile=null;friendsList=[];incomingRequests=[];outgoingRequests=[];if(typeof stopFriendRealtime==='function')stopFriendRealtime();if(typeof renderFriends==='function')renderFriends();if(typeof updateFriendsBadge==='function')updateFriendsBadge();}catch(e){}}
+      if(!uid){lastAuthUid=null;try{FRIENDS=[];myProfile=null;friendsList=[];incomingRequests=[];outgoingRequests=[];if(typeof stopFriendRealtime==='function')stopFriendRealtime();if(typeof msgStopRealtime==='function'){msgStopRealtime();msgThreads=[];msgRows={};msgOpenId=null;msgReady=null;window._msgLoaded=false;try{msgRenderList();}catch(_e){}}if(typeof renderFriends==='function')renderFriends();if(typeof updateFriendsBadge==='function')updateFriendsBadge();}catch(e){}}
     });
   }catch(e){ console.warn('[professify] initBackend:',e&&e.message||e); /* keep sb if the client was created — a later, non-critical throw must not disable accounts */ if(!sb||!sb.auth)sb=null; }
 }
@@ -8805,7 +8841,16 @@ async function loadReviews(id){
        grant is gone, instead of erroring and showing no reviews at all. */
     const REVIEW_COLS='id,professor_key,professor_name,department,course,score,would_again,'
       +'tags,note,helpful,created_at,difficulty,teach_ability,hours,format,course_key,grade';
-    const {data,error}=await sb.from('reviews').select(REVIEW_COLS).eq('professor_key',key).order('created_at',{ascending:false}).limit(200);
+    /* reviews_public is the same rows with user_id removed at the database, not filtered out
+       here — see professify-messaging.sql. Reading it rather than the base table is what lets
+       that table stop being readable by anyone but its author, which is the only way "your
+       review is anonymous" is a fact rather than a promise. Falls back to the base table so
+       this build still works on a database where the migration has not been run. */
+    let {data,error}=await sb.from('reviews_public').select(REVIEW_COLS).eq('professor_key',key).order('created_at',{ascending:false}).limit(200);
+    if(error&&/does not exist|schema cache/i.test(String(error.message||''))){
+      const fb=await sb.from('reviews').select(REVIEW_COLS).eq('professor_key',key).order('created_at',{ascending:false}).limit(200);
+      data=fb.data; error=fb.error;
+    }
     if(error)throw error;
     if(Array.isArray(data)){
       dbReviews[key]=data.map(r=>({id:r.id,course:r.course||'',term:(r.term||'').trim(),score:r.score,difficulty:r.difficulty,teach:r.teach_ability,hours:r.hours||'',format:r.format||'',grade:(r.grade||'').trim(),again:r.would_again,/* verified means "written through an authenticated, domain-checked account", which is
@@ -9675,6 +9720,9 @@ async function loadMyReviews(){
     }); }
   }catch(e){}
   window.MY_REVIEWS=out;
+  /* Which of them you have chosen to put your name to, for the switch on each row. Reads the
+     base table, which after professify-messaging.sql returns only your own rows anyway. */
+  try{ if(typeof revLoadShare==='function')await revLoadShare(); }catch(e){}
   // Private impact = how many classmates marked YOUR reviews helpful (real votes in review_helpful).
   try{
     if(typeof backendReady==='function'&&backendReady()&&sbUser){
@@ -9717,11 +9765,17 @@ function renderMyReviews(){
        row is a preview that never synced, so there is nothing to delete — offering the
        button there would fail silently and teach the student the button doesn't work. */
     var delable=!!r.id&&!r._local;
-    var foot=(openable||delable)
+    /* One switch, on the review it governs, off until you touch it. It is deliberately NOT in
+       Settings: a global "share my reviews" would make a decision about a review you wrote two
+       years ago at the moment you flipped it, and the decision people actually want to make is
+       per-review — this one was fine to put your name to, that one was not. */
+    var share=(!r._local&&r.id&&typeof revShareToggleHtml==='function')?revShareToggleHtml(r.id):'';
+    var foot=(openable||delable||share)
       ? ('<div class="myr-foot">'
          +(openable?'<span class="myr-link">View professor →</span>':'<span class="myr-link" style="visibility:hidden"></span>')
          +(delable?('<button type="button" class="myr-del" data-id="'+escapeHtml(String(r.id))+'" onclick="event.stopPropagation();myrDelete(this)">Delete</button>'):'')
-         +'</div>')
+         +'</div>'
+         +(share?('<div class="myr-share" onclick="event.stopPropagation()">'+share+'</div>'):''))
       : '';
     /* The row-wide click opens the professor; the delete button stops propagation above so
        arming it doesn't also navigate away from the thing you're trying to remove. */
@@ -9735,7 +9789,7 @@ function renderMyReviews(){
   var body=list.length
     ? '<div class="myr-list">'+rows+'</div>'
     : '<div class="myr-empty">You haven’t written any reviews yet. Rate a professor and it’ll show up here so you can find it again.</div>';
-  host.innerHTML='<div class="sl-card"><button class="sl-x" onclick="closeMyReviews()">&times;</button><div class="sl-kick">Your reviews</div><h2 class="sl-h">'+(list.length?(list.length+' review'+(list.length===1?'':'s')+' you’ve written'):'Your reviews')+'</h2>'+body+'<p class="sl-fine">Only you can see this list. Your reviews post anonymously to other students.<br>'
+  host.innerHTML='<div class="sl-card"><button class="sl-x" onclick="closeMyReviews()">&times;</button><div class="sl-kick">Your reviews</div><h2 class="sl-h">'+(list.length?(list.length+' review'+(list.length===1?'':'s')+' you’ve written'):'Your reviews')+'</h2>'+body+'<p class="sl-fine">Your reviews post anonymously. Nobody — including your friends — is told which review is yours unless you switch it on above, one review at a time.<br>'
     +'Deleting your account leaves your reviews up, permanently unlinked from you — delete any you don’t want kept before you close the account.</p></div>';
 }
 /* ---- Delete one of your own reviews ----
@@ -10199,6 +10253,14 @@ function renderModal(){
         </div>
       </div>
       ${badges.length?`<div style="display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap">${badges.slice(0,2).map((b,i)=>`<span style="background:${i===0?PFC.greenTint:PFC.blueTint};color:${i===0?PFC.green:PFC.blue};font-size:11px;padding:4px 10px;border-radius:20px">${i===0?b.toLowerCase():'also teaches '+b.toLowerCase()}</span>`).join('')}</div>`:'<div style="height:4px"></div>'}
+      ${/* "Tate and Sean suggested this teacher" — a recommendation that cost nobody a rating
+             form, and under it the friends who chose to show you their review. Both render as
+             nothing at all when there is nothing true to say. (Tate, 2026-08-28.) */''}
+      ${(typeof psugPillHtml==='function')?psugPillHtml(currentProf):''}
+      ${/* Recommending someone should not cost a rating form. This writes one row saying "I'd
+             take them" — no score, so it cannot move an average — and your friends see it as a
+             pill on this card. (Tate, 2026-08-28.) */''}
+      ${(typeof psugBtnHtml==='function'&&psugBtnHtml(currentProf))?`<div style="margin:-4px 0 16px">${psugBtnHtml(currentProf)}</div>`:''}
       <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 4px 20px;margin-bottom:14px;border-bottom:1px solid ${PFC.line};flex-wrap:wrap;gap:14px">
         <div style="display:flex;flex-direction:column;align-items:flex-start;min-width:0">
           ${/* Only claim a heading when there's something real under it. A cached profile with
@@ -13963,6 +14025,231 @@ window.SCHED_COMING=[["College of Liberal Arts","Anthropology-Geography","Art & 
    inconsistency that reads as a bug. */
 .nt-av{overflow:hidden}
 .nt-av .ava-img{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}
+
+/* The escape hatch under a narrowed section list — a quiet text button, not a second CTA. */
+.si-showall{margin-top:8px}
+
+/* Add-a-friend, reordered (Tate, 2026-08-28). The invite controls lead; the send button is the
+   primary action and the QR sits beside it as the in-person alternative. */
+.fr-invite-actions{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+.fr-invite-send{flex:0 1 auto;padding:10px 20px;font-size:14px}
+@media (max-width:480px){
+  .fr-invite-actions{gap:8px}
+  .fr-invite-send{flex:1 1 100%;min-height:44px}
+  .fr-invite-actions .fr-chip{flex:1 1 100%;min-height:44px}
+}
+
+/* ---- a shared slot on the Home mini week ------------------------------------------------------
+   Lanes lived here and are gone. The card only ever renders in the 225px left rail, where a day
+   column measures 35.8px; "3438" needs 22.3px at 8.5px/800, so a half-lane at 15.9px could never
+   hold one — which is why the waitlisted twin kept collapsing back to an unlabelled 6px sliver.
+   Both codes at full column width, stacked, is the only arrangement in which both are readable.
+   (Tate, 2026-08-28: the waitlisted class has to be visible next to the class you are in.) */
+/* The shared block is a container and nothing else — no fill of its own, so each row can wear
+   exactly the treatment it would wear standing alone. A gold tint laid OVER the blue came out
+   olive and read as neither. */
+.hmc-blk.share{background:transparent;border:0;flex-direction:column;align-items:stretch;
+  justify-content:center;gap:1.5px;padding:0;overflow:visible}
+.hmc-blk.share b{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;
+  border-radius:5px;background:var(--clsblk);color:var(--clsblk-ink);
+  font-size:8px;font-weight:800;line-height:1;letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;overflow:hidden;white-space:nowrap}
+/* Same gold, same dashes as a waitlisted block on its own time — one visual language for
+   "you do not hold this seat yet", wherever it appears. */
+.hmc-blk.share b.wl{background:rgba(199,169,111,.26);color:var(--mid);
+  border:1.5px dashed rgba(199,169,111,.85)}
+/* Red is reserved for what red should mean here: two courses you are actually ENROLLED in,
+   overlapping. A waitlisted twin is information, not a warning. */
+.hmc-blk.share.conflict b{background:var(--low);color:#fff}
+
+/* The split pair: two real blocks in one slot, and the course number written once across them.
+   Written once because a pair at one hour is the same course twice — an enrolled section and the
+   waitlisted one beside it — so a second copy of "3438" would cost the width that makes the first
+   one legible. The label rides on the enrolled block, where the ground is dark and white reads. */
+.hmc-blk.pair{background:transparent;border:0;padding:0;overflow:visible}
+.hmc-blk.pair .hmc-half{position:absolute;top:0;bottom:0;border-radius:5px;display:block;
+  background:var(--clsblk);box-sizing:border-box}
+.hmc-blk.pair .hmc-half.wl{background:rgba(199,169,111,.26);border:1.5px dashed rgba(199,169,111,.85)}
+/* Above the halves, and inside the labelled one: right-aligned into the 65% share rather than
+   centred over the seam, where half of it would sit on the light gold and disappear. */
+.hmc-blk.pair span{position:absolute;z-index:1;right:0;top:0;bottom:0;width:65%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:8px;font-weight:800;letter-spacing:-.02em;color:var(--clsblk-ink);
+  line-height:1;white-space:nowrap;overflow:hidden;font-variant-numeric:tabular-nums}
+
+
+/* ---- the Watchlist card, made to fit ----------------------------------------------------------
+   (Tate, 2026-08-28: "the watchlist should only include the class numbers so its more compact and
+   i dont want it to scroll ... it should always show profile and calandar".)
+   One line per entry: the number, and whether you can get in. The two-line course title that used
+   to sit underneath is on the tooltip instead — it was the whole reason this card ran past the
+   bottom of the screen. Row count is decided at runtime by hmFitWatch(); these rules only have to
+   make a row a predictable, uniform height so that decision can be made by measuring. */
+.hm-wcard .hm-wrow{display:flex;align-items:center;gap:10px;padding:7.5px 0}
+.hm-wcard .hm-wrow .wl-code{font-size:13.5px}
+.hm-wcard .hm-wrow .wl-st{margin-left:auto;font-size:11px;padding:2.5px 9px}
+.hm-wcard .hm-saved{padding:7px 0;border-bottom:1px solid var(--line-soft)}
+.hm-wcard .hm-saved .fav{width:23px;height:23px;font-size:9px}
+/* Rows are hidden from the bottom, so ":last-of-type" is not the last one you can SEE. The
+   divider is moved with a class instead, or the card ends on a hairline pointing at nothing. */
+.hm-wcard .hm-witem.wl-lastvis{border-bottom:none}
+/* Chrome trimmed so the space goes to rows instead: a laptop fold has about 140px left after
+   the profile card and the week, and every 30px recovered here is one more course you can see
+   without leaving Home. */
+.hm-wcard{padding-top:15px;padding-bottom:9px}
+.hm-wcard .hm-wct{padding-bottom:10px}
+
+/* ---- the schedule card sheet (desktop / no file-share) --------------------------------------- */
+.sc-back{position:fixed;inset:0;z-index:1400;display:none;align-items:center;justify-content:center;
+  padding:22px;background:rgba(8,20,15,.62);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+.sc-back.open{display:flex}
+.sc-card{position:relative;width:min(520px,100%);max-height:92vh;overflow-y:auto;background:var(--panel);
+  border:1px solid var(--line);border-radius:20px;padding:22px 22px 20px;box-shadow:0 24px 60px rgba(0,0,0,.32)}
+.sc-x{position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:50%;border:1px solid var(--line);
+  background:transparent;color:var(--muted);font-size:19px;line-height:1;cursor:pointer}
+.sc-kick{font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--faint)}
+.sc-h{margin:6px 0 14px;font-size:20px;font-weight:700;letter-spacing:-.015em;color:var(--text)}
+.sc-img{display:block;width:100%;height:auto;border-radius:14px;border:1px solid var(--line)}
+.sc-acts{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-top:15px}
+.sc-dl{text-decoration:none}
+.sc-fine{margin:12px 0 0;font-size:12.5px;color:var(--muted);line-height:1.5}
+@media (max-width:480px){ .sc-card{padding:18px} .sc-acts .btn,.sc-acts .fr-chip{flex:1 1 100%;min-height:44px} }
+
+/* =================================================================================================
+   MESSAGES  —  thread list, thread, and the two suggestion cards
+   Inside Friends (Tate's option B), so everything here has to sit inside the existing one-column
+   page rather than build a second layout. The thread takes the pane; nothing floats over anything.
+   ================================================================================================= */
+.msg-list{display:flex;flex-direction:column;gap:2px}
+.msg-trow{display:flex;align-items:center;gap:11px;padding:11px 10px;border-radius:12px;cursor:pointer;
+  border:1px solid transparent}
+.msg-trow:hover{background:var(--panel-2)}
+.msg-trow.unread{background:rgba(var(--accent-rgb),.07);border-color:rgba(var(--accent-rgb),.16)}
+.msg-av{width:38px;height:38px;border-radius:50%;flex:none;display:inline-flex;align-items:center;
+  justify-content:center;font-size:13px;font-weight:700;color:var(--text-2);background:var(--panel-3);
+  overflow:hidden}
+.msg-av img{width:100%;height:100%;object-fit:cover;display:block}
+.msg-av.stack{font-variant-numeric:tabular-nums}
+.msg-tmain{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.msg-tname{font-size:14.5px;font-weight:650;letter-spacing:-.01em;color:var(--text);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msg-tprev{font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msg-trow.unread .msg-tprev{color:var(--text-2)}
+.msg-twhen{font-size:11.5px;color:var(--faint);flex:none;font-variant-numeric:tabular-nums}
+.msg-tdot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none}
+
+/* the thread */
+.msg-thread{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:16px;
+  background:var(--panel);overflow:hidden;min-height:60vh}
+.msg-head{display:flex;align-items:center;gap:10px;padding:11px 13px;border-bottom:1px solid var(--line)}
+.msg-back{width:32px;height:32px;border-radius:50%;border:1px solid var(--line);background:transparent;
+  color:var(--text-2);font-size:16px;line-height:1;cursor:pointer;flex:none}
+.msg-htitle{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.msg-htitle b{font-size:15px;font-weight:700;letter-spacing:-.012em;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.msg-htitle small{font-size:11.5px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msg-leave{flex:none;background:transparent;border:1px solid var(--line);border-radius:999px;
+  padding:5px 12px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer}
+.msg-body{flex:1;min-height:0;max-height:56vh;overflow-y:auto;padding:14px 13px;
+  display:flex;flex-direction:column;gap:8px;background:var(--panel-2)}
+.msg-empty{margin:auto;text-align:center;font-size:13px;color:var(--faint);padding:28px 10px}
+.msg-row{display:flex;flex-direction:column;align-items:flex-start;max-width:86%}
+.msg-row.me{align-self:flex-end;align-items:flex-end}
+.msg-row.card{max-width:min(340px,92%)}
+.msg-who{font-size:10.5px;font-weight:700;color:var(--faint);margin:0 0 3px 3px;letter-spacing:.02em}
+.msg-b{padding:9px 13px;border-radius:16px;font-size:13.5px;line-height:1.45;
+  background:var(--panel-3);color:var(--text);border-bottom-left-radius:6px;overflow-wrap:anywhere}
+.msg-b.me{background:var(--clsblk);color:var(--clsblk-ink);border-bottom-left-radius:16px;
+  border-bottom-right-radius:6px}
+.msg-note{margin-top:5px;font-size:12.5px;color:var(--muted);padding:0 3px}
+
+/* a suggestion card, in a thread */
+.msug{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.msug-top{padding:11px 13px 10px;border-bottom:1px solid var(--line-soft)}
+.msug-kick{font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--faint)}
+.msug-code{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px;
+  font-size:16px;font-weight:800;letter-spacing:-.02em;color:var(--text)}
+.msug-sub{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.4}
+.msug-seat{font-size:10.5px;font-weight:700;border:1px solid currentColor;border-radius:999px;
+  padding:2px 8px;letter-spacing:0}
+.msug-seat.open{color:var(--accent)}.msug-seat.wait{color:var(--mid)}.msug-seat.full{color:var(--low)}
+.msug-fits{padding:9px 13px;display:flex;flex-direction:column;gap:5px}
+/* The fit line is the feature. Colour is never the only channel — each row names the reason. */
+.msug-fit{display:flex;align-items:center;gap:7px;font-size:12px;line-height:1.3}
+.msug-fit i{width:7px;height:7px;border-radius:50%;flex:none;background:var(--faint)}
+.msug-fit.ok i{background:var(--accent)}
+.msug-fit.no i{background:var(--low)}
+.msug-fit.none i,.msug-fit.unknown i{background:var(--mid)}
+.msug-fit b{font-weight:700;color:var(--text-2)}
+.msug-fit span{color:var(--muted)}
+.msug-acts{display:flex;gap:7px;padding:0 13px 12px}
+.msug-b{flex:1;padding:8px 0;border-radius:9px;border:1px solid var(--line);background:var(--panel-2);
+  color:var(--text-2);font:600 12.5px/1 inherit;cursor:pointer}
+.msug-b.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+
+/* composer */
+.msg-compose{display:flex;align-items:center;gap:8px;padding:10px 12px;border-top:1px solid var(--line)}
+.msg-plus{width:34px;height:34px;border-radius:50%;flex:none;border:1px solid var(--line);
+  background:var(--panel-2);color:var(--text-2);font-size:18px;line-height:1;cursor:pointer}
+.msg-fld{flex:1;min-width:0;background:var(--panel-2);border:1px solid var(--line);border-radius:999px;
+  padding:9px 15px;font-size:13.5px;color:var(--text)}
+.msg-go{width:34px;height:34px;border-radius:50%;flex:none;border:0;background:var(--accent);
+  color:var(--accent-ink);font-size:16px;line-height:1;cursor:pointer}
+
+/* the class picker, and the new-group sheet */
+.msg-pick,.msg-new{border-top:1px solid var(--line);padding:12px 13px;background:var(--panel-2)}
+.msg-new{border:1px solid var(--line);border-radius:14px;margin-bottom:10px}
+.msg-pick-h,.msg-new-h{font-size:12.5px;font-weight:700;color:var(--text-2);margin-bottom:9px}
+.msg-pick-l,.msg-new-l{display:flex;flex-direction:column;gap:5px;max-height:240px;overflow-y:auto}
+.msg-pick-r{display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:9px 11px;
+  border:1px solid var(--line);border-radius:10px;background:var(--panel);cursor:pointer;color:var(--text)}
+.msg-pick-r b{font-family:var(--mono);font-size:12.5px;font-weight:700;flex:none}
+.msg-pick-r span{flex:1;min-width:0;font-size:12px;color:var(--muted);overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.msg-pick-r i{font-style:normal;font-size:10.5px;color:var(--faint);flex:none}
+.msg-pick-e{font-size:12.5px;color:var(--faint);line-height:1.5}
+.msg-new-name{margin:0 0 10px}
+.msg-new-r{display:flex;align-items:center;gap:9px;padding:6px 4px;font-size:13px;cursor:pointer}
+.msg-new-r .msg-av{width:28px;height:28px;font-size:11px}
+.msg-new-a{display:flex;gap:8px;align-items:center;margin-top:11px}
+
+/* a Message button on a friend row */
+.fr-msgbtn{flex:none;background:transparent;border:1px solid var(--line);border-radius:999px;
+  padding:5px 12px;font-size:12px;font-weight:600;color:var(--accent);cursor:pointer}
+
+/* =================================================================================================
+   "Tate and Sean suggested this teacher" — on the professor card
+   ================================================================================================= */
+.psug-wrap{display:flex;flex-direction:column;gap:7px;margin:0 0 14px}
+.psug-pill{display:flex;align-items:center;gap:9px;padding:7px 12px 7px 8px;border-radius:999px;
+  background:rgba(21,71,52,.07);border:1px solid rgba(21,71,52,.16);
+  font-size:12.5px;color:#2c3a33;line-height:1.35}
+.psug-pill.rev{cursor:pointer;background:rgba(43,124,179,.08);border-color:rgba(43,124,179,.2);color:#26424f}
+.psug-pill b{font-weight:700}
+.psug-faces{display:flex;flex:none}
+.psug-faces i{width:22px;height:22px;border-radius:50%;overflow:hidden;display:inline-flex;
+  align-items:center;justify-content:center;font-style:normal;font-size:8.5px;font-weight:700;
+  color:#fff;background:#7b8a80;border:2px solid #F6F3EE;margin-left:-7px}
+.psug-faces i:first-child{margin-left:0}
+.psug-faces i img{width:100%;height:100%;object-fit:cover;display:block}
+.psug-btn{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 14px;border-radius:999px;
+  border:1px solid rgba(21,71,52,.25);background:transparent;color:#154734;
+  font:600 12.5px 'Inter',-apple-system,system-ui,sans-serif;cursor:pointer}
+.psug-btn.on{background:rgba(21,71,52,.1);border-color:transparent}
+
+/* the per-review privacy switch — off is the resting state, and it looks like it */
+.rev-share{display:inline-flex;align-items:center;gap:9px;background:transparent;border:0;padding:6px 0;
+  font-size:12.5px;color:var(--muted);cursor:pointer;text-align:left}
+.rev-share .rev-sw{width:32px;height:18px;border-radius:999px;background:var(--panel-3);
+  border:1px solid var(--line);position:relative;flex:none;transition:background .15s}
+.rev-share .rev-sw::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;
+  border-radius:50%;background:var(--muted);transition:left .15s,background .15s}
+.rev-share.on{color:var(--accent)}
+.rev-share.on .rev-sw{background:var(--accent);border-color:var(--accent)}
+.rev-share.on .rev-sw::after{left:16px;background:var(--accent-ink)}
+@media (prefers-reduced-motion:reduce){.rev-share .rev-sw,.rev-share .rev-sw::after{transition:none}}
 </style>
 
 <div class="fp-back" id="fpBack">
@@ -15350,6 +15637,11 @@ function schedTextToImport(text,wlByKey,source){
         /* What the SCHEDULE said, before matchSection had an opinion. Dedupe keys off this:
            two cards are two sections even when the matcher pointed them at the same one. */
         _read:(r.section||'')+'|'+(r.days||'')+'|'+(r.start||''),
+        /* The day and hour EXACTLY as the schedule printed them, kept apart rather than merged
+           into the display string. The section picker narrows itself with these: if your export
+           says the class meets MoWe at 1:30, the sections at other hours are not choices you
+           could possibly need to make. */
+        _rdays:r.days||'', _rstart:r.start||'',
         pick:known,status:status||'enrolled',wlPos:wlPos||null};
     });
     // Drop exact duplicate sections (same code + class number).
@@ -15363,6 +15655,22 @@ function schedTextToImport(text,wlByKey,source){
     var seenK={}; schImportCodes=schImportCodes.filter(function(c){
       var k=c.code+'|'+(c._read&&c._read!=='||'?c._read:(c.crn||c.section||('r'+Math.random())));
       if(seenK[k])return false; seenK[k]=1; return true;
+    });
+    /* ---- settle every row that isn't actually a question ------------------------------------
+       A dropdown with one option in it is not a choice, it is a chore — and the student has
+       already told us the answer twice over: once by importing a schedule that names the hour,
+       and once by the course only running one section. Resolve those here, silently, so the
+       review screen only ever asks about rows where more than one answer is possible.
+       (Tate, 2026-08-28: "if theres only one class just auto pick it ... you should only give
+       the option between the sections at that specific time because the other times dont
+       matter".)
+       Nothing is invented: siAutoSection returns an index only when the feed leaves exactly one
+       possibility, and the row it adopts is a real live section. */
+    schImportCodes.forEach(function(c){
+      if(!c||c.matched||c._noTime||c._timeUnknown)return;
+      var ix=(typeof siAutoSection==='function')?siAutoSection(c):-1;
+      if(ix<0)return;
+      try{ siApplySection(c,(SEAT_SECTIONS[c.code]||[])[ix],false); }catch(e){}
     });
     const dupNote=schImportCodes.length>new Set(schImportCodes.map(function(c){return c.code;})).size?' Two sections of one course stay separate.':'';
     /* Say when the read was poor. A blurry screenshot doesn't fail loudly — it quietly
@@ -15932,14 +16240,65 @@ function siNeedsFix(c){
   if(c._timeUnknown)return false;
   return !c.days;                          // no meeting string at all
 }
-function siSectionOptions(code){
+/* ---- narrowing the section list to the hour the schedule actually printed ---------------------
+   The export tells us the day and the start time. Every section at a DIFFERENT hour is therefore
+   not a section this student could be in, and offering it is offering a wrong answer. Narrowing
+   to the printed hour usually leaves exactly one section, which is then not a question at all —
+   see siAutoSection below. (Tate, 2026-08-28.)
+   The narrowing is dropped entirely if it would leave NOTHING: an import whose time matches no
+   section we hold means our feed is behind or the read was off, and an empty picker is worse
+   than a long one. */
+function siImportMeet(c){
+  try{
+    if(!c||!c._rdays||!c._rstart)return null;
+    var dm=String(c._rdays).match(/(?:Mo|Tu|We|Th|Fr|Sa|Su)/g);
+    if(!dm||!dm.length)return null;
+    var tm=String(c._rstart).match(/(\d{1,2}):(\d{2})\s*([AaPp][Mm])/);
+    if(!tm)return null;
+    var h=+tm[1],mi=+tm[2],ap=tm[3].toUpperCase();
+    if(ap==='PM'&&h!==12)h+=12; if(ap==='AM'&&h===12)h=0;
+    return {days:dm.slice().sort().join(''),start:h*60+mi};
+  }catch(e){ return null; }
+}
+function siSecMeet(r){
+  try{
+    var m=(typeof parseMeet==='function')
+      ? parseMeet((typeof prettyTime==='function')?prettyTime(r.days):(r.days||'')) : null;
+    return m?{days:m.days.slice().sort().join(''),start:m.start}:null;
+  }catch(e){ return null; }
+}
+function siSectionOptions(code,c,showAll){
   try{
     if(typeof SEAT_SECTIONS==='undefined'||!SEAT_SECTIONS)return [];
-    return (SEAT_SECTIONS[code]||[]).map(function(r,ix){
+    var all=(SEAT_SECTIONS[code]||[]).map(function(r,ix){
       var t=(typeof prettyTime==='function')?prettyTime(r.days):(r.days||'');
       return {ix:ix,label:[(r.section||('Section '+(ix+1))),t||'time TBA',r.instructor||''].filter(Boolean).join(' · ')};
     });
+    if(showAll||(c&&c._allSecs))return all;
+    var want=siImportMeet(c);
+    if(!want)return all;
+    var narrowed=all.filter(function(o){
+      var m=siSecMeet((SEAT_SECTIONS[code]||[])[o.ix]);
+      return m&&m.days===want.days&&m.start===want.start;
+    });
+    return narrowed.length?narrowed:all;
   }catch(e){ return []; }
+}
+/* The one section this row can only be. Returns its feed index, or -1 when it is genuinely a
+   choice. Two ways to be certain, and neither is a guess:
+     • the course runs ONE section — there is nothing else it could be
+     • the schedule printed an hour and ONE section meets then
+   Anything else stays a question. */
+function siAutoSection(c){
+  try{
+    if(!c||!c.code)return -1;
+    if(typeof SEAT_SECTIONS==='undefined'||!SEAT_SECTIONS)return -1;
+    var rows=SEAT_SECTIONS[c.code]||[];
+    if(!rows.length)return -1;
+    if(rows.length===1)return 0;
+    var opts=siSectionOptions(c.code,c);
+    return (opts.length===1)?opts[0].ix:-1;
+  }catch(e){ return -1; }
 }
 window.siPickSection=function(i,v){
   var c=schImportCodes[i]; if(!c)return;
@@ -15950,29 +16309,39 @@ window.siPickSection=function(i,v){
     c._noTime=true; c._timeUnknown=false; c.days=''; c._wantPick=false;
     renderSchedImport('done',schImportMsg); return;
   }
-  try{
-    var r=(SEAT_SECTIONS[c.code]||[])[parseInt(v,10)];
-    if(r){
-      /* Everything here comes from the live feed, so the row stops being an OCR guess and
-         becomes a confirmed section — same standard as a section we matched automatically. */
-      c.section=r.section||c.section; c.crn=String(r.class_nbr||'')||c.crn;
-      /* The feed writes instructors as "Snyder, Coby". Every other surface flips that before
-         showing it, so adopting it raw here printed a name in a format nothing else uses. */
-      c.prof=(r.instructor&&typeof cpDispName==='function')?cpDispName(r.instructor,null)
-            :(r.instructor||c.prof);
-      c.days=(typeof prettyTime==='function')?prettyTime(r.days):(r.days||'');
-      /* A section with no hour is two different facts and they get two different answers.
-         Asynchronous means it genuinely never meets — record that. No hour on a section the
-         feed doesn't call async means our scrape simply hasn't got the time; say THAT rather
-         than claiming the class has no meeting. Either way the question is answered and the
-         row stops asking. */
-      if(!c.days){
-        if(typeof secIsAsync==='function'&&secIsAsync(r)){ c._noTime=true;  c._timeUnknown=false; }
-        else                                             { c._noTime=false; c._timeUnknown=true;  }
-      }else{ c._noTime=false; c._timeUnknown=false; }
-      c.matched=true; c._fixed=true; c._wantPick=false;
-    }
-  }catch(e){}
+  try{ siApplySection(c,(SEAT_SECTIONS[c.code]||[])[parseInt(v,10)],true); }catch(e){}
+  renderSchedImport('done',schImportMsg);
+};
+/* Adopt a live feed row onto an import row. Shared by the picker and by the automatic case, so
+   a section resolved without asking carries exactly the same data as one chosen by hand.
+   `byHand` is the ONLY difference, and it decides one thing: whether the row gets to claim the
+   student set it. An automatic pick did not come from them, and a "✓ you set this" badge on a
+   choice they never made is a small lie that costs trust when they go looking for the choice
+   they supposedly made. */
+function siApplySection(c,r,byHand){
+  if(!c||!r)return false;
+  c.section=r.section||c.section; c.crn=String(r.class_nbr||'')||c.crn;
+  /* The feed writes instructors as "Snyder, Coby". Every other surface flips that before
+     showing it, so adopting it raw here printed a name in a format nothing else uses. */
+  c.prof=(r.instructor&&typeof cpDispName==='function')?cpDispName(r.instructor,null)
+        :(r.instructor||c.prof);
+  c.days=(typeof prettyTime==='function')?prettyTime(r.days):(r.days||'');
+  /* A section with no hour is two different facts and they get two different answers.
+     Asynchronous means it genuinely never meets — record that. No hour on a section the
+     feed doesn't call async means our scrape simply hasn't got the time; say THAT rather
+     than claiming the class has no meeting. Either way the question is answered and the
+     row stops asking. */
+  if(!c.days){
+    if(typeof secIsAsync==='function'&&secIsAsync(r)){ c._noTime=true;  c._timeUnknown=false; }
+    else                                             { c._noTime=false; c._timeUnknown=true;  }
+  }else{ c._noTime=false; c._timeUnknown=false; }
+  c.matched=true; c._wantPick=false;
+  if(byHand)c._fixed=true; else c._auto=true;
+  return true;
+}
+window.siShowAllSecs=function(i){
+  var c=schImportCodes[i]; if(!c)return;
+  c._allSecs=true; c._wantPick=true;
   renderSchedImport('done',schImportMsg);
 };
 window.siWantPick=function(i){
@@ -15981,7 +16350,11 @@ window.siWantPick=function(i){
   renderSchedImport('done',schImportMsg);
 };
 function siItemHtml(c,i){
-  var opts=siSectionOptions(c.code);
+  var opts=siSectionOptions(c.code,c);
+  /* How many we are NOT showing, so the student is never quietly boxed in by our reading of
+     their export. Narrowing is right by default and wrong the moment the time was misread. */
+  var allOpts=siSectionOptions(c.code,c,true);
+  var hidden=Math.max(0,allOpts.length-opts.length);
   var needs=siNeedsFix(c);
   var showPicker=(needs||c._wantPick)&&c.pick;
   /* Name the professor when we know it. When the course runs several and we couldn't pin the
@@ -16001,7 +16374,12 @@ function siItemHtml(c,i){
         +'<option value="">Choose…</option>'
         +opts.map(function(o){return '<option value="'+o.ix+'">'+escapeHtml(o.label)+'</option>';}).join('')
         +'<option value="__none">This class has no set meeting time</option>'
-        +'</select></div>'
+        +'</select>'
+        +(hidden?('<button type="button" class="si-fixbtn si-showall" onclick="siShowAllSecs('+i+')">'
+                  +'Show all '+allOpts.length+' sections</button>'
+                  +'<span class="si-fixnote">Only the '+(opts.length===1?'section':opts.length+' sections')
+                  +' meeting at '+escapeHtml(c.days||'your time')+'.</span>'):'')
+        +'</div>'
       /* No live sections for this course — which right now means our scrape is missing it, not
          that the class isn't running. Don't ask them to type a time we'd then present as
          verified; offer the one answer we can record honestly and say why. */
@@ -16037,7 +16415,10 @@ function siItemHtml(c,i){
            a section you had never picked. It now offers on any row with sections, and says
            which of the two jobs it is doing. (Tate: "if it didnt include the professor it
            should give me the ability to pick section".) */
-        +((!showPicker&&opts.length&&c.pick)
+        /* One section for the whole course is not a choice — offering "Change section" there
+           opens a dropdown with a single entry, which is the dead end this whole change is
+           about. Offer it only when something else could actually be picked. */
+        +((!showPicker&&allOpts.length>1&&c.pick)
             ?('<button type="button" class="si-change" onclick="siWantPick('+i+')">'
               +((c.matched||c._fixed)?'Change section':'Pick your section')+'</button>')
             :'')
@@ -18048,14 +18429,31 @@ var UUID_RE=/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-
    Same token the QR uses (?add=<your id>), surfaced as a copy/share link so a
    friend can join from an iMessage or DM and be auto-connected once they sign up. */
 function myInviteLink(){ return (typeof sbUser!=='undefined'&&sbUser&&typeof qrPayloadFor==='function')?qrPayloadFor(sbUser.id):''; }
+/* Clipboard refused — an old browser, or a page that wasn't focused when the click landed.
+   Put the link somewhere selectable and say so, instead of naming a control that isn't there. */
+function inviteLinkFallback(link){
+  var note=document.getElementById('frInviteNote');
+  if(note){
+    note.innerHTML='<span class="fr-mut">Couldn\u2019t copy automatically \u2014 here it is:</span>'
+      +'<input class="fr-invite-input" readonly style="margin-top:6px;width:100%" onclick="this.select()" value="">';
+    var f=note.querySelector('input'); if(f){ f.value=link; try{f.select();}catch(e){} }
+  }
+  try{ if(typeof frToast==='function')frToast('Couldn\u2019t copy automatically \u2014 the link is on screen to copy by hand.'); }catch(e){}
+}
 function shareInviteLink(){
   var link=myInviteLink(); if(!link)return;
   if(navigator.share){ navigator.share({title:'Professify',text:'Join me on Professify — see my classes and which Cal Poly professors are actually good:',url:link}).catch(function(){}); return; }
   // Desktop (no Web Share): copy to clipboard WITH clear feedback (the old copy path
   // targeted removed elements and gave none). frToast is self-contained.
   try{
-    if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(link).then(function(){if(typeof frToast==='function')frToast('Invite link copied — paste it to a friend.');},function(){if(typeof frToast==='function')frToast('Couldn’t copy automatically — long-press the link to copy it.');}); }
-    else if(typeof frToast==='function')frToast('Long-press the link to copy it.');
+    /* The link is no longer on screen to long-press, so a failed copy has to hand it over
+       some other way rather than telling them to grab something they cannot see. */
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(link).then(
+        function(){ if(typeof frToast==='function')frToast('Invite link copied — paste it to a friend.'); },
+        function(){ inviteLinkFallback(link); });
+    }
+    else inviteLinkFallback(link);
   }catch(e){}
 }
 /* ============ SHARE MY SCHEDULE (as a link, not an image) ============
@@ -18170,23 +18568,432 @@ function schedShareLink(){
    day — removed outright rather than left dead behind a flag, so nothing can render it by
    accident. Feedback is the toast, and it still only claims success once the browser
    confirms it: the clipboard promise decides what the message says, never the click. */
+/* =================================================================================================
+   THE SHARE CARD — your actual week, drawn as an image
+   (Tate, 2026-08-28: "when you share your schedule it should actually have a preview of your
+   actual schedule that shows up on imessage ... with a visual image of actual class names times".)
+
+   Everything on this card is read from the sections Cal Poly has you in. Nothing is placed at an
+   invented hour: a class with no parsed meeting time cannot go on a grid, so it goes on a labelled
+   line underneath instead of being dropped or guessed at, and a waitlisted section says so.
+
+   1200x1200 for the same reason the invite card is: iMessage draws an image at its own aspect
+   ratio, so a square occupies roughly twice the thread height of a 1200x630 one — which at bubble
+   width is the difference between a legible week and a smudge.
+   ================================================================================================= */
+var SC_W=1200, SC_H=1200, SC_PAD=52;
+var SC={ ink:'#12261E', panel:'#F6F3EE', line:'#DCD6CA', mut:'#8A968D',
+         blk:'#2B7CB3', blkInk:'#FFFFFF', gold:'#C7A96F', mint:'#7FD3AB' };
+
+function scRound(g,x,y,w,h,r){
+  if(g.roundRect){ g.beginPath(); g.roundRect(x,y,w,h,r); return; }
+  r=Math.min(r,w/2,h/2);
+  g.beginPath();
+  g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r);
+  g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath();
+}
+function scFont(px,wt){ return (wt||600)+' '+px+'px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif'; }
+function scClip(g,txt,max){
+  txt=String(txt||'');
+  if(g.measureText(txt).width<=max)return txt;
+  while(txt.length>1&&g.measureText(txt+'…').width>max)txt=txt.slice(0,-1);
+  return txt+'…';
+}
+/* 545 -> "9:05". Minutes are dropped only when they are zero, because "9" alone reads as a
+   duration rather than a time. */
+function scClock(mins){
+  var h=Math.floor(mins/60), m=mins%60, ap=(h>=12?'PM':'AM'), hh=h%12; if(hh===0)hh=12;
+  return hh+':'+(m<10?'0':'')+m;
+}
+function scHourLabel(mins){
+  var h=Math.floor(mins/60), ap=(h>=12?'PM':'AM'), hh=h%12; if(hh===0)hh=12;
+  return hh+' '+ap;
+}
+
+/* Every section you are in, with its parsed meeting — the same source the week on Home uses,
+   so the card and the app can never disagree about what you are taking. */
+function scMeets(){
+  var codes=(typeof myClasses!=='undefined')?myClasses:[];
+  var all=(typeof myClassMeets==='function')?myClassMeets(codes):[];
+  var placed=[], loose=[];
+  all.forEach(function(m){
+    var prof='',sec='';
+    try{
+      var meta=(typeof myClassMeta!=='undefined')?myClassMeta[m.code]:null;
+      var ix=(m.key&&m.key.indexOf('#')>=0)?parseInt(m.key.split('#')[1],10):0;
+      var s=(meta&&meta.secs&&meta.secs[ix])||null;
+      prof=(s&&s.prof)||(meta&&meta.prof)||'';
+      sec=(s&&s.section)||'';
+    }catch(e){}
+    var row={code:m.code,prof:prof,section:sec,wl:!!m.wl,meet:m.meet};
+    if(m.meet&&m.meet.days&&m.meet.start!=null)placed.push(row); else loose.push(row);
+  });
+  return {placed:placed,loose:loose};
+}
+
+function schedCardCanvas(opts){
+  opts=opts||{};
+  var data=scMeets(), placed=data.placed;
+  var c=document.createElement('canvas');
+  c.width=SC_W; c.height=SC_H;
+  var g=c.getContext('2d');
+
+  /* ---- ground ---- */
+  var grad=g.createLinearGradient(0,0,SC_W*0.35,SC_H);
+  grad.addColorStop(0,'#1C5C43'); grad.addColorStop(.44,'#154734'); grad.addColorStop(1,'#0E3324');
+  g.fillStyle=grad; g.fillRect(0,0,SC_W,SC_H);
+  var glow=g.createRadialGradient(SC_W*0.84,0,0,SC_W*0.84,0,700);
+  glow.addColorStop(0,'rgba(95,211,160,.17)'); glow.addColorStop(1,'rgba(95,211,160,0)');
+  g.fillStyle=glow; g.fillRect(0,0,SC_W,SC_H);
+
+  /* ---- mark ---- */
+  g.fillStyle='#5FD3A0'; scRound(g,SC_PAD,SC_PAD,42,42,13); g.fill();
+  g.fillStyle='#0F3D2C'; g.font=scFont(25,800); g.textBaseline='middle'; g.textAlign='center';
+  g.fillText('P',SC_PAD+21,SC_PAD+22);
+  g.textAlign='left'; g.fillStyle='#fff'; g.font=scFont(29,700);
+  g.fillText('Professify',SC_PAD+56,SC_PAD+22);
+  var term=String(opts.term||((typeof APP_TERM!=='undefined')?APP_TERM:'')||'').trim();
+  if(term){ g.textAlign='right'; g.font=scFont(21,600); g.fillStyle='rgba(255,255,255,.68)';
+            g.fillText(term,SC_W-SC_PAD,SC_PAD+22); g.textAlign='left'; }
+
+  /* ---- title ---- */
+  var name=String(opts.name||'').trim();
+  var title=name?(name.split(/\s+/)[0]+'’s schedule this semester'):'My schedule this semester';
+  g.fillStyle='#fff'; g.font=scFont(46,700); g.textAlign='center';
+  g.fillText(scClip(g,title,SC_W-SC_PAD*2),SC_W/2,175);
+
+  /* ---- the week panel ---- */
+  var PT=232, PH=(SC_H-PT-SC_PAD-58), PX=SC_PAD, PW=SC_W-SC_PAD*2;
+  g.fillStyle=SC.panel; scRound(g,PX,PT,PW,PH,20); g.fill();
+
+  if(!placed.length&&!data.loose.length){
+    g.fillStyle=SC.mut; g.font=scFont(24,600); g.textAlign='center';
+    g.fillText('No classes imported yet',SC_W/2,PT+PH/2);
+    return c;
+  }
+
+  /* Weekend columns only when something actually meets then, so the ordinary week stays five
+     columns and each one stays wide enough for a course code. */
+  var DAYS=['Mo','Tu','We','Th','Fr'], DL=['MON','TUE','WED','THU','FRI'];
+  if(placed.some(function(m){return m.meet.days.indexOf('Sa')>=0;})){DAYS.push('Sa');DL.push('SAT');}
+  if(placed.some(function(m){return m.meet.days.indexOf('Su')>=0;})){DAYS.push('Su');DL.push('SUN');}
+
+  /* The window is the day you actually have, not a fixed 8-to-6 — an 8am lab and a 7pm seminar
+     both have to be on the card, and empty hours at either end waste the only space there is. */
+  var lo=24*60, hi=0;
+  placed.forEach(function(m){ lo=Math.min(lo,m.meet.start); hi=Math.max(hi,m.meet.end); });
+  if(!placed.length){ lo=8*60; hi=18*60; }
+  lo=Math.floor(lo/60)*60; hi=Math.ceil(hi/60)*60;
+  if(hi-lo<180)hi=lo+180;
+
+  var IP=26, GUT=76, HEAD=34;
+  var looseH=data.loose.length?58:0;
+  var gx=PX+IP+GUT, gy=PT+IP+HEAD+6;
+  var gw=PW-IP*2-GUT, gh=PH-IP*2-HEAD-6-looseH;
+  var colW=gw/DAYS.length, span=hi-lo;
+
+  /* hour lines + labels */
+  g.textAlign='right'; g.textBaseline='middle';
+  for(var t=lo;t<=hi;t+=60){
+    var y=gy+((t-lo)/span)*gh;
+    g.strokeStyle=SC.line; g.lineWidth=1;
+    g.beginPath(); g.moveTo(gx,Math.round(y)+.5); g.lineTo(gx+gw,Math.round(y)+.5); g.stroke();
+    if(t<hi){ g.fillStyle=SC.mut; g.font=scFont(17,600); g.fillText(scHourLabel(t),gx-14,y+13); }
+  }
+  /* day headings */
+  g.textAlign='center'; g.fillStyle=SC.mut; g.font=scFont(18,700);
+  DAYS.forEach(function(d,i){ g.fillText(DL[i],gx+colW*(i+.5),PT+IP+14); });
+
+  /* ---- blocks ---- */
+  /* Lanes are per CLUSTER, not per day. Assigning them across the whole day made every Monday
+     block half-width because one pair overlapped at 10am — so an 8am class with nothing near it
+     came out as "BUS …". A block only gives up width to the blocks it actually collides with. */
+  function scClusters(day){
+    var out=[],cur=[],end=-1;
+    day.forEach(function(m){
+      if(cur.length&&m.meet.start>=end){ out.push(cur); cur=[]; end=-1; }
+      cur.push(m); end=Math.max(end,m.meet.end);
+    });
+    if(cur.length)out.push(cur);
+    return out;
+  }
+  /* Step the size down before clipping. A truncated line on a card someone is going to text to a
+     friend is the one outcome worth spending a font size to avoid. */
+  function scFit(g,txt,avail,sizes,wt){
+    for(var i=0;i<sizes.length;i++){
+      g.font=scFont(sizes[i],wt);
+      if(g.measureText(txt).width<=avail)return {txt:txt,size:sizes[i]};
+    }
+    return null;
+  }
+  /* "Maria Chaderina" -> "Chaderina" before it ever becomes "Maria Ch…". A surname is the part
+     that identifies the professor; the truncation was throwing away the useful half. */
+  function scWho(g,name,avail,sizes){
+    var full=scFit(g,name,avail,sizes,600); if(full)return full;
+    var last=String(name).trim().split(/\s+/).pop();
+    var one=scFit(g,last,avail,sizes,600); if(one)return one;
+    g.font=scFont(sizes[sizes.length-1],600);
+    return {txt:scClip(g,last,avail),size:sizes[sizes.length-1]};
+  }
+  DAYS.forEach(function(d,di){
+    var day=placed.filter(function(m){return m.meet.days.indexOf(d)>=0;})
+      .sort(function(a,b){return a.meet.start-b.meet.start||a.meet.end-b.meet.end;});
+    scClusters(day).forEach(function(cluster){
+      var lanes=[];
+      cluster.forEach(function(m){
+        var li=0; while(lanes[li]!=null&&lanes[li]>m.meet.start)li++;
+        m._lane=li; lanes[li]=m.meet.end;
+      });
+      var n=Math.max(1,lanes.length);
+      cluster.forEach(function(m){
+        var y=gy+((m.meet.start-lo)/span)*gh;
+        var h=Math.max(28,((m.meet.end-m.meet.start)/span)*gh);
+        var w=colW/n, x=gx+colW*di+w*m._lane;
+        var bx=x+3, bw=w-6;
+        if(m.wl){
+          g.fillStyle='rgba(199,169,111,.26)'; scRound(g,bx,y+2,bw,h-4,10); g.fill();
+          g.strokeStyle=SC.gold; g.lineWidth=2; g.setLineDash([6,4]);
+          scRound(g,bx,y+2,bw,h-4,10); g.stroke(); g.setLineDash([]);
+        }else{
+          g.fillStyle=SC.blk; scRound(g,bx,y+2,bw,h-4,10); g.fill();
+        }
+        var ink=m.wl?'#6B4E17':SC.blkInk;
+        var cx=bx+bw/2, avail=bw-14, top=y+2, bh=h-4;
+        g.textAlign='center'; g.fillStyle=ink;
+        var lines=[];
+        /* The code, whole. One line if it fits; the subject stacked over the number if it does
+           not; never "BUS …", which names no class at all. */
+        var one=scFit(g,m.code,avail,[25,23,21,19],800);
+        if(one){ lines.push({txt:one.txt,size:one.size,wt:800,gapAfter:5}); }
+        else{
+          var parts=String(m.code).split(/\s+/);
+          var subj=parts.slice(0,-1).join(' ')||m.code, num=parts[parts.length-1];
+          var sf=scFit(g,subj,avail,[15,14,13],700)||{txt:subj,size:13};
+          var nf=scFit(g,num,avail,[24,22,20,18],800)||{txt:num,size:18};
+          lines.push({txt:sf.txt,size:sf.size,wt:700,alpha:.8,gapAfter:1});
+          lines.push({txt:nf.txt,size:nf.size,wt:800,gapAfter:5});
+        }
+        if(bh>=56){
+          var tt=scClock(m.meet.start)+'–'+scClock(m.meet.end);
+          var tf=scFit(g,tt,avail,[16,15,14,13,12],600);
+          if(tf)lines.push({txt:tf.txt,size:tf.size,wt:600,alpha:.85,gapAfter:4});
+        }
+        if(bh>=88&&m.prof){
+          var wf=scWho(g,m.prof,avail,[14,13,12]);
+          lines.push({txt:wf.txt,size:wf.size,wt:600,alpha:.78,gapAfter:4});
+        }
+        if(bh>=116&&m.wl)lines.push({txt:'waitlisted',size:13,wt:700,alpha:.9,gapAfter:0});
+        var totalH=0;
+        lines.forEach(function(l){ totalH+=l.size*1.15+(l.gapAfter||0); });
+        var ty=top+(bh-totalH)/2;
+        g.textBaseline='top';
+        lines.forEach(function(l){
+          g.font=scFont(l.size,l.wt);
+          g.globalAlpha=(l.alpha==null?1:l.alpha);
+          g.fillText(l.txt,cx,ty);
+          g.globalAlpha=1;
+          ty+=l.size*1.15+(l.gapAfter||0);
+        });
+      });
+    });
+  });
+
+  /* ---- classes with no hour: named, never placed at one we made up ---- */
+  if(data.loose.length){
+    var ly=PT+PH-IP-24;
+    g.strokeStyle=SC.line; g.lineWidth=1;
+    g.beginPath(); g.moveTo(PX+IP,Math.round(ly-24)+.5); g.lineTo(PX+PW-IP,Math.round(ly-24)+.5); g.stroke();
+    g.textAlign='left'; g.textBaseline='middle';
+    var anyAsync=false;
+    try{ anyAsync=data.loose.some(function(m){ return (typeof calIsAsync==='function')&&calIsAsync(m.code); }); }catch(e){}
+    var lab=anyAsync?'ASYNC':'NO SET TIME';
+    g.fillStyle=anyAsync?'#1C6247':'#8A6A22'; g.font=scFont(16,800);
+    g.fillText(lab,PX+IP,ly+6);
+    var lx=PX+IP+g.measureText(lab).width+16;
+    var seen={};
+    data.loose.forEach(function(m){
+      if(seen[m.code])return; seen[m.code]=1;
+      g.font=scFont(17,700);
+      var tw=g.measureText(m.code).width+22;
+      if(lx+tw>PX+PW-IP)return;
+      g.fillStyle='#EDE8DC'; scRound(g,lx,ly-8,tw,30,8); g.fill();
+      g.fillStyle=SC.ink; g.fillText(m.code,lx+11,ly+7);
+      lx+=tw+8;
+    });
+  }
+
+  /* ---- footer ---- */
+  g.textAlign='center'; g.textBaseline='middle';
+  g.fillStyle='rgba(255,255,255,.9)'; g.font=scFont(25,700);
+  g.fillText('professify.app',SC_W/2,SC_H-SC_PAD+4);
+  return c;
+}
+
+/* A PNG of the card. Waits for webfonts first — without it the first share of a session renders
+   in the fallback face while every later one uses Inter, which is a card that looks different
+   depending on when you tapped it. */
+async function schedCardBlob(opts){
+  try{ if(document.fonts&&document.fonts.ready)await document.fonts.ready; }catch(e){}
+  var c=schedCardCanvas(opts);
+  return await new Promise(function(res){
+    try{ c.toBlob(function(b){res(b);}, 'image/png'); }catch(e){ res(null); }
+  });
+}
+try{ window.schedCardCanvas=schedCardCanvas; window.schedCardBlob=schedCardBlob; window.scMeets=scMeets; }catch(e){}
+
+/* A File, built without a single await.
+   navigator.share() has to be called inside the user gesture that triggered it, and on iOS an
+   awaited promise in between is enough to lose that activation and have the sheet silently
+   refuse. canvas.toDataURL() is synchronous, so the whole path from click to share sheet is. */
+function schedCardFileSync(opts){
+  try{
+    var c=schedCardCanvas(opts);
+    var url=c.toDataURL('image/png');
+    var b64=url.split(',')[1]; if(!b64)return null;
+    var bin=atob(b64), arr=new Uint8Array(bin.length);
+    for(var i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+    var name='professify-schedule.png';
+    try{ return new File([arr],name,{type:'image/png'}); }
+    catch(e){ var bl=new Blob([arr],{type:'image/png'}); bl.name=name; return bl; }
+  }catch(e){ return null; }
+}
+/* ---- the link-preview path ------------------------------------------------------------------
+   A crawler does not run JavaScript, so a link can only preview a student's own week if the image
+   already exists at a URL and something server-side writes it into og:image. The bucket and the
+   edge function are both deployment, not code, so this whole path is behind SHARE_PREVIEW and the
+   share works exactly as before while it is off. */
+var SC_BUCKET='schedule-cards';
+function scPreviewOn(){ try{ return !!cfg().SHARE_PREVIEW; }catch(e){ return false; } }
+/* A random name, not the account id. The image URL travels inside a link that gets forwarded, and
+   a user id in it would be an identifier handed to everyone down the chain for nothing. */
+function scToken(){
+  var a=new Uint8Array(16);
+  try{ (window.crypto||window.msCrypto).getRandomValues(a); }
+  catch(e){ for(var i=0;i<16;i++)a[i]=Math.floor(Math.random()*256); }
+  return Array.prototype.map.call(a,function(b){return ('0'+b.toString(16)).slice(-2);}).join('')+'.png';
+}
+/* Fire and forget, deliberately. navigator.share() has to be called inside the click, so nothing
+   here may be awaited — and an upload that fails must cost the student a link preview, never their
+   share sheet. */
+function scUploadCard(id,file){
+  try{
+    if(!scPreviewOn()||!id||!file)return;
+    if(typeof sb==='undefined'||!sb||!sb.storage)return;
+    sb.storage.from(SC_BUCKET).upload(id,file,{contentType:'image/png',upsert:true})
+      .then(function(r){ if(r&&r.error)try{console.warn('[share] card upload failed:',r.error.message);}catch(e){} },
+            function(e){ try{console.warn('[share] card upload failed:',e);}catch(_e){} });
+  }catch(e){}
+}
+/* /s carries the image id and hands the human on to the app with the same payload the plain link
+   has always used, so an old link and a new one open to exactly the same screen. */
+function schedPreviewLink(id){
+  var base=((cfg().SITE_URL||'').replace(/\/+$/,''))||'';
+  var plain=schedShareLink();
+  if(!scPreviewOn()||!base||!id||plain.indexOf(base+'/?')!==0)return plain;
+  var term=(typeof APP_TERM!=='undefined'?APP_TERM:'');
+  return base+'/s?i='+encodeURIComponent(id)+(term?('&tm='+encodeURIComponent(term)):'')
+    +'&'+plain.slice((base+'/?').length);
+}
+try{ window.schedPreviewLink=schedPreviewLink; window.scPreviewOn=scPreviewOn; }catch(e){}
+
+function schedCardOpts(){
+  var nm=''; try{ nm=((typeof myProfile!=='undefined'&&myProfile)?myProfile.display_name:'')||''; }catch(e){}
+  return {name:nm, term:(typeof APP_TERM!=='undefined'?APP_TERM:'')};
+}
+window.schedCardFileSync=schedCardFileSync;
+
+/* The desktop path: no file share sheet, so show the card itself with the two things you would
+   have done with it anyway. This is also where you find out what the picture looks like before
+   sending it, which the share sheet does not tell you. */
+function schedCardSheet(link){
+  var back=document.getElementById('scSheet');
+  if(!back){ back=document.createElement('div'); back.id='scSheet'; back.className='sc-back'; document.body.appendChild(back); }
+  var c=schedCardCanvas(schedCardOpts());
+  var src=''; try{ src=c.toDataURL('image/png'); }catch(e){}
+  back.innerHTML='<div class="sc-card" role="dialog" aria-label="Your schedule card">'
+    +'<button class="sc-x" onclick="schedCardClose()" aria-label="Close">&times;</button>'
+    +'<div class="sc-kick">Share your schedule</div>'
+    +'<h3 class="sc-h">Look at my schedule this semester</h3>'
+    +(src?('<img class="sc-img" src="'+src+'" alt="Your week: '+escAcc(scAltText())+'">'):'')
+    +'<div class="sc-acts">'
+    +'<a class="btn primary sc-dl" download="professify-schedule.png" href="'+src+'">Save the image</a>'
+    +'<button class="fr-chip" onclick="schedCardCopy()">Copy the link</button>'
+    +'</div>'
+    +'<p class="sc-fine">Send the image and the link together — the picture is your real week, and the link lets them line their classes up against it.</p>'
+    +'<input type="hidden" id="scLink" value="'+escAcc(link||'')+'">'
+    +'</div>';
+  back.classList.add('open');
+  back.onclick=function(e){ if(e.target===back)schedCardClose(); };
+}
+/* The card is an image, and an image with no alt text says nothing to anyone using a screen
+   reader — so the week gets described in words, from the same data that drew it. */
+function scAltText(){
+  var d=scMeets(), bits=[];
+  d.placed.forEach(function(m){
+    bits.push(m.code+' '+m.meet.days.join('')+' '+scClock(m.meet.start)+' to '+scClock(m.meet.end)
+      +(m.wl?' (waitlisted)':''));
+  });
+  d.loose.forEach(function(m){ bits.push(m.code+', no set time'); });
+  return bits.join('; ')||'no classes yet';
+}
+window.schedCardClose=function(){ var b=document.getElementById('scSheet'); if(b)b.classList.remove('open'); };
+window.schedCardCopy=function(){
+  var el=document.getElementById('scLink'); var v=el?el.value:'';
+  if(!v)return;
+  try{
+    navigator.clipboard.writeText(v).then(
+      function(){ if(typeof frToast==='function')frToast('Schedule link copied'); },
+      function(){ if(typeof frToast==='function')frToast('Couldn’t copy — select the link and copy it'); });
+  }catch(e){}
+};
+window.schedCardSheet=schedCardSheet;
+window.scAltText=scAltText;
+
 function shareMySchedule(){
   if(!(myClasses&&myClasses.length)){ if(typeof frToast==='function')frToast('Add a class to My Classes first, then share your schedule.'); return; }
   var link=schedShareLink(); if(!link)return;
-  /* navigator.share and clipboard.writeText both want to be called inside the click. */
-  if(navigator.share){
-    navigator.share({title:'My Professify schedule',text:'Here’s my Cal Poly schedule — see if we overlap:',url:link})
-      .catch(function(){});
+  /* WHAT ARRIVES IN THE THREAD (Tate, 2026-08-28: "it should actually have a preview of your
+     actual schedule ... with a visual image of actual class names times").
+     A link on its own previews with whatever OG tags the site serves, which for a static site is
+     the same card for everybody — crawlers do not run JavaScript, so no amount of client code can
+     make a link preview show YOUR week. Attaching the PNG does: iOS puts the real image in the
+     message, at full size, with the text under it. So the image is the first choice and the link
+     rides along in the text, which is also the only version that works with no server at all. */
+  var TEXT='Look at my schedule this semester';
+  var file=schedCardFileSync(schedCardOpts());
+  /* The id is chosen HERE, before the upload starts, so the link can carry it without waiting on
+     the network. The upload then races the crawler — which is fine, because on iOS the picture is
+     already attached to the message and does not depend on this at all. */
+  if(scPreviewOn()&&file){ var _id=scToken(); scUploadCard(_id,file); link=schedPreviewLink(_id); }
+  var canFiles=false;
+  try{ canFiles=!!(file&&navigator.canShare&&navigator.share&&navigator.canShare({files:[file]})); }catch(e){}
+  if(canFiles){
+    navigator.share({files:[file],text:TEXT+'\n'+link}).catch(function(err){
+      /* Dismissing the sheet is not a failure and must not be answered with a fallback the
+         student did not ask for. */
+      if(err&&(err.name==='AbortError'||err.name==='NotAllowedError'))return;
+      try{ schedCardSheet(link); }catch(e){}
+    });
     return;
   }
-  try{
-    if(navigator.clipboard&&navigator.clipboard.writeText){
-      navigator.clipboard.writeText(link).then(
-        function(){ if(typeof frToast==='function')frToast('Schedule link copied — send it to a friend.'); },
-        function(){ if(typeof frToast==='function')frToast('Couldn’t copy automatically — long-press to copy the link.'); });
-    }
-    else if(typeof frToast==='function')frToast('Long-press the link to copy it.');
-  }catch(e){}
+  /* A share sheet with no file support still beats a bare link — but it cannot carry the week,
+     so say what it IS carrying rather than promising a picture that will not appear. */
+  if(navigator.share){
+    navigator.share({title:'My Professify schedule',text:TEXT,url:link}).catch(function(err){
+      if(err&&(err.name==='AbortError'||err.name==='NotAllowedError'))return;
+      try{ schedCardSheet(link); }catch(e){}
+    });
+    return;
+  }
+  try{ schedCardSheet(link); }catch(e){
+    try{
+      if(navigator.clipboard&&navigator.clipboard.writeText){
+        navigator.clipboard.writeText(link).then(
+          function(){ if(typeof frToast==='function')frToast('Schedule link copied — send it to a friend.'); },
+          function(){ if(typeof frToast==='function')frToast('Couldn’t copy automatically — long-press to copy the link.'); });
+      }
+    }catch(e2){}
+  }
 }
 /* Parse a meeting string like "TuTh 9:00AM–10:20AM" into day tokens for the mini grid. */
 function _shDays(t){ var out=[]; var s=String(t||''); ['Mo','Tu','We','Th','Fr','Sa','Su'].forEach(function(d){ if(s.indexOf(d)>=0)out.push(d); }); return out; }
@@ -18588,6 +19395,7 @@ function friendRowHtml(f){
       ${codeLine}
       ${nxt?`<span class="fr-nexttog">${escapeHtml(nxt)}</span>`:''}
     </div>
+    ${(typeof msgOn==='function'&&msgOn())?`<button class="fr-msgbtn" title="Message ${escAcc(f.name)}" onclick="msgWith('${f.id}',event)">Message</button>`:''}
     <span class="fr-rowgo" aria-hidden="true">›</span>
     <button class="save-ico fr-rm" title="Remove friend" onclick="event.stopPropagation();removeFriend('${f.id}')">&times;</button>
   </div>`;
@@ -18630,8 +19438,10 @@ window.openAddFriend=function(){
   el.style.display=open?'none':'';
   if(!open){
     try{ if(typeof refreshInviteLink==='function')refreshInviteLink(); }catch(e){}
-    try{ el.scrollIntoView({behavior:'smooth',block:'nearest'}); }catch(e){}
-    setTimeout(function(){ var i=document.getElementById('frSearchPeople'); if(i)i.focus(); },220);
+    /* No scrollIntoView, and no autofocus. The panel now opens directly under the slot you
+       just pressed, so it is already on screen — scrolling to it moved the page out from under
+       the tap, and focusing the search box did it a second time on a phone by raising the
+       keyboard. Opening a panel should not move anything. */
   }
 };
 window.closeAddFriend=function(){
@@ -19115,6 +19925,13 @@ window.gpSetTab=function(t){
   var fp=document.getElementById('frFriendsPane'), gp=document.getElementById('gpPane');
   var sug=document.getElementById('frSuggestedSec');
   if(fp)fp.style.display=(t==='friends')?'':'none';
+  /* A thread is a place you are IN. Switching to Groups has to leave it, or the pane stays
+     open underneath and two screens are on top of each other. */
+  var tp=document.getElementById('frThreadPane');
+  if(tp&&t!=='friends'){ tp.style.display='none'; tp.innerHTML=''; try{ msgOpenId=null; }catch(e){} }
+  var msec=document.getElementById('frMsgSec');
+  if(msec&&t==='groups')msec.style.display='none';
+  else if(t==='friends'){ try{ msgRenderList(); }catch(e){} }
   /* Coming BACK from Groups used to leave this hidden until something else happened to call
      renderFriends — so the suggestions vanished for the rest of the session after one tab
      switch. Restore it from the same fact that decided it in the first place. */
@@ -19295,6 +20112,733 @@ window.gpAskDeleteGroup=function(id,ev){ if(ev){ev.stopPropagation&&ev.stopPropa
   _gpDelAsk=id; gpRenderDetail(); };
 window.gpCancelDeleteGroup=function(ev){ if(ev){ev.stopPropagation&&ev.stopPropagation();}
   _gpDelAsk=null; gpRenderDetail(); };
+/* =================================================================================================
+   MESSAGES  —  inside Friends, not beside it
+   (Tate, 2026-08-28: "build the messaging into friends".)
+
+   WHY IT LIVES HERE
+   The bottom bar is five slots and stays five slots. A sixth tab on a 390px phone gives every
+   label 65px and the row starts reading as a toolbar. Friends is also where the people already
+   are: the person you want to message is three rows below the thread you had with them, so the
+   list and the conversation share one screen and one mental model.
+
+   WHAT MAKES IT PROFESSIFY'S CHAT RATHER THAN A WORSE IMESSAGE
+   A message can be a CLASS or a PROFESSOR, not just text. A class suggestion is stored as the
+   course and section — a reference, never a screenshot — and the fit line under it ("Sean, free
+   then · Jabeast, clashes with BUS 3431") is computed from everyone's imported sections when the
+   message is READ. That is the one thing a group text cannot do, and it is the whole argument for
+   the feature existing inside the app.
+
+   IF THE MIGRATION HASN'T RUN
+   professify-messaging.sql creates four tables. Until it runs, every call here fails with 42P01
+   and msgReady goes false — the section hides itself and the rest of Friends is untouched. No
+   error card, no empty state: a student who has never seen messaging should not be shown a
+   broken version of it.
+   ================================================================================================= */
+/* Its own escaper. The app has two: escapeHtml(), which is global, and esc(), which is private
+   to the Home IIFE further down the file and therefore was NOT in scope here — calling it threw
+   "esc is not defined" on the first render of a thread list. One local wrapper, so this module
+   does not depend on which script block it happens to sit in. */
+function msgEsc(s){
+  try{ if(typeof escapeHtml==='function')return escapeHtml(s==null?'':s); }catch(e){}
+  return String(s==null?'':s).replace(/[&<>"]/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; });
+}
+
+var msgReady=null;          /* null = not asked yet, false = no backend/migration, true = live */
+var msgThreads=[];          /* [{id,kind,title,last_at,members:[uid],last,unread}] */
+var msgRows={};             /* conversation_id -> [message] */
+var msgOpenId=null;
+var msgChannel=null;
+var msgLoading=false;
+
+function msgFlagOn(){ try{ return !!(window.PROFESSIFY_FLAGS&&window.PROFESSIFY_FLAGS.messages); }catch(e){ return false; } }
+/* WHO AM I, and WHAT DO I TALK TO — two named seams rather than reads of `sb` and `sbUser`
+   scattered through the file.
+   The practical reason: both are top-level `let` bindings, so nothing outside this script can
+   replace them, and a verifier for messaging would otherwise have to mock an entire Supabase
+   client before page load, or test nothing at all. The design reason is better anyway — MSG_DB
+   below is a complete, readable list of every table and function this feature touches. */
+function msgMe(){
+  if(window.msgMeOverride)return window.msgMeOverride;
+  try{ return (typeof sbUser!=='undefined'&&sbUser)?sbUser.id:null; }catch(e){ return null; }
+}
+function msgHasBackend(){
+  if(window.msgDbOverride)return true;
+  try{ return typeof sb!=='undefined'&&!!sb; }catch(e){ return false; }
+}
+function msgIsMe(uid){ var me=msgMe(); return !!me&&uid===me; }
+function msgOn(){ return msgFlagOn()&&msgHasBackend()&&!!msgMe()&&msgReady!==false; }
+/* 42P01 is "relation does not exist" and PGRST205 is PostgREST's schema-cache version of the
+   same thing. Either means the migration has not been run, which is a state to go quiet in, not
+   an error to report. Anything else is a real failure and is left visible in the console. */
+function msgMissing(err){
+  if(!err)return false;
+  var c=String(err.code||''), m=String(err.message||'');
+  return c==='42P01'||c==='PGRST205'||c==='PGRST202'||/does not exist|schema cache/i.test(m);
+}
+function msgFail(err,where){
+  if(msgMissing(err)){ msgReady=false; return true; }
+  if(err)try{ console.warn('[messages] '+where, err); }catch(e){}
+  return false;
+}
+
+
+/* The whole surface area of messaging against the database. Nothing outside this object calls
+   sb, so what this feature can touch is readable in one place — and replaceable in one place. */
+var MSG_DB={
+  myMemberships: function(uid){ return sb.from('conversation_members').select('conversation_id,last_read_at').eq('user_id',uid); },
+  membersOf:     function(ids){ return sb.from('conversation_members').select('conversation_id,user_id').in('conversation_id',ids); },
+  conversations: function(ids){ return sb.from('conversations').select('id,kind,title,created_by,last_at').in('id',ids); },
+  latestMessages:function(ids){ return sb.from('messages').select('conversation_id,sender,kind,body,created_at').in('conversation_id',ids).order('created_at',{ascending:false}).limit(300); },
+  messagesIn:    function(cid){ return sb.from('messages').select('*').eq('conversation_id',cid).order('created_at',{ascending:true}).limit(400); },
+  markRead:      function(cid,uid,at){ return sb.from('conversation_members').update({last_read_at:at}).eq('conversation_id',cid).eq('user_id',uid); },
+  insertMessage: function(row){ return sb.from('messages').insert(row).select().single(); },
+  newConversation:function(row){ return sb.from('conversations').insert(row).select().single(); },
+  addMembers:    function(rows){ return sb.from('conversation_members').insert(rows); },
+  leave:         function(cid,uid){ return sb.from('conversation_members').delete().eq('conversation_id',cid).eq('user_id',uid); },
+  suggestedBy:   function(key){ return sb.rpc('professor_suggested_by',{p_professor_key:key}); },
+  friendsReviewed:function(key){ return sb.rpc('friends_reviewed',{p_professor_key:key}); },
+  mySuggestion:  function(uid,key){ return sb.from('professor_suggestions').select('professor_key').eq('user_id',uid).eq('professor_key',key).limit(1); },
+  addSuggestion: function(row){ return sb.from('professor_suggestions').upsert(row,{onConflict:'user_id,professor_key'}); },
+  delSuggestion: function(uid,key){ return sb.from('professor_suggestions').delete().eq('user_id',uid).eq('professor_key',key); },
+  myShares:      function(uid){ return sb.from('reviews').select('id,professor_key,share_with_friends').eq('user_id',uid); },
+  setShare:      function(id,uid,v){ return sb.from('reviews').update({share_with_friends:v}).eq('id',id).eq('user_id',uid); }
+};
+function msgDb(){ return window.msgDbOverride||MSG_DB; }
+
+/* ---- people ---------------------------------------------------------------------------------- */
+function msgPerson(uid){
+  try{
+    if(msgIsMe(uid)){
+      var mine=(typeof myProfile!=='undefined'&&myProfile)?myProfile:{};
+      return {id:uid,name:'You',first:'You',avatar:(typeof frAvatarFor==='function')?frAvatarFor({id:uid,avatar_url:mine.avatar_url}):'' ,me:true};
+    }
+    var f=(typeof friendsList!=='undefined'?friendsList:[]).filter(function(x){return x&&x.id===uid;})[0];
+    if(f)return {id:uid,name:f.name||'Classmate',first:(f.name||'Classmate').split(/\s+/)[0],
+                 avatar:(typeof frAvatarFor==='function')?frAvatarFor(f):(f.avatar_url||'')};
+  }catch(e){}
+  /* Never invent a name for someone we cannot resolve. "Someone" is true; a made-up name is not. */
+  return {id:uid,name:'Someone',first:'Someone',avatar:''};
+}
+/* initials() is global; hmIni() is NOT — it is another resident of the Home IIFE, and reaching
+   for it here rendered every avatar as "?". Seen in the first screenshot of this feature. */
+function msgIni(n){
+  n=String(n||'').trim();
+  if(!n)return '?';
+  try{ if(typeof initials==='function')return initials(n); }catch(e){}
+  return n.split(/\s+/).map(function(w){return w[0]||'';}).slice(0,2).join('').toUpperCase()||'?';
+}
+function msgAva(p,cls){
+  var ini=msgIni(p.name);
+  return p.avatar
+    ? '<span class="msg-av '+(cls||'')+'"><img src="'+msgEsc(p.avatar)+'" alt="" loading="lazy"></span>'
+    : '<span class="msg-av '+(cls||'')+'">'+msgEsc(ini)+'</span>';
+}
+/* A direct thread is named by the person who isn't you. A group is named by its title, or by
+   the people in it when nobody has named it. */
+function msgTitle(t){
+  if(t.title)return t.title;
+  var others=(t.members||[]).filter(function(u){return !msgIsMe(u);});
+  if(!others.length)return 'Just you';
+  /* One other person is a name, not a first name — the row is about them and there is room. */
+  if(others.length===1)return msgPerson(others[0]).name;
+  var names=others.map(function(u){return msgPerson(u).first;});
+  if(names.length===2)return names.join(' and ');
+  return names.slice(0,2).join(', ')+' +'+(names.length-2);
+}
+function msgUnread(t){
+  if(!t.last||!t.last.created_at)return 0;
+  if(msgIsMe(t.last.sender))return 0;
+  return (new Date(t.last.created_at)>new Date(t.last_read_at||0))?1:0;
+}
+function msgAgo(iso){
+  if(!iso)return '';
+  var s=Math.max(0,(Date.now()-new Date(iso).getTime())/1000);
+  if(s<60)return 'now';
+  if(s<3600)return Math.floor(s/60)+'m';
+  if(s<86400)return Math.floor(s/3600)+'h';
+  if(s<604800)return Math.floor(s/86400)+'d';
+  try{ return new Date(iso).toLocaleDateString(undefined,{month:'short',day:'numeric'}); }catch(e){ return ''; }
+}
+
+/* ---- loading --------------------------------------------------------------------------------- */
+async function msgLoadThreads(){
+  if(!msgFlagOn()||!msgHasBackend()||!msgMe()){msgThreads=[];return;}
+  if(msgLoading)return; msgLoading=true;
+  try{
+    var mine=await msgDb().myMemberships(msgMe());
+    if(mine.error){ msgFail(mine.error,'members'); msgThreads=[]; return; }
+    var ids=(mine.data||[]).map(function(r){return r.conversation_id;});
+    if(!ids.length){ msgReady=true; msgThreads=[]; return; }
+    var readAt={}; (mine.data||[]).forEach(function(r){readAt[r.conversation_id]=r.last_read_at;});
+
+    var convs=await msgDb().conversations(ids);
+    if(convs.error){ msgFail(convs.error,'conversations'); msgThreads=[]; return; }
+    var all=await msgDb().membersOf(ids);
+    var memb={}; ((all&&all.data)||[]).forEach(function(r){ (memb[r.conversation_id]=memb[r.conversation_id]||[]).push(r.user_id); });
+
+    /* One query for the previews rather than one per thread. 300 is far past any real inbox and
+       the index is (conversation_id, created_at desc), so this is a cheap scan either way. */
+    var last=await msgDb().latestMessages(ids);
+    var lastOf={}; ((last&&last.data)||[]).forEach(function(m){ if(!lastOf[m.conversation_id])lastOf[m.conversation_id]=m; });
+
+    msgThreads=(convs.data||[]).map(function(c){
+      return {id:c.id,kind:c.kind,title:c.title,created_by:c.created_by,last_at:c.last_at,
+              members:memb[c.id]||[],last:lastOf[c.id]||null,last_read_at:readAt[c.id]};
+    }).sort(function(a,b){ return new Date(b.last_at)-new Date(a.last_at); });
+    msgReady=true;
+  }catch(e){ msgFail(e,'loadThreads'); }
+  finally{ msgLoading=false; }
+}
+
+async function msgLoadRows(cid){
+  if(!msgOn())return [];
+  var res=await msgDb().messagesIn(cid);
+  if(res.error){ msgFail(res.error,'rows'); return []; }
+  msgRows[cid]=res.data||[];
+  return msgRows[cid];
+}
+
+async function msgMarkRead(cid){
+  if(!msgOn())return;
+  try{
+    await msgDb().markRead(cid,msgMe(),new Date().toISOString());
+    var t=msgThreads.filter(function(x){return x.id===cid;})[0];
+    if(t)t.last_read_at=new Date().toISOString();
+    try{ msgRenderList(); if(typeof updateFriendsBadge==='function')updateFriendsBadge(); }catch(e){}
+  }catch(e){}
+}
+
+/* ---- writing --------------------------------------------------------------------------------- */
+async function msgSend(cid,kind,body,payload){
+  if(!msgOn())return false;
+  var row={conversation_id:cid,sender:msgMe(),kind:kind||'text',body:body||null,payload:payload||null};
+  var res=await msgDb().insertMessage(row);
+  if(res.error){ msgFail(res.error,'send'); return false; }
+  (msgRows[cid]=msgRows[cid]||[]).push(res.data);
+  var t=msgThreads.filter(function(x){return x.id===cid;})[0];
+  if(t){ t.last=res.data; t.last_at=res.data.created_at; }
+  return true;
+}
+
+/* Find the 1:1 thread with this person, or make one. Two people can only ever have one, so this
+   looks before it creates — otherwise every "Message" tap starts a new empty thread and the list
+   fills with duplicates of the same conversation. */
+async function msgThreadWith(uid){
+  if(!msgOn())return null;
+  var hit=msgThreads.filter(function(t){
+    return t.kind==='direct'&&t.members.length===2&&t.members.indexOf(uid)>=0;
+  })[0];
+  if(hit)return hit.id;
+  var c=await msgDb().newConversation({kind:'direct',created_by:msgMe()});
+  if(c.error){ msgFail(c.error,'newDirect'); return null; }
+  var m=await msgDb().addMembers([{conversation_id:c.data.id,user_id:msgMe()},{conversation_id:c.data.id,user_id:uid}]);
+  if(m.error){ msgFail(m.error,'newDirectMembers'); return null; }
+  await msgLoadThreads();
+  return c.data.id;
+}
+
+async function msgCreateGroup(uids,title){
+  if(!msgOn())return null;
+  var c=await msgDb().newConversation({kind:'group',title:title||null,created_by:msgMe()});
+  if(c.error){ msgFail(c.error,'newGroup'); return null; }
+  var rows=[{conversation_id:c.data.id,user_id:msgMe()}]
+    .concat((uids||[]).map(function(u){return {conversation_id:c.data.id,user_id:u};}));
+  var m=await msgDb().addMembers(rows);
+  if(m.error){ msgFail(m.error,'newGroupMembers'); return null; }
+  await msgLoadThreads();
+  return c.data.id;
+}
+
+/* ---- fit: does this section work for everyone in the thread? --------------------------------- */
+/* The feature, in one function. Everybody in a thread has already imported their sections, so the
+   app can answer "is Sean free at 9:00 on Monday" without asking Sean. What it must never do is
+   GUESS: someone who has not imported a schedule gets "hasn't imported a schedule", not "free". */
+function msgSecsFor(uid){
+  try{
+    if(msgIsMe(uid)){
+      var mine=(typeof myClassMeets==='function'&&typeof myClasses!=='undefined')?myClassMeets(myClasses):[];
+      return mine.filter(function(m){return m.meet;}).map(function(m){return {code:m.code,meet:m.meet};});
+    }
+    var f=(typeof friendsList!=='undefined'?friendsList:[]).filter(function(x){return x&&x.id===uid;})[0];
+    if(!f||!Array.isArray(f.secs))return null;
+    return f.secs.map(function(s){return {code:s.code,meet:(typeof parseMeet==='function')?parseMeet(s.days):null};})
+                 .filter(function(x){return x.meet;});
+  }catch(e){}
+  return null;
+}
+function msgFit(uid,meet,code){
+  var secs=msgSecsFor(uid);
+  if(secs==null)return {k:'unknown',t:'we can’t see their schedule'};
+  if(!secs.length)return {k:'none',t:'hasn’t imported a schedule'};
+  if(!meet)return {k:'unknown',t:'this section has no set time'};
+  var clash=null;
+  secs.forEach(function(s){
+    if(clash||!s.meet)return;
+    if(code&&s.code===code)return;                       /* already in it — not a clash */
+    var shareDay=s.meet.days.some(function(d){return meet.days.indexOf(d)>=0;});
+    if(shareDay&&s.meet.start<meet.end&&meet.start<s.meet.end)clash=s.code;
+  });
+  if(clash)return {k:'no',t:'clashes with '+clash};
+  return {k:'ok',t:'free then'};
+}
+function msgFitRows(t,payload){
+  var meet=(typeof parseMeet==='function')?parseMeet(payload&&payload.days||''):null;
+  return (t.members||[]).map(function(u){
+    var p=msgPerson(u), f=msgFit(u,meet,payload&&payload.code);
+    return '<div class="msug-fit '+f.k+'"><i></i><b>'+msgEsc(p.first)+'</b><span>'+msgEsc(f.t)+'</span></div>';
+  }).join('');
+}
+
+/* ---- rendering ------------------------------------------------------------------------------- */
+function msgBodyHtml(t,m){
+  var mine=msgIsMe(m.sender);
+  var pl=m.payload||{};
+  if(m.kind==='class'){
+    /* Seats are read NOW, from the live feed — never from the payload. A suggestion sent last
+       week that said "8 seats" would be lying by the time anyone opened it. */
+    var seat=null; try{ seat=(typeof realSeat==='function')?realSeat(pl.code):null; }catch(e){}
+    var seatTxt=(seat&&seat.label)?('<span class="msug-seat '+msgEsc(seat.cls||'')+'">'+msgEsc(seat.label)+'</span>'):'';
+    var sub=[pl.name||'',pl.prof||'',pl.days||''].filter(Boolean).map(msgEsc).join(' &middot; ');
+    return '<div class="msug">'
+      +'<div class="msug-top"><div class="msug-kick">'+msgEsc(msgPerson(m.sender).first)+' suggested</div>'
+      +'<div class="msug-code">'+msgEsc(pl.code||'')+(pl.section?(' &middot; '+msgEsc(pl.section)):'')+seatTxt+'</div>'
+      +(sub?('<div class="msug-sub">'+sub+'</div>'):'')+'</div>'
+      +'<div class="msug-fits">'+msgFitRows(t,pl)+'</div>'
+      +'<div class="msug-acts">'
+      +'<button class="msug-b pri" onclick="msgAddWatch(\''+escAcc(pl.code||'')+'\',event)">Add to watchlist</button>'
+      +'<button class="msug-b" onclick="msgOpenClass(\''+escAcc(pl.code||'')+'\',event)">See sections</button>'
+      +'</div></div>'
+      +(m.body?('<div class="msg-note">'+msgEsc(m.body)+'</div>'):'');
+  }
+  if(m.kind==='professor'){
+    var p=null; try{ p=(typeof PROFESSORS!=='undefined')?PROFESSORS[pl.key]:null; }catch(e){}
+    /* The score comes from the live professor record, not from the message. If we no longer have
+       a rating for them, the card says so rather than repeating a number nobody can check. */
+    var five=null; try{ if(p&&typeof blendFive==='function')five=blendFive(p); }catch(e){}
+    var line=p?[p.dept||'',(five!=null?(five.toFixed(1)+' on PolyRatings'):'no rating yet')].filter(Boolean).join(' · ')
+              :'we don’t have a rating for them';
+    return '<div class="msug">'
+      +'<div class="msug-top"><div class="msug-kick">'+msgEsc(msgPerson(m.sender).first)+' suggested</div>'
+      +'<div class="msug-code">'+msgEsc(pl.name||(p&&p.name)||'A professor')+'</div>'
+      +'<div class="msug-sub">'+msgEsc(line)+(pl.took?' &middot; took them':'')+'</div></div>'
+      +(p?('<div class="msug-acts"><button class="msug-b pri" onclick="msgOpenProf(\''+escAcc(pl.key)+'\',event)">See their page</button></div>'):'')
+      +'</div>'
+      +(m.body?('<div class="msg-note">'+msgEsc(m.body)+'</div>'):'');
+  }
+  return '<div class="msg-b '+(mine?'me':'them')+'">'+msgEsc(m.body||'')+'</div>';
+}
+
+function msgRowHtml(t,m,prev){
+  var mine=msgIsMe(m.sender);
+  var card=(m.kind==='class'||m.kind==='professor');
+  var showWho=!mine&&t.kind==='group'&&(!prev||prev.sender!==m.sender);
+  return '<div class="msg-row'+(mine?' me':'')+(card?' card':'')+'">'
+    +(showWho?('<div class="msg-who">'+msgEsc(msgPerson(m.sender).first)+'</div>'):'')
+    +msgBodyHtml(t,m)+'</div>';
+}
+
+function msgRenderList(){
+  var sec=document.getElementById('frMsgSec'), out=document.getElementById('frMsgOut');
+  if(!sec||!out)return;
+  if(!msgOn()||!msgThreads.length){ sec.style.display='none'; return; }
+  sec.style.display='';
+  var n=msgThreads.filter(function(t){return msgUnread(t);}).length;
+  var cn=document.getElementById('frMsgCount'); if(cn)cn.textContent=n?(' '+n):'';
+  out.innerHTML=msgThreads.map(function(t){
+    var others=(t.members||[]).filter(function(u){return !msgIsMe(u);});
+    var av=(t.kind==='group'&&others.length>1)
+      ? '<span class="msg-av stack">'+(t.members.length)+'</span>'
+      : msgAva(msgPerson(others[0]||t.members[0]));
+    var pv='';
+    if(t.last){
+      var who=msgIsMe(t.last.sender)?'You: ':
+              (t.kind==='group'?(msgPerson(t.last.sender).first+': '):'');
+      var txt=t.last.kind==='class'?'suggested a class'
+             :t.last.kind==='professor'?'suggested a professor'
+             :(t.last.body||'');
+      pv=who+txt;
+    }else pv='No messages yet';
+    var un=msgUnread(t);
+    return '<div class="msg-trow'+(un?' unread':'')+'" onclick="msgOpen(\''+escAcc(t.id)+'\')">'
+      +av+'<span class="msg-tmain"><span class="msg-tname">'+msgEsc(msgTitle(t))+'</span>'
+      +'<span class="msg-tprev">'+msgEsc(pv)+'</span></span>'
+      +'<span class="msg-twhen">'+msgEsc(msgAgo(t.last_at))+'</span>'
+      +(un?'<span class="msg-tdot"></span>':'')+'</div>';
+  }).join('');
+}
+
+function msgRenderThread(){
+  var pane=document.getElementById('frThreadPane'); if(!pane)return;
+  var t=msgThreads.filter(function(x){return x.id===msgOpenId;})[0];
+  if(!t){ msgClose(); return; }
+  var rows=msgRows[t.id]||[];
+  var body=rows.length
+    ? rows.map(function(m,i){return msgRowHtml(t,m,rows[i-1]);}).join('')
+    : '<div class="msg-empty">No messages yet. Suggest a class, or just say hi.</div>';
+  var who=(t.members||[]).filter(function(u){return !msgIsMe(u);})
+    .map(function(u){return msgPerson(u).name;}).join(', ');
+  pane.innerHTML='<div class="msg-thread">'
+    +'<div class="msg-head">'
+    +'<button class="msg-back" onclick="msgClose()" aria-label="Back to Friends">&larr;</button>'
+    +'<span class="msg-htitle"><b>'+msgEsc(msgTitle(t))+'</b>'+(who?('<small>'+msgEsc(who)+'</small>'):'')+'</span>'
+    +'<button class="msg-leave" onclick="msgLeave()">Leave</button>'
+    +'</div>'
+    +'<div class="msg-body" id="msgBody">'+body+'</div>'
+    +'<div class="msg-compose">'
+    +'<button class="msg-plus" onclick="msgPickClass()" title="Suggest a class">+</button>'
+    +'<input id="msgInput" class="msg-fld" placeholder="Message" autocomplete="off" '
+    +'onkeydown="if(event.key===\'Enter\'){event.preventDefault();msgSendText();}">'
+    +'<button class="msg-go" onclick="msgSendText()" aria-label="Send">&uarr;</button>'
+    +'</div></div>';
+  var b=document.getElementById('msgBody'); if(b)b.scrollTop=b.scrollHeight;
+}
+
+window.msgOpen=async function(cid){
+  msgOpenId=cid;
+  var fp=document.getElementById('frFriendsPane'), tp=document.getElementById('frThreadPane');
+  var tog=document.getElementById('gpToggle');
+  if(fp)fp.style.display='none';
+  if(tog)tog.style.display='none';
+  if(tp)tp.style.display='';
+  msgRenderThread();
+  await msgLoadRows(cid);
+  msgRenderThread();
+  msgMarkRead(cid);
+};
+window.msgClose=function(){
+  msgOpenId=null;
+  var fp=document.getElementById('frFriendsPane'), tp=document.getElementById('frThreadPane');
+  if(tp){ tp.style.display='none'; tp.innerHTML=''; }
+  if(fp)fp.style.display='';
+  try{ if(typeof gpFlagOn==='function'&&gpFlagOn()){var tg=document.getElementById('gpToggle'); if(tg)tg.style.display='';} }catch(e){}
+  msgRenderList();
+};
+window.msgSendText=async function(){
+  var el=document.getElementById('msgInput'); if(!el)return;
+  var v=(el.value||'').trim(); if(!v||!msgOpenId)return;
+  el.value='';
+  var ok=await msgSend(msgOpenId,'text',v,null);
+  if(!ok){ el.value=v; try{ frToast('Couldn’t send that — try again'); }catch(e){} return; }
+  msgRenderThread(); msgRenderList();
+};
+window.msgLeave=async function(){
+  if(!msgOpenId||!msgOn())return;
+  var cid=msgOpenId;
+  var res=await msgDb().leave(cid,msgMe());
+  if(res.error){ msgFail(res.error,'leave'); return; }
+  msgThreads=msgThreads.filter(function(t){return t.id!==cid;});
+  msgClose();
+};
+window.msgAddWatch=function(code,ev){
+  if(ev)ev.stopPropagation();
+  try{ if(typeof toggleWatchClass==='function'){ if(!(typeof isWatchedClass==='function'&&isWatchedClass(code)))toggleWatchClass(code); }
+       else if(typeof addWatchClass==='function')addWatchClass(code); }catch(e){}
+  try{ frToast(code+' is on your watchlist'); }catch(e){}
+};
+window.msgOpenClass=function(code,ev){ if(ev)ev.stopPropagation(); try{ if(typeof openClassPage==='function')openClassPage(code); else if(typeof gotoSection==='function')gotoSection(code); }catch(e){} };
+window.msgOpenProf=function(key,ev){ if(ev)ev.stopPropagation(); try{ if(typeof openProf==='function')openProf(key); }catch(e){} };
+
+/* ---- realtime -------------------------------------------------------------------------------- */
+function msgStartRealtime(){
+  /* A stubbed db has no realtime channel, and a test that opened one would be listening to
+     nothing forever. */
+  if(!msgOn()||msgChannel||window.msgDbOverride)return;
+  try{ if(typeof sb==='undefined'||!sb)return; }catch(e){ return; }
+  try{
+    msgChannel=sb.channel('professify-messages')
+      .on('postgres_changes',{event:'*',schema:'public',table:'messages'},function(){
+        if(window._msgT)clearTimeout(window._msgT);
+        window._msgT=setTimeout(async function(){
+          await msgLoadThreads();
+          if(msgOpenId){ await msgLoadRows(msgOpenId); msgRenderThread(); msgMarkRead(msgOpenId); }
+          msgRenderList();
+        },250);
+      })
+      .subscribe();
+  }catch(e){}
+}
+function msgStopRealtime(){ try{ if(msgChannel&&sb)sb.removeChannel(msgChannel); }catch(e){} msgChannel=null; }
+
+window.msgRefresh=async function(){
+  if(!msgFlagOn())return;
+  await msgLoadThreads();
+  msgRenderList();
+  msgStartRealtime();
+};
+try{
+  window.msgLoadThreads=msgLoadThreads; window.msgRenderList=msgRenderList;
+  window.msgThreadWith=msgThreadWith;   window.msgCreateGroup=msgCreateGroup;
+  window.msgSend=msgSend;               window.msgFit=msgFit;
+  window.msgStopRealtime=msgStopRealtime;
+  window.msgState=function(){return {ready:msgReady,threads:msgThreads,open:msgOpenId,rows:msgRows};};
+}catch(e){}
+
+/* ---- suggesting a class into a thread --------------------------------------------------------
+   The picker offers what you are already thinking about — your watchlist first, then the classes
+   you are in — because a suggestion almost always comes out of one of those two lists. Sections
+   come from the live seat feed, so what you send is a real section number with a real time on it,
+   not a course code and a hope. */
+function msgPickable(){
+  var out=[],seen={};
+  var add=function(c,src){ if(!c||seen[c])return; seen[c]=1; out.push({code:c,src:src}); };
+  try{ (typeof watchClasses!=='undefined'?watchClasses:[]).forEach(function(c){add(c,'Watchlist');}); }catch(e){}
+  try{ (typeof myClasses!=='undefined'?myClasses:[]).forEach(function(c){add(c,'My classes');}); }catch(e){}
+  return out;
+}
+function msgSecOptions(code){
+  var secs=[]; try{ secs=(typeof SEAT_SECTIONS!=='undefined'&&SEAT_SECTIONS&&SEAT_SECTIONS[code])?SEAT_SECTIONS[code]:[]; }catch(e){}
+  return secs.map(function(r,i){
+    return {ix:i,section:r.section||'',crn:r.class_nbr||r.crn||'',
+            prof:(r.instructor||'').trim(),
+            days:(typeof prettyTime==='function')?prettyTime(r.days):(r.days||'')};
+  });
+}
+window.msgPickClass=function(){
+  if(!msgOpenId)return;
+  var list=msgPickable();
+  var pane=document.getElementById('frThreadPane'); if(!pane)return;
+  var host=document.getElementById('msgPick');
+  if(host){ host.remove(); return; }                       /* the + is a toggle */
+  var h='<div class="msg-pick" id="msgPick"><div class="msg-pick-h">Suggest a class</div>';
+  h+= list.length
+    ? '<div class="msg-pick-l">'+list.map(function(x){
+        var nm=''; try{ nm=(typeof classInfo==='function')?(classInfo(x.code).name||''):''; }catch(e){}
+        return '<button class="msg-pick-r" onclick="msgPickSection(\''+escAcc(x.code)+'\')">'
+          +'<b>'+msgEsc(x.code)+'</b>'+(nm?('<span>'+msgEsc(nm)+'</span>'):'')
+          +'<i>'+msgEsc(x.src)+'</i></button>';
+      }).join('')+'</div>'
+    : '<div class="msg-pick-e">Nothing on your watchlist yet — add a class and it shows up here.</div>';
+  h+='</div>';
+  var comp=pane.querySelector('.msg-compose');
+  if(comp)comp.insertAdjacentHTML('beforebegin',h);
+};
+window.msgPickSection=function(code){
+  var host=document.getElementById('msgPick'); if(!host)return;
+  var opts=msgSecOptions(code);
+  /* One section is not a question. Send it. (Same rule the schedule importer follows.) */
+  if(opts.length===1){ msgSendClass(code,opts[0]); return; }
+  if(!opts.length){ msgSendClass(code,null); return; }
+  host.innerHTML='<div class="msg-pick-h">'+msgEsc(code)+' &mdash; which section?</div>'
+    +'<div class="msg-pick-l">'+opts.map(function(o){
+      return '<button class="msg-pick-r" onclick="msgSendClassIx(\''+escAcc(code)+'\','+o.ix+')">'
+        +'<b>'+msgEsc(o.section||('#'+o.crn))+'</b>'
+        +'<span>'+msgEsc([o.prof,o.days].filter(Boolean).join(' · '))+'</span></button>';
+    }).join('')+'</div>';
+};
+window.msgSendClassIx=function(code,ix){
+  var o=msgSecOptions(code).filter(function(x){return x.ix===ix;})[0];
+  msgSendClass(code,o||null);
+};
+async function msgSendClass(code,sec){
+  var host=document.getElementById('msgPick'); if(host)host.remove();
+  if(!msgOpenId)return;
+  var nm=''; try{ nm=(typeof classInfo==='function')?(classInfo(code).name||''):''; }catch(e){}
+  var payload={code:code,name:nm};
+  if(sec){ payload.section=sec.section||''; payload.crn=sec.crn||''; payload.prof=sec.prof||''; payload.days=sec.days||''; }
+  var ok=await msgSend(msgOpenId,'class',null,payload);
+  if(!ok){ try{ frToast('Couldn’t send that — try again'); }catch(e){} return; }
+  msgRenderThread(); msgRenderList();
+}
+window.msgSendClass=msgSendClass;
+
+/* ---- messaging one person, from anywhere ------------------------------------------------------ */
+window.msgWith=async function(uid,ev){
+  if(ev)ev.stopPropagation();
+  if(!msgOn()){ try{ frToast('Messages aren’t switched on yet'); }catch(e){} return; }
+  try{ if(typeof show==='function')show('friends'); }catch(e){}
+  var cid=await msgThreadWith(uid);
+  if(!cid){ try{ frToast('Couldn’t open that conversation'); }catch(e){} return; }
+  msgRenderList();
+  msgOpen(cid);
+};
+
+/* ---- a new group ------------------------------------------------------------------------------ */
+var msgGroupPick={};
+window.msgNewGroup=function(){
+  var host=document.getElementById('frMsgNew');
+  if(!host)return;
+  if(host.style.display!=='none'){ host.style.display='none'; host.innerHTML=''; return; }
+  msgGroupPick={};
+  var friends=(typeof friendsList!=='undefined'?friendsList:[]);
+  host.style.display='';
+  host.innerHTML='<div class="msg-new-h">New group</div>'
+    +'<input id="msgGroupName" class="rate-input msg-new-name" placeholder="Name it — “Spring planning”">'
+    +(friends.length
+      ? '<div class="msg-new-l">'+friends.map(function(f){
+          return '<label class="msg-new-r"><input type="checkbox" value="'+escAcc(f.id)+'" onchange="msgGroupToggle(this)">'
+            +msgAva(msgPerson(f.id))+'<span>'+msgEsc(f.name||'Classmate')+'</span></label>';
+        }).join('')+'</div>'
+      : '<div class="msg-pick-e">Add a friend first — a group needs someone in it.</div>')
+    +'<div class="msg-new-a"><button class="btn primary" onclick="msgCreateGroupNow()">Create</button>'
+    +'<button class="fr-chip" onclick="msgNewGroup()">Cancel</button></div>';
+};
+window.msgGroupToggle=function(el){ if(el.checked)msgGroupPick[el.value]=1; else delete msgGroupPick[el.value]; };
+window.msgCreateGroupNow=async function(){
+  var ids=Object.keys(msgGroupPick);
+  if(!ids.length){ try{ frToast('Pick at least one friend'); }catch(e){} return; }
+  var nm=(document.getElementById('msgGroupName')||{}).value||'';
+  var cid=await msgCreateGroup(ids,nm.trim()||null);
+  var host=document.getElementById('frMsgNew'); if(host){ host.style.display='none'; host.innerHTML=''; }
+  if(!cid){ try{ frToast('Couldn’t create that group'); }catch(e){} return; }
+  msgRenderList(); msgOpen(cid);
+};
+
+/* ---- suggesting a professor ------------------------------------------------------------------- */
+/* Two facts, both already true and neither invented: their real score, which is read live from the
+   professor record and not stored on the suggestion, and whether you actually took them, which
+   comes from Past Classes so it cannot be claimed by someone who did not. There is no rating form
+   here on purpose — a recommendation is a much smaller thing than a review, and making people
+   fill in a review to say "take this person" is why nobody says it. */
+function msgTookProf(name){
+  try{
+    var n=String(name||'').toLowerCase();
+    return (typeof pastClasses!=='undefined'?pastClasses:[]).some(function(h){
+      return h&&h.professor&&String(h.professor).toLowerCase()===n; });
+  }catch(e){ return false; }
+}
+window.msgSuggestProf=async function(key,ev){
+  if(ev)ev.stopPropagation();
+  if(!msgOn()){ try{ frToast('Sign in to suggest a professor'); }catch(e){} return; }
+  var p=null; try{ p=PROFESSORS[key]; }catch(e){}
+  if(!p)return;
+  var res=await msgDb().addSuggestion({user_id:msgMe(),professor_key:key,professor_name:p.name});
+  if(res.error){ if(!msgFail(res.error,'suggestProf')){ try{ frToast('Couldn’t save that'); }catch(e){} } 
+                 else { try{ frToast('Suggestions aren’t switched on yet'); }catch(e){} } return; }
+  try{ frToast('Your friends will see you suggested '+p.name); }catch(e){}
+  psugCache[key]=null;
+  try{ await psugLoad(key); if(typeof renderModal==='function'&&currentProf===key)renderModal(); }catch(e){}
+};
+window.msgUnsuggestProf=async function(key,ev){
+  if(ev)ev.stopPropagation();
+  if(!msgOn())return;
+  var res=await msgDb().delSuggestion(msgMe(),key);
+  if(res.error){ msgFail(res.error,'unsuggestProf'); return; }
+  psugMine[key]=false; psugCache[key]=null;
+  try{ await psugLoad(key); if(typeof renderModal==='function'&&currentProf===key)renderModal(); }catch(e){}
+};
+
+/* =================================================================================================
+   ON A PROFESSOR'S PAGE: who among your friends suggested them, and who reviewed them
+   (Tate, 2026-08-28: "suggesting should show up on teachers profiles like tate and sean
+   suggested this teacher pill".)
+
+   Both lists come from SECURITY DEFINER functions, not from a table read, because neither
+   answer is yours to compute in the browser: professor_suggestions and reviews are readable
+   only by their owner, and the friendship check has to happen where it cannot be skipped.
+   ================================================================================================= */
+var psugCache={};     /* professor_key -> [{id,display_name,avatar_url}] | null while loading */
+var psugMine={};      /* professor_key -> bool: have I suggested them */
+var pfrevCache={};    /* professor_key -> [{id,display_name,avatar_url,score}] */
+
+async function psugLoad(key){
+  if(!key)return;
+  if(!msgOn()){ psugCache[key]=[]; pfrevCache[key]=[]; return; }
+  try{
+    var s=await msgDb().suggestedBy(key);
+    if(s.error){ msgFail(s.error,'suggested_by'); psugCache[key]=[]; }
+    else psugCache[key]=s.data||[];
+    var mine=await msgDb().mySuggestion(msgMe(),key);
+    psugMine[key]=!!(mine&&mine.data&&mine.data.length);
+    var r=await msgDb().friendsReviewed(key);
+    if(r.error){ msgFail(r.error,'friends_reviewed'); pfrevCache[key]=[]; }
+    else pfrevCache[key]=r.data||[];
+  }catch(e){ psugCache[key]=psugCache[key]||[]; pfrevCache[key]=pfrevCache[key]||[]; }
+}
+window.psugLoad=psugLoad;
+
+function psugNames(list){
+  var n=list.map(function(x){return (x.display_name||'A friend').split(/\s+/)[0];});
+  if(n.length===1)return n[0];
+  if(n.length===2)return n[0]+' and '+n[1];
+  return n[0]+', '+n[1]+' and '+(n.length-2)+' other'+(n.length-2===1?'':'s');
+}
+function psugFaces(list){
+  return '<span class="psug-faces">'+list.slice(0,3).map(function(x){
+    var av=(typeof frAvatarFor==='function')?frAvatarFor(x):(x.avatar_url||'');
+    var ini=msgIni(x.display_name);
+    return av?('<i><img src="'+msgEsc(av)+'" alt="" loading="lazy"></i>'):('<i>'+msgEsc(ini)+'</i>');
+  }).join('')+'</span>';
+}
+/* Rendered into the professor card. Returns '' when there is nothing true to say — no pill,
+   no "0 friends", no empty state. */
+function psugPillHtml(key){
+  if(!key||!msgOn())return '';
+  var sug=psugCache[key], rev=pfrevCache[key];
+  var out='';
+  if(sug&&sug.length){
+    out+='<div class="psug-pill" title="'+escAcc(sug.map(function(x){return x.display_name||'A friend';}).join(', '))+'">'
+      +psugFaces(sug)
+      +'<span><b>'+msgEsc(psugNames(sug))+'</b> suggested this teacher</span></div>';
+  }
+  if(rev&&rev.length){
+    /* The number has to mean "these people CHOSE to show you this". A friend who never turned
+       the toggle on is not in the list the database returned, so they are not in this count —
+       otherwise the sentence is a different claim than the one being made. */
+    out+='<div class="psug-pill rev" onclick="psugOpenRevs(\''+escAcc(key)+'\',event)">'
+      +psugFaces(rev)
+      +'<span><b>'+rev.length+' friend'+(rev.length===1?'':'s')+'</b> reviewed '
+      +(rev.length===1?'them':'them')+'</span></div>';
+  }
+  return out?('<div class="psug-wrap">'+out+'</div>'):'';
+}
+window.psugPillHtml=psugPillHtml;
+window.psugOpenRevs=function(key,ev){
+  if(ev)ev.stopPropagation();
+  var rev=pfrevCache[key]||[]; if(!rev.length)return;
+  try{ frToast(rev.map(function(x){
+    return (x.display_name||'A friend')+(x.score!=null?(' · '+Number(x.score).toFixed(1)):'');
+  }).join('   ·   ')); }catch(e){}
+};
+/* The button that needs no rating form. */
+function psugBtnHtml(key){
+  if(!key||!msgOn())return '';
+  return psugMine[key]
+    ? '<button class="psug-btn on" onclick="msgUnsuggestProf(\''+escAcc(key)+'\',event)">&#10003; You suggested them</button>'
+    : '<button class="psug-btn" onclick="msgSuggestProf(\''+escAcc(key)+'\',event)">Suggest to friends</button>';
+}
+window.psugBtnHtml=psugBtnHtml;
+
+/* ---- "show my review to friends" -------------------------------------------------------------
+   OFF by default and one tap to change, which is only an honest offer because the column it
+   writes is the ONLY thing that ever attaches your name to a review. Until this file's migration
+   ran, reviews.user_id was readable by every signed-in student, so "off by default" would have
+   been describing a choice that had already been made for people. */
+var revShare={};      /* review id -> bool */
+async function revLoadShare(){
+  if(!msgOn())return;
+  try{
+    var r=await msgDb().myShares(msgMe());
+    if(r.error){ msgFail(r.error,'loadShare'); return; }
+    (r.data||[]).forEach(function(x){ revShare[x.id]=!!x.share_with_friends; });
+  }catch(e){}
+}
+window.revLoadShare=revLoadShare;
+window.revToggleShare=async function(id,ev){
+  if(ev)ev.stopPropagation();
+  if(!msgOn())return;
+  var next=!revShare[id];
+  var r=await msgDb().setShare(id,msgMe(),next);
+  if(r.error){
+    if(msgFail(r.error,'toggleShare')){ try{ frToast('That switch needs the latest database update'); }catch(e){} }
+    else { try{ frToast('Couldn’t change that'); }catch(e){} }
+    return;
+  }
+  revShare[id]=next;
+  try{ frToast(next?'Your friends can see you wrote this':'Back to anonymous'); }catch(e){}
+  try{ if(typeof renderMyReviews==='function')renderMyReviews(); }catch(e){}
+};
+function revShareToggleHtml(id){
+  if(!id||!msgOn())return '';
+  var on=!!revShare[id];
+  return '<button class="rev-share'+(on?' on':'')+'" role="switch" aria-checked="'+(on?'true':'false')+'" '
+    +'onclick="revToggleShare(\''+escAcc(id)+'\',event)" '
+    +'title="'+(on?'Your friends can see this review is yours':'Nobody is told this review is yours')+'">'
+    +'<span class="rev-sw"></span>Show my friends I wrote this</button>';
+}
+window.revShareToggleHtml=revShareToggleHtml;
+
 function renderFriends(){
   updateFriendsBadge();
   const signedIn=backendReady()&&!!sbUser;
@@ -19314,12 +20858,19 @@ function renderFriends(){
   const nameEl=document.getElementById('frName');if(nameEl&&document.activeElement!==nameEl)nameEl.value=(myProfile&&myProfile.display_name)||'';
   const handleEl=document.getElementById('frHandle');if(handleEl&&document.activeElement!==handleEl)handleEl.value=(myProfile&&myProfile.instagram_handle)||'';
 
-  var shareBtn=document.getElementById('frShareSched');
-  if(shareBtn)shareBtn.style.display=(typeof myClasses!=='undefined'&&myClasses.length)?'':'none';
+  /* "Share my schedule" left the add-a-friend panel on 2026-08-28 — it is a different job
+     from inviting someone, and it already has its own button on the Home schedule card. */
   /* Groups ships dark until the flag says otherwise. */
   var _gt=document.getElementById('gpToggle');
   if(_gt)_gt.style.display=gpFlagOn()?'':'none';
   if(gpFlagOn()){ try{ gpSetTab(gpTab); }catch(e){} }
+
+  /* Messages: painted from memory every render, fetched once and then kept live by realtime. */
+  try{ msgRenderList(); }catch(e){}
+  if(!window._msgLoaded&&typeof msgRefresh==='function'&&msgFlagOn()){
+    window._msgLoaded=true;
+    try{ msgRefresh(); }catch(e){}
+  }
 
   /* Fetched once per session, then repainted from memory — this runs on every tab render. */
   if(!window._frSugLoaded&&typeof loadFriendSuggestions==='function'){
@@ -21094,7 +22645,7 @@ try{
    Specific to what Professify actually holds. A policy that doesn't name the data is worse
    than none: it reads as boilerplate nobody checked, which is exactly the impression a
    product handling other students' .edu addresses cannot afford. */
-var LEGAL_UPDATED='23 August 2026';
+var LEGAL_UPDATED='28 August 2026';
 var LEGAL_CONTACT='tdogtate@icloud.com';
 var LEGAL_DOCS={
   terms:{title:'Terms of Service',html:
@@ -21138,15 +22689,22 @@ var LEGAL_DOCS={
     +'<li><b>Past classes</b> — courses you mark as taken, with term and professor.</li>'
     +'<li><b>Friends</b> — who you’re connected to, and pending requests.</li>'
     +'<li><b>Reviews</b> — your ratings and written notes, stored with your account so you can edit or delete them.</li>'
+    +'<li><b>Messages</b> — what you send in a direct or group conversation, who is in it, and when each message was sent. A class or professor you suggest is stored as the course code or the professor, not as a copy of what was on your screen.</li>'
+    +'<li><b>Professors you suggest</b> — the professor, and that it was you. There is no score attached; a suggestion cannot move anyone’s rating.</li>'
     +'<li><b>A phone number hash</b>, if you used contact matching — a one-way hash, not the number.</li>'
     +'</ul>'
     +'<h4>Who can see what</h4>'
     +'<ul>'
     +'<li><b>Your email address:</b> your accepted friends, and no one else.</li>'
     +'<li><b>Your classes and schedule:</b> your accepted friends. Remove a friend and their access ends.</li>'
-    +'<li><b>Your reviews:</b> the rating and text are public and visible without an account. Your identity is not attached to them publicly, and never shown to anyone — including your friends.</li>'
+    +'<li><b>Your reviews:</b> the rating and text are public and visible without an account. <b>Who wrote them is not.</b> Reviews are served to everyone — signed in or not — from a database view that does not contain an author column at all, and the underlying table is readable only by the person who wrote the row. There is nothing to look up.</li>'
+    +'<li><b>The one exception, and it is yours to make:</b> each review has a switch, off until you turn it on, that lets your accepted friends see that a review is yours. It applies to that one review, never to the others, and turning it back off ends the access. Nobody else — not other students, not signed-out visitors, not professors — is affected by that switch.</li>'
+    +'<li><b>Your messages:</b> the people in that conversation, and nobody else. Membership is checked by the database on every read, so a thread you are not in returns nothing rather than being hidden by the app. Leave a thread and your access to it ends.</li>'
+    +'<li><b>Professors you suggest:</b> your accepted friends, on that professor’s page. Not the public, and not the professor.</li>'
     +'<li><b>Your past classes and watchlist:</b> only you, except where a friend shares a class with you.</li>'
     +'</ul>'
+    +'<h4>What we can read</h4>'
+    +'<p>Messages are not end-to-end encrypted. They are encrypted in transit and stored in the database like everything else, which means whoever holds the database keys could read them — today that is one student maintaining this project. Do not put anything in Professify you would not put in a group text. If that changes, this page changes with it.</p>'
     +'<h4>Where it lives</h4>'
     +'<p>In a Supabase-hosted Postgres database on servers in the United States. Traffic is encrypted in transit. Photos are stored in Supabase Storage; a photo you upload is publicly reachable by its URL, so treat it as public.</p>'
     +'<h4>Who else is involved</h4>'
@@ -21158,7 +22716,8 @@ var LEGAL_DOCS={
     +'</ul>'
     +'<p>Nobody else receives your data. It is not sold, rented, or shared for advertising.</p>'
     +'<h4>How long it is kept</h4>'
-    +'<p>While your account exists. Delete your account and your profile, classes, sections, past classes, watchlist and friend links are deleted with it. Backups may keep copies for a short period before rolling off.</p>'
+    +'<p>While your account exists. Delete your account and your profile, classes, sections, past classes, watchlist, friend links, suggestions and messages are deleted with it. Backups may keep copies for a short period before rolling off.</p>'
+    +'<p><b>Messages specifically:</b> they are kept until the conversation is deleted or an account in it is closed — they are not rolled off on a timer today. Leaving a group removes your access to it but does not delete what you already sent, the same way leaving a group text does not unsend your messages. Delete your own message and it is gone for everyone.</p>'
     +'<h4>Reviews are the one exception</h4>'
     +'<p><b>Your reviews stay up when you delete your account — but they stop being yours.</b> We set the author field to null, so afterwards no record anywhere links a review to you. It is not merely displayed anonymously; there is nothing left to look up, by us or by anyone asking us.</p>'
     +'<p>Why: a review is what another student came here to read, and it is already part of a professor’s average. Removing it would silently change a number other people made decisions on, and would mean every professor’s rating shifted whenever an unrelated student graduated and closed their account.</p>'
@@ -21181,6 +22740,10 @@ var LEGAL_DOCS={
     +'<p>There is no password to steal — sign-in is a one-time code emailed to your <code>@calpoly.edu</code> address. Sessions are held in your browser and refresh in the background; signing out clears them.</p>'
     +'<h4>How your data is separated</h4>'
     +'<p>Every table uses database-level row policies, so who can read a row is decided by the database rather than by the app asking nicely. Friend access is checked against an accepted friendship each time, not cached and trusted.</p>'
+    +'<p>Messages work the same way and one step further: reading a conversation requires a membership row, and that check runs inside the database on every query. A conversation you are not in does not return a filtered version — it returns nothing.</p>'
+    +'<h4>Review anonymity, and what changed</h4>'
+    +'<p>Until 28 August 2026, the author id on a review was readable by any signed-in student. Review text was always meant to be public and the author never was, so this page and the Privacy page were both making a promise the database did not keep. It is closed: reviews are now served from a view that has no author column, and the table underneath is readable only by the person who wrote the row. That is a stronger guarantee than a rule about who may look, because there is no longer anything to look at.</p>'
+    +'<p>The per-review “show my friends I wrote this” switch was added at the same time and not before, because offering that choice on top of the old behaviour would have been offering a choice that had already been made for people.</p>'
     +'<h4>What we do not do</h4>'
     +'<ul>'
     +'<li>No advertising or analytics trackers.</li>'
@@ -21194,6 +22757,8 @@ var LEGAL_DOCS={
     +'<li>It has not had an independent penetration test.</li>'
     +'<li>Anything you post as a review is public. Treat it as permanently public.</li>'
     +'<li>A profile photo you upload is reachable by anyone with its link.</li>'
+    +'<li><b>Messages are not end-to-end encrypted</b> and can be read by whoever holds the database. They are private from other students, not from us.</li>'
+    +'<li>There is no automatic moderation of messages. You can leave a conversation, and only your accepted friends can start one with you, but nothing scans what is sent. If someone is using this to harass you, email the address below.</li>'
     +'</ul>'
     +'<h4>Found a problem?</h4>'
     +'<p>Please report it rather than testing how far it goes. Email <b>'+LEGAL_CONTACT+'</b> with what you found and how to reproduce it. Reports made in good faith are welcome, and you won’t be pursued for reporting one. Please don’t access, change or keep other students’ data while investigating.</p>'
@@ -21529,6 +23094,7 @@ window.epSave=async function(){
 function epRefreshEverywhere(){
   try{ updateAuthUI(); }catch(e){}
   try{ if(typeof hmRenderRailL==='function')hmRenderRailL(); }catch(e){}
+  try{ if(typeof hmFitWatch==='function')hmFitWatch(); }catch(e){}
   try{ if(typeof renderHome==='function')renderHome(); }catch(e){}
   try{ if(typeof renderFriends==='function')renderFriends(); }catch(e){}
   try{ if(typeof renderAccountSection==='function')renderAccountSection(); }catch(e){}
@@ -22553,7 +24119,7 @@ function hmPlaceRail(){
     }
   }catch(e){}
 }
-try{ window.addEventListener('resize',function(){ if(window._hmRailT)clearTimeout(window._hmRailT); window._hmRailT=setTimeout(function(){hmPlaceRail();hmStickRails();},150); }); }catch(e){}
+try{ window.addEventListener('resize',function(){ if(window._hmRailT)clearTimeout(window._hmRailT); window._hmRailT=setTimeout(function(){hmPlaceRail();hmFitWatch();hmStickRails();},150); }); }catch(e){}
 /* 8s is past the Doherty threshold by an order of magnitude — if neither feed has answered by
    then, it isn't slow, it's gone. */
 function hmArmFeedTimeout(){
@@ -22694,63 +24260,89 @@ function hmMiniCalHtml(){
       while(j<day.length&&day[j].meet.start<maxEnd){cluster.push(day[j]);maxEnd=Math.max(maxEnd,day[j].meet.end);j++;}
       var start0=cluster[0].meet.start;
       var top=((start0-lo)/span)*H;
-      /* Positional clustering is not a conflict test. It called two SECTIONS OF THE SAME
-         COURSE a clash (exactly the enrolled+waitlisted case the importer creates), and it
-         chained A–B–C into one "conflict" when A and C never overlap. myClassConflicts() was
-         already computed on the line above and then thrown away — use it. */
-      var realClash=cluster.length>1&&cluster.some(function(x){
-        return cluster.some(function(y){
-          if(x===y||x.code===y.code)return false;                       // same course ≠ clash
-          return x.meet.start<y.meet.end&&y.meet.start<x.meet.end;      // genuine pairwise overlap
+      var n=cluster.length;
+      if(n===1){
+        var m0=cluster[0], h0=((m0.meet.end-m0.meet.start)/span)*H;
+        blocks+='<div class="hmc-blk'+(m0.wl?' wl':'')+'" style="top:'+(((m0.meet.start-lo)/span)*H).toFixed(1)
+          +'px;height:'+Math.max(h0,13).toFixed(1)+'px;left:1px;width:calc(100% - 2px)" title="'+esc(m0.code)
+          +(m0.wl?(' — on the waitlist'+(m0.wlPos?(' #'+m0.wlPos):'')):'')
+          +'"><span>'+codeNum(m0)+'</span></div>';
+        i=j; continue;
+      }
+      /* TWO SECTIONS AT THE SAME HOUR SHARE THE SLOT — SPLIT, the way the full calendar does.
+         (Tate, 2026-08-28: "change the homepage view to having the waitlist and enrolled class
+         split like it has in the right view".)
+
+         This is the third attempt and the first one that is both split and readable, so the two
+         it replaces are worth naming. A merged red block folded the pair into one box that could
+         not say which seat you actually hold. Stacking the two codes vertically inside the slot
+         said which — but a two-row block needs ~28px, and an 80-minute class in this card is
+         ~19px, so the block grew past its own hour and collided with the next class down. That
+         is the overlap in Tate's screenshot.
+
+         Split solves both. The catch is width: a day column is 40.8px, and "3438" needs 22.3px
+         at the size the rest of the card uses, so two equal halves at 19px each could never hold
+         it — which is exactly why the earlier lane attempt kept collapsing to an unlabelled
+         sliver. Two sections at one hour are almost always the SAME course (the enrolled +
+         waitlisted twin the importer creates), so the code only has to be written once: the
+         seat you hold takes the wider share and carries the label, the one you are waiting on
+         takes the rest and carries the gold dashes. Both are real blocks, neither is a sliver,
+         and nothing is truncated. */
+      var sameCourse=cluster.every(function(m){return m.code===cluster[0].code;});
+      if(sameCourse){
+        /* Waitlisted first so the gold sits on the left, matching the full calendar. */
+        var ord=cluster.slice().sort(function(x,y){ return (y.wl?1:0)-(x.wl?1:0); });
+        var hP=Math.max(((maxEnd-start0)/span)*H,13);
+        /* 65% to the labelled block. Measured: the block is 38.8px wide, so 65% is 25.2px and
+           "3438" at 8px/800 is 22.3px — it fits with room, where an even split at 19.4px could
+           not. The other 35% is 13.6px, which is a block you can see and click, not a sliver. */
+        var restW=35/Math.max(1,ord.length-1);
+        var acc=0, halves='';
+        ord.forEach(function(m,li){
+          var last=(li===ord.length-1);
+          var w=last?(100-acc):restW;
+          halves+='<i class="hmc-half'+(m.wl?' wl':'')+'" style="left:'+acc.toFixed(3)+'%;width:'+w.toFixed(3)+'%"></i>';
+          acc+=w;
         });
+        var tipsP=ord.map(function(m){
+          return m.code+(m.wl?(' \u2014 waitlist'+(m.wlPos?(' #'+m.wlPos):'')):' \u2014 enrolled');
+        });
+        blocks+='<div class="hmc-blk pair" style="top:'+top.toFixed(1)
+          +'px;height:'+hP.toFixed(1)+'px;left:1px;width:calc(100% - 2px)" title="'
+          +tipsP.map(esc).join(' \u00b7 ')+'"><span>'+codeNum(ord[ord.length-1])+'</span>'+halves+'</div>';
+        i=j; continue;
+      }
+      var clash=cluster.some(function(x){return cluster.some(function(y){
+        if(x===y||x.code===y.code)return false;      // two sections of one course never clash
+        if(x.wl||y.wl)return false;                  // a waitlisted seat is not one you hold
+        return x.meet.start<y.meet.end&&y.meet.start<x.meet.end;
+      });});
+      var hS=((maxEnd-start0)/span)*H;
+      var rowsHtml='',tips=[];
+      cluster.forEach(function(m){
+        rowsHtml+='<b'+(m.wl?' class="wl"':'')+'>'+codeNum(m)+'</b>';
+        tips.push(m.code+(m.wl?(' — waitlist'+(m.wlPos?(' #'+m.wlPos):'')):''));
       });
-      if(realClash){
-        // Overlap = time conflict. One clear red block spanning the clash, listing every
-        // clashing course number stacked — reads as "these collide" instead of cramped pills.
-        var h=((maxEnd-start0)/span)*H;
-        var inner=cluster.map(function(m){return '<b>'+codeNum(m)+'</b>';}).join('');
+      var ttl;
+      if(clash){
         /* Naming every member of the cluster claimed A, B and C all collide when only
            A–B and B–C actually overlap. List the real pairs. */
         var _pairs=[],_seen={};
         cluster.forEach(function(x){cluster.forEach(function(y){
-          if(x===y||x.code===y.code)return;
+          if(x===y||x.code===y.code||x.wl||y.wl)return;
           if(!(x.meet.start<y.meet.end&&y.meet.start<x.meet.end))return;
           var k=[x.code,y.code].sort().join('|');
           if(_seen[k])return; _seen[k]=1; _pairs.push(k.split('|').map(esc).join(' & '));
         });});
-        var ttl='Time conflict: '+(_pairs.length?_pairs.join(', '):cluster.map(function(m){return esc(m.code);}).join(' & '));
-        blocks+='<div class="hmc-blk conflict" style="top:'+top.toFixed(1)+'px;height:'+Math.max(h,24).toFixed(1)+'px;left:1px;width:calc(100% - 2px)" title="'+ttl+'">'+inner+'</div>';
+        ttl='Time conflict: '+_pairs.join(', ');
       }else{
-        /* Every member of the cluster, not just cluster[0] (Tate, 2026-08-25: "display
-           waitlisted classes on this view as well"). A cluster that isn't a clash is the
-           enrolled + waitlisted pair of the SAME course, which the importer creates all the
-           time — and this branch was drawing the first one and dropping the rest, so the
-           waitlisted section simply wasn't on the week. They share the column in lanes, the
-           way the full calendar already does. */
-        /* Splitting the column into lanes was the obvious move and it was wrong here: a rail
-           column is ~34px, so two lanes are 16px and "3431" came back as "343" — the same
-           sliced-code problem the friend calendars had. One section carries the label at full
-           width (the enrolled one, since that is the seat you actually hold), and the others
-           become slim gold markers at their own times. A marker does not pretend to be a
-           readable block; it says "there is also a section here", and the tooltip says which. */
-        var lead=null;
-        for(var ci=0;ci<cluster.length;ci++){ if(!cluster[ci].wl){lead=cluster[ci];break;} }
-        if(!lead)lead=cluster[0];
-        var lh=((lead.meet.end-lead.meet.start)/span)*H, lt=((lead.meet.start-lo)/span)*H;
-        var lwl=!!lead.wl;
-        blocks+='<div class="hmc-blk'+(lwl?' wl':'')+'" style="top:'+lt.toFixed(1)
-          +'px;height:'+Math.max(lh,13).toFixed(1)+'px;left:1px;width:calc(100% - 2px)" title="'
-          +esc(lead.code)+(lwl?(' \u2014 on the waitlist'+(lead.wlPos?(' #'+lead.wlPos):'')):'')
-          +'"><span>'+codeNum(lead)+'</span></div>';
-        cluster.forEach(function(m){
-          if(m===lead)return;
-          var h2=((m.meet.end-m.meet.start)/span)*H, t2=((m.meet.start-lo)/span)*H;
-          blocks+='<div class="hmc-mark'+(m.wl?' wl':'')+'" style="top:'+t2.toFixed(1)
-            +'px;height:'+Math.max(h2,10).toFixed(1)+'px" title="'+esc(m.code)
-            +(m.wl?(' \u2014 on the waitlist'+(m.wlPos?(' #'+m.wlPos):'')):' \u2014 second section')
-            +'"></div>';
-        });
+        ttl=tips.map(esc).join(' · ');
       }
+      /* Room for every row at 8px/1.35 plus the block's own 1px padding, so a two-hour
+         overlap and a fifty-minute one both stay readable instead of clipping the last code. */
+      blocks+='<div class="hmc-blk share'+(clash?' conflict':'')+'" style="top:'+top.toFixed(1)
+        +'px;height:'+Math.max(hS,n*11+2).toFixed(1)+'px;left:1px;width:calc(100% - 2px)" title="'
+        +ttl+'">'+rowsHtml+'</div>';
       i=j;
     }
     return '<div class="hmc-col"><div class="hmc-dh">'+DL[di]+'</div><div class="hmc-day" style="height:'+H+'px">'+blocks+'</div></div>';
@@ -22829,8 +24421,11 @@ function hmRenderRailL(){
   /* Watchlist card — both the classes AND the professors you're watching. */
   var watchCard='';
   try{
-    var wCodes=(typeof watchClasses!=='undefined'?watchClasses:[]).slice(0,3);
-    var wProfs=(watchlist||[]).filter(function(id){return typeof PROFESSORS!=='undefined'&&PROFESSORS[id];}).slice(0,3);
+    /* Ask for more than will fit and let hmFitWatch() decide how many rows the screen
+       actually has room for. A fixed 3 was either too few on a tall monitor or one row too
+       many on a laptop, and the too-many case is the one that pushed the card off screen. */
+    var wCodes=(typeof watchClasses!=='undefined'?watchClasses:[]).slice(0,10);
+    var wProfs=(watchlist||[]).filter(function(id){return typeof PROFESSORS!=='undefined'&&PROFESSORS[id];}).slice(0,8);
     if(wCodes.length||wProfs.length){
       var rows='';
       /* A rail glance at your watchlist answers exactly one question — can I get in — and
@@ -22843,20 +24438,20 @@ function hmRenderRailL(){
         var ci=(typeof classInfo==='function')?classInfo(code):{name:''};
         var seat=(typeof realSeat==='function')?realSeat(code):null;
         var st=(seat&&seat.label)?('<span class="wl-st '+esc(seat.cls)+'">'+esc(seat.label)+'</span>'):'';
-        var tip=code+((seat&&typeof seatBadge==='function')?(' — '+seatBadge(seat)):' — on your Watchlist');
-        /* One line could not hold chip + name + status at this rail width: measured, the
-           name got ~85px and "Organizational Behavior" needs ~140px, so it truncated to
-           "Organiza…" — the exact problem the status word was meant to free up room for.
-           Two short things on the top line, the name given the full width below it. */
-        rows+='<div class="hm-wrow" onclick="event.stopPropagation();show(\'watch\')" title="'+esc(tip)+'">'
-          +'<div class="wl-top"><span class="wl-code">'+esc(code)+'</span>'+st+'</div>'
-          +(ci&&ci.name?('<div class="wl-nm">'+esc(ci.name)+'</div>'):'')+'</div>';
-        /* Status is an outlined pill, not loose text — it is the answer to "can I get in",
-           and it needs to read as a state you could tap through to. (Tate, 2026-08-25) */
+        /* The course TITLE is gone from this row (Tate, 2026-08-28: "the watchlist should only
+           include the class numbers so its more compact"). It was two clamped lines of grey per
+           entry — "Risk Management and Insurance Planning" — which tripled the row height for a
+           name you already know, and it is what made this card outgrow the screen. The number
+           and whether you can get in are the two things a glance is asking for; the title is on
+           the row's tooltip and in the Watchlist tab. */
+        var tip=code+(ci&&ci.name?(' \u2014 '+ci.name):'')
+          +((seat&&typeof seatBadge==='function')?(' \u2014 '+seatBadge(seat)):'');
+        rows+='<div class="hm-wrow hm-witem" onclick="event.stopPropagation();show(\'watch\')" title="'+esc(tip)+'">'
+          +'<span class="wl-code">'+esc(code)+'</span>'+st+'</div>';
       });
       wProfs.forEach(function(pid){
         var p=PROFESSORS[pid];var r5=(p.rating!=null&&typeof to5==='function')?to5(p.rating):null;
-        rows+='<div class="hm-saved" onclick="event.stopPropagation();openProf(\''+esc(pid)+'\')">'
+        rows+='<div class="hm-saved hm-witem" onclick="event.stopPropagation();openProf(\''+esc(pid)+'\')">'
           +'<span class="fav pv" style="'+profTintStyle(p.rating)+'">'+esc(hmIni(p.name))+'</span>'
           +'<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(p.name)+'</span>'
           +(r5!=null?('<span class="r hm-score" style="color:'+scoreColor(p.rating)+'" title="'+r5.toFixed(1)+' out of 5"><b>'+r5.toFixed(1)+'</b></span>'):'')+'</div>';
@@ -22867,6 +24462,49 @@ function hmRenderRailL(){
   }catch(e){}
   host.innerHTML=id+mini+watchCard;
 }
+/* ---- one screenful of rail --------------------------------------------------------------------
+   Tate, 2026-08-28: "i dont want it to scroll it should always show profile and calandar and
+   watchlist classes should only fill until they overflow and it says see all in watchlist so it
+   doesnt cut it off from view."
+
+   So the number of Watchlist rows is not a constant. Home's left column carries three things and
+   the first two are fixed — who you are, and your week — which leaves the Watchlist whatever is
+   left of the viewport. Render more rows than could ever fit, then hide from the bottom until the
+   whole rail clears the fold. Rows are hidden whole: a row that is half on screen is worse than a
+   row that isn't there, because it reads as a rendering bug rather than as "there is more".
+   "View all" is in the card header and is what carries the rest.
+
+   Measured after layout, not guessed from a row count, because the two cards above vary: a week
+   with an overlap is taller than one without, and the profile card grows a line when a major is
+   set. Re-run on resize for the same reason. */
+function hmFitWatch(){
+  try{
+    var rail=document.getElementById('hmRailL'); if(!rail)return;
+    /* Below 1140px the rail is display:none (phone Home ends at the feed), so there is no fold
+       to fit and nothing to measure — offsetParent is the cheap test for "actually laid out". */
+    if(!rail.offsetParent)return;
+    var card=rail.querySelector('.hm-wcard'); if(!card)return;
+    var items=[].slice.call(card.querySelectorAll('.hm-witem'));
+    if(items.length<2)return;
+    items.forEach(function(el){el.style.display='';el.classList.remove('wl-lastvis');});
+    var hdr=document.querySelector('header.nav');
+    var hh=hdr?Math.round(hdr.getBoundingClientRect().height):64;
+    /* 16 above the rail to clear the header, 16 below so the last row isn't flush to the edge. */
+    var budget=window.innerHeight-hh-32;
+    for(var k=items.length-1;k>0;k--){
+      if(rail.getBoundingClientRect().height<=budget)break;
+      items[k].style.display='none';
+    }
+    /* On a short laptop the two cards above can eat the whole fold, and one row would still
+       hang past it. Then the heading and "View all" are the card — it still says the Watchlist
+       is there and how to reach it, which is more than a row you can only see the top of. */
+    if(rail.getBoundingClientRect().height>budget)items[0].style.display='none';
+    for(var v=items.length-1;v>=0;v--){
+      if(items[v].style.display!=='none'){items[v].classList.add('wl-lastvis');break;}
+    }
+  }catch(e){}
+}
+try{ window.hmFitWatch=hmFitWatch; }catch(e){}
 function hmRenderRailR(){
   var host=document.getElementById('hmRailR'); if(!host)return;
   var out='';
@@ -23040,6 +24678,9 @@ window.renderHome=function(){
   if(land)land.style.display='none';
   if(dash)dash.style.display='';
   hmGreeting();hmRenderAlert();hmRenderStrip();hmRenderComposer();hmRenderFeed();hmRenderRailL();hmRenderRailR();hmPlaceRail();
+  /* After hmPlaceRail(): the rail's width — and so its height — depends on which column
+     it ended up in, and the fit is measured from that height. */
+  try{ hmFitWatch(); }catch(e){}
   /* After the rails have their content, not before — the pin point is derived from their height. */
   hmStickRails();
 };
@@ -23189,6 +24830,11 @@ hmLoadPosts().then(function(){try{hmRenderFeed();}catch(e){}});
   try{ window.hmRenderStrip=hmRenderStrip; window.renderHome=renderHome; }catch(e){}
   /* the mini calendar draws conflict state — exposed so that claim stays testable */
   try{ window.hmMiniCalHtml=hmMiniCalHtml; }catch(e){}
+  /* Exported for the same reason the comment at gpMembers() gives: hmIni() lives in this
+     IIFE, and two call sites OUTSIDE it were falling through to '?' — a face pile with no
+     initials on it, on a palette whose own comment says initials are the second channel
+     because two of its colours separate by 1.02:1. A name on window fixes both. */
+  try{ window.hmIni=hmIni; }catch(e){}
   /* The Quad's week grid makes a claim about WHEN a friend is on campus — exposed so the
      "these times are theirs, not mine" guarantee stays testable. */
   try{ window.hmFriendMeets=hmFriendMeets; window.hmMiniWeekHtml=hmMiniWeekHtml; }catch(e){}
