@@ -14,7 +14,11 @@
    uploaded it before the link was shared; this only points at it.
    ================================================================================================= */
 
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+/* The project URL, with the environment variable as an override rather than a requirement.
+   It is not a secret — index.html ships it to every browser in PROFESSIFY_CONFIG — and making
+   this function depend on a Netlify env var meant one more manual step between deploying and
+   the preview actually working, with a silent fallback to the generic card if it was missed. */
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "https://rqkndeqbcahozidniesn.supabase.co";
 const BUCKET       = "schedule-cards";
 const FALLBACK_IMG = "https://professify.app/share-card.png";
 
