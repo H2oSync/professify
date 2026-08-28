@@ -18,3 +18,112 @@
   for = "/index.html"
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"
+
+# ---------------------------------------------------------------------------
+# publish = "." serves EVERY file in the repo root, so each old build left lying
+# around here has been a live, public copy of Professify at its own URL. Verified
+# 2026-08-24: professify.app/index_v7.html returned a working months-old app whose
+# own disclaimer reads "Some sample reviews and grade data are placeholders" —
+# fabricated data, on the real domain, one guessed URL away, with no robots.txt to
+# keep it out of search results.
+#
+# Redirects are matched before static files, so these stop being reachable
+# immediately. The files themselves should still be deleted from the repo; this is
+# the lock on the door, not the cleanup.
+# ---------------------------------------------------------------------------
+[[redirects]]
+  from = "/index-legacy-v0.html"
+  to = "/"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/index_6.html"
+  to = "/"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/index_v7.html"
+  to = "/"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/professify-merged-final_2.html"
+  to = "/"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/professor-plan_26.html"
+  to = "/"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/professor-plan_31.html"
+  to = "/"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/sprint.html"
+  to = "/"
+  status = 301
+  force = true
+
+# Not app pages either: the database schema (which spells out every row-level
+# security rule to anyone who asks for it), the stale scraper source, and the repo's
+# own docs. None of these were ever meant to be served from professify.app.
+[[redirects]]
+  from = "/supabase-setup.sql"
+  to = "/"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/scrape-seats_1.mjs"
+  to = "/"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/BACKEND-SETUP.md"
+  to = "/"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/CONTRIBUTING.md"
+  to = "/"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/README.md"
+  to = "/"
+  status = 301
+  force = true
+
+# ---------------------------------------------------------------------------
+# The invite link. /invite is a separate FILE (invite.html) rather than a query
+# string on the app, because the app is one static index.html: ?add=<id> cannot
+# change which <meta> tags get served, so an invite texted to a friend previewed
+# with the homepage card and nothing in the app could fix it. invite.html carries
+# its own Open Graph tags and hands the person on to /?add=<id>.
+#
+# status = 200 is a REWRITE, not a redirect: the address bar keeps saying /invite
+# and, critically, the query string survives so the token reaches the page.
+# ---------------------------------------------------------------------------
+[[redirects]]
+  from = "/invite"
+  to = "/invite.html"
+  status = 200
+
+# Don't hard-cache the invite page either — it is a preview surface, and a stale
+# copy in a CDN edge would keep serving yesterday's card after a change.
+[[headers]]
+  for = "/invite.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
