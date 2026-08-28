@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+<!-- =============================================================================================
+     professify.app/invite  —  the link you send a friend.
+
+     WHY THIS FILE EXISTS AT ALL
+     The app is one static index.html on Netlify. Query strings do not change which file is
+     served, so /?add=<id> gets the SAME <meta> tags as the bare homepage — which means an invite
+     texted to a friend previewed with the homepage card, and there was no way to give it its own
+     without a second file. This is that second file: its only job is to carry invite-specific
+     Open Graph tags for the crawler, then hand the human straight to the app with their token.
+
+     iMessage, WhatsApp, Slack and Discord all read these tags WITHOUT running JavaScript, so the
+     redirect below cannot affect the preview. The person clicking gets bounced on in one frame.
+     ============================================================================================= -->
+
+<title>You&rsquo;ve been invited to join Professify</title>
+<meta name="description" content="Build your Cal Poly schedule, see what your friends are taking, and pick the professors worth having.">
+<!-- A share target is not a page anyone should find in search: it is one person's link to one
+     other person. The homepage is what gets indexed. -->
+<meta name="robots" content="noindex, follow">
+
+<meta property="og:type"        content="website">
+<meta property="og:site_name"   content="Professify">
+<meta property="og:url"         content="https://professify.app/invite">
+<!-- iMessage renders the card as: image, then og:title in bold, then the domain. It does not
+     show og:description at all, so the title has to carry the whole message on its own. -->
+<meta property="og:title"       content="You've been invited to join Professify">
+<meta property="og:description" content="Build your Cal Poly schedule, see what your friends are taking, and pick the professors worth having.">
+<!-- 1200x1200, square on purpose. iMessage draws an og:image at its own aspect ratio, so a
+     square card takes roughly twice the thread height of a 1200x630 one — and at bubble width
+     that is the difference between a legible week grid and a smudge. The trade: Slack, Twitter
+     and Discord centre-crop to ~1.91:1, where the week survives and the header, the stats row
+     and the footer do not. Invites are overwhelmingly texted, so that is the right way round.
+     Absolute URL, real file — a relative path or a data: URI is silently ignored by every
+     crawler that matters. -->
+<meta property="og:image"        content="https://professify.app/invite-card.png">
+<meta property="og:image:width"  content="1200">
+<meta property="og:image:height" content="1200">
+<meta property="og:image:type"   content="image/png">
+<meta property="og:image:alt"    content="Professify — a week of classes with friends in them, and a professor rating.">
+
+<meta name="twitter:card"        content="summary_large_image">
+<meta name="twitter:title"       content="You've been invited to join Professify">
+<meta name="twitter:description" content="Build your Cal Poly schedule, see what your friends are taking, and pick the professors worth having.">
+<meta name="twitter:image"       content="https://professify.app/invite-card.png">
+
+<style>
+  :root{color-scheme:light dark}
+  html,body{height:100%}
+  body{margin:0;display:flex;align-items:center;justify-content:center;
+    font:500 15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    background:#154734;color:#F6F4F1;text-align:center;padding:24px}
+  .w{max-width:24rem;display:flex;flex-direction:column;align-items:center;gap:14px}
+  .logo{width:46px;height:46px;border-radius:13px;background:#5FD3A0;color:#0C2C1F;
+    display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:800}
+  h1{margin:0;font-size:19px;font-weight:700;letter-spacing:-.015em}
+  p{margin:0;font-size:14px;color:rgba(246,244,241,.72)}
+  a{display:inline-block;margin-top:4px;padding:11px 22px;border-radius:999px;
+    background:#5FD3A0;color:#0C2C1F;font-weight:700;text-decoration:none;font-size:15px}
+  a:focus-visible{outline:3px solid #F6F4F1;outline-offset:2px}
+</style>
+</head>
+<body>
+  <!-- Everything below is the no-JavaScript floor. With JS on, nobody sees it for longer than a
+       frame; with JS off, it is a working link rather than a dead end. -->
+  <div class="w">
+    <div class="logo" aria-hidden="true">P</div>
+    <h1>You&rsquo;ve been invited to Professify</h1>
+    <p>Build your Cal&nbsp;Poly schedule, see what your friends are taking, and pick the professors worth having.</p>
+    <a id="go" href="/">Continue to Professify</a>
+  </div>
+
+<script>
+(function(){
+  /* Carry the invite token across, and NOTHING else. The app accepts add / ref / invite and
+     validates the shape itself; this only has to avoid mangling it. Rebuilding the query from
+     a whitelist — rather than forwarding location.search wholesale — means a crafted link
+     cannot use this page to inject arbitrary parameters into the app. */
+  var out='/';
+  try{
+    var q=new URLSearchParams(location.search);
+    var id=q.get('add')||q.get('ref')||q.get('invite');
+    if(id&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))
+      out='/?add='+encodeURIComponent(id);
+  }catch(e){}
+  var a=document.getElementById('go');
+  if(a)a.setAttribute('href',out);
+
+  /* Only redirect when this page is the whole window.
+     Inside an IFRAME — a preview pane, an embed, an in-app browser card — "/" is not the app,
+     it is whatever that host serves at its own root. Redirecting there hangs on a spinner and
+     makes a page that is fine in production look broken. (Seen 2026-08-27 in the file preview.)
+     Framed, the card below is the page: logo, one line, and a button that works. */
+  var framed=false;
+  try{ framed=(window.top!==window.self); }catch(e){ framed=true; }   // cross-origin throw = framed
+  if(framed){
+    if(a)a.setAttribute('target','_top');
+    return;
+  }
+  /* replace(), not assign(): Back from the app should return to whatever the friend was doing
+     before they tapped the message, not to this page, which would bounce them forward again. */
+  try{ location.replace(out); }catch(e){ location.href=out; }
+})();
+</script>
+</body>
+</html>

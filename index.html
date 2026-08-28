@@ -11,8 +11,18 @@
      a bare grey URL — indistinguishable from spam — because link scrapers fetch the HTML and
      never execute JavaScript. So these are static, in the head, and must stay that way:
      anything the app adds at runtime is invisible to a scraper.
-     og:image must be a real absolute URL to a real file (no data: URIs) — share.png sits next
-     to index.html in the repo. -->
+     og:image must be a real absolute URL to a real file (no data: URIs) — the PNGs sit next
+     to index.html in the repo.
+
+     2026-08-26: og:image pointed at /share.png, which was never uploaded — professify.app/share.png
+     returned 404, which is exactly why a shared link rendered in iMessage as a bare grey box with
+     the title and nothing else. Two changes:
+       * NEW FILENAMES. Apple, Twitter and Slack all cache a link's preview by URL, 404s included,
+         so re-uploading share.png would have kept serving the miss for hours. share-card.png has
+         never been fetched by anyone.
+       * PORTRAIT for og:image (1200x1500). iMessage draws the og:image at its own aspect ratio,
+         so a tall card fills the bubble the way Saturn's does instead of sitting as a thin strip.
+         Twitter crops portrait badly, so twitter:image keeps a 1200x630 of the same design. -->
 <meta name="description" content="Real Cal Poly professor ratings from PolyRatings, daily seat and waitlist counts, and which of your friends are in your classes. Free, no ads.">
 <link rel="canonical" href="https://professify.app/">
 <meta name="theme-color" content="#154734">
@@ -22,15 +32,17 @@
 <meta property="og:url"         content="https://professify.app/">
 <meta property="og:title"       content="Professify — pick the right professor">
 <meta property="og:description" content="Real Cal Poly ratings from PolyRatings, daily seat and waitlist counts, and who of your friends is in each class.">
-<meta property="og:image"       content="https://professify.app/share.png">
+<meta property="og:image"       content="https://professify.app/share-card.png">
 <meta property="og:image:width"  content="1200">
-<meta property="og:image:height" content="630">
+<meta property="og:image:height" content="1500">
+<meta property="og:image:type"   content="image/png">
 <meta property="og:image:alt"   content="Professify — Cal Poly professor ratings, daily seat counts, and your friends' classes.">
 
 <meta name="twitter:card"        content="summary_large_image">
 <meta name="twitter:title"       content="Professify — pick the right professor">
 <meta name="twitter:description" content="Real Cal Poly ratings from PolyRatings, daily seat and waitlist counts, and who of your friends is in each class.">
-<meta name="twitter:image"       content="https://professify.app/share.png">
+<meta name="twitter:image"       content="https://professify.app/share-wide.png">
+<meta name="twitter:image:alt"   content="Professify — a Cal Poly week with friends' initials on the classes you share.">
 <!-- Tesseract (~1MB) used to load here as a render-blocking script on EVERY visit, including
      the overwhelming majority who never import a screenshot. It's fetched on demand now by
      lazyScript(), which is what loadOcr() always intended. -->
@@ -2645,6 +2657,14 @@ html[data-auth="in"] #schedGuestNote{display:none!important}
 
   <div class="sp-card sp-hidden" id="schCheckCard">
     <div class="sp-step">Check off everything you've already completed</div>
+    <!-- Ticking 40 boxes one at a time is the reason this screen gets abandoned. Most students
+         have their classes in TERM-sized groups — one screenshot per quarter — so the fastest
+         honest path is to hand us a term at a time and let it tick the boxes. -->
+    <button type="button" class="sp-termimp" onclick="openTermImport()">
+      <span class="sp-ti-i" aria-hidden="true">＋</span>
+      <span class="sp-ti-t"><b>Log a whole term at once</b>
+        <span>Drop a screenshot of one quarter or semester — or paste the codes.</span></span>
+    </button>
     <div class="sp-quick">
       <button id="schQNone" type="button">Clear all</button>
       <button type="button" data-yr="1">Done with 1st year</button>
@@ -2730,7 +2750,7 @@ html[data-auth="in"] #schedGuestNote{display:none!important}
             <div class="pc-tiles">
               <button class="pc-tile" onclick="document.getElementById('transcriptFile').click()">
                 <span class="pc-ic">📄</span>
-                <span class="pc-tt"><b>Upload transcript</b><span>Screenshot it — we read your classes &amp; terms.</span></span>
+                <span class="pc-tt"><b>Upload transcript</b><span>PDF or screenshot — we read your classes &amp; terms.</span></span>
               </button>
               <!-- [...this.files] is a SNAPSHOT. `this.value=''` (which is what lets you pick the same
                    file twice in a row) EMPTIES the live FileList, and handleTranscriptImport is async —
@@ -2738,7 +2758,7 @@ html[data-auth="in"] #schedGuestNote{display:none!important}
                    reads a list of length 0. That is the whole of "transcript upload does nothing":
                    verified live on professify.app 2026-08-25, files.length 1 at the event and 0 one
                    tick later. My Classes' input never cleared .value, which is why only this one broke. -->
-              <input type="file" id="transcriptFile" accept="image/*" multiple hidden onchange="handleTranscriptImport([...this.files]);this.value=''">
+              <input type="file" id="transcriptFile" accept="image/*,application/pdf,.pdf" multiple hidden onchange="handleTranscriptImport([...this.files]);this.value=''">
               <button class="pc-tile" id="pcManualTile" onclick="pcShowManual()">
                 <span class="pc-ic">✏️</span>
                 <span class="pc-tt"><b>Add manually</b><span>One class at a time.</span></span>
@@ -3278,6 +3298,21 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
       <div id="gpPane" style="display:none"></div>
 
       <div id="frFriendsPane">
+
+      <!-- People you might know: shared sections and courses (suggest_friends, which also
+           subsumes the older suggest_classmates) merged into one ranked list, each row carrying
+           the single strongest reason it is there.
+           ABOVE the friends list, and INSIDE this pane so it follows the Friends/Groups tab
+           without a second place to remember. It hides completely when there is nothing to
+           suggest — no empty state — because on a young graph that is most of the time, and an
+           empty box at the top of the page is the first thing every new student would see. -->
+      <div id="frSuggestedSec" class="fr-section" style="display:none">
+        <div class="fr-listhead">
+          <div class="grouphead" style="margin:0">People you might know<span id="frSugCount" class="fr-secount"></span></div>
+        </div>
+        <div id="frSuggestedOut" class="fr-grid"></div>
+      </div>
+
       <div class="fr-section">
         <div class="fr-listhead">
           <div class="grouphead" style="margin:0">Your friends<span id="frFriendCount" class="fr-secount"></span></div>
@@ -3290,16 +3325,6 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
 
       </div><!-- /frFriendsPane -->
 
-      <!-- People you might know: mutual friends (suggest_friends) and classmates
-           (suggest_classmates) merged into one ranked list, each row carrying the single
-           strongest reason it's there. -->
-      <div id="frSuggestedSec" class="fr-section" style="display:none">
-        <div class="fr-listhead">
-          <div class="grouphead" style="margin:0">People you might know<span id="frSugCount" class="fr-secount"></span></div>
-        </div>
-        <div id="frSuggestedOut" class="fr-grid"></div>
-      </div>
-
       <!-- ===== the add-a-friend sheet, opened by the dashed slot at the end of the list ===== -->
       <div id="frAddSheet" class="fr-addsheet" style="display:none">
         <div class="fr-as-head">
@@ -3310,7 +3335,7 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
         <div class="fr-as-block">
           <div class="fr-as-lab">Search for someone</div>
           <div class="fr-people-row">
-            <input id="frSearchPeople" class="rate-input" style="margin:0" placeholder="Name, Cal Poly email, or @handle" onkeydown="if(event.key==='Enter'){event.preventDefault();searchPeople();}" oninput="frPeopleTyping()">
+            <input id="frSearchPeople" class="rate-input" style="margin:0" placeholder="Start typing a name \u2014 or a Cal Poly email or @handle" onkeydown="if(event.key==='Enter'){frPeopleEnter(event);}" oninput="frPeopleTyping()" autocomplete="off">
             <button class="btn primary fr-handle-btn" onclick="searchPeople()">Search</button>
           </div>
           <div id="frPeopleErr" class="rate-err" style="min-height:0"></div>
@@ -3843,7 +3868,7 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
 /* Feature flags. Groups ships dark: the code is in the file and the toggle does not render
    until this is true, so it can be reviewed and merged without appearing to students. */
 window.PROFESSIFY_FLAGS={groups:true};   /* Groups ON — Tate, 2026-08-25. Friends-only; groups are device-local (localStorage). */
-window.PROFESSIFY_BUILD='2026-08-26 13:20';
+window.PROFESSIFY_BUILD='2026-08-27 11:30';
 /* Paint the build stamp everywhere it appears. */
 try{
   (function(){
@@ -4096,6 +4121,102 @@ function pqDedupeGroup(group){
    information is still free to act on, so both surfaces now call this. Only ever built from the
    student's OWN logged Past Classes; with nothing logged there is nothing to warn about, and we
    say nothing rather than guessing. */
+/* ---- Schedule flags: a pill you can ignore, a sentence when you can't ------------------------
+   Prereq and conflict warnings each printed a full-width red paragraph above the schedule —
+   two of them, stacked, every time you opened My Classes. They pushed the actual schedule off
+   the screen and, being permanent, stopped reading as warnings at all. (Tate, 2026-08-26:
+   "dont display the whole text just have a simple prerec check as a small pill and when you
+   click it shows a super simple description".)
+
+   The other half of that note is a real correctness point: MY CLASSES IS WHAT THE REGISTRAR
+   ALREADY DID. If Cal Poly enrolled you in BUS 3431, its prerequisite is settled — telling you
+   otherwise is second-guessing the registrar with our own scraped table. On an ENROLLED course
+   the flag drops to a neutral note about your Past Classes log. On a WAITLISTED one it stays a
+   warning, because that seat isn't yours yet and an unmet prereq is exactly what loses it. */
+var _sfOpen={};
+window.sfToggle=function(surface,key,ev){
+  if(ev){ev.stopPropagation&&ev.stopPropagation();}
+  var k=surface+'|'+key;
+  var was=_sfOpen[k]; _sfOpen={}; if(!was)_sfOpen[k]=1;   // one open at a time — these are asides
+  try{ if(surface==='mine'&&typeof renderMyClasses==='function')renderMyClasses();
+       else if(typeof renderWatchClasses==='function')renderWatchClasses(); }catch(e){}
+};
+/* Is the student actually enrolled in this course (as opposed to waiting on it)? */
+function sfIsEnrolled(code){
+  try{
+    var m=myClassMeta[code]; if(!m||!Array.isArray(m.secs)||!m.secs.length)return false;
+    return m.secs.some(function(s){ return s.status!=='waitlisted'; });
+  }catch(e){ return false; }
+}
+/* Every course on this surface whose prereqs we can see are unmet, split by whether the seat
+   is already theirs. */
+function sfPrereqProblems(codes){
+  var out={enrolled:[],pending:[]};
+  try{
+    if(typeof sbUser==='undefined'||!sbUser||typeof prereqStatus!=='function')return out;
+    var done=completedCodes();
+    (codes||[]).forEach(function(c){
+      if(typeof hasPrereqs!=='function'||!hasPrereqs(c))return;
+      var st=prereqStatus(c,done,[]); if(st.state!=='unmet')return;
+      var row={code:c,need:st.missing.map(prereqGroupLabel).join(', '),
+               first:(st.missing[0]&&st.missing[0][0])?canonCode(st.missing[0][0]):''};
+      (sfIsEnrolled(c)?out.enrolled:out.pending).push(row);
+    });
+  }catch(e){}
+  return out;
+}
+function sfPrereqLines(rows){
+  return '<ul class="sf-list">'+rows.map(function(r){
+    return '<li><b>'+escAcc(r.code)+'</b> needs '+escAcc(r.need)
+      +(r.first?(' <button class="pq-fix" onclick="pqTookIt(\''+escAcc(r.first)+'\',event)">I’ve taken it</button>'):'')
+      +'</li>';
+  }).join('')+'</ul>';
+}
+/* surface: 'mine' | 'watch'.  conf: {pairs:[[a,b],...]} */
+function schedFlagsHtml(surface,codes,conf){
+  var flags=[];
+  var pq=sfPrereqProblems(codes);
+  if(surface==='mine'){
+    /* Waitlisted first — that is the only one that can still cost you something. */
+    if(pq.pending.length){
+      flags.push({key:'pq',tone:'warn',label:'Prereq check',n:pq.pending.length,
+        detail:'<p>You’re waitlisted for '+(pq.pending.length===1?'a class':'classes')+' whose prerequisite isn’t in your logged Past Classes. '
+          +'A waitlist seat can be dropped for an unmet prerequisite, so this one is worth settling.</p>'+sfPrereqLines(pq.pending)});
+    }
+    if(pq.enrolled.length){
+      flags.push({key:'pqe',tone:'note',label:'Prereq note',n:pq.enrolled.length,
+        detail:'<p>Cal Poly already enrolled you in '+(pq.enrolled.length===1?'this class':'these classes')+', so as far as registration goes the prerequisite is settled — '
+          +'we’re not second-guessing that. This is only about your <b>Past Classes</b> log, which the planner reads to tick off requirements.</p>'
+          +sfPrereqLines(pq.enrolled)});
+    }
+  }else if(pq.pending.length||pq.enrolled.length){
+    var all=pq.pending.concat(pq.enrolled);
+    flags.push({key:'pq',tone:'warn',label:'Prereq check',n:all.length,
+      detail:'<p>Nothing here is registered yet, which is the cheapest moment to find this out.</p>'+sfPrereqLines(all)});
+  }
+  if(conf&&conf.pairs&&conf.pairs.length){
+    flags.push({key:'clash',tone:'warn',label:(conf.pairs.length===1?'1 time conflict':conf.pairs.length+' time conflicts'),
+      detail:'<p>'+(surface==='mine'
+          ? 'These overlap on your schedule. Swap one for a different section to clear it.'
+          : 'These overlap. That’s fine while you’re deciding — pick one before you enroll.')+'</p>'
+        +'<ul class="sf-list">'+conf.pairs.map(function(p){
+            return '<li>'+escAcc(p[0])+' ↔ '+escAcc(p[1])+'</li>'; }).join('')+'</ul>'});
+  }
+  if(!flags.length)return '';
+  var openKey=null;
+  flags.forEach(function(f){ if(_sfOpen[surface+'|'+f.key])openKey=f.key; });
+  var pills=flags.map(function(f){
+    var on=(openKey===f.key);
+    return '<button class="sf-pill sf-'+f.tone+(on?' on':'')+'" aria-expanded="'+(on?'true':'false')+'"'
+      +' onclick="sfToggle(\''+surface+'\',\''+f.key+'\',event)">'
+      +'<span class="sf-dot" aria-hidden="true"></span>'+escAcc(f.label)
+      +((f.n&&f.n>1)?('<span class="sf-n">'+f.n+'</span>'):'')
+      +'<span class="sf-car" aria-hidden="true">'+(on?'▴':'▾')+'</span></button>';
+  }).join('');
+  var open=flags.filter(function(f){return f.key===openKey;})[0];
+  return '<div class="sf-row">'+pills+'</div>'
+    +(open?('<div class="sf-detail sf-'+open.tone+'">'+open.detail+'</div>'):'');
+}
 function prereqBanner(codes,verb){
   try{
     if(typeof sbUser==='undefined'||!sbUser||typeof prereqStatus!=='function')return '';
@@ -4140,7 +4261,13 @@ function prereqChipHtml(code, plannedBefore){
      it reads as if you were somehow taking 3431 in this row. The chip is about THIS course's
      prerequisite; say so, or it's a non sequitur. */
   if(st.state==='inprogress'){ var ng=st.inProgress.map(function(g){return pqDedupeGroup(g).join(' or ');}).join(', ');
-    return '<span class="pq-chip pq-conc" title="'+esc(ng)+' is a prerequisite for this class and you\'re enrolled in it this term">\u21bb Prereq '+esc(ng)+' \u2014 taking it now</span>'; }
+    /* The leading \u21bb read as a refresh button — something to tap — on a chip that is pure
+       information. And "Prereq BUS 3431 — taking it now" is two facts joined by a dash, so it
+       scanned as one long string. Split them: the course is the thing you look for, the status
+       is a quiet tag beside it. (Tate, 2026-08-27.) */
+    return '<span class="pq-chip pq-conc" title="'+esc(ng)+' is a prerequisite for this class and you\'re enrolled in it this term">'
+      +'<span class="pq-lead">Prereq <b>'+esc(ng)+'</b></span>'
+      +'<span class="pq-tag">taking it now</span></span>'; }
   if(st.state==='concurrent'){ var cg=st.concurrent.map(function(g){return pqDedupeGroup(g).join(' or ');}).join(', '); return '<span class="pq-chip pq-conc" title="May be taken at the same time">↔ Can take with '+esc(cg)+'</span>'; }
   if(st.state!=='unmet')return '';
   /* --- unmet: compact chip, expandable to a structured checklist --- */
@@ -7737,7 +7864,7 @@ function clsSecRowsFor(secs,code){
       var watching=isWatchedSec(code,crn), mine=isMineSec(code,crn);
       acts='<div class="cs-acts">'
         +'<button class="cs-watch'+(watching?' on':'')+'" title="'+(watching?'On your Watchlist — tap to remove':'Add this section to your Watchlist to compare it')+'" onclick="wcWatchSec(\''+escAcc(code)+'\',\''+escAcc(crn)+'\',event)">'+(watching?'✓ Watching':'☆ Watch')+'</button>'
-        +(mine?'<span class="cs-inmine">✓ In My Classes</span>':'<button class="cs-enroll" title="Cal Poly has you enrolled or waitlisted in this section? Add it to My Classes." onclick="mcEnrollSec(\''+escAcc(code)+'\',\''+escAcc(crn)+'\',event)">I’m in this →</button>')
+        +(mine?'<button class="cs-inmine" title="Tap to take this section back out of My Classes" onclick="mcLeaveSec(\''+escAcc(code)+'\',\''+escAcc(crn)+'\',event)"><span class="im-on">✓ In My Classes</span><span class="im-off">✕ Remove</span></button>':'<button class="cs-enroll" title="Cal Poly has you enrolled or waitlisted in this section? Add it to My Classes." onclick="mcEnrollSec(\''+escAcc(code)+'\',\''+escAcc(crn)+'\',event)">I’m in this →</button>')
       +'</div>';
     }
     var conf=secConflictChip(code,s), frs=friendSecChip(code,s);
@@ -7955,11 +8082,13 @@ function cpSecRow(s,code){
   if(crn){
     var watching=isWatchedSec(code,crn), mine=isMineSec(code,crn);
     acts='<button class="cp-watch'+(watching?' on':'')+'" title="'+(watching?'On your Watchlist — tap to remove':'Add this section to your Watchlist to compare it')+'" onclick="wcWatchSec(\''+escAcc(code)+'\',\''+escAcc(crn)+'\',event)">'+(watching?'✓ Watching':'☆ Watch')+'</button>'
-      +(mine?'<span class="cp-inmine">✓ In My Classes</span>'
+      +(mine?'<button class="cp-inmine" title="Tap to take this section back out of My Classes" onclick="mcLeaveSec(\''+escAcc(code)+'\',\''+escAcc(crn)+'\',event)"><span class="im-on">✓ In My Classes</span><span class="im-off">✕ Remove</span></button>'
             :'<button class="cp-enroll" title="Cal Poly has you enrolled or waitlisted in this section? Add it to My Classes." onclick="mcEnrollSec(\''+escAcc(code)+'\',\''+escAcc(crn)+'\',event)">I’m in this →</button>');
   }
   var copyAttr=crn?(' onclick="clsCopySec(event,\''+escAcc(crn)+'\')" title="Tap to copy this section’s class number for registration"'):'';
-  return '<div class="cp-sec'+(conf?' clash':'')+'"'+copyAttr+'>'
+  /* One flash on the row that just changed — a repaint should read as "that worked", not as
+     the list quietly redrawing under your finger. */
+  return '<div class="cp-sec'+(conf?' clash':'')+((_cpJust&&String(crn)===_cpJust)?' cp-just':'')+'"'+copyAttr+'>'
     +'<div class="cp-c1"><div class="cp-secn">'+escapeHtml(cpSecNum(s))+comp+'</div>'+profCell+'</div>'
     +'<div class="cp-c2"><div class="cp-when">'+CP_CAL+'<span>'+when+'</span>'+pills+'</div>'
       +((frs||conf)?('<div class="cp-chips">'+frs+conf+'</div>'):'')+'</div>'
@@ -8035,10 +8164,18 @@ function renderClassPage(){
     if(!isNaN(an)&&!isNaN(bn)&&an!==bn)return an-bn;
     return String(a.section||'').localeCompare(String(b.section||''));
   });
-  var shown=(cpTab==='all')?secs:secs.filter(function(x){return x.comp&&x.comp.label===cpTab;});
+  var shown=secs;   /* narrowed below, but only when there are tabs to narrow it with */
 
+  /* A tab that shows the same rows as "All Sections" is not a filter, it is a duplicate.
+     When EVERY section of a course is one component — a course that is nothing but seminars,
+     say — cpKinds still returned ['Seminar'], so the page drew "All Sections" and
+     "Seminar Sections" side by side listing identical rows, under a note telling the student
+     to check which one goes with their lecture when the course has no lecture at all.
+     Tabs only earn their place when something is left out of them. */
+  var hasPlain=secs.some(function(x){ return !(x.comp&&x.comp.label); });
+  var partitions=(kinds.length>1)||(kinds.length===1&&hasPlain);
   var tabs='';
-  if(kinds.length){
+  if(kinds.length&&partitions){
     var LAB='<svg class="cp-ti" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M10 3v6.2L4.6 18A2 2 0 006.3 21h11.4a2 2 0 001.7-3L14 9.2V3M9 3h6M8.2 14h7.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
     var GRID='<svg class="cp-ti" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.6"/></svg>';
     tabs='<div class="cp-tabs" role="tablist">'
@@ -8046,12 +8183,13 @@ function renderClassPage(){
       +kinds.map(function(k){
         return '<button role="tab" aria-selected="'+(cpTab===k)+'" class="cp-tab'+(cpTab===k?' on':'')+'" onclick="cpSetTab(\''+escAcc(k)+'\')">'+LAB+escapeHtml(k)+' Sections</button>';
       }).join('')+'</div>';
+    if(cpTab!=='all')shown=secs.filter(function(x){return x.comp&&x.comp.label===cpTab;});
   }
 
   /* We deliberately do NOT pair a lab to a lecture: Cal Poly encodes that with PeopleSoft's
      associated-class number, which our scrape doesn't capture, so any pairing drawn here
      would be invented. Grouping by TYPE is something the data supports. */
-  var note=kinds.length
+  var note=(kinds.length&&partitions)
     ? '<p class="cp-note">Cal Poly lists '+escapeHtml(kinds.join(' and ').toLowerCase())+' sections separately — check which one goes with your lecture.</p>'
     : '';
   var anyClash=shown.some(function(x){ return !!(typeof secConflictChip==='function'&&secConflictChip(code,x)); });
@@ -8061,6 +8199,24 @@ function renderClassPage(){
     +'<div class="cp-list">'+shown.map(function(x){return cpSecRow(x,code);}).join('')+'</div>'+foot;
 }
 window.renderClassPage=renderClassPage;
+/* ---- the class page repaints when its state changes -----------------------------------------
+   Watch, Unwatch and "I'm in this" all wrote their state correctly and then repainted Explore,
+   the Watchlist and My Classes — every surface EXCEPT the one the button was on. So on the
+   class page you tapped Watch, the section really was watched, and the row still said
+   "☆ Watch" until you navigated away and back. (Tate, 2026-08-26: "it should show immidiatly
+   and the button should click its not doing it right now".)
+   Guarded on the view being active so a mutation made anywhere else doesn't pay to redraw a
+   page nobody is looking at. */
+var _cpJust=null;
+function cpRefresh(crn){
+  try{
+    if(crn)_cpJust=String(crn);
+    var v=document.getElementById('view-class');
+    if(v&&v.classList.contains('active')&&typeof cpCode!=='undefined'&&cpCode)renderClassPage();
+  }catch(e){}
+  _cpJust=null;
+}
+window.cpRefresh=cpRefresh;
 
 /* ===== schedule day-overlap helper (shared by schedule conflict checks) ===== */
 function shareDay(a,b){a=a||'';b=b||'';for(const ch of a)if(b.indexOf(ch)>=0)return true;return false;}
@@ -9062,6 +9218,48 @@ function renderRateForm(id){
    from the reviewer — it feeds both the sort and the provenance line students read for freshness.
    Options are generated from the term the rest of the app already runs on, so they never rot. */
 const APP_TERM='Fall 2026';
+/* ---- ONE definition of Cal Poly's term sequence ----------------------------------------------
+   Cal Poly ran QUARTERS (Fall / Winter / Spring / Summer) through Summer 2026 and switched to
+   SEMESTERS (Fall / Spring / Summer) at Fall 2026. Any screen that offers a student a list of
+   past terms has to walk that boundary correctly or it will offer a Winter that never existed —
+   or drop the Winters a third-year actually took. The capture strip inside the planner already
+   encoded this rule privately; it now delegates here so there is one copy of it. */
+var SEM_FIRST_FALL_Y=2026;
+function termIsSemester(term,year){
+  if(year>SEM_FIRST_FALL_Y)return true;
+  if(year<SEM_FIRST_FALL_Y)return false;
+  return term==='Fall';                       /* Fall 2026 is the first semester */
+}
+function termSystemWord(t){ return termIsSemester(t.term,t.year)?'semester':'quarter'; }
+function termPrev(t){
+  if(t.term==='Fall')  return {term:'Spring',year:t.year};
+  if(t.term==='Spring')return (t.year>SEM_FIRST_FALL_Y)?{term:'Fall',year:t.year-1}:{term:'Winter',year:t.year};
+  if(t.term==='Winter')return {term:'Fall',year:t.year-1};
+  if(t.term==='Summer')return {term:'Spring',year:t.year};
+  return {term:'Fall',year:t.year-1};
+}
+function termNext(t){
+  if(t.term==='Fall')  return {term:(t.year>=SEM_FIRST_FALL_Y)?'Spring':'Winter',year:t.year+1};
+  if(t.term==='Winter')return {term:'Spring',year:t.year};
+  if(t.term==='Spring')return {term:'Fall',year:t.year};
+  if(t.term==='Summer')return {term:'Fall',year:t.year};
+  return {term:'Fall',year:t.year};
+}
+/* You cannot have taken a class in a term that hasn't ended. */
+function termLastDone(){
+  var now=new Date(), y=now.getFullYear(), mo=now.getMonth();
+  if(mo>=5)return {term:'Spring',year:y};                                    /* Jun onward */
+  if(mo>=3)return {term:(y>SEM_FIRST_FALL_Y?'Fall':'Winter'),year:(y>SEM_FIRST_FALL_Y?y-1:y)};
+  return {term:'Fall',year:y-1};
+}
+function termOrd(t){ return t.year*4+({Winter:0,Spring:1,Summer:2,Fall:3}[t.term]||0); }
+/* The last n finished terms, newest first — quarters where they were quarters. */
+function termsBack(n){
+  var out=[],t=termLastDone();
+  for(var i=0;i<(n||12);i++){ out.push(t); t=termPrev(t); }
+  return out;
+}
+
 const QUARTER_SEQ=['Winter','Spring','Summer','Fall'];
 function rateTermOptions(n){
   var m=/^([A-Za-z]+)\s+(\d{4})$/.exec(APP_TERM); if(!m)return [];
@@ -9660,7 +9858,10 @@ function rlProfRowHtml(id,p,ctx,code){
   const sub=ctx||pfCoursesTaught(p).map(c=>c.code).concat(wlCourses(p)).filter((v,i,a)=>a.indexOf(v)===i).slice(0,2).join(', ')||(typeof profDeptLabel==='function'?profDeptLabel(p):(p.dept||''));
   return `<div onclick="rlOpenProf('${id}','${escapeHtml(code||'')}')" style="display:flex;align-items:center;justify-content:space-between;background:${PFC.panel};border:1px solid ${rvd?PFC.line:(ctx?PFC.green+'55':PFC.line)};border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer">
     <div style="display:flex;align-items:center;gap:10px;min-width:0">
-      <div style="width:36px;height:36px;border-radius:8px;background:${PFC.greenTint};display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;color:${PFC.green};flex:none">${initials(p.name)}</div>
+      <!-- The rating rides the INITIALS, not the number (Tate, 2026-08-26) — the same rounded
+           square that carries it on the Explore professor tiles, so the colour means one thing
+           in both places. An unrated professor gets no ramp colour: there is nothing to shade. -->
+      <div style="width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex:none;${unrated?`background:${PFC.greenTint};color:${PFC.green}`:profTintStyle(p.rating)}">${initials(p.name)}</div>
       <div style="min-width:0">
         <div style="font-size:14px;font-weight:500">${escapeHtml(p.name)}</div>
         <div style="font-size:12px;color:${PFC.ink2};font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(sub)}</div>
@@ -9671,7 +9872,13 @@ function rlProfRowHtml(id,p,ctx,code){
            :(ctx?`<span style="background:${PFC.green};color:${PFC.greenInk};font-size:11px;font-weight:600;padding:4px 9px;border-radius:7px">Rate ★</span>`:'')}
       ${unrated
         ? (ctx?'':`<span style="background:${PFC.greenTint};color:${PFC.green};font-size:11px;font-weight:600;padding:4px 9px;border-radius:7px;white-space:nowrap">Be the first ★</span>`)
-        : `<span style="width:52px;text-align:center;background:${PFC.blueTint};color:${PFC.blue};font-size:12px;font-weight:500;padding:4px 0;border-radius:7px">${to5(p.rating).toFixed(1)}/5</span>`}
+        /* The number carries its own verdict here, same ramp as the professor tiles in Explore —
+           a 4.6 and a 2.1 printed in identical blue made the column decorative. And "/5" on
+           every row is the same three characters twenty-four times; the scale is a five-point
+           scale everywhere in the app. (Tate, 2026-08-26.) */
+        /* ...so the number itself goes quiet. Two things shouting the same rating in two
+           different colour languages is what made this row busy in the first place. */
+        : `<span style="min-width:40px;text-align:center;background:${PFC.panel};border:1px solid ${PFC.line};color:${PFC.ink};font-size:12.5px;font-weight:700;padding:4px 9px;border-radius:7px">${to5(p.rating).toFixed(1)}</span>`}
     </div>
   </div>`;
 }
@@ -10156,6 +10363,7 @@ function watchTotal(){
 function updateWatchBadge(){var n=watchTotal();var b=document.getElementById('watchCount');if(b){b.textContent=n;b.hidden=n===0;}var mb=document.getElementById('mWatchCount');if(mb){mb.textContent=n;mb.hidden=n===0;}}
 function updateWatchUI(){
   updateWatchBadge();
+  cpRefresh();                       // the class page is a surface too
   const mb=document.getElementById('mback');
   if(mb&&mb.classList.contains('open')&&currentProf!=null&&modalMode==='profile')renderModal();
   const ve=document.getElementById('view-explore');if(ve&&ve.classList.contains('active'))renderExplore();
@@ -10349,7 +10557,13 @@ function renderWatch(){
     tray=`<div class="wc-tray"><div class="wc-chips">${chips}</div><button class="wc-go" ${ready?'':'disabled'} onclick="wpOpenCompare()">Compare (${wpCompareSet.length}) →</button></div>`;
   }
   const hint=wpCompareSet.length===1?'<div class="wc-hint">Add one more professor to compare them side by side.</div>':'';
-  out.innerHTML=`<div class="mc-head"><div><b>${profs.length} professor${profs.length===1?'':'s'} watched</b> · tap Compare on the ones you’re deciding between</div><button class="wl-clear" onclick="clearWatch()">Clear watchlist</button></div><div class="mc-list">${cards}</div>${hint}${tray}`;
+  /* Same treatment as the Classes tab: a heading and one line under it, and no "Clear
+     watchlist" — that was the same unconfirmed one-tap wipe, and every card here already
+     carries its own × too. (Tate, 2026-08-27: "take clear away".) */
+  out.innerHTML=`<div class="wl-top"><div class="wl-titles">`
+      +`<div class="wl-h">${profs.length} professor${profs.length===1?'':'s'} watched</div>`
+      +`<div class="wl-s">Tap <b>Compare</b> on the ones you’re deciding between.</div>`
+    +`</div></div><div class="mc-list">${cards}</div>${hint}${tray}`;
 }
 
 /* ---- CLASS watchlist (separate from professors) ---- */
@@ -10387,6 +10601,7 @@ function wcWatchSec(code,crn,ev,quiet){ if(ev){ev.stopPropagation();}
   try{if(typeof renderExplore==='function')renderExplore();}catch(e){}
   try{if(typeof updateWatchTabCounts==='function')updateWatchTabCounts();}catch(e){}
   try{if(typeof renderWatchClasses==='function')renderWatchClasses();}catch(e){}
+  try{if(typeof cpRefresh==='function')cpRefresh(crn);}catch(e){}
 }
 /* ONE answer to "is this student waitlisted for this course", derived from the sections.
    There were four copies of this rule and all four got the same two things wrong:
@@ -10466,128 +10681,25 @@ function mcConfirmBar(code){
     +'</div></div>';
 }
 
-/* ---- Adding a class without leaving My Classes ---------------------------------------------
-   My Classes could only be filled by importing a schedule or by finding the course in Explore
-   and coming back — so adding ONE class meant leaving the screen that lists your classes.
-   This is the same course typeahead Past Classes uses, and the same real section list the
-   Watchlist picks from; choosing a section runs the existing enrolled/waitlisted dialog, so a
-   class added here is indistinguishable from an imported one. */
-var mcAddOpen=false, mcAddCode='';
+/* ---- Adding a class sends you to Explore ----------------------------------------------------
+   There used to be a whole second course picker inline in My Classes — a typeahead plus its own
+   section list — duplicating Explore's search and the class page's section list, and needing its
+   own copy of every rule those two learned (component grouping, seat ranking, the enrol dialog).
+   Tate, 2026-08-26: "Add a class should just take you to explore search."
+   So it does. Explore searches classes, the class page lists the sections with their professors,
+   ratings, seats and friends, and "I'm in this" there runs the same mcCommitSection this screen
+   always ended at — including the lecture-plus-activity prompt. One picker, not two. */
 function mcToggleAdd(ev){
   if(ev){ev.stopPropagation&&ev.stopPropagation();}
-  mcAddOpen=!mcAddOpen; if(!mcAddOpen)mcAddCode='';
-  try{renderMyClasses();}catch(e){}
-  if(mcAddOpen)setTimeout(function(){ try{document.getElementById('mcAddIn').focus();}catch(e){} },40);
-}
-function mcAddPick(code){
-  code=(typeof normCode==='function')?normCode(code):String(code||'').toUpperCase().trim();
-  if(!code)return;
-  /* Store the current-semester code, so a student who types an old quarter number ends up
-     with the course the rest of the app knows. */
-  try{ if(typeof canonCode==='function')code=canonCode(code)||code; }catch(e){}
-  mcAddCode=code;
-  try{renderMyClasses();}catch(e){}
-}
-/* No section data for this course — add it at course level and say so rather than pretend. */
-function mcAddCodeOnly(code,ev){
-  if(ev){ev.stopPropagation&&ev.stopPropagation();}
-  try{ if(typeof isMyClass==='function'&&!isMyClass(code))toggleMyClass(code); }catch(e){}
-  mcAddOpen=false; mcAddCode='';
-  try{renderMyClasses();}catch(e){}
-  try{frToast(code+' added — we have no section times for it, so it won’t appear on the calendar.');}catch(e){}
-}
-/* Pick one of the course's REAL sections; the enroll dialog then asks enrolled vs waitlisted. */
-function mcAddSection(code,crn,ev){
-  if(ev){ev.stopPropagation&&ev.stopPropagation();}
-  var secs=(typeof clsSections==='function')?clsSections(code):[];
-  var s=secs.filter(function(x){return String(x.class_nbr)===String(crn);})[0];
-  if(!s)return;
-  mcAddOpen=false; mcAddCode='';
-  try{renderMyClasses();}catch(e){}
-  try{ openEnrollDialog(code,s); }catch(e){}
-}
-/* The same course typeahead Past Classes uses — suggests on every keystroke, across all five
-   catalogs, and accepts an old quarter number. Re-attached after each render because the
-   input is a new node every time. */
-function mcWireAdd(){
+  try{ show('explore'); }catch(e){}
+  try{ if(typeof setExMode==='function')setExMode('classes'); }catch(e){}
   try{
-    if(!mcAddOpen||mcAddCode)return;
-    if(typeof attachTypeahead!=='function'||typeof allClassOptions!=='function')return;
-    attachTypeahead('mcAddIn',allClassOptions,function(o){ mcAddPick(o.value||o.label); });
-    var inp=document.getElementById('mcAddIn');
-    if(inp)inp.onkeydown=function(ev){ if(ev.key==='Enter'){ev.preventDefault();mcAddPick(inp.value);} };
+    var inp=document.getElementById('exQuery');
+    if(inp){ inp.value=''; exQuery=''; if(typeof renderExplore==='function')renderExplore();
+      setTimeout(function(){ try{inp.focus();inp.scrollIntoView({block:'center'});}catch(e){} },60); }
   }catch(e){}
 }
-function mcAddPanel(){
-  if(!mcAddOpen)return '';
-  var body;
-  if(!mcAddCode){
-    body='<div class="mc-add-hint">Type a course code or name — we’ll show its real sections.</div>'
-      +'<div class="mc-add-inwrap"><input id="mcAddIn" type="text" autocomplete="off" placeholder="e.g. BUS 3431 or Corporate Finance"></div>';
-  }else{
-    var secs=(typeof clsSections==='function')?clsSections(mcAddCode):[];
-    var nm=''; try{ nm=(classInfo(mcAddCode)||{}).name||''; }catch(e){}
-    var head='<div class="mc-add-hd"><b>'+escAcc(mcAddCode)+'</b>'+(nm?' · '+escAcc(nm):'')
-      +'<button class="mc-add-back" onclick="mcAddPick(\'\')">change</button></div>';
-    if(!secs.length){
-      body=head+'<div class="mc-add-hint">We have no section data for '+escAcc(mcAddCode)+' this term. '
-        +'You can still add the course — it just won’t have a time on your calendar.</div>'
-        +'<button class="mc-add-anyway" onclick="mcAddCodeOnly(\''+escAcc(mcAddCode)+'\',event)">Add '+escAcc(mcAddCode)+' anyway</button>';
-    }else{
-      /* Grouped by component, not flattened into one seat-ranked blur. A course with lectures
-         AND activities is TWO registrations, and the old list interleaved them
-         (01-LEC, 03-ACT, 02-LEC, 04-ACT) under one singular question — so a student picked a
-         row, the panel closed, and nothing ever mentioned the half of the course they were
-         still missing. That is the whole bug. */
-      var _held=((myClassMeta[mcAddCode]||{}).secs)||[];
-      var _miss=secMissingParts(mcAddCode,_held);
-      var _groups=secGroups(secs);
-      var _multi=_groups.length>1;
-      var hint;
-      if(!_multi){ hint='Which section are you in?'; }
-      else if(_held.length&&_miss.length){
-        hint='<b>You still need '+escAcc(partsPhrase(_miss))+' for '+escAcc(mcAddCode)+'.</b> '
-            +'Cal Poly registers each part separately, so add that one too.';
-      }else if(_held.length){
-        hint='You have every part of this course. Adding another section is fine — that’s what being enrolled in one and waitlisted for another looks like.';
-      }else{
-        hint='<b>'+escAcc(mcAddCode)+' registers in '+(_groups.length===2?'two parts':(_groups.length+' parts'))+'.</b> '
-            +'You need '+escAcc(partsPhrase(_groups.map(function(g){return g.name;})))+' — pick them one at a time.';
-      }
-      /* Grouping by TYPE is all the data supports. Which activity goes with which lecture is
-         PeopleSoft's associated-class number, which our scrape doesn't capture — so we group,
-         and never claim a pairing. */
-      var pickRow=function(x){
-        var r5=(x.rating!=null&&typeof to5==='function')?('<span class="wc-pick-rate" style="color:'+scoreColor(x.rating)+'">'+to5(x.rating).toFixed(1)+'</span>'):'';
-        var seat=''; if(x.seat){ var cls=(x.seat.cls==='open')?'open':((x.seat.cls==='wait')?'wait':'full');
-          seat='<span class="wc-pick-seat '+cls+'">'+escAcc((typeof seatBadge==='function')?seatBadge(x.seat):'')+'</span>'; }
-        var mine=(typeof isMineSec==='function')&&isMineSec(mcAddCode,x.class_nbr);
-        var right=mine?'<span class="wc-pick-add">✓ Added</span>':'<span class="wc-pick-add">Add</span>';
-        var click=mine?'':(' onclick="mcAddSection(\''+escAcc(mcAddCode)+'\',\''+escAcc(x.class_nbr)+'\',event)"');
-        return '<div class="wc-pick-row'+(mine?' taken':'')+'"'+click+'>'
-          +'<div class="wc-pick-l"><div class="wc-pick-top">'+(x.section?'<b>'+escAcc(x.section)+'</b>':'<b>Section</b>')+r5+'</div>'
-          +'<div class="wc-pick-sub">'+escAcc([x.name||'Staff',x.days].filter(Boolean).join(' · ')||'Time TBA')+'</div></div>'
-          +'<div class="wc-pick-r">'+seat+right+'</div></div>';
-      };
-      var bySeat=function(a,b){return seatRank(b.seat)-seatRank(a.seat);};
-      var listHtml;
-      if(!_multi){
-        listHtml='<div class="wc-pick-list">'+secs.slice().sort(bySeat).map(pickRow).join('')+'</div>';
-      }else{
-        listHtml=_groups.map(function(g){
-          var got=_miss.indexOf(g.name)<0;
-          var gs=g.secs.slice().sort(bySeat);
-          return '<div class="mc-add-grp'+(got?' got':'')+'">'
-              +'<span class="mc-add-grpn">'+escAcc(g.name)+' sections</span>'
-              +'<span class="mc-add-grpc">'+(got?'✓ you have one':('pick 1 of '+gs.length))+'</span>'
-            +'</div><div class="wc-pick-list">'+gs.map(pickRow).join('')+'</div>';
-        }).join('');
-      }
-      body=head+'<div class="mc-add-hint">'+hint+'</div>'+listHtml;
-    }
-  }
-  return '<div class="mc-add">'+body+'</div>';
-}
+/* Kept as no-ops: renderMyClasses still calls these where the panel used to render. */
 /* Commit a section into My Classes with a confirmed enrolled/waitlisted status. */
 function mcCommitSection(code,s,status,wlPos){
   if(typeof toggleMyClass==='function'&&!isMyClass(code))toggleMyClass(code);   // adds code (+ syncs saved_classes)
@@ -10619,6 +10731,7 @@ function mcCommitSection(code,s,status,wlPos){
   try{if(typeof renderMyClasses==='function')renderMyClasses();}catch(e){}
   try{if(typeof renderExplore==='function')renderExplore();}catch(e){}
   try{if(typeof updateWatchTabCounts==='function')updateWatchTabCounts();}catch(e){}
+  try{if(typeof cpRefresh==='function')cpRefresh(rec.crn);}catch(e){}
   /* Ask for the other half NOW. enConfirm() calls closeEnrollDialog() straight after this
      returns, and that clears body overflow — so the next dialog opens on a timer rather than
      racing it. This is the whole "prompt the specific section right away" behaviour: the one
@@ -10694,6 +10807,57 @@ function renderPartPrompt(){
     +'<p class="en-note" style="margin-top:12px">We list every '+escapeHtml(part.toLowerCase())+' section this course runs. Cal Poly doesn’t publish which one pairs with which lecture in the data we read, so check your registration if you’re unsure.</p>'
     +'<div class="si-actions" style="margin-top:16px"><button class="wl-clear" onclick="partSkip()">Not now</button></div>'
     +'</div></div>';
+}
+/* ---- Leaving a section from the section row --------------------------------------------------
+   "I'm in this →" put a section into My Classes and the row then printed a dead badge, so the
+   only way back out was to leave the page, find the class card and hit its x. (Tate, 2026-08-26:
+   "when i click my classes it should take me out of the class, like click to get in click again
+   to get out.") Watch already worked this way; this is the same toggle for the other button.
+
+   It removes immediately — that is the ask — and the toast carries an Undo, because removing the
+   LAST section of a course drops the whole course out of My Classes, which is the one action
+   here that a mis-tap should not cost you. */
+var _mcUndoSec=null;
+window.mcLeaveSec=function(code,crn,ev){
+  if(ev){ev.stopPropagation&&ev.stopPropagation();ev.preventDefault&&ev.preventDefault();}
+  try{
+    var meta=myClassMeta[code]; if(!meta||!Array.isArray(meta.secs))return;
+    var ix=-1;
+    for(var i=0;i<meta.secs.length;i++){ if(String(meta.secs[i].crn)===String(crn)){ix=i;break;} }
+    if(ix<0)return;
+    var rec=meta.secs[ix];
+    _mcUndoSec={code:code,rec:{crn:rec.crn,section:rec.section,prof:rec.prof,days:rec.days,
+                               status:rec.status,wlPos:rec.wlPos},at:Date.now()};
+    var last=(meta.secs.length===1);
+    mcRemoveSection(code,ix);
+    try{ cpRefresh(crn); }catch(e){}
+    try{ if(typeof updateWatchUI==='function')updateWatchUI(); }catch(e){}
+    mcToastUndo((rec.section?(code+' '+rec.section):code)
+      +' removed from My Classes'+(last?' — that was its last section, so the class went with it.':'.'));
+  }catch(e){}
+};
+/* Put it back exactly as it was — same section, same enrolled/waitlisted status, same spot. */
+window.mcUndoLeave=function(ev){
+  if(ev){ev.stopPropagation&&ev.stopPropagation();}
+  var u=_mcUndoSec; _mcUndoSec=null; if(!u)return;
+  try{
+    var s=(typeof secByCrn==='function')?secByCrn(u.code,u.rec.crn):null;
+    if(!s)s={class_nbr:u.rec.crn,section:u.rec.section,name:u.rec.prof,days:u.rec.days,seat:null};
+    mcCommitSection(u.code,s,u.rec.status||'enrolled',u.rec.wlPos||null);
+    try{ cpRefresh(u.rec.crn); }catch(e){}
+  }catch(e){}
+};
+/* frToast() sets textContent, which wipes any child button — so the action is appended after. */
+function mcToastUndo(msg){
+  try{
+    if(typeof frToast!=='function')return;
+    frToast(msg,6000);
+    var t=document.getElementById('frToast'); if(!t)return;
+    var b=document.createElement('button');
+    b.className='fr-toast-act'; b.textContent='Undo';
+    b.onclick=function(e){ mcUndoLeave(e); t.classList.remove('on'); };
+    t.appendChild(b);
+  }catch(e){}
 }
 /* ---- Enrolled/Waitlist confirm dialog (used by "I'm enrolled" + Watchlist promote) ---- */
 var _enrollState={code:null,s:null,status:'enrolled',wlPos:null};
@@ -10958,7 +11122,7 @@ function wcSeatBadge(a){
 function renderWatchClasses(){
   var out=document.getElementById('watchClassOut');if(!out)return;
   var codes=watchClasses.slice();
-  if(!codes.length){ out.innerHTML=movedReceiptHtml()+'<div class="wl-empty"><h3>Build a possible schedule</h3><p>Your Watchlist is where you <b style="color:var(--text-2)">compare sections and try out a schedule</b> before you enroll — nothing here counts as registered. Hit <b style="color:var(--text-2)">Watch</b> on a class in Explore to add it, then switch to <b style="color:var(--text-2)">Calendar</b> to see conflicts and which friends are in them. Locked one in? Move it to My Classes.</p><button class="btn primary" onclick="show(\'explore\')">Browse classes →</button></div>'; return; }
+  if(!codes.length){ out.innerHTML=movedReceiptHtml()+'<div class="wl-empty"><h3>Build a possible schedule</h3><p>Your Watchlist is where you <b style="color:var(--text-2)">compare sections and try out a schedule</b> before you enroll — nothing here counts as registered. Hit <b style="color:var(--text-2)">Watch</b> on a class in Explore to add it, then switch to <b style="color:var(--text-2)">Schedule</b> to see conflicts and which friends are in them. Locked one in? Move it to My Classes.</p><button class="btn primary" onclick="show(\'explore\')">Browse classes →</button></div>'; return; }
   var wconf=(typeof myClassConflicts==='function')?myClassConflicts(codes,watchMeta):{bad:{},pairs:[]};
   function wSeatFor(code,sec){ var prim=clsPrimarySection(code,(sec.prof&&typeof matchProfId==='function'?matchProfId(sec.prof):null),sec.prof,sec.days,sec.crn); return sectionSeatBadge(prim); }
   var cardArr=[], nSecs=0;
@@ -10999,7 +11163,7 @@ function renderWatchClasses(){
               +'<button class="qw-nudge" onclick="wcTogglePick(\''+escAcc(code)+'\',event)">'+(wPickOpen?'Hide sections ▲':'Pick '+escAcc(partsPhrase(wMiss))+' ▾')+'</button></div>'):'')
           +(wPickOpen?wcPickPanel(code):'')
           +'<div class="wc-acts">'
-            +(mineSec?'<span class="wc-inmine">✓ In My Classes</span>':'<button class="wc-move" title="Cal Poly has you enrolled or waitlisted in this section? Add it to My Classes." onclick="wcPromoteSec(\''+escAcc(code)+'\',\''+escAcc(sec.crn)+'\',event)">I’m in this →</button>')
+            +(mineSec?'<button class="wc-inmine" title="Tap to take this section back out of My Classes" onclick="mcLeaveSec(\''+escAcc(code)+'\',\''+escAcc(sec.crn)+'\',event)"><span class="im-on">✓ In My Classes</span><span class="im-off">✕ Remove</span></button>':'<button class="wc-move" title="Cal Poly has you enrolled or waitlisted in this section? Add it to My Classes." onclick="wcPromoteSec(\''+escAcc(code)+'\',\''+escAcc(sec.crn)+'\',event)">I’m in this →</button>')
             /* The conflict banner's own advice ("swap one for a different section"), made the
                cheapest action on the card instead of a six-click trip through Explore. */
             +'<button class="wc-swap'+(swapOpen?' on':'')+'" onclick="toggleSecSwap(\'watch\',\''+escAcc(code)+'\',\''+escAcc(sec.crn)+'\',event)">'+(swapOpen?'Hide sections \u25b2':'Browse other sections \u25be')+'</button>'
@@ -11041,19 +11205,26 @@ function renderWatchClasses(){
     }
   });
   var cards=movedReceiptHtml()+cardArr.join('');
-  var wbanner=prereqBanner(codes,'considering');
-  if(wconf.pairs.length){
-    var wlines=wconf.pairs.map(function(p){return escAcc(p[0])+' ↔ '+escAcc(p[1]);}).join(', ');
-    wbanner+='<div class="mc-conflict"><b>⚠ '+wconf.pairs.length+' time '+(wconf.pairs.length===1?'conflict':'conflicts')+'</b> — these overlap: '+wlines+'. That’s fine while you’re deciding — you can watch overlapping sections and pick one before you enroll.</div>';
-  }
-  var wtoggle='<div class="mc-viewtog"><button class="'+(wcView==='list'?'on':'')+'" onclick="setWcView(\'list\')">List</button><button class="'+(wcView==='calendar'?'on':'')+'" onclick="setWcView(\'calendar\')">Calendar</button></div>';
+  var wbanner=schedFlagsHtml('watch',codes,wconf);
+  var wtoggle='<div class="mc-viewtog"><button class="'+(wcView==='list'?'on':'')+'" onclick="setWcView(\'list\')">List</button><button class="'+(wcView==='calendar'?'on':'')+'" onclick="setWcView(\'calendar\')">Schedule</button></div>';
   var wbody=(wcView==='calendar'&&typeof renderMyCalendar==='function')?renderMyCalendar(codes,wconf,watchMeta):('<div class="mc-list">'+cards+'</div>');
   /* "5 sections you're considering" read as five classes when two of them were the lecture and
      activity of one course. Same fix as My Classes: name both numbers when they differ. */
   var wCountTxt=(nSecs>codes.length)
     ? (codes.length+' course'+(codes.length===1?'':'s')+' · '+nSecs+' sections you’re considering')
     : (nSecs+' section'+(nSecs===1?'':'s')+' you’re considering');
-  out.innerHTML='<div class="mc-head"><div><b>'+wCountTxt+'</b> · not enrolled yet — compare them here (and on the calendar), then tap <b style="color:var(--text-2)">I’m in this</b> on the one you lock in</div><div class="mc-headr">'+wtoggle+'<button class="wl-clear" onclick="clearWatchClasses()">Clear</button></div></div>'
+  /* The header used to be one run-on sentence with the view toggle and a "Clear" link jammed
+     on the end of it, so on any narrow column the count, the explanation, the toggle and a
+     destructive one-tap action all wrapped into each other. Three separate jobs, so: a
+     heading you can read at a glance, one short line under it, and the toggle held to the
+     right where it stays put.
+     "Clear" is gone (Tate, 2026-08-27). It was an unconfirmed one-tap wipe of the whole
+     Watchlist sitting inches from the view toggle, and every card already carries its own ×
+     — the safe way to remove one thing is the only way you need. */
+  out.innerHTML='<div class="wl-top"><div class="wl-titles">'
+      +'<div class="wl-h">'+wCountTxt+'</div>'
+      +'<div class="wl-s">Not enrolled yet — tap <b>I’m in this</b> on the one you lock in.</div>'
+    +'</div>'+wtoggle+'</div>'
     +wbanner+wbody;
 }
 /* The receipt for a section that just moved to My Classes. Rendered above the list AND on
@@ -11287,7 +11458,7 @@ function mcRemoveSection(code,ix,ev){ if(ev){ev.stopPropagation&&ev.stopPropagat
     var f=meta.secs[0]; if(f){meta.prof=f.prof||meta.prof; if(f.days)meta.time=f.days;}
     try{saveMyClassMeta();}catch(e){}
     try{if(gone&&gone.crn&&typeof deleteMySecFromDb==='function')deleteMySecFromDb(gone.crn);}catch(e){}
-    renderMyClasses(); return;
+    renderMyClasses(); cpRefresh(); return;
   }
   var goneAll=(meta&&Array.isArray(meta.secs))?meta.secs.slice():[];
   if(meta){ delete meta.secs; delete meta.wl; }
@@ -11299,13 +11470,19 @@ function mcRemoveSection(code,ix,ev){ if(ev){ev.stopPropagation&&ev.stopPropagat
 function renderMyClasses(){
   var out=document.getElementById('watchMineOut');if(!out)return;
   var codes=myClasses.slice();
-  if(!codes.length){ out.innerHTML='<div class="wl-empty"><h3>No enrolled or waitlisted classes yet</h3><p>My Classes shows only the sections Cal Poly officially has you <b style="color:var(--text-2)">enrolled in or waitlisted for</b>. Import your PASS / Student Center schedule and we’ll read each section, your status, and any waitlist spots. Still deciding between sections? Build a possible schedule in your <b style="color:var(--text-2)">Watchlist</b> first.</p><button class="btn primary" onclick="openSchedImport()">📷 Import my schedule</button><button class="fr-addtoggle mc-addbtn'+(mcAddOpen?' on':'')+'" style="margin-left:10px" onclick="mcToggleAdd(event)">'+(mcAddOpen?'\u2715 Cancel':'+ Add a class')+'</button></div>'+mcAddPanel(); mcWireAdd(); return; }
+  if(!codes.length){ out.innerHTML='<div class="wl-empty"><h3>No enrolled or waitlisted classes yet</h3><p>My Classes shows only the sections Cal Poly officially has you <b style="color:var(--text-2)">enrolled in or waitlisted for</b>. Import your PASS / Student Center schedule and we’ll read each section, your status, and any waitlist spots. Still deciding between sections? Build a possible schedule in your <b style="color:var(--text-2)">Watchlist</b> first.</p><button class="btn primary" onclick="openSchedImport()">Import my schedule</button><button class="fr-addtoggle mc-addbtn" style="margin-left:10px" onclick="mcToggleAdd(event)">+ Add a class</button></div>'; return; }
   var infos=codes.map(classInfo);
   var conf=myClassConflicts(codes);
   var cards=infos.map(function(i){
     var meta=myClassMeta[i.code];
     var secs=(meta&&Array.isArray(meta.secs)&&meta.secs.length)?meta.secs:null;
-    var pq=(typeof prereqChipHtml==='function')?prereqChipHtml(i.code):'';
+    /* No red "1 prerequisite to go" on a class you are ENROLLED in. Cal Poly let you register;
+       our scraped prereq table does not get to overrule that on the screen that shows what the
+       registrar actually did. (Tate, 2026-08-26: "if im in the class it means the prerec didnt
+       matter my classes are your actual schedule".) A waitlisted seat is not yours yet, so it
+       keeps the chip — and the "Prereq note" pill above still records the Past Classes gap for
+       every one of them, enrolled included. */
+    var pq=(typeof prereqChipHtml==='function'&&!sfIsEnrolled(i.code))?prereqChipHtml(i.code):'';
     /* Imported schedule: render the STUDENT'S real section(s) — professor, meeting time,
        and their personal enrolled/waitlist status — not a re-derived "best" section. */
     if(secs){
@@ -11422,20 +11599,17 @@ function renderMyClasses(){
      registration week (a waitlisted section commonly clashes with an enrolled one), so the
      prereq warning was being thrown away exactly when a student is committing to classes.
      renderWatchClasses has always done `wbanner+=` — same situation, correct behaviour. */
-  var banner=prereqBanner(codes,'planning');
-  if(conf.pairs.length){
-    var lines=conf.pairs.map(function(p){return escAcc(p[0])+' ↔ '+escAcc(p[1]);}).join(', ');
-    banner+='<div class="mc-conflict"><b>⚠ '+conf.pairs.length+' time '+(conf.pairs.length===1?'conflict':'conflicts')+'</b> — these overlap: '+lines+'. Swap one for a different section to clear it.</div>';
-  }
-  var toggle='<div class="mc-viewtog"><button class="'+(myClassesView==='list'?'on':'')+'" onclick="setMyClassesView(\'list\')">List</button><button class="'+(myClassesView==='calendar'?'on':'')+'" onclick="setMyClassesView(\'calendar\')">Calendar</button></div>';
+  /* Two red paragraphs used to sit here permanently, pushing the schedule below the fold.
+     They're pills now; the sentence is one tap away. See schedFlagsHtml. */
+  var banner=schedFlagsHtml('mine',codes,conf);
+  var toggle='<div class="mc-viewtog"><button class="'+(myClassesView==='list'?'on':'')+'" onclick="setMyClassesView(\'list\')">List</button><button class="'+(myClassesView==='calendar'?'on':'')+'" onclick="setMyClassesView(\'calendar\')">Schedule</button></div>';
   var body=myClassesView==='calendar'?renderMyCalendar(codes,conf):('<div class="mc-list">'+cards+'</div>');
   var countTxt=(nCards>codes.length)?(codes.length+' course'+(codes.length===1?'':'s')+' · '+nCards+' sections'):(codes.length+' class'+(codes.length===1?'':'es'));
   /* Once the schedule is in, "Import schedule" is an instruction to redo work you've already
      done, and "Clear" is a one-tap way to lose it sitting next to the controls you use every
      day. Both are gone from the header. Import still leads the empty state, which is where a
      student who has nothing actually is, and re-importing is offered from the calendar. */
-  out.innerHTML='<div class="mc-head"><div><b>'+countTxt+'</b>'+unitsTxt+' — enrolled &amp; waitlisted this term</div><div class="mc-headr">'+toggle+'<button class="fr-addtoggle mc-addbtn'+(mcAddOpen?' on':'')+'" onclick="mcToggleAdd(event)" title="Add a class without leaving this screen">'+(mcAddOpen?'\u2715 Cancel':'+ Add a class')+'</button><button class="fr-addtoggle" onclick="shareMySchedule()" title="Send a link that opens your schedule on Professify — friends can see it and add you">🔗 Share schedule</button></div></div>'
-    +mcAddPanel()
+  out.innerHTML='<div class="mc-head"><div><b>'+countTxt+'</b>'+unitsTxt+' — enrolled &amp; waitlisted this term</div><div class="mc-headr">'+toggle+'<button class="fr-addtoggle mc-addbtn" onclick="mcToggleAdd(event)" title="Search classes in Explore, then tap \u201cI\u2019m in this\u201d on your section">+ Add a class</button><button class="fr-addtoggle" onclick="shareMySchedule()" title="Send a link that opens your schedule on Professify — friends can see it and add you">🔗 Share schedule</button></div></div>'
     +banner+body
     +'<div class="wl-insight" style="margin-top:16px">These are the classes Cal Poly officially has you <b style="color:var(--text-2)">enrolled in or waitlisted for</b> — imported from your schedule. Comparing sections you haven’t locked in? Those live in your <b style="color:var(--text-2)">Watchlist</b>. This is the schedule your friends see.'
     /* Add/drop runs for two weeks. Taking the import button out of the header was right — it
@@ -11443,7 +11617,6 @@ function renderMyClasses(){
        whose schedule changed. It sits at the end of the list, where someone who has just
        noticed their list is stale is already looking. */
     +' <button class="mc-reimport" onclick="openSchedImport()">Schedule changed? Re-import it</button></div>';
-  mcWireAdd();
 }
 /* Weekly Mon–Fri calendar grid of My Classes. Blocks placed by parsed start/end; conflicting blocks flagged red. */
 /* opts.peopleFor(code) -> [{name,ini,color}] overrides "which of MY friends is in this",
@@ -11463,6 +11636,17 @@ function renderMyClasses(){
    because we don't. */
 function calIsAsync(code){
   try{ return (typeof courseIsAsync==='function')&&courseIsAsync(code); }catch(e){ return false; }
+}
+/* "BUS 4442" in a 30px-wide block came back as "BU / S 44 / 42": .cal-block.narrow allows
+   overflow-wrap:anywhere, which breaks mid-token because it is the only way to fit. Splitting
+   the code into its two real parts gives the line a legal break — between the subject and the
+   number — and each half then refuses to break inside itself. (Tate, 2026-08-26: "for these
+   really small ones make sure to have the class and its number on separate lines".) */
+function cbCodeHtml(code){
+  var t=String(code||'').trim();
+  var m=/^([A-Za-z]+)\s+(\S.*)$/.exec(t);
+  if(!m)return escAcc(t);
+  return '<span class="cb-cs">'+escAcc(m[1])+'</span> <span class="cb-cn">'+escAcc(m[2])+'</span>';
 }
 function renderMyCalendar(codes,conf,meta,opts){
   opts=opts||{};
@@ -11555,7 +11739,7 @@ function renderMyCalendar(codes,conf,meta,opts){
         var tip=m.code+' · '+m.name+(m.wl?' · waitlisted'+(m.wlPos?' #'+m.wlPos:''):'')
           +((calFr.length&&!showFr)?(' · with '+calFr.map(function(f){return f.name;}).join(', ')):'');
         var tapCode=String(m.code).replace(/'/g,"\\'");
-        html+='<div class="cal-block cb-tap'+(tight?' cb-tight':'')+(bad?' bad':'')+(m.wl?' wl':'')+'" role="button" tabindex="0" onclick="event.stopPropagation();gotoSection(\''+tapCode+'\')" style="top:'+top+'px;height:'+Math.max(h,18)+'px;left:calc('+left+'% + 3px);width:calc('+w+'% - 6px)" title="'+escAcc(tip+' \u2014 tap for sections & seats')+'"><span class="cb-top"><span class="cb-code">'+escAcc(m.code)+'</span>'+wlTag+'</span>'+nmHtml+calFrHtml+'</div>';
+        html+='<div class="cal-block cb-tap'+(tight?' cb-tight':'')+(bad?' bad':'')+(m.wl?' wl':'')+'" role="button" tabindex="0" onclick="event.stopPropagation();gotoSection(\''+tapCode+'\')" style="top:'+top+'px;height:'+Math.max(h,18)+'px;left:calc('+left+'% + 3px);width:calc('+w+'% - 6px)" title="'+escAcc(tip+' \u2014 tap for sections & seats')+'"><span class="cb-top"><span class="cb-code">'+cbCodeHtml(m.code)+'</span>'+wlTag+'</span>'+nmHtml+calFrHtml+'</div>';
       });
       i=j;
     }
@@ -11570,7 +11754,7 @@ function renderMyCalendar(codes,conf,meta,opts){
     +'<div class="cal-day cal-anyday" style="'+dayStyle+'">'
     +asyncOnes.map(function(m){
         return '<div class="cal-block cal-anyblk" title="'+escAcc(m.code+' — asynchronous, no set meeting time')+'">'
-          +'<span class="cb-top"><span class="cb-code">'+escAcc(m.code)+'</span></span>'
+          +'<span class="cb-top"><span class="cb-code">'+cbCodeHtml(m.code)+'</span></span>'
           +'<span class="cb-nm">'+escAcc(String(m.name||'').slice(0,26))+'</span>'
           +'<span class="mode-pill async mp-sm">Async</span></div>';
       }).join('')+'</div></div>'):'';
@@ -11580,7 +11764,7 @@ function renderMyCalendar(codes,conf,meta,opts){
     +'<div class="cal-day cal-anyday" style="'+dayStyle+'">'
     +stillTba.map(function(m){
         return '<div class="cal-block cal-anyblk cal-tbablk" title="'+escAcc(m.code+' — no meeting time listed for this section yet')+'">'
-          +'<span class="cb-top"><span class="cb-code">'+escAcc(m.code)+'</span></span>'
+          +'<span class="cb-top"><span class="cb-code">'+cbCodeHtml(m.code)+'</span></span>'
           +'<span class="mode-pill mp-sm">Time TBA</span></div>';
       }).join('')+'</div></div>'):'';
   /* The note that used to live here listed exactly the codes now sitting in the TIME TBA rail
@@ -12536,30 +12720,10 @@ window.SCHED_COMING=[["College of Liberal Arts","Anthropology-Geography","Art & 
      so the answer is usually the first chip. "Someone else" exists because the person who
      taught you two years ago may not be on this term's feed at all — that is a real gap in
      what we know, and typing a name is the honest way to close it. */
-  var SEM_FIRST_FALL=2026;   /* Cal Poly's first semester term is Fall 2026; before that, quarters */
-  function capPrev(t){
-    if(t.term==='Fall')  return {term:'Spring',year:t.year};
-    if(t.term==='Spring')return (t.year>SEM_FIRST_FALL)?{term:'Fall',year:t.year-1}:{term:'Winter',year:t.year};
-    if(t.term==='Winter')return {term:'Fall',year:t.year-1};
-    if(t.term==='Summer')return {term:'Spring',year:t.year};
-    return {term:'Fall',year:t.year-1};
-  }
-  function capNext(t){
-    if(t.term==='Fall')  return {term:(t.year>=SEM_FIRST_FALL)?'Spring':'Winter',year:t.year+1};
-    if(t.term==='Winter')return {term:'Spring',year:t.year};
-    if(t.term==='Spring')return {term:'Fall',year:t.year};
-    if(t.term==='Summer')return {term:'Fall',year:t.year};
-    return {term:'Fall',year:t.year};
-  }
-  /* Never offer a term that hasn't finished — you can't have taken a class in it. */
-  function capLastDone(){
-    var now=new Date(), y=now.getFullYear(), mo=now.getMonth();
-    if(mo>=7)return {term:'Spring',year:y};        /* Aug onward: spring has ended */
-    if(mo>=5)return {term:'Spring',year:y};        /* Jun–Jul */
-    if(mo>=3)return {term:(y>SEM_FIRST_FALL?'Fall':'Winter'),year:(y>SEM_FIRST_FALL?y-1:y)};
-    return {term:'Fall',year:y-1};
-  }
-  function capOrd(t){return t.year*4+({Winter:0,Spring:1,Summer:2,Fall:3}[t.term]||0);}
+  /* The quarter->semester rule lives at top level now (termPrev / termNext / termLastDone), so
+     the capture strip and the planner's term importer cannot drift apart. */
+  var SEM_FIRST_FALL=SEM_FIRST_FALL_Y;
+  var capPrev=termPrev, capNext=termNext, capLastDone=termLastDone, capOrd=termOrd;
   /* Two terms newer than the derived guess, the guess, then two older — so being off by a
      term in either direction is still one tap. */
   function capTermChips(planYear,planTerm){
@@ -13230,7 +13394,7 @@ window.SCHED_COMING=[["College of Liberal Arts","Anthropology-Geography","Art & 
   .cal-mini .cal-anyday{padding:5px;gap:5px}
 }
 .cal-mini .cal-anyblk{background:var(--panel)!important;color:var(--text)!important;
-  border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;
+  border:1px solid var(--line);border-left:3px solid var(--clsblk);border-radius:8px;
   box-shadow:none!important;padding:7px 8px;gap:5px}
 .cal-mini .cal-anyblk .cb-code{font-size:11.5px;color:var(--text)}
 .cal-mini .cal-anyblk.wl{border-left-color:var(--mid)}
@@ -13463,8 +13627,11 @@ window.SCHED_COMING=[["College of Liberal Arts","Anthropology-Geography","Art & 
 .hmc-blk{background:var(--clsblk)}
 .hmc-blk span{color:var(--clsblk-ink)}
 .hmc-mark{background:var(--clsblk)}
-/* Async stays exactly as it was — same specificity as .cal-block, so it has to come after. */
-.cal-anyblk{background:var(--accent)}
+/* 2026-08-27: async blocks were pinned to the accent green when the rest went blue, on Tate's
+   instruction at the time. He reversed it — "Async and projects and everything should be blue"
+   — and he's right: async is still a class you're enrolled in, so it belongs to the same
+   colour as every other enrolled block. Green now means one thing only, ratings. The rule is
+   gone rather than restated so .cal-anyblk simply inherits .cal-block. */
 
 /* A 50-minute class that would otherwise print a bare code. 2px of padding instead of 3 and a
    10px title line buy exactly the one row it was short of. Declared last so it beats the
@@ -13482,6 +13649,320 @@ window.SCHED_COMING=[["College of Liberal Arts","Anthropology-Geography","Art & 
   background:rgba(var(--accent-rgb),.07)}
 .cp-crumb .cp-back:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .cp-bi{width:15px;height:15px;flex:none}
+
+/* ===== Groups detail: named, not typed-in (2026-08-26) ======================================
+   End of the sheet on purpose — .gp-head and .gp-name are set ~16k lines above. */
+/* Row 1 is navigation. The name is not navigation, so it stopped living here. */
+.gp-bar{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.gp-head{display:flex;align-items:center;gap:10px;margin:2px 0 18px;flex-wrap:nowrap;min-width:0}
+.gp-title{font-size:27px;font-weight:700;letter-spacing:-.025em;line-height:1.15;color:var(--text);
+  margin:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gp-edit{flex:none;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;
+  border-radius:9px;border:1px solid var(--line);background:var(--panel-2);color:var(--muted);
+  cursor:pointer;transition:color .14s,border-color .14s}
+.gp-edit svg{width:16px;height:16px}
+.gp-edit:hover{color:var(--accent);border-color:rgba(var(--accent-rgb),.5)}
+.gp-edit:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* Editing looks like the heading it replaces, so the swap doesn't jump the layout. */
+.gp-nameit{flex:1;min-width:0;background:var(--panel-2);border:1px solid rgba(var(--accent-rgb),.55);
+  border-radius:10px;color:var(--text);font:700 27px/1.15 inherit;letter-spacing:-.025em;padding:6px 11px}
+.gp-nameit:focus{outline:none;border-color:var(--accent)}
+
+/* The grid's day labels are the day picker — there is no second row of them any more. */
+.gp-ghead .gp-dh{display:flex;align-items:center;justify-content:center;gap:5px;width:100%;
+  background:none;border:1px solid transparent;border-radius:7px;padding:5px 0;min-height:30px;
+  font:600 10.5px/1 inherit;letter-spacing:.05em;color:var(--faint);cursor:pointer;
+  transition:color .12s,background .12s,border-color .12s}
+.gp-ghead .gp-dh:hover{color:var(--text-2);background:var(--panel-2)}
+.gp-ghead .gp-dh.on{color:var(--good);background:rgba(var(--accent-rgb),.14);
+  border-color:rgba(var(--accent-rgb),.45);font-size:12px;letter-spacing:.06em}
+.gp-ghead .gp-dh:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.gp-dh-x{font-size:9px;opacity:.75}
+
+/* Add-a-friend now lives in the members column, so it is a stacked list, not a wide tray. */
+.gp-side .gp-add{margin-top:14px;padding-top:13px;border-top:1px solid var(--line)}
+.gp-side .gp-add-row{gap:6px}
+.gp-side .gp-chip{max-width:100%;min-height:38px;padding:5px 11px 5px 5px}
+.gp-side .gp-chip span:not(.gp-av){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Deleting a group is not undoable. */
+.gp-delask{margin:0 0 16px;padding:12px 14px;border:1px solid rgba(224,132,122,.45);
+  background:rgba(224,132,122,.10);border-radius:11px}
+.gp-delask-q{font-size:13.5px;line-height:1.5;color:var(--text-2)}
+.gp-delask-b{display:flex;gap:9px;margin-top:10px}
+.gp-delask-no,.gp-delask-yes{border-radius:999px;font:700 12.5px inherit;cursor:pointer;
+  min-height:38px;padding:0 15px;border:1px solid var(--line);background:var(--panel);color:var(--text-2)}
+.gp-delask-yes{border-color:transparent;background:#c0564b;color:#fff}
+@media(max-width:720px){
+  .gp-title,.gp-nameit{font-size:23px}
+}
+
+/* ===== Schedule flags as pills (2026-08-26) =================================================
+   Full-width red paragraphs above the schedule became small pills that open one at a time.
+   Two tones, and the difference is load-bearing: warn = something can still cost you a seat;
+   note = a fact we're recording, not a problem. My Classes uses `note` for a course you are
+   already enrolled in, because the registrar has settled that prerequisite. */
+.sf-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.sf-pill{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:7px 13px;
+  min-height:36px;font:600 12.5px inherit;cursor:pointer;border:1px solid var(--line);
+  background:var(--panel);color:var(--text-2);transition:border-color .14s,background .14s}
+.sf-pill .sf-dot{width:7px;height:7px;border-radius:50%;flex:none}
+.sf-pill.sf-warn .sf-dot{background:#d9695d}
+.sf-pill.sf-note .sf-dot{background:var(--mid)}
+.sf-pill.sf-warn{border-color:rgba(217,105,93,.42);color:#d9695d}
+.sf-pill.sf-warn:hover,.sf-pill.sf-warn.on{background:rgba(217,105,93,.10);border-color:rgba(217,105,93,.65)}
+.sf-pill.sf-note:hover,.sf-pill.sf-note.on{background:rgba(var(--fg-rgb),.05);border-color:rgba(var(--fg-rgb),.22)}
+.sf-pill:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.sf-n{font-weight:800;font-size:11px;background:rgba(var(--fg-rgb),.10);border-radius:999px;padding:1px 6px}
+.sf-car{font-size:9px;opacity:.7}
+.sf-detail{border:1px solid var(--line);border-radius:12px;padding:13px 15px;margin-bottom:14px;
+  font-size:13px;line-height:1.55;color:var(--text-2);background:var(--panel-2)}
+.sf-detail.sf-warn{border-color:rgba(217,105,93,.34);background:rgba(217,105,93,.07)}
+.sf-detail p{margin:0}
+.sf-list{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:7px}
+.sf-list li{font-size:13px;line-height:1.45;color:var(--text-2)}
+.sf-list li b{color:var(--text);font-weight:700}
+.sf-detail .pq-fix{background:none;border:0;padding:0 0 0 4px;font:600 12.5px inherit;
+  color:var(--accent);cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+
+/* ===== Buttons that feel pressed (2026-08-26) ===============================================
+   "the button should click its not doing it right now" — half of that was the class page not
+   repainting (see cpRefresh); the other half is that these had no press state at all, so on a
+   phone a tap gave nothing back during the moment before the row redrew. */
+.cp-watch,.cp-enroll,.cs-watch,.cs-enroll,.wc-move,.wc-swap,.sf-pill,.gp-dh,.mc-addbtn{
+  transition:transform .08s ease, background .14s, border-color .14s, color .14s}
+.cp-watch:active,.cp-enroll:active,.cs-watch:active,.cs-enroll:active,
+.wc-move:active,.wc-swap:active,.sf-pill:active,.gp-dh:active,.mc-addbtn:active{transform:scale(.95)}
+.wc-pick-row:active{background:rgba(var(--accent-rgb),.14)}
+/* The row that just changed gets one short flash, so a repaint reads as "that worked" rather
+   than as the list quietly redrawing under your finger. */
+@keyframes cpJust{from{background:rgba(var(--accent-rgb),.20)}to{background:transparent}}
+.cp-sec.cp-just,.cs-row.cp-just{animation:cpJust .55s ease-out}
+@media (prefers-reduced-motion:reduce){
+  .cp-watch,.cp-enroll,.cs-watch,.cs-enroll,.wc-move,.wc-swap,.sf-pill,.gp-dh,.mc-addbtn{transition:none}
+  .cp-watch:active,.cp-enroll:active,.cs-watch:active,.cs-enroll:active,
+  .wc-move:active,.wc-swap:active,.sf-pill:active,.gp-dh:active,.mc-addbtn:active{transform:none}
+  .cp-sec.cp-just,.cs-row.cp-just{animation:none}
+}
+
+/* ===== "In My Classes" is a toggle, not a label (2026-08-26) =================================
+   It printed as a dead badge, so the only way out of a section was to leave the page and find
+   the class card's x. It is a button now, and on hover/focus it says what pressing it does —
+   because "✓ In My Classes" alone reads as a status, and a status you can destroy by tapping
+   needs to admit that before you tap it. */
+.cp-inmine,.cs-inmine,.wc-inmine{cursor:pointer;font-family:inherit;
+  transition:transform .08s ease,color .14s,background .14s,border-color .14s}
+.cp-inmine .im-off,.cs-inmine .im-off,.wc-inmine .im-off{display:none}
+.cp-inmine:hover .im-on,.cs-inmine:hover .im-on,.wc-inmine:hover .im-on,
+.cp-inmine:focus-visible .im-on,.cs-inmine:focus-visible .im-on,.wc-inmine:focus-visible .im-on{display:none}
+.cp-inmine:hover .im-off,.cs-inmine:hover .im-off,.wc-inmine:hover .im-off,
+.cp-inmine:focus-visible .im-off,.cs-inmine:focus-visible .im-off,.wc-inmine:focus-visible .im-off{display:inline}
+.cp-inmine:hover,.cs-inmine:hover,.wc-inmine:hover,
+.cp-inmine:focus-visible,.cs-inmine:focus-visible,.wc-inmine:focus-visible{
+  color:#d9695d;border-color:rgba(217,105,93,.55);background:rgba(217,105,93,.10)}
+.cp-inmine:active,.cs-inmine:active,.wc-inmine:active{transform:scale(.95)}
+.cp-inmine:focus-visible,.cs-inmine:focus-visible,.wc-inmine:focus-visible{outline:2px solid #d9695d;outline-offset:2px}
+/* .cs-inmine and .wc-inmine were spans with no border; as buttons they need one to line up
+   with the "I'm in this →" button they replace. */
+.cs-inmine,.wc-inmine{border:1px solid rgba(var(--accent-rgb),.4)}
+/* The toast's action, reused from the share nudge. */
+#frToast .fr-toast-act{margin-left:12px;background:none;border:0;padding:0;font:800 13px inherit;
+  color:var(--accent);cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+
+/* ===== Friend search: results you can act on (2026-08-26) ===================================
+   A friend's row opens their profile, so it has to look pressable. A row for someone who isn't
+   a friend yet deliberately does not — their week isn't ours to show until they accept. */
+.fr-person.fr-p-open{cursor:pointer;transition:background .14s,border-color .14s,transform .08s ease}
+.fr-person.fr-p-open:hover{background:rgba(var(--accent-rgb),.07)}
+.fr-person.fr-p-open:active{transform:scale(.995)}
+.fr-person.fr-p-open:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* A note sitting above real results is an aside, not an error. */
+.rate-err.fr-people-hint{color:var(--muted);font-weight:400}
+
+/* The two halves of a course code. The break between them is the ONLY one allowed — the
+   subject and the number each stay whole, so a narrow block reads "BUS" over "4442" instead
+   of slicing the token wherever it happens to run out of room. */
+.cb-cs,.cb-cn{white-space:nowrap;display:inline-block}
+.cal-mini .cal-block.narrow .cb-code{white-space:normal;overflow-wrap:normal;word-break:normal}
+.cal-mini .cal-block.narrow .cb-cs,.cal-mini .cal-block.narrow .cb-cn{
+  white-space:nowrap;overflow-wrap:normal;word-break:keep-all;display:block;width:100%}
+
+/* A waitlisted block inherited the FULL calendar's padding (6px 7px) because .cal-block.wl is
+   declared after .cal-mini .cal-block and beats it on order at equal specificity — so on a feed
+   card the gold blocks had ~6px less room than the solid ones beside them and "BUS 3431" came
+   back as "3US 3431". Its dashed border already costs 3px; it cannot afford the padding too. */
+.cal-mini .cal-block.wl{padding:1px 3px}
+.cal-mini .cal-block.wl .cb-code{letter-spacing:-.02em}
+
+/* A mode pill sits INSIDE a solid class block now, so its own tinted background fought the
+   block's. On a block it becomes a translucent white chip: still a label, no second hue. */
+.cal-block .mode-pill{background:rgba(255,255,255,.20);color:#fff;border-color:rgba(255,255,255,.34)}
+.cal-block.wl .mode-pill{background:rgba(var(--fg-rgb),.10);color:var(--mid);border-color:rgba(176,141,72,.5)}
+.cal-mini .cal-anyblk .mode-pill{background:rgba(var(--fg-rgb),.08);color:var(--muted);
+  border-color:var(--line)}
+
+/* ===== Log a whole term at once (2026-08-27) ================================================ */
+.sp-termimp{display:flex;align-items:center;gap:12px;width:100%;text-align:left;margin:0 0 12px;
+  padding:13px 15px;border:1px dashed rgba(var(--accent-rgb),.45);border-radius:12px;
+  background:rgba(var(--accent-rgb),.06);color:var(--text);font:inherit;cursor:pointer;
+  transition:border-color .14s,background .14s,transform .08s ease}
+.sp-termimp:hover{border-color:rgba(var(--accent-rgb),.75);background:rgba(var(--accent-rgb),.10)}
+.sp-termimp:active{transform:scale(.995)}
+.sp-termimp:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.sp-ti-i{flex:none;width:30px;height:30px;border-radius:9px;background:rgba(var(--accent-rgb),.16);
+  color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700}
+.sp-ti-t{min-width:0;display:flex;flex-direction:column;gap:2px}
+.sp-ti-t b{font-size:13.5px;font-weight:700}
+.sp-ti-t span{font-size:12px;color:var(--muted);line-height:1.4}
+
+/* The term strip. Each chip says which SYSTEM that term ran under, because a third-year has
+   quarters behind them and semesters ahead and the two are not interchangeable. */
+.pt-chips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:16px;max-height:132px;overflow-y:auto}
+.pt-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;
+  background:var(--panel-2);color:var(--text-2);font:600 12.5px inherit;padding:7px 13px;cursor:pointer;
+  min-height:36px;white-space:nowrap}
+.pt-chip:hover{border-color:rgba(var(--accent-rgb),.5)}
+.pt-chip.on{background:rgba(var(--accent-rgb),.16);border-color:rgba(var(--accent-rgb),.6);color:var(--good)}
+.pt-sys{font-size:10px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:var(--faint)}
+.pt-chip.on .pt-sys{color:var(--good-2)}
+
+.pt-drop{display:flex;flex-direction:column;align-items:center;gap:4px;padding:22px 16px;text-align:center;
+  border:1.5px dashed var(--line);border-radius:13px;background:var(--panel-2);cursor:pointer;
+  transition:border-color .14s,background .14s}
+.pt-drop:hover,.pt-drop.over{border-color:rgba(var(--accent-rgb),.7);background:rgba(var(--accent-rgb),.08)}
+.pt-drop:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.pt-drop b{font-size:13.5px;color:var(--text)}
+.pt-drop span{font-size:12px;color:var(--muted)}
+.pt-or{text-align:center;font-size:11.5px;color:var(--faint);margin:12px 0 8px;
+  letter-spacing:.03em;text-transform:uppercase}
+.pt-ta{width:100%;background:var(--panel-2);border:1px solid var(--line);border-radius:11px;
+  color:var(--text);font:inherit;font-size:13px;padding:10px 12px;resize:vertical}
+.pt-ta:focus{outline:none;border-color:rgba(var(--accent-rgb),.6)}
+.pt-read{margin-top:8px;background:none;border:1px solid var(--line);border-radius:999px;
+  color:var(--text-2);font:600 12.5px inherit;padding:8px 15px;cursor:pointer;min-height:38px}
+.pt-read:hover{border-color:rgba(var(--accent-rgb),.55);color:var(--accent)}
+.pt-msg{margin-top:12px;font-size:12.5px;color:var(--muted);line-height:1.5}
+.pt-list{margin-top:14px;border:1px solid var(--line);border-radius:12px;overflow:hidden;max-height:230px;overflow-y:auto}
+.pt-row{display:flex;align-items:center;gap:10px;padding:10px 13px;border-top:1px solid var(--line);
+  font-size:13px;cursor:pointer}
+.pt-row:first-child{border-top:0}
+.pt-row.done{opacity:.55;cursor:default}
+.pt-code{font-weight:800;color:var(--text);white-space:nowrap}
+.pt-name{color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pt-al{margin-left:auto;font-size:11px;font-weight:700;color:var(--good);white-space:nowrap}
+
+/* PDF import — the schedule tile is now a real drop target, so it needs the same hover-and-
+   drag affordance the planner's term box has. Declared last, per the ordering rule. */
+.si-drop.over{border-color:var(--accent);background:rgba(var(--accent-rgb),.08)}
+
+/* Photos in the people-search rows. .fr-av is a 34px flex circle that used to hold two letters;
+   an <img> in it needs telling to fill it, or it renders at its intrinsic size and spills.
+   The border:0 is the real fix: a generic `.fr-av` rule for STACKED face-pile avatars puts a
+   2px panel-coloured ring on every .fr-av, and .fr-person .fr-av never overrode it. With
+   initials that ring is invisible — it is the row's own background colour — so it only ever
+   shrank the disc by 4px. With a photo it becomes a visible gap around every face. */
+.fr-person .fr-av{overflow:hidden;border:0;box-sizing:border-box}
+.fr-person .fr-av .ava-img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
+
+/* ---- Watchlist header, restructured (Tate, 2026-08-27) --------------------------------------
+   Was: one run-on sentence, the view toggle and a "Clear" link all on a single flex line, all
+   wrapping into each other on a narrow column. Now a heading, one line under it, and the
+   toggle pinned right. */
+.wl-top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;
+  flex-wrap:wrap;margin-bottom:14px}
+.wl-titles{min-width:0;flex:1 1 300px}
+.wl-h{font-size:16px;font-weight:700;color:var(--text);letter-spacing:-.01em;line-height:1.25}
+.wl-s{font-size:12.5px;color:var(--muted);line-height:1.5;margin-top:4px;max-width:60ch}
+.wl-s b{color:var(--text-2);font-weight:700}
+.wl-top .mc-viewtog{flex:none;margin-top:2px}
+@media (max-width:560px){
+  .wl-top{gap:11px}
+  .wl-titles{flex-basis:100%}
+}
+
+/* ---- the in-progress prereq chip ------------------------------------------------------------
+   Reads as course-then-status now, with the status as a quieter tag, instead of one dashed run
+   of text behind a glyph that looked like a refresh button. */
+.pq-chip.pq-conc{display:inline-flex;align-items:center;gap:7px;padding:3px 5px 3px 10px}
+.pq-chip.pq-conc .pq-lead{white-space:nowrap}   /* the gap belongs before the tag, not mid-phrase */
+.pq-chip.pq-conc b{font-weight:700;color:var(--text);margin-left:.32em}
+.pq-chip.pq-conc .pq-tag{font-size:10.5px;font-weight:600;letter-spacing:.01em;
+  color:var(--muted);background:rgba(var(--fg-rgb),.06);border-radius:5px;padding:2px 7px;
+  white-space:nowrap}
+
+/* ---- friends strip: the ring is back, in blue (Tate, 2026-08-27) -----------------------------
+   Green was the problem, not the ring — green is the professor-rating colour everywhere else in
+   the app, so a green ring around a friend's face was borrowing a meaning it doesn't have. Blue
+   is the schedule colour (--clsblk, the same blue a class block is drawn in), which is what
+   these faces are actually about: whose week you're looking at.
+   The geometry is the original: a 48px photo inside a 60px ring. .hm-fitem.seen still dims it
+   to a plain line, and the DASHED ring on the "Add friend" tile is untouched. */
+.hm-fitem:not(.hm-fadd) .ring{border:2px solid var(--clsblk);padding:3px;width:60px;height:60px}
+.hm-fitem:not(.hm-fadd) .fav{width:48px;height:48px;font-size:17px}
+.hm-fitem.seen:not(.hm-fadd) .ring{border-color:var(--line)}
+
+/* ---- "Rate a professor" in the same blue -----------------------------------------------------
+   It sat in the app's green, which on Home put a solid green pill directly above a rail of
+   professor ratings that are ALSO green when they're good. Blue separates the action from the
+   scores it's about. Only this button moves: the app-wide .btn.primary stays green, so nothing
+   else on any screen shifts underneath it. */
+.hm-ratebtn{background:var(--clsblk);color:var(--clsblk-ink)}
+.hm-ratebtn:hover{filter:brightness(1.1)}
+.hm-ratebtn:focus-visible{outline:2px solid var(--clsblk);outline-offset:2px}
+
+/* ---- a friend's friends, on their profile (Tate, 2026-08-27) --------------------------------- */
+.frp-fofnote{margin:0 0 11px;font-size:12.5px;line-height:1.45}
+.fof-list{display:flex;flex-direction:column;gap:8px}
+.fof-row{display:flex;align-items:center;gap:11px;padding:9px 11px;border:1px solid var(--line);
+  border-radius:12px;background:var(--panel)}
+.fof-row.fof-open{cursor:pointer;transition:background .14s,border-color .14s}
+.fof-row.fof-open:hover{background:rgba(var(--accent-rgb),.07);border-color:rgba(var(--accent-rgb),.4)}
+.fof-av{width:36px;height:36px;border-radius:50%;flex:none;overflow:hidden;display:flex;
+  align-items:center;justify-content:center;font-weight:800;font-size:13px;color:#4F4F56}
+.fof-av .ava-img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
+.fof-main{flex:1;min-width:0}
+.fof-nm{font-weight:600;font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis}
+.fof-sub{font-size:11.5px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fof-add{flex:none;padding:7px 15px;height:auto;font-size:13px}
+.fof-state{flex:none;font-size:12px;color:var(--faint);font-weight:600;white-space:nowrap}
+@media (max-width:480px){
+  .fof-row{padding:9px}
+  .fof-add{padding:9px 13px;min-height:38px}
+}
+
+/* ---- the Schedule sub-tabs on a phone -------------------------------------------------------
+   Found by clicking through at 320-430px: the strip is 410px wide against 290-400px of room, so
+   "Past Classes" was cut off at EVERY phone size including a 430px Pro Max. It scrolls, so the
+   tab is reachable — but nothing on screen says so, and a label sliced to "Past C" reads as
+   broken rather than as more-to-the-right. A first-time student would not know the tab exists.
+   Tightening the padding fits all four from 360px up, which is every phone in real use; below
+   that it still scrolls and the fade says so. */
+@media (max-width:560px){
+  #view-sched .wl-tabs{gap:1px;position:relative}
+  #view-sched .wl-tab{padding-left:9px;padding-right:9px;font-size:14px}
+  #view-sched .wl-tab span{margin-left:3px}
+}
+@media (max-width:400px){
+  #view-sched .wl-tab{padding-left:6px;padding-right:6px;font-size:13.5px}
+}
+/* All four fit from 360px up now, so the fade is scoped to the only widths where the strip
+   really does still run off the edge. Applying it any wider would dim the right edge of a tab
+   that is fully visible — an affordance for scrolling that isn't there. */
+@media (max-width:340px){
+  #view-sched .wl-tabs{
+    -webkit-mask-image:linear-gradient(to right,#000 calc(100% - 26px),transparent 100%);
+            mask-image:linear-gradient(to right,#000 calc(100% - 26px),transparent 100%);
+  }
+}
+
+/* ---- photos in the notifications panel (Tate, 2026-08-27) ------------------------------------
+   .nt-av is a 34px ROUNDED SQUARE, not a circle, so the image inherits that radius rather than
+   being forced round — a squircle avatar suddenly going circular in one panel is the kind of
+   inconsistency that reads as a bug. */
+.nt-av{overflow:hidden}
+.nt-av .ava-img{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}
 </style>
 
 <div class="fp-back" id="fpBack">
@@ -13508,6 +13989,7 @@ const A11Y_MODALS=[
 const OV_DAYNAME={Mo:'Monday',Tu:'Tuesday',We:'Wednesday',Th:'Thursday',Fr:'Friday'};
 const OV_DAYS=['Mo','Tu','We','Th','Fr'];
 const TERM_ORDER={Winter:0,Spring:1,Summer:2,Fall:3};
+
 let a11yLastFocus=null;
 let activityFeed=[],activityLoaded=false;
 let frChannel=null,frRefreshT=null;
@@ -13583,7 +14065,14 @@ async function _loadFriendsDataInner(){
   const accepted=all.filter(r=>r.status==='accepted');
   incomingRequests=all.filter(r=>r.status==='pending'&&r.to_user===sbUser.id);
   outgoingRequests=all.filter(r=>r.status==='pending'&&r.from_user===sbUser.id);
-  const friendIds=accepted.map(r=>r.from_user===sbUser.id?r.to_user:r.from_user);
+  /* ONE row per person. friend_requests can legitimately hold an accepted row in BOTH
+     directions between the same pair — you asked them, they asked you, both got accepted — and
+     this mapped each row to a person, so that pair rendered as two identical friends: two
+     avatars in the strip, two feed cards, and the same schedule counted twice in every overlap
+     total. Reported live 2026-08-26 with "Tate Sims" appearing twice on Mrauhala's home.
+     The duplicate row is not itself wrong; treating it as two people was. */
+  const friendIds=[...new Set(accepted.map(r=>r.from_user===sbUser.id?r.to_user:r.from_user))]
+    .filter(id=>id&&id!==sbUser.id);
   const otherIds=[...new Set([...friendIds,...incomingRequests.map(r=>r.from_user),...outgoingRequests.map(r=>r.to_user)])];
   let profMap={};
   if(otherIds.length){
@@ -13685,12 +14174,17 @@ async function _loadFriendsDataInner(){
   }
   friendsList=friendIds.map(id=>({id,name:(profMap[id]&&profMap[id].display_name)||'Classmate',handle:(profMap[id]&&profMap[id].instagram_handle)||'',email:(profMap[id]&&profMap[id].edu_email)||'',avatar_url:(profMap[id]&&profMap[id].avatar_url)||'',username:(profMap[id]&&profMap[id].username)||'',classes:classMap[id]||[],crns:crnsMap[id]||[],secs:secsMap[id]||[],history:histMap[id]||[],classAdds:addMap[id]||[],wl:wlMap[id]||{},color:colorForId(id)}));
   FRIENDS=friendsList.map(f=>({id:f.id,name:f.name,ini:initials(f.name),color:colorForId(f.id),classes:f.classes,crns:f.crns||f.sections||[],secs:f.secs||[],history:f.history,avatar_url:f.avatar_url||''}));
+  /* avatar_url was read into profMap and then not carried onto the request rows, so a friend
+     request — and every notification built from one — could only ever draw initials for someone
+     whose photo we already had in hand. */
   incomingRequests=incomingRequests.map(r=>({...r,
     name:(profMap[r.from_user]&&profMap[r.from_user].display_name)||'A classmate',
-    handle:(profMap[r.from_user]&&profMap[r.from_user].instagram_handle)||''}));
+    handle:(profMap[r.from_user]&&profMap[r.from_user].instagram_handle)||'',
+    avatar_url:(profMap[r.from_user]&&profMap[r.from_user].avatar_url)||''}));
   outgoingRequests=outgoingRequests.map(r=>({...r,
     name:(profMap[r.to_user]&&profMap[r.to_user].display_name)||'A classmate',
-    handle:(profMap[r.to_user]&&profMap[r.to_user].instagram_handle)||''}));
+    handle:(profMap[r.to_user]&&profMap[r.to_user].instagram_handle)||'',
+    avatar_url:(profMap[r.to_user]&&profMap[r.to_user].avatar_url)||''}));
   friendsLoaded=true;
   try{ if(window._frLoadWatch){clearTimeout(window._frLoadWatch);window._frLoadWatch=null;} }catch(e){}
   buildActivityFeed();
@@ -14168,6 +14662,13 @@ function schedLooksLikeCards(text){
 }
 function parseSchedCards(text){
   var raw=String(text||'').replace(/ /g,' ');
+  /* A PDF export glues a value to the next label with no separator — Cal Poly's "My Schedule"
+     PDF prints "Units: 4Instructor: Dawn Janke" on one line. Every label pattern below opens
+     with \b, and there is no word boundary between "4" and "Instructor", so the instructor was
+     silently dropped from every row of a PDF import while days, times and section all read
+     perfectly. Splitting the glue takes one line and needs no lookbehind (which older iOS
+     Safari does not have). */
+  raw=raw.replace(/(\d)(Instructor|Section|Days|Start|End|Room|Dates|Units|Description|Wait)\b/gi,'$1 $2');
   var lines=raw.split(/\n/).map(function(l){return l.replace(/\s+/g,' ').trim();});
   var subs=(typeof knownSubjects==='function')?knownSubjects():null;
 
@@ -14662,6 +15163,28 @@ async function handleSchedImport(files){
   if(!files||!files.length)return;
   const f=[].slice.call(files)[0];   /* snapshot: see the FileList note on #transcriptFile */
   if(!f)return;
+  /* A PDF carries its own text layer, so none of the pixel work below applies to it — no
+     upscaling, no inversion, no contrast curve, no three-pass scoring, because there is
+     nothing to guess. Straight to the parser, which is the same one the paste box feeds. */
+  if(isPdfFile(f)){
+    renderSchedImport('busy','Opening your PDF…');
+    var ptxt='';
+    try{
+      ptxt=await pdfToText(f,function(p,n){ renderSchedImport('busy','Reading your PDF'+(n>1?(' (page '+p+' of '+n+')'):'')+'…'); });
+    }catch(e){
+      console.error('[professify] pdf read failed:',e);
+      renderSchedImport('done','Couldn’t open that PDF — try a screenshot of it, or paste the text instead.'); return;
+    }
+    if(!ptxt.trim()){
+      /* A scanned PDF is a picture in a PDF wrapper: real file, no text layer. Saying that
+         plainly beats "couldn't read it", because the fix is different — screenshot it. */
+      renderSchedImport('done','That PDF has no text in it — it looks scanned. Screenshot it instead and upload that.'); return;
+    }
+    try{ schedTextToImport(ptxt,{},'pdf'); }
+    catch(e){ console.error('[professify] pdf parse failed:',e);
+              renderSchedImport('done','Couldn’t read that PDF. Try pasting the text instead.'); }
+    return;
+  }
   renderSchedImport('busy','Loading text recognition…');
   try{ await loadOcr(); }
   catch(e){ renderSchedImport('done','Text recognition didn’t load — check your connection and try again.'); return; }
@@ -14863,10 +15386,17 @@ function schedTextToImport(text,wlByKey,source){
     /* The "retake the screenshot at full size" advice is about pixels, so it is wrong for a
        paste — nothing was read from an image. An unmatched row from pasted text means the
        class number genuinely isn't in our section feed. */
-    if(source==='paste')quality=unmatched?(' '+_some+' matched a specific section — you can still add them; the section will fill in once the seat feed catches up.'):'';
+    /* Same for a PDF: its text came off the page exactly, so "retake the screenshot at full
+       size" is advice about a problem the student does not have. An unmatched row here means
+       the class number genuinely isn't in our section feed yet. */
+    if(source==='paste'||source==='pdf')quality=unmatched?(' '+_some+' matched a specific section — you can still add them; the section will fill in once the seat feed catches up.'):'';
     schImportMsg=schImportCodes.length?('Found '+schImportCodes.length+' class'+(schImportCodes.length===1?'':'es')+'.'+dupNote+quality+' Confirm your status on each — tap Enrolled / Waitlist.'):'';
     if(!schImportCodes.length&&source==='paste'){
       renderSchedImport('paste','No class codes in that text. Copy the whole schedule table — it needs to include codes like BUS 3306.');
+      return;
+    }
+    if(!schImportCodes.length&&source==='pdf'){
+      renderSchedImport('done','That PDF opened, but there were no class codes in it — check it\u2019s the schedule export and not a different page.');
       return;
     }
     renderSchedImport('done',schImportMsg);
@@ -14929,6 +15459,77 @@ function lazyScript(src,globalName,timeoutMs){
   });
 }
 function loadOcr(){return lazyScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js','Tesseract',45000);}
+/* ---- PDFs -----------------------------------------------------------------------------------
+   Cal Poly's portal has a "My Schedule" export that hands you a PDF, and a transcript/Degree
+   Progress Report prints to one. Until now every file input said accept="image/*", so the file
+   picker greyed those out and the only way in was to screenshot the PDF — putting a PERFECT,
+   already-digital text layer through Tesseract and hoping the pixels survived. That is the worst
+   possible trade: a PDF's text is exact, and OCR is the thing we fall back to when it isn't.
+   So PDFs skip Tesseract entirely and go straight to the same text parser the paste box uses. */
+function isPdfFile(f){
+  if(!f)return false;
+  if(String(f.type||'').toLowerCase()==='application/pdf')return true;
+  return /\.pdf$/i.test(String(f.name||''));
+}
+/* v3 legacy build on purpose: it is UMD, so it loads through the same plain <script> tag as
+   Tesseract (the v4 build is an ES module and would need type="module"), and "legacy" is the
+   transpiled bundle that still runs on the older iOS Safari a chunk of students are on. */
+var PDFJS_BASE='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/';
+function loadPdfJs(){
+  return lazyScript(PDFJS_BASE+'pdf.min.js','pdfjsLib',45000).then(function(lib){
+    try{
+      if(lib&&lib.GlobalWorkerOptions&&!lib.GlobalWorkerOptions.workerSrc)
+        lib.GlobalWorkerOptions.workerSrc=PDFJS_BASE+'pdf.worker.min.js';
+    }catch(e){}
+    return lib;
+  });
+}
+/* pdf.js hands back positioned RUNS, not lines — "Days:" and "MoWe" are separate items that
+   happen to share a baseline. Grouping by y and re-inserting a space only where the runs are
+   actually apart is what turns them back into the line the parser expects. Runs that abut with
+   no gap stay glued, which is why parseSchedCards has to split "Units: 4Instructor:" — that
+   glue is in the PDF itself, not an artefact of this. */
+function pdfItemsToText(items){
+  var lines=[],cur=null;
+  (items||[]).forEach(function(it){
+    var s=(it&&typeof it.str==='string')?it.str:'';
+    var tr=(it&&it.transform)||null;
+    var x=tr?(+tr[4]||0):0, y=tr?(+tr[5]||0):0, w=+((it&&it.width)||0);
+    if(!cur||Math.abs(y-cur.y)>3.2){ cur={y:y,end:x,text:''}; lines.push(cur); }
+    if(cur.text&&s&&(x-cur.end)>1.6&&!/\s$/.test(cur.text)&&!/^\s/.test(s))cur.text+=' ';
+    cur.text+=s; cur.end=x+w;
+    if(it&&it.hasEOL)cur=null;
+  });
+  return lines.map(function(l){return String(l.text||'').replace(/\s+/g,' ').trim();})
+              .filter(function(t){return t;}).join('\n');
+}
+function fileBytes(file){
+  if(file&&typeof file.arrayBuffer==='function')return file.arrayBuffer();
+  return new Promise(function(res,rej){                       // older iOS Safari has no .arrayBuffer()
+    try{ var r=new FileReader();
+         r.onload=function(){res(r.result);}; r.onerror=function(){rej(new Error('Could not read that file.'));};
+         r.readAsArrayBuffer(file); }catch(e){ rej(e); }
+  });
+}
+/* Returns the whole document's text, in reading order, pages joined by a blank line. Capped at
+   30 pages: a schedule is 1-3 and a transcript under 10, so anything past that is a misfire and
+   not worth freezing the tab over. */
+async function pdfToText(file,onPage){
+  var lib=await loadPdfJs();
+  var buf=await fileBytes(file);
+  var doc=await lib.getDocument({data:new Uint8Array(buf)}).promise;
+  var n=Math.min(doc.numPages||0,30), out=[];
+  for(var p=1;p<=n;p++){
+    if(typeof onPage==='function'){ try{ onPage(p,n); }catch(e){} }
+    var page=await doc.getPage(p);
+    var tc=await page.getTextContent();
+    out.push(pdfItemsToText(tc&&tc.items));
+    try{ page.cleanup(); }catch(e){}
+  }
+  try{ doc.destroy(); }catch(e){}
+  return out.join('\n\n');
+}
+window.isPdfFile=isPdfFile; window.pdfToText=pdfToText; window.pdfItemsToText=pdfItemsToText;
 function loadQrGen(){return lazyScript('https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js','qrcode');}
 /* Every subject code a major actually draws on, most-used first — majorPrefix() returns only
    the single dominant one, which is too blunt for filtering (a Business student takes ECON and
@@ -14963,12 +15564,19 @@ function majorPrefix(major){
    is unambiguous, and anything still a guess is reported as unconfirmed rather than printed
    as a time. */
 function friendMeetsResolved(f){
-  var out={byCode:{},dropped:[],unknown:[],assumed:{}};
+  /* `list` is every meeting; `byCode` keeps the first per course for the callers that only ever
+     wanted one answer ("is this course confirmed?"). Anything that DRAWS A WEEK must read list,
+     or a friend's second section of a course disappears the way it used to. */
+  var out={byCode:{},list:[],dropped:[],unknown:[],assumed:{}};
   try{
     if(typeof hmFriendMeets!=='function')return out;
     var fm=hmFriendMeets(f);
     var kept=(typeof hmDropImpossible==='function')?hmDropImpossible(fm.meets):{meets:fm.meets,dropped:[]};
-    (kept.meets||[]).forEach(function(m){ out.byCode[m.code]=m; if(m.assumed)out.assumed[m.code]=1; });
+    (kept.meets||[]).forEach(function(m){
+      out.list.push(m);
+      if(out.byCode[m.code]==null)out.byCode[m.code]=m;
+      if(m.assumed)out.assumed[m.code]=1;
+    });
     out.dropped=kept.dropped||[];
     out.unknown=fm.unknown||[];
   }catch(e){}
@@ -15206,15 +15814,22 @@ function renderFriendProfile(){
   }
   function frpCalendarHtml(){
     var codes=[],meta={},anyPlaced=false;
+    /* EVERY confirmed section of theirs, grouped by course — the same shape My Classes builds
+       for you. Reading FR.byCode here drew one block per course, so a friend in a lecture AND
+       its activity, or enrolled in one section while waitlisted for another, showed up missing
+       half their week. */
+    var placed={};
+    (FR.list||[]).forEach(function(mm){
+      if(!mm||!mm.meet||mm.assumed)return;
+      if((f.classes||[]).indexOf(mm.code)<0)return;
+      anyPlaced=true;
+      if(!meta[mm.code]){ meta[mm.code]={secs:[]}; codes.push(mm.code); }
+      meta[mm.code].secs.push({meet:mm.meet,section:mm.section||'',prof:mm.instructor||'',
+        status:(mm.wl?'waitlisted':'enrolled'),wlPos:(mm.wl?(mm.wlPos||null):null)});
+      placed[mm.code]=1;
+    });
     (f.classes||[]).forEach(function(c){
-      var mm=FR.byCode[c];
-      if(mm&&mm.meet&&!mm.assumed){
-        anyPlaced=true;
-        codes.push(c);
-        meta[c]={secs:[{meet:mm.meet,section:mm.section||'',prof:mm.instructor||'',
-                        status:(wl[c]!=null?'waitlisted':'enrolled'),wlPos:(wl[c]!=null?wl[c]:null)}]};
-        return;
-      }
+      if(placed[c])return;
       if(!frpNoTimeKnown(c))return;                 // meets, section unknown -> the note
       codes.push(c);
       /* An explicit null meeting. Passing empty meta instead would let myClassTime() fall back
@@ -15228,15 +15843,15 @@ function renderFriendProfile(){
   const frpCal=frpCalendarHtml();
   /* Only the genuinely-unplaceable ones — the rails speak for the rest. */
   const unplaced=(f.classes||[]).filter(c=>{
-    var mm=FR.byCode[c];
-    return !(mm&&mm.meet&&!mm.assumed) && !frpNoTimeKnown(c);
+    const any=(FR.list||[]).some(m=>m.code===c&&m.meet&&!m.assumed);
+    return !any && !frpNoTimeKnown(c);
   });
   const unplacedNote=unplaced.length
     ? `<div class="cal-tba">Not on the grid: ${unplaced.map(c=>escapeHtml(c)).join(', ')} — ${first} hasn’t confirmed which section they’re in, and these courses run at more than one time.</div>`
     : '';
   /* Same control My Classes uses for the same choice, so it looks and behaves identically. */
   const frpToggle=frpCal?`<div class="frp-view"><div class="mc-viewtog">
-      <button type="button" class="${frpView==='list'?'':'on'}" onclick="setFrpView('cal')">Calendar</button>
+      <button type="button" class="${frpView==='list'?'':'on'}" onclick="setFrpView('cal')">Schedule</button>
       <button type="button" class="${frpView==='list'?'on':''}" onclick="setFrpView('list')">List</button>
     </div></div>`:'';
   const listHtml=(f.classes||[]).length
@@ -15260,6 +15875,20 @@ function renderFriendProfile(){
           </div>`;}).join('')}</div>`
       : `<p class="fr-mut frp-none">${first} hasn’t logged any past classes yet.</p>`);
 
+  /* ---- their friends ----------------------------------------------------------------------
+     The tab appears only once friends_of() has actually answered with somebody. Three reasons
+     it might not: the function isn't deployed yet, this person has no other friends, or the
+     gate refused us — and in every one of those cases a "Friends (0)" tab is a promise of a
+     screen that has nothing on it. Nothing to show, nothing to tap. */
+  const fofList=(typeof fofCache!=='undefined'&&fofCache[f.id])?fofCache[f.id]:null;
+  const fofTab=(fofList&&fofList.length)
+    ? `<button class="wl-tab ${profileTab==='friends'?'on':''}" onclick="setProfileTab('friends')">Friends (${fofList.length})</button>`
+    : '';
+  const fofBlock=(fofList&&fofList.length)
+    ? `<p class="fr-mut frp-fofnote">Everyone ${escapeHtml(first)} is friends with. Tap Add to send a request.</p>
+       <div class="fof-list">${fofList.map(fofRowHtml).join('')}</div>`
+    : `<p class="fr-mut frp-none">Nothing to show here yet.</p>`;
+
   el.innerHTML=`<div class="frp-wrap">
     <button class="mclose" onclick="closeFriendProfile()">&times;</button>
     <div class="frp-head">
@@ -15271,11 +15900,22 @@ function renderFriendProfile(){
       </div>
     </div>
     <div class="frp-tabs">
-      <button class="wl-tab ${profileTab==='took'?'':'on'}" onclick="setProfileTab('classes')">Their classes (${(f.classes||[]).length})</button>
+      <button class="wl-tab ${profileTab==='classes'||(profileTab!=='took'&&profileTab!=='friends')?'on':''}" onclick="setProfileTab('classes')">Their classes (${(f.classes||[]).length})</button>
       <button class="wl-tab ${profileTab==='took'?'on':''}" onclick="setProfileTab('took')">Already took (${hist.length})</button>
+      ${fofTab}
     </div>
-    <div class="frp-body">${profileTab==='took'?tookBlock:classesBlock}</div>
+    <div class="frp-body">${profileTab==='friends'?fofBlock:(profileTab==='took'?tookBlock:classesBlock)}</div>
   </div>`;
+  /* Fetched on first open of THIS person, then the tab count fills in. Asking on every render
+     would re-hit the server on every tab switch for an answer that cannot have changed. */
+  if(!fofCache[f.id]&&window.FOF_OK!==false&&typeof loadFriendsOf==='function'){
+    loadFriendsOf(f.id).then(function(list){
+      /* Repaint only when the answer would actually change the screen. Re-rendering on an
+         empty result is how the loop above started, and it buys nothing: no rows means no tab
+         either way. */
+      if((list&&list.length)&&profileFriendId===f.id)try{renderFriendProfile();}catch(e){}
+    });
+  }
 }
 /* ---- one row of the review screen -------------------------------------------------------
    A class the OCR could not fully read is not a failure to hide — it is the one thing on this
@@ -15285,6 +15925,11 @@ function renderFriendProfile(){
 function siNeedsFix(c){
   if(!c||!c.pick)return false;
   if(c._noTime)return false;              // they told us it has no set time — that IS the answer
+  /* Picking a real section off the live feed settles the question even when that section has
+     no hour attached. UNIV 4401 is asynchronous: choosing it left c.days empty, so this kept
+     returning true, the row kept saying "needs a time", and the picker kept reopening on the
+     Choose… option — which is exactly what "it wasn't saving" looked like. (Tate, 2026-08-26.) */
+  if(c._timeUnknown)return false;
   return !c.days;                          // no meeting string at all
 }
 function siSectionOptions(code){
@@ -15302,7 +15947,7 @@ window.siPickSection=function(i,v){
   if(v==='__none'){
     /* "No set meeting time" is a real answer, not a skip: an async class genuinely never
        meets, and recording that is different from leaving a hole. */
-    c._noTime=true; c.days=''; c._wantPick=false;
+    c._noTime=true; c._timeUnknown=false; c.days=''; c._wantPick=false;
     renderSchedImport('done',schImportMsg); return;
   }
   try{
@@ -15311,9 +15956,21 @@ window.siPickSection=function(i,v){
       /* Everything here comes from the live feed, so the row stops being an OCR guess and
          becomes a confirmed section — same standard as a section we matched automatically. */
       c.section=r.section||c.section; c.crn=String(r.class_nbr||'')||c.crn;
-      c.prof=r.instructor||c.prof;
+      /* The feed writes instructors as "Snyder, Coby". Every other surface flips that before
+         showing it, so adopting it raw here printed a name in a format nothing else uses. */
+      c.prof=(r.instructor&&typeof cpDispName==='function')?cpDispName(r.instructor,null)
+            :(r.instructor||c.prof);
       c.days=(typeof prettyTime==='function')?prettyTime(r.days):(r.days||'');
-      c._noTime=false; c.matched=true; c._fixed=true; c._wantPick=false;
+      /* A section with no hour is two different facts and they get two different answers.
+         Asynchronous means it genuinely never meets — record that. No hour on a section the
+         feed doesn't call async means our scrape simply hasn't got the time; say THAT rather
+         than claiming the class has no meeting. Either way the question is answered and the
+         row stops asking. */
+      if(!c.days){
+        if(typeof secIsAsync==='function'&&secIsAsync(r)){ c._noTime=true;  c._timeUnknown=false; }
+        else                                             { c._noTime=false; c._timeUnknown=true;  }
+      }else{ c._noTime=false; c._timeUnknown=false; }
+      c.matched=true; c._fixed=true; c._wantPick=false;
     }
   }catch(e){}
   renderSchedImport('done',schImportMsg);
@@ -15330,7 +15987,11 @@ function siItemHtml(c,i){
   /* Name the professor when we know it. When the course runs several and we couldn't pin the
      section, say that instead of leaving the line silent — the number is the reason to use
      the picker below. */
-  var _who=c.prof||((c.profN>1)?(c.profN+' professors — pick your section'):'');
+  /* Silent when we read no professor AND the course runs one — but that is the row where the
+     student most needs telling that picking is available. */
+  var _who=c.prof
+    ||((c.profN>1)?(c.profN+' professors — pick your section')
+                  :((opts.length&&!c.matched&&!c._fixed)?'Professor not read — pick your section':''));
   var meta=[_who,c.days].filter(Boolean).join(' · ');
   var picker='';
   if(showPicker){
@@ -15356,7 +16017,8 @@ function siItemHtml(c,i){
         +(c.known?'':'<span class="fh-nomatch">not in catalog</span>')
         +(needs?'<span class="si-needs">needs a time</span>':'')
         +(c._fixed?'<span class="si-fixed">✓ you set this</span>':'')
-        +(c._noTime?'<span class="si-anyt">no set meeting time</span>':'')+'</div>'
+        +(c._noTime?'<span class="si-anyt">no set meeting time</span>':'')
+        +(c._timeUnknown?'<span class="si-anyt">time not published</span>':'')+'</div>'
       +(c.name?'<div class="fh-name">'+escapeHtml(c.name)+'</div>':'')
       +(meta?'<div class="si-prof">'+escapeHtml(meta)+'</div>':'')
       +picker
@@ -15367,7 +16029,18 @@ function siItemHtml(c,i){
         /* Changing a section the app READ correctly has to be possible too — OCR misread a
            section token as S02 when the schedule said S01 during testing, and without this
            the student's only recourse was to redo the whole import. */
-        +((!showPicker&&opts.length>1&&c.pick)?'<button type="button" class="si-change" onclick="siWantPick('+i+')">Change section</button>':'')
+        /* Changing a section the app READ correctly has to be possible too — OCR misread a
+           section token as S02 when the schedule said S01 during testing.
+           2026-08-26: this used to require opts.length>1 AND read "Change section", so a row
+           whose professor we never read — the case where you most need to choose — offered
+           nothing at all if the course listed one section, and otherwise invited you to change
+           a section you had never picked. It now offers on any row with sections, and says
+           which of the two jobs it is doing. (Tate: "if it didnt include the professor it
+           should give me the ability to pick section".) */
+        +((!showPicker&&opts.length&&c.pick)
+            ?('<button type="button" class="si-change" onclick="siWantPick('+i+')">'
+              +((c.matched||c._fixed)?'Change section':'Pick your section')+'</button>')
+            :'')
       +'</div>'
     +'</div></div>';
 }
@@ -15407,7 +16080,7 @@ function renderSchedImport(state,msg){
        because they're on a laptop with the schedule open in another tab and no screenshot to
        take — neither of those moments wants a second file picker. */
     body=`<div class="si-tabs">
-        <button class="si-tab" onclick="renderSchedImport('idle')">Screenshot</button>
+        <button class="si-tab" onclick="renderSchedImport('idle')">Upload</button>
         <button class="si-tab on">Paste text</button>
       </div>
       ${msg?`<p class="fr-mut" style="margin:0 0 12px">${escapeHtml(msg)}</p>`:''}
@@ -15417,20 +16090,20 @@ function renderSchedImport(state,msg){
         <button class="btn primary" onclick="pasteSchedImport()">Read it</button></div>`;
   }else{
     body=`<div class="si-tabs">
-        <button class="si-tab on">Screenshot</button>
+        <button class="si-tab on">Upload</button>
         <button class="si-tab" onclick="renderSchedImport('paste')">Paste text</button>
       </div>
-      <div class="si-drop" onclick="document.getElementById('siFile').click()">
+      <div class="si-drop" id="siDrop" onclick="document.getElementById('siFile').click()">
         <div class="si-ico">🗓️</div>
-        <b>Upload a screenshot of your schedule</b>
-        <p>Your Cal Poly schedule, a photo of it, anything with class codes on it. We'll pull out the classes and you pick which to keep.</p>
-        <button class="btn primary">Choose image</button>
+        <b>Upload your schedule</b>
+        <p>The PDF from your Cal&nbsp;Poly portal, a screenshot, a photo &mdash; anything with class codes on it. A PDF reads exactly; a picture we have to recognise.</p>
+        <button class="btn primary">Choose a file</button>
       </div>
       <!-- Snapshot then clear: the clear is what lets a student re-pick the SAME screenshot after
            a bad read (without it, no change event fires and nothing happens), and the snapshot is what
            keeps the clear from emptying the list out from under the async handler. -->
-      <input id="siFile" type="file" accept="image/*" style="display:none" onchange="handleSchedImport([...this.files]);this.value=''">
-      <p class="fr-mut" style="margin:11px 2px 0">On a laptop with no screenshot handy? <button class="qw-nudge" onclick="renderSchedImport('paste')">Paste the text instead</button></p>`;
+      <input id="siFile" type="file" accept="image/*,application/pdf,.pdf" style="display:none" onchange="handleSchedImport([...this.files]);this.value=''">
+      <p class="fr-mut" style="margin:11px 2px 0">Nothing to upload? <button class="qw-nudge" onclick="renderSchedImport('paste')">Paste the text instead</button></p>`;
   }
   /* The heading said "Import from a screenshot" when a screenshot is now one of two ways in.
      A title that names one method makes the other look like a workaround. */
@@ -15441,6 +16114,21 @@ function renderSchedImport(state,msg){
       ${body}
     </div></div>`;
   if(state==='done')renderSchedImportCount();
+  /* Drag-and-drop, same as the planner's term box. The tile has always LOOKED like a drop
+     zone — dashed border and all — and dropping a file on it did nothing but make the browser
+     navigate away to the file, losing the page. */
+  var sdz=document.getElementById('siDrop');
+  if(sdz&&!sdz._wired){
+    sdz._wired=1;
+    ['dragenter','dragover'].forEach(function(ev){ sdz.addEventListener(ev,function(e){
+      e.preventDefault(); e.stopPropagation(); sdz.classList.add('over'); }); });
+    ['dragleave','drop'].forEach(function(ev){ sdz.addEventListener(ev,function(e){
+      e.preventDefault(); e.stopPropagation(); sdz.classList.remove('over'); }); });
+    sdz.addEventListener('drop',function(e){
+      var f=(e.dataTransfer&&e.dataTransfer.files)?[].slice.call(e.dataTransfer.files):[];
+      if(f.length)handleSchedImport(f);
+    });
+  }
 }
 function renderSchedImportCount(){
   const el=document.getElementById('siCount');if(!el)return;
@@ -15880,11 +16568,21 @@ function updateNotifBadge(){
   const n=unseenNotifCount();
   b.textContent=n>9?'9+':n;b.hidden=n===0;
 }
+/* A face in a notification. Same resolver the search rows use, so a person looks like the same
+   person on every surface — and the same fallback: their initials when we have no photo, and
+   their initials again if the photo 404s. (Tate, 2026-08-27.) */
+function ntAva(p){
+  try{
+    var url=(typeof frAvatarFor==='function')?frAvatarFor(p||{}):((p&&p.avatar_url)||'');
+    return (typeof avaHtml==='function')?avaHtml(url,(p&&(p.name||p.display_name))||'?')
+                                       : escapeHtml(initials((p&&p.name)||'?'));
+  }catch(e){ return escapeHtml(initials((p&&p.name)||'?')); }
+}
 function notifRowHtml(n,unread){
   const cls=unread?' unread':'';
   if(n.kind==='req'){
     return `<div class="nt-row${cls}" data-kind="req">
-      <span class="nt-av" style="background:${colorForId(n.who)}">${initials(n.name||'?')}</span>
+      <span class="nt-av" style="background:${colorForId(n.who)}">${ntAva({id:n.who,avatar_url:n.avatar_url,name:n.name})}</span>
       <div class="nt-main">
         <div class="nt-t"><b>${escapeHtml(n.name||'A classmate')}</b> sent you a friend request</div>
         ${n.handle?`<div class="nt-b">@${escapeHtml(n.handle)}</div>`:''}
@@ -15900,7 +16598,7 @@ function notifRowHtml(n,unread){
     const mineAlready=(typeof isMyClass==='function')&&isMyClass(n.code);
     const isTook=n.type==='took';
     return `<div class="nt-row${cls}" data-kind="friend">
-      <span class="nt-av" style="background:${f.color||colorForId(f.id)}">${initials(f.name||'?')}</span>
+      <span class="nt-av" style="background:${f.color||colorForId(f.id)}">${ntAva(f)}</span>
       <div class="nt-main">
         <div class="nt-t"><b>${first}</b> ${isTook?'logged':'joined'} <b>${escapeHtml(n.code)}</b>${isTook&&n.term?` from ${escapeHtml(n.term)} ${n.year}`:''}</div>
         <div class="nt-b">${ci&&ci.name?escapeHtml(ci.name):''}${isTook&&n.professor?` · had ${escapeHtml(n.professor)}`:''}</div>
@@ -15921,7 +16619,7 @@ function notifRowHtml(n,unread){
   const secLbl=theirs&&theirs.section?(' '+escapeHtml(theirs.section)):'';
   if(n.type==='samesection'){
     return `<div class="nt-row${cls}" data-kind="classmate">
-      <span class="nt-av" style="background:${f.color||colorForId(f.id)}">${initials(f.name||'?')}</span>
+      <span class="nt-av" style="background:${f.color||colorForId(f.id)}">${ntAva(f)}</span>
       <div class="nt-main">
         <div class="nt-t"><b>${first}</b> is in your <b>${escapeHtml(n.code)}${secLbl}</b></div>
         <div class="nt-b">${ci&&ci.name?escapeHtml(ci.name):''}${theirs&&theirs.days?` · ${escapeHtml(theirs.days)}`:''}</div>
@@ -15935,7 +16633,7 @@ function notifRowHtml(n,unread){
   const pitch=(typeof secPitch==='function')?secPitch(n.code,n.mineCrn,n.crn):{ok:false,reasons:[],openSeats:0};
   const mineLbl=mineSec&&mineSec.section?(' '+escapeHtml(mineSec.section)):'';
   return `<div class="nt-row${cls}" data-kind="classmate">
-    <span class="nt-av" style="background:${f.color||colorForId(f.id)}">${initials(f.name||'?')}</span>
+    <span class="nt-av" style="background:${f.color||colorForId(f.id)}">${ntAva(f)}</span>
     <div class="nt-main">
       <div class="nt-t"><b>${first}</b> joined <b>${escapeHtml(n.code)}${secLbl}</b> — you're in${mineLbl?` <b>${mineLbl.trim()}</b>`:' a different section'}</div>
       <div class="nt-b">${pitch.reasons.length
@@ -17370,6 +18068,67 @@ function shareInviteLink(){
    encoded — nothing invented. */
 function _b64urlEnc(str){ try{ return btoa(unescape(encodeURIComponent(str))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }catch(e){ return ''; } }
 function _b64urlDec(s){ try{ s=String(s||'').replace(/-/g,'+').replace(/_/g,'/'); while(s.length%4)s+='='; return decodeURIComponent(escape(atob(s))); }catch(e){ return ''; } }
+/* ---- v2 share payload: a link you can actually text -----------------------------------------
+   v1 encoded the whole schedule as JSON and base64'd it, keys and all — a five-class week came
+   out ~900 characters. iMessage stops treating a URL that long as a link: it printed the raw
+   base64 as a wall of blue text with a bare grey preview stuck to it (Tate, 2026-08-26, with
+   the screenshot). Every other client has its own version of that problem — SMS splits it,
+   mail wraps it at 78 columns and breaks it.
+
+   v2 drops everything the receiving app can work out for itself and packs the rest:
+     • the course NAME goes, because the catalog on the other end already has it by code
+     • " Regular" goes off the section token — it is noise the registrar adds
+     • "MoWe 4:00PM–5:50PM" becomes "MW1600-1750"
+     • the JSON keys go: fields are positional
+   Same five classes: ~200 characters before base64, ~270 after. v1 links still open — the
+   decoder tries JSON first, so nothing anyone has already sent stops working.
+
+   A meeting string we cannot parse is carried VERBATIM behind an '=' rather than guessed at.
+   A wrong time on someone's shared week is worse than a long link. */
+var _SH_PACK=[['Th','R'],['Su','U'],['Sa','S'],['Mo','M'],['Tu','T'],['We','W'],['Fr','F']];
+var _SH_UNPACK={M:'Mo',T:'Tu',W:'We',R:'Th',F:'Fr',S:'Sa',U:'Su'};
+function _sh2(n){ return (n<10?'0':'')+n; }
+function _sh12(h,mm){ var ap=(h>=12)?'PM':'AM', hh=h%12; if(!hh)hh=12; return hh+':'+mm+ap; }
+function _shPackTime(t){
+  var s=String(t||'').replace(/\s+/g,' ').trim(); if(!s)return '';
+  var m=/^([A-Za-z]+) (\d{1,2}):(\d{2}) ?([AaPp])\.?[Mm]?\.? ?[–—-] ?(\d{1,2}):(\d{2}) ?([AaPp])\.?[Mm]?\.?$/.exec(s);
+  if(!m)return '='+s;
+  var d=m[1]; _SH_PACK.forEach(function(p){ d=d.split(p[0]).join(p[1]); });
+  if(!d||/[^MTWRFSU]/.test(d))return '='+s;
+  var h1=(+m[2]%12)+(/p/i.test(m[4])?12:0), h2=(+m[5]%12)+(/p/i.test(m[7])?12:0);
+  return d+_sh2(h1)+m[3]+'-'+_sh2(h2)+m[6];
+}
+function _shUnpackTime(t){
+  var s=String(t||''); if(!s)return '';
+  if(s.charAt(0)==='=')return s.slice(1);
+  var m=/^([MTWRFSU]+)(\d{2})(\d{2})-(\d{2})(\d{2})$/.exec(s); if(!m)return s;
+  var d=''; for(var i=0;i<m[1].length;i++)d+=(_SH_UNPACK[m[1].charAt(i)]||'');
+  return d+' '+_sh12(+m[2],m[3])+'–'+_sh12(+m[4],m[5]);
+}
+/* "S01-LEC Regular" -> "S01-LEC". The word is on every section and carries nothing. */
+function _shPackSec(s){ return String(s||'').replace(/\s+Regular\s*$/i,'').trim(); }
+/* | and ~ are the field and row separators. Nothing in a course code, time, professor name or
+   section token contains either, but a stray one would silently shift every field after it. */
+function _shF(x){ return String(x==null?'':x).replace(/[|~]/g,' ').trim(); }
+function _shEncode(term,cl){
+  return '2~'+_shF(term)+'~'+cl.map(function(r){
+    return [_shF(r.c),_shPackTime(r.t),_shF(r.p),_shPackSec(r.s)].join('|');
+  }).join('~');
+}
+function _shDecode(raw){
+  var s=String(raw||'');
+  if(s.slice(0,2)!=='2~')return null;
+  var parts=s.split('~'); if(parts.length<3)return null;
+  var cl=[];
+  for(var i=2;i<parts.length;i++){
+    if(!parts[i])continue;
+    var f=parts[i].split('|');
+    var code=f[0]||''; if(!code)continue;
+    var nm=''; try{ nm=((typeof classInfo==='function'?classInfo(code):null)||{}).name||''; }catch(e){}
+    cl.push({c:code,n:nm,t:_shUnpackTime(f[1]||''),p:f[2]||'',s:f[3]||''});
+  }
+  return cl.length?{v:2,term:parts[1]||'',cl:cl}:null;
+}
 function myScheduleForShare(){
   var out=[];
   try{
@@ -17400,7 +18159,7 @@ function schedShareLink(){
   /* Carry the term in the payload. The landing used to hard-code "Fall 2026", which would
      have quietly mislabelled every shared schedule the moment the term rolled — and a link
      shared in Fall should still say Fall when it's opened in Winter. */
-  var payload=_b64urlEnc(JSON.stringify({v:1,term:(typeof APP_TERM!=='undefined'?APP_TERM:''),cl:cl}));
+  var payload=_b64urlEnc(_shEncode((typeof APP_TERM!=='undefined'?APP_TERM:''),cl));
   var first='';
   try{ first=((myProfile&&myProfile.display_name)||'').split(' ')[0]||''; }catch(e){}
   var qs='sched='+payload+(first?('&nm='+encodeURIComponent(first)):'');
@@ -17436,7 +18195,10 @@ function initSchedShare(){
   var enc=null,nm='A friend',addId=null;
   try{ var q=new URLSearchParams(location.search); enc=q.get('sched'); nm=q.get('nm')||'A friend'; addId=q.get('add')||null; }catch(e){ return; }
   if(!enc)return;
-  var data=null; try{ data=JSON.parse(_b64urlDec(enc)); }catch(e){}
+  /* v2 first, then v1's JSON — every link anyone has already sent has to keep opening. */
+  var plain=_b64urlDec(enc), data=null;
+  try{ data=_shDecode(plain); }catch(e){}
+  if(!data){ try{ data=JSON.parse(plain); }catch(e){} }
   if(!data||!Array.isArray(data.cl)||!data.cl.length)return;
   // Stash any invite token so "Add <name>" connects after sign-in (same key initInvite uses).
   if(addId&&typeof UUID_RE!=='undefined'&&UUID_RE.test(addId)){ try{sessionStorage.setItem('professify_pending_add',addId);}catch(e){} }
@@ -17623,7 +18385,13 @@ function qrPayloadFor(id){
   const base=(cfg().SITE_URL||'').replace(/\/+$/,'');
   // Without a hosted URL there's nothing sensible for a camera app to open, so
   // fall back to the raw-token form — our own scanner still handles it.
-  return base?`${base}/?add=${encodeURIComponent(id)}`:`professify:add:${id}`;
+  /* /invite, not /?add=. The app is one static index.html, so a query string cannot change
+     which <meta> tags get served — an invite texted to a friend previewed with the HOMEPAGE
+     card, and no amount of app code could fix that. /invite is a second file whose only job is
+     to carry invite-specific Open Graph tags for the crawler and then hand the person straight
+     on to /?add=<id>. Both URLs still work; this is just the one worth sending.
+     (Tate, 2026-08-27 — the landscape card with the week grid and the friend faces.) */
+  return base?`${base}/invite?add=${encodeURIComponent(id)}`:`professify:add:${id}`;
 }
 
 function parseQrPayload(text){
@@ -17685,6 +18453,17 @@ async function showMyQR(){
 
 async function sendFriendRequest(targetId){
   try{
+    /* Don't create the second accepted row in the first place. A pair can end up with one in
+       each direction — you asked them, they asked you — and while the client now dedupes on
+       read, the cheapest fix is not to ask again for someone this account already has a
+       relationship with. (Tate, 2026-08-26: "you shouldnt be able to add someone twice.") */
+    if(typeof peopleRelState==='function'){
+      var st=peopleRelState(targetId);
+      if(st==='friends'){ try{frToast('You two are already friends.');}catch(_e){} return true; }
+      if(st==='sent'){ try{frToast('Request already sent — waiting on them.');}catch(_e){} return true; }
+      if(st==='incoming'){ try{frToast('They already asked you — accept it from Friends.');}catch(_e){} return true; }
+    }
+    if(targetId===sbUser.id)return false;
     const {error}=await sb.from('friend_requests').insert({from_user:sbUser.id,to_user:targetId,status:'pending'});
     if(error&&!/duplicate/i.test(error.message||''))throw error;
     contactMatches=contactMatches.filter(p=>p.id!==targetId);
@@ -17865,6 +18644,105 @@ window.closeAddFriend=function(){
    so the row never has to guess which of "5 mutuals" and "same section" to lead with. */
 window.friendSuggestions=window.friendSuggestions||[];
 window.FR_SUG_FAILED=false;
+/* ---- Friends-of-a-friend --------------------------------------------------------------------
+   Tate, 2026-08-27: "next to their classes and already took have friends and everyone a person
+   is friends with you can see and then friend them from there."
+
+   This cannot be read from the client. RLS on friend_requests returns only YOUR OWN edges, so
+   asking "who is Sage friends with" from here returns nothing, always. It runs through
+   friends_of(), a SECURITY DEFINER function gated on the caller being that person's ACCEPTED
+   friend — see professify-friends-of.sql. Everything below is display.
+
+   Cached per person for the session: opening a profile twice should not re-ask. */
+var fofCache={}, fofBusy={};
+window.FOF_OK=null;      // null = never asked; false = the function isn't deployed
+/* The network call is one named thing, on window, on purpose. `sb` and `sbUser` are top-level
+   `let`s, so they are not reachable from outside this scope — which means the only way to
+   exercise this path (or to see what it asks for) is to have the request itself be a seam. */
+window.fofFetch=async function(id){
+  if(!(typeof backendReady==='function'&&backendReady()))return null;
+  if(!(typeof sbUser!=='undefined'&&sbUser))return null;
+  return sb.rpc('friends_of',{p_user:id});
+};
+window.loadFriendsOf=async function(id){
+  if(!id)return [];
+  if(fofCache[id])return fofCache[id];
+  if(fofBusy[id])return fofBusy[id];
+  fofBusy[id]=(async function(){
+    var out=[];
+    try{
+      var r=await window.fofFetch(id);
+      if(!r)return out;                     // signed out, or no backend on this deploy
+      if(r.error){
+        /* "Not deployed on this database" and "the server broke" are different things, and only
+           one of them should ever change what the screen offers. A missing function hides the
+           tab; a real failure leaves it alone and simply has nothing to show. */
+        if(/function|does not exist|schema/i.test(r.error.message||''))window.FOF_OK=false;
+        return out;
+      }
+      window.FOF_OK=true;
+      out=(Array.isArray(r.data)?r.data:[]).map(function(x){
+        return {id:x.id,name:x.display_name||'Classmate',username:x.username||'',
+                avatar_url:x.avatar_url||'',mutual:!!x.mutual};
+      });
+    }catch(e){}
+    finally{
+      /* Cache in `finally`, not on the happy path. Three of the exits above return early, and
+         when they did so without writing the cache, renderFriendProfile saw fofCache[id] still
+         unset, called loadFriendsOf again, got the already-resolved promise back immediately,
+         and re-rendered — which called loadFriendsOf again. A render loop that pinned the tab
+         at 100% CPU, caught by the profile check timing out rather than failing. Recording
+         "we asked and got nothing" is exactly what stops it. */
+      fofCache[id]=out; delete fofBusy[id];
+    }
+    return out;
+  })();
+  return fofBusy[id];
+};
+/* A row in that list. The right-hand side is the ONLY thing that varies, and it varies by the
+   relationship you already have with that person — the same four states the people-search rows
+   use, so one screen never disagrees with the other about who you're friends with. */
+window.fofRowHtml=function(p){
+  var st=(typeof peopleRelState==='function')?peopleRelState(p.id):'none';
+  var right;
+  if(st==='friends')      right='<span class="fof-state">✓ Friends</span>';
+  else if(st==='sent')    right='<span class="fof-state">Requested</span>';
+  else if(st==='incoming')right='<button class="btn primary fof-add" onclick="event.stopPropagation();fofAdd(\''+escAcc(p.id)+'\',this)">Accept</button>';
+  else                    right='<button class="btn primary fof-add" onclick="event.stopPropagation();fofAdd(\''+escAcc(p.id)+'\',this)">Add</button>';
+  var open=(st==='friends');
+  /* Only a friend's row opens — the same rule as search. Someone you haven't added yet has a
+     week that isn't ours to show, and a tap that opened an empty profile would be a dead end
+     and a promise we don't keep. */
+  return '<div class="fof-row'+(open?' fof-open':'')+'"'
+    +(open?(' role="button" tabindex="0"'
+      +' onclick="openFriendProfile(\''+escAcc(p.id)+'\')"'
+      +' onkeydown="if(event.key===\'Enter\'){event.preventDefault();openFriendProfile(\''+escAcc(p.id)+'\');}"'
+      +' title="Open '+escAcc(p.name)+'’s profile"'):'')+'>'
+    +'<div class="fof-av" style="background:'+colorForId(p.id)+'">'
+      +((typeof avaHtml==='function')?avaHtml(p.avatar_url,p.name):escapeHtml(initials(p.name)))+'</div>'
+    +'<div class="fof-main"><div class="fof-nm">'+escapeHtml(p.name)+'</div>'
+      +(p.mutual?'<div class="fof-sub">Friends with you too</div>'
+                :(p.username?'<div class="fof-sub">@'+escapeHtml(p.username)+'</div>':''))+'</div>'
+    +right+'</div>';
+};
+window.fofAdd=async function(id,btn){
+  if(!(typeof backendReady==='function'&&backendReady()))return;
+  var was=btn?btn.textContent:'';
+  if(btn){btn.disabled=true;btn.textContent='Sending…';}
+  try{
+    /* sendFriendRequest owns the sign-in requirement and the already-a-friend cases, and it
+       reports failure by RETURNING FALSE rather than throwing. Treating "it ran without
+       throwing" as success would flip the button to Requested on a request that never left the
+       device — the worst possible outcome here, because the student walks away believing they
+       asked. `false` is a failure and is handled as one. */
+    var ok=await sendFriendRequest(id);
+    if(ok===false)throw new Error('Could not send the request — try again.');
+    if(btn){var s=document.createElement('span');s.className='fof-state';s.textContent='Requested';btn.replaceWith(s);}
+  }catch(e){
+    if(btn){btn.disabled=false;btn.textContent=was||'Add';}
+    try{frToast((e&&e.message)||'Could not send request.');}catch(_e){}
+  }
+};
 async function loadFriendSuggestions(){
   window.FR_SUG_FAILED=false;
   var out=[];
@@ -17949,6 +18827,7 @@ var gpTab='friends', gpOpen=null;
    inside the group record, and when groups start syncing between people the shared row still
    carries no mute state to leak. It does now survive a reload, which it didn't before: a mute
    you had to redo every visit isn't a setting, it's a rerun. */
+var gpNameEdit=null;                                /* group id whose name is being edited */
 var GP_MUTE_KEY='professify_group_mutes';
 var gpMuted={};                                     /* gpMuted: groupId -> {memberId:1} */
 try{ var _gm=JSON.parse(localStorage.getItem(GP_MUTE_KEY)||'{}'); if(_gm&&typeof _gm==='object'&&!Array.isArray(_gm))gpMuted=_gm; }catch(e){}
@@ -18146,8 +19025,22 @@ function gpGrid(g,c,only){
   var lane={}; act.forEach(function(m,i){ lane[m.id]=i; });
   var cols=(only==null)?[0,1,2,3,4]:[only];
   var H=GP_NSLOT*GP_ROWH, ppm=GP_ROWH/GP_STEP;
+  /* The day labels ARE the day picker (Tate, 2026-08-26: "no need for the days of the week
+     here make it so when you click the day of the week on the schedule it opens to that
+     specific day"). A Mo/Tu/We/Th/Fr/All button row used to sit directly above these labels
+     doing the same job — two controls, stacked, for one decision.
+     Focused, the header collapses to the one day it is showing, so the strip and the columns
+     under it always line up; tapping it again gives the week back. */
   var h='<div class="gp-grid" style="--gpcols:'+cols.length+'"><div class="gp-ghead"><div></div>'
-    +cols.map(function(d){return '<div>'+GP_DAYLBL[d]+'</div>';}).join('')+'</div><div class="gp-gbody">';
+    +cols.map(function(d){
+      var focused=(only!=null);
+      var full=(typeof GP_DAYFULL!=='undefined')?GP_DAYFULL[GP_DAYS[d]]:GP_DAYLBL[d];
+      return '<button type="button" class="gp-dh'+(focused?' on':'')+'"'
+        +' onclick="gpSetDay(\''+g.id+'\','+(focused?-1:d)+')"'
+        +' aria-pressed="'+(focused?'true':'false')+'"'
+        +' title="'+escAcc(focused?('Showing '+full+' \u2014 tap for the whole week'):('Show only '+full))+'">'
+        +GP_DAYLBL[d]+(focused?'<span class="gp-dh-x">\u2715</span>':'')+'</button>';
+    }).join('')+'</div><div class="gp-gbody">';
   h+='<div class="gp-gut" style="height:'+H+'px">';
   for(var k=0;k<GP_NSLOT;k++){
     var t=GP_LO+k*GP_STEP;
@@ -18222,19 +19115,28 @@ window.gpSetTab=function(t){
   var fp=document.getElementById('frFriendsPane'), gp=document.getElementById('gpPane');
   var sug=document.getElementById('frSuggestedSec');
   if(fp)fp.style.display=(t==='friends')?'':'none';
-  if(sug&&t==='groups')sug.style.display='none';
+  /* Coming BACK from Groups used to leave this hidden until something else happened to call
+     renderFriends — so the suggestions vanished for the rest of the session after one tab
+     switch. Restore it from the same fact that decided it in the first place. */
+  if(sug)sug.style.display=(t==='groups')?'none'
+    :(((typeof frMergedSuggestions==='function')&&frMergedSuggestions().length)?'':'none');
   if(gp)gp.style.display=(t==='groups')?'':'none';
   if(t==='groups')gpRender();
 };
 window.gpNew=function(){
   var n=gpList.length+1;
   var g={id:'g'+Date.now().toString(36),name:'Group '+n,members:[]};
-  gpList.push(g); gpSave(); gpOpen=g.id; gpRender();
+  gpList.push(g); gpSave(); gpOpen=g.id;
+  /* "Group 3" is a placeholder, not a name — open it in the rename field so the first thing
+     you do is the thing you came to do. */
+  gpNameEdit=g.id; gpRender();
+  setTimeout(function(){ var i=document.getElementById('gpNameIn'); if(i){i.focus();i.select();} },40);
 };
 window.gpOpenGroup=function(id){ gpOpen=id; gpRender(); };
 window.gpBack=function(){ gpOpen=null; gpRender(); };
 window.gpRename=function(id,v){ var g=gpFind(id); if(!g)return; g.name=String(v||'').slice(0,40)||g.name; gpSave(); };
 window.gpDelete=function(id){
+  _gpDelAsk=null; gpNameEdit=null;
   gpList=gpList.filter(function(x){return x.id!==id;}); gpSave();
   delete gpMuted[id]; gpSaveMutes();                /* don't leave a dead group's mutes on disk */
   gpOpen=null; gpRender();
@@ -18277,6 +19179,20 @@ function gpRender(){
 function gpRenderDetail(){
   var host=document.getElementById('gpPane'); if(!host)return;
   var g=gpFind(gpOpen); if(!g){ gpRender(); return; }
+  /* Bank a pending rename BEFORE this render builds anything. The rename field is about to be
+     destroyed by host.innerHTML, and its blur handler fires DURING that assignment — which
+     re-entered this function and threw "The node to be removed is no longer a child of this
+     node" the moment anyone added a member while the name was focused. Detaching the handler
+     and harvesting the value here does both jobs: no re-entry, and nothing typed is lost. */
+  var _oldIn=document.getElementById('gpNameIn');
+  if(_oldIn){
+    _oldIn.onblur=null;
+    if(gpNameEdit){
+      var _g0=gpFind(gpNameEdit), _v=String(_oldIn.value||'').trim().slice(0,40);
+      if(_g0&&_v&&_g0.name!==_v){ _g0.name=_v; gpSave(); }
+      gpNameEdit=null;
+    }
+  }
   var c=gpCompute(g);
   var muted=Object.keys(c.muted).filter(function(k){return c.muted[k];}).length;
 
@@ -18306,27 +19222,48 @@ function gpRenderDetail(){
        +friends.slice(0,12).map(function(f){
          return '<button class="gp-chip" onclick="gpAddMember(\''+g.id+'\',\''+f.id+'\')">'
            +'<span class="gp-av sm" style="background:'+((typeof hmFriendColor==='function')?hmFriendColor(f):'#5E7A8A')+'">'
-           +escAcc(f.ini||'?')+'</span>'+escAcc(f.name)+'</button>';
+           /* friendsList rows carry no .ini, so every chip read "?" while the member tiles
+              beside them showed real initials. Same helper both places. */
+           +escAcc(f.ini||((typeof initials==='function')?initials(f.name):'')||'?')+'</span>'+escAcc(f.name)+'</button>';
        }).join('')+'</div></div>')
     : '<div class="gp-add"><div class="gp-add-l">Everyone you’re friends with is already in.</div></div>';
 
+  /* The name was a live text input sitting in the toolbar, so a group called Buildo read as
+     something half-typed rather than something named — and every keystroke wrote to storage.
+     It is a heading now; renaming is a deliberate act behind the pencil. (Tate, 2026-08-26.) */
+  var editing=(gpNameEdit===g.id);
+  var title=editing
+    ? ('<input class="gp-nameit" id="gpNameIn" value="'+escAcc(g.name)+'" maxlength="40" aria-label="Group name"'
+       +' onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur();}'
+       +' else if(event.key===\'Escape\'){gpCancelName(event);}"'
+       +' onblur="gpCommitName(\''+g.id+'\',this.value)">')
+    : ('<h2 class="gp-title">'+escAcc(g.name)+'</h2>'
+       +'<button class="gp-edit" onclick="gpEditName(\''+g.id+'\',event)" aria-label="Rename this group" title="Rename">'
+       +'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true">'
+       +'<path d="M4 20h4l10-10-4-4L4 16v4z" stroke-linejoin="round"/><path d="M13.5 6.5l4 4" stroke-linecap="round"/>'
+       +'</svg></button>');
   host.innerHTML='<div class="fr-section gp-detail">'
-    +'<div class="gp-head"><button class="gp-back" onclick="gpBack()">← Groups</button>'
-    +'<input class="gp-name" value="'+escAcc(g.name)+'" maxlength="40" oninput="gpRename(\''+g.id+'\',this.value)" aria-label="Group name">'
-    +'<button class="gp-del" onclick="gpDelete(\''+g.id+'\')" title="Delete this group">Delete</button></div>'
+    +'<div class="gp-bar"><button class="gp-back" onclick="gpBack()">← Groups</button>'
+      +'<button class="gp-del" onclick="gpAskDeleteGroup(\''+g.id+'\',event)" title="Delete this group">Delete</button></div>'
+    +'<div class="gp-head'+(editing?' editing':'')+'">'+title+'</div>'
+    +(_gpDelAsk===g.id?('<div class="gp-delask" role="alertdialog">'
+        +'<div class="gp-delask-q">Delete <b>'+escAcc(g.name)+'</b>? This removes it for everyone in it.</div>'
+        +'<div class="gp-delask-b"><button class="gp-delask-no" onclick="gpCancelDeleteGroup(event)">Keep it</button>'
+        +'<button class="gp-delask-yes" onclick="gpDelete(\''+g.id+'\')">Delete group</button></div></div>'):'')
 
     /* Grid first, members beside it — Tate, 2026-08-25. */
     +'<div class="gp-split">'
       +'<div class="gp-gridwrap">'
-        +'<div class="gp-daytabs" id="gpDayTabs">'+GP_DAYS.map(function(d,i){
-            return '<button class="'+(i===(g._day||0)?'on':'')+'" onclick="gpSetDay(\''+g.id+'\','+i+')">'+GP_DAYLBL[i]+'</button>';
-          }).join('')+'<button class="'+((g._day==null||g._day===-1)?'on':'')+'" onclick="gpSetDay(\''+g.id+'\',-1)">All</button></div>'
         +gpGrid(g,c,(g._day!=null&&g._day>=0)?g._day:null)
         +'<div class="gp-key"><span class="gp-sw"></span>'+(c.active.length?('all '+c.active.length+' free'):'nobody active')+'</div>'
       +'</div>'
+      /* Add-a-friend sits directly under the members it adds to (Tate, 2026-08-26). It used to
+         be the last thing on the page, below the free-time list — so growing the group meant
+         scrolling past the answer to reach the control that changes who the answer is about. */
       +'<div class="gp-side"><div class="gp-side-l">Members'+(muted?(' · '+muted+' muted'):'')+'</div>'
         +mem
         +(muted?('<button class="gp-unmute" onclick="gpClearMutes(\''+g.id+'\',event)">Unmute everyone</button>'):'')
+        +addRow
         +'<div class="gp-hint">Tap a name to mute them and see what opens up without them.</div>'
       +'</div>'
     +'</div>'
@@ -18338,10 +19275,26 @@ function gpRenderDetail(){
     +'<div class="gp-times-l">'+gpTimesLabel(c)+'</div>'
     +'<div class="gp-times">'+gpTimes(g,c)+'</div>'
     +(unk.length?('<div class="gp-unk">Not counted — no set meeting time: '+escAcc(unk.slice(0,6).join(', '))+'</div>'):'')
-    +addRow
     +'</div>';
 }
 window.gpSetDay=function(id,d){ var g=gpFind(id); if(!g)return; g._day=d; gpRenderDetail(); };
+/* Renaming is a mode, not a permanent state of the toolbar. */
+window.gpEditName=function(id,ev){ if(ev){ev.stopPropagation&&ev.stopPropagation();}
+  gpNameEdit=id; gpRenderDetail();
+  setTimeout(function(){ var i=document.getElementById('gpNameIn'); if(i){i.focus();i.select();} },30); };
+window.gpCommitName=function(id,v){
+  if(gpNameEdit!==id)return;                       // Escape already closed it
+  var g=gpFind(id); if(g){ var nm=String(v||'').trim().slice(0,40); if(nm)g.name=nm; gpSave(); }
+  gpNameEdit=null; gpRenderDetail();
+  try{ if(typeof updateGroupsCount==='function')updateGroupsCount(); }catch(e){} };
+window.gpCancelName=function(ev){ if(ev){ev.stopPropagation&&ev.stopPropagation();}
+  gpNameEdit=null; gpRenderDetail(); };
+/* Deleting a group is not undoable and the button sits in the same bar as "back". Ask. */
+var _gpDelAsk=null;
+window.gpAskDeleteGroup=function(id,ev){ if(ev){ev.stopPropagation&&ev.stopPropagation();}
+  _gpDelAsk=id; gpRenderDetail(); };
+window.gpCancelDeleteGroup=function(ev){ if(ev){ev.stopPropagation&&ev.stopPropagation();}
+  _gpDelAsk=null; gpRenderDetail(); };
 function renderFriends(){
   updateFriendsBadge();
   const signedIn=backendReady()&&!!sbUser;
@@ -18378,7 +19331,7 @@ function renderFriends(){
   if(sugSec)sugSec.style.display=merged.length?'':'none';
   setSecCount('frSugCount',merged.length);
   if(sugOut)sugOut.innerHTML=merged.map(p=>`<div class="fr-card">
-      <div class="ini" style="background:${colorForId(p.id)}">${avaHtml(p.avatar_url,p.name)}</div>
+      <div class="ini" style="background:${colorForId(p.id)}">${avaHtml(frAvatarFor(p),p.name)}</div>
       <div class="fr-main"><h4>${escapeHtml(p.name)}</h4><div class="fr-reason">${escapeHtml(p.reason)}</div></div>
       <button class="btn primary fr-add" onclick="sendFriendRequest('${p.id}')">Add</button>
       <button class="fr-dismiss" title="Don't suggest ${escAcc(p.name)} again" onclick="dismissSuggestion('${p.id}',this)">&times;</button>
@@ -18387,7 +19340,7 @@ function renderFriends(){
   const matSec=document.getElementById('frMatchesSec'),matOut=document.getElementById('frMatchesOut');
   if(matSec)matSec.style.display=contactMatches.length?'':'none';
   if(matOut)matOut.innerHTML=contactMatches.map(p=>`<div class="fr-card">
-      <div class="ini" style="background:${colorForId(p.id)}">${initials(p.display_name||'?')}</div>
+      <div class="ini" style="background:${colorForId(p.id)}">${avaHtml(frAvatarFor(p),p.display_name||'?')}</div>
       <div class="fr-main"><h4>${escapeHtml(p.display_name||'Classmate')}<span class="fr-src contacts">Contacts</span></h4>${p.instagram_handle?`<div class="fr-mut">@${escapeHtml(p.instagram_handle)}</div>`:''}</div>
       <button class="btn primary fr-add" onclick="sendFriendRequest('${p.id}')">Send request</button>
     </div>`).join('');
@@ -18882,15 +19835,122 @@ function tookLabel(t){return `${t.term} ${t.year}`;}
 /* addByHandle() lived here. Its find_profile_by_handle lookup now runs inside searchPeople(),
    so one field covers names, Cal Poly emails and Instagram handles. */
 
+/* ---- Who this client already knows ---------------------------------------------------------
+   Every person already loaded here — friends, both directions of pending requests, contact
+   matches, classmate suggestions. Searching this costs nothing and answers instantly, which is
+   the difference between a search box and autofill. (Tate, 2026-08-26: "it should auto fill
+   when i type a name ... so you dont just need the full email or full name.")
+   The server RPC still runs, because most of Cal Poly is not in any of these lists — but it
+   runs BEHIND results that are already on screen instead of in front of a blank box. */
+function frPeoplePool(){
+  var out=[],seen={};
+  var push=function(id,name,handle,extra){
+    if(!id||seen[id])return;
+    try{ if(typeof sbUser!=='undefined'&&sbUser&&id===sbUser.id)return; }catch(e){}
+    seen[id]=1;
+    out.push({id:id,display_name:name||'Classmate',instagram_handle:handle||'',
+              edu_email:(extra&&extra.email)||'',username:(extra&&extra.username)||'',
+              /* The photo was dropped right here. Every list this pool draws from carries
+                 avatar_url, and the pool threw it away, so search results showed grey initials
+                 for people whose faces are on screen two inches above in the friends list. */
+              avatar_url:(extra&&extra.avatar)||'',_local:true});
+  };
+  try{ (friendsList||[]).forEach(function(f){ push(f.id,f.name,f.handle,{email:f.email,username:f.username,avatar:f.avatar_url}); }); }catch(e){}
+  try{ (incomingRequests||[]).forEach(function(r){ push(r.from_user,r.name,r.handle,{avatar:r.avatar_url}); }); }catch(e){}
+  try{ (outgoingRequests||[]).forEach(function(r){ push(r.to_user,r.name,r.handle,{avatar:r.avatar_url}); }); }catch(e){}
+  try{ (contactMatches||[]).forEach(function(p){ push(p.id,p.display_name,p.instagram_handle,{email:p.edu_email,username:p.username,avatar:p.avatar_url}); }); }catch(e){}
+  try{ (classmateSuggestions||[]).forEach(function(p){ push(p.id,p.display_name,p.instagram_handle,{email:p.edu_email,username:p.username,avatar:p.avatar_url}); }); }catch(e){}
+  try{ (window.friendSuggestions||[]).forEach(function(p){ push(p.id,p.display_name,p.username,{username:p.username,avatar:p.avatar_url}); }); }catch(e){}
+  return out;
+}
+/* One place that answers "do we have a photo for this person". A server search row may not
+   carry avatar_url — search_people decides its own columns, and this client cannot change
+   what a deployed RPC selects — but the same person is very often already in a list that DOES
+   carry it. Looking sideways costs nothing and is the difference between a face and a letter.
+   Your OWN photo comes from the byte cache, so it paints even offline. */
+function frAvatarFor(p){
+  if(!p)return '';
+  try{ if(typeof sbUser!=='undefined'&&sbUser&&p.id===sbUser.id&&typeof myAvatarUrl==='function'){
+         var mine=myAvatarUrl(); if(mine)return mine; } }catch(e){}
+  if(p.avatar_url)return String(p.avatar_url);
+  var id=p.id; if(!id)return '';
+  var hit='';
+  var scan=function(arr,key){
+    if(hit||!arr)return;
+    try{ for(var i=0;i<arr.length;i++){
+      var x=arr[i]; if(!x)continue;
+      var xid=key?x[key]:x.id;
+      if(xid===id&&x.avatar_url){ hit=String(x.avatar_url); return; }
+    } }catch(e){}
+  };
+  try{ scan(typeof friendsList!=='undefined'?friendsList:null); }catch(e){}
+  try{ scan(typeof FRIENDS!=='undefined'?FRIENDS:null); }catch(e){}
+  try{ scan(typeof incomingRequests!=='undefined'?incomingRequests:null,'from_user'); }catch(e){}
+  try{ scan(typeof outgoingRequests!=='undefined'?outgoingRequests:null,'to_user'); }catch(e){}
+  try{ scan(typeof contactMatches!=='undefined'?contactMatches:null); }catch(e){}
+  try{ scan(typeof classmateSuggestions!=='undefined'?classmateSuggestions:null); }catch(e){}
+  try{ scan(window.friendSuggestions); }catch(e){}
+  return hit;
+}
+window.frAvatarFor=frAvatarFor;
+/* Rank by how the match reads, not just whether it matched: a name that STARTS with what you
+   typed is what you meant; a substring buried in an email is a long shot. */
+function frMatchScore(p,q){
+  var name=String(p.display_name||'').toLowerCase();
+  var handle=String(p.instagram_handle||'').toLowerCase();
+  var email=String(p.edu_email||'').toLowerCase();
+  var user=String(p.username||'').toLowerCase();
+  if(name.indexOf(q)===0)return 100;
+  var words=name.split(/\s+/);
+  for(var i=0;i<words.length;i++){ if(words[i].indexOf(q)===0)return 90-i; }
+  if(handle.indexOf(q)===0||user.indexOf(q)===0)return 80;
+  if(email.indexOf(q)===0)return 70;
+  if(name.indexOf(q)>=0)return 50;
+  if(handle.indexOf(q)>=0||user.indexOf(q)>=0)return 40;
+  if(email.indexOf(q)>=0)return 30;
+  return 0;
+}
+function frLocalHits(q){
+  q=String(q||'').replace(/^@/,'').trim().toLowerCase();
+  if(!q)return [];
+  var scored=[];
+  frPeoplePool().forEach(function(p){
+    var s=frMatchScore(p,q); if(!s)return;
+    /* People you already know come first — you are far likelier to be looking for them. */
+    if(peopleRelState(p.id)==='friends')s+=5;
+    scored.push([s,p]);
+  });
+  scored.sort(function(a,b){ return b[0]-a[0] || String(a[1].display_name||'').localeCompare(String(b[1].display_name||'')); });
+  return scored.slice(0,8).map(function(x){return x[1];});
+}
 /* ===== Find classmates by name or Cal Poly email ===== */
-var _frPeopleT=null;
+var _frPeopleT=null, _frLastQ='';
 function frPeopleTyping(){
   var err=document.getElementById('frPeopleErr'); if(err)err.textContent='';
   clearTimeout(_frPeopleT);
+  var out=document.getElementById('frPeopleOut');
   var v=(document.getElementById('frSearchPeople').value||'').trim();
-  // Debounced live search once they've typed enough to be a real query.
-  if(v.length>=2){ _frPeopleT=setTimeout(searchPeople,320); }
-  else { var out=document.getElementById('frPeopleOut'); if(out)out.innerHTML=''; }
+  if(!v){ if(out)out.innerHTML=''; _frLastQ=''; return; }
+  _frLastQ=v;
+  /* Paint what we already know on the FIRST keystroke. The old rule waited for two characters
+     and then a 320ms timer before anything at all appeared, so typing a friend's name felt
+     like it needed the whole thing. */
+  var local=frLocalHits(v);
+  if(out)out.innerHTML=local.length
+    ? local.map(peopleRowHtml).join('')
+    : '<div class="fr-people-empty">Searching…</div>';
+  /* The server still runs — most of Cal Poly is in none of the lists this client holds — but
+     it now arrives behind results instead of in front of a blank box. */
+  if(v.length>=2)_frPeopleT=setTimeout(searchPeople,200);
+}
+/* Enter opens the first result rather than re-running the search that already ran. */
+function frPeopleEnter(ev){
+  ev.preventDefault();
+  var first=document.querySelector('#frPeopleOut .fr-person');
+  if(first&&first.getAttribute('data-open')==='1'){ first.click(); return; }
+  var add=document.querySelector('#frPeopleOut .fr-padd');
+  if(add){ add.click(); return; }
+  searchPeople();
 }
 async function searchPeople(){
   var err=document.getElementById('frPeopleErr'), out=document.getElementById('frPeopleOut');
@@ -18898,9 +19958,27 @@ async function searchPeople(){
   if(!err||!out||!inp)return;
   err.textContent='';
   var q=(inp.value||'').trim();
-  if(q.length<2){err.textContent='Type at least 2 characters.';out.innerHTML='';return;}
-  if(!backendReady()||!sbUser){err.textContent='Sign in first to search classmates.';out.innerHTML='';return;}
-  out.innerHTML='<div class="fr-people-empty">Searching…</div>';
+  /* Whatever this client already knows is ALREADY on screen (frPeopleTyping paints it on the
+     first keystroke). Every exit below has to leave those rows alone: wiping a friend you can
+     see in your own list because the network is unhappy is worse than not searching at all —
+     and that is exactly what this function used to do, error text and empty box together. */
+  var local=frLocalHits(q);
+  var keep=function(msg){
+    /* With rows on screen the message is an aside, not a failure — red would say the opposite
+       of what the list underneath is showing. */
+    err.className=local.length?'rate-err fr-people-hint':'rate-err';
+    out.innerHTML=local.length?local.map(peopleRowHtml).join(''):'';
+    err.textContent=msg||'';
+  };
+  if(q.length<2){ keep(local.length?'':'Type at least 2 characters.'); return; }
+  if(!backendReady()||!sbUser){
+    /* Not a failure — the people below are real, we just can't reach the rest of Cal Poly. */
+    keep(local.length?'Sign in to search everyone at Cal Poly, not just people you know.'
+                     :'Sign in first to search classmates.');
+    return;
+  }
+  err.className='rate-err';
+  if(!local.length)out.innerHTML='<div class="fr-people-empty">Searching…</div>';
   try{
     /* One field, three ways to find someone. There used to be a second input directly below
        this one that did nothing but look people up by Instagram handle — two adjacent
@@ -18919,11 +19997,18 @@ async function searchPeople(){
         seen[pp.id]=1; rows.push(pp);
       });
     });
-    if(!rows.length){ out.innerHTML='<div class="fr-people-empty">No one matching “'+escapeHtml(q)+'” has joined Professify yet.</div>'; return; }
-    out.innerHTML=rows.map(peopleRowHtml).join('');
+    /* Someone already on this client must not vanish because the server didn't return them —
+       a friend you can see in your own list disappearing mid-search reads as a bug. Local hits
+       lead, server hits fill in behind. */
+    var merged=[];
+    frLocalHits(q).forEach(function(p){ if(!seen[p.id]){ seen[p.id]=1; merged.push(p); } });
+    merged=merged.concat(rows);
+    if(!merged.length){ out.innerHTML='<div class="fr-people-empty">No one matching “'+escapeHtml(q)+'” has joined Professify yet.</div>'; return; }
+    if((inp.value||'').trim()!==q)return;      // they kept typing; a stale answer is worse than none
+    out.innerHTML=merged.map(peopleRowHtml).join('');
   }catch(e){
-    out.innerHTML='';
-    err.textContent=(e&&e.message)||'Search failed. Try again.';
+    /* Same rule on the failure path: the local hits stay. */
+    keep((e&&e.message)||'Couldn’t reach the classmate search — these are people already on this device.');
   }
 }
 function peopleRelState(id){
@@ -18940,10 +20025,24 @@ function peopleRowHtml(p){
   if(st==='friends')right='<span class="fr-pstate">✓ Friends</span>';
   else if(st==='sent')right='<span class="fr-pstate">Request sent</span>';
   else if(st==='incoming')right='<span class="fr-pstate">Wants to add you</span>';
-  else right='<button class="btn primary fr-padd" onclick="addPerson(\''+p.id+'\',this)">Add</button>';
-  return '<div class="fr-person">'
-    +'<div class="fr-av" style="background:'+colorForId(p.id)+'">'+escapeHtml(initials(p.display_name||'C'))+'</div>'
-    +'<div class="fr-pmain"><div class="fr-pname">'+name+'</div>'+(handle?'<div class="fr-pmut">'+handle+'</div>':'')+'</div>'
+  else right='<button class="btn primary fr-padd" onclick="event.stopPropagation();addPerson(\''+p.id+'\',this)">Add</button>';
+  /* A friend's row opens their profile — you searched for a person, so the person is the
+     result. A row for someone who is NOT yet a friend is deliberately not clickable: their week
+     is not ours to show until they accept, and a tap that opened an empty profile would be
+     both a dead end and a promise we don't keep. */
+  var isFriend=(st==='friends');
+  var sub=handle||(isFriend?'Tap to see their schedule':'');
+  return '<div class="fr-person'+(isFriend?' fr-p-open':'')+'"'
+    +(isFriend?(' data-open="1" role="button" tabindex="0"'
+      +' onclick="openFriendProfile(\''+escAcc(p.id)+'\')"'
+      +' onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openFriendProfile(\''+escAcc(p.id)+'\');}"'
+      +' title="Open '+escAcc(p.display_name||'their')+'\u2019s profile"'):'')+'>'
+    /* avaHtml falls back to initials on a missing URL and again on a 404, so a broken photo
+       degrades to exactly what this row used to show — never a broken-image icon. */
+    +'<div class="fr-av" style="background:'+colorForId(p.id)+'">'
+      +((typeof avaHtml==='function')?avaHtml(frAvatarFor(p),p.display_name||'C')
+                                     :escapeHtml(initials(p.display_name||'C')))+'</div>'
+    +'<div class="fr-pmain"><div class="fr-pname">'+name+'</div>'+(sub?'<div class="fr-pmut">'+escapeHtml(sub)+'</div>':'')+'</div>'
     +right+'</div>';
 }
 async function addPerson(id,btn){
@@ -19242,6 +20341,16 @@ function tiScore(rows){
    upscale leads, and the column split (a Degree Progress Report prints two) comes after. */
 window.tiReadOne=function(f,l){return tiReadOne(f,l);};
 async function tiReadOne(file,label){
+  /* PDF short-circuit. Both callers (the transcript importer and the per-term planner import)
+     come through here, so routing it once covers both — and a PDF's text layer is exact, so
+     the whole multi-pass OCR tournament below has nothing to choose between. */
+  if(typeof isPdfFile==='function'&&isPdfFile(file)){
+    try{
+      var pt=await pdfToText(file,function(p,n){ tiRender('busy',label+(n>1?(' — page '+p+' of '+n):'')+'…'); });
+      var prows=[]; try{ prows=tiParse(pt); }catch(_p){ prows=[]; }
+      return {text:pt,score:tiScore(prows),rows:prows,pdf:true,empty:!String(pt||'').trim()};
+    }catch(e){ console.error('[professify] pdf read failed:',e); return {text:'',score:-1,pdf:true}; }
+  }
   var loaded=null;
   try{ loaded=await schedLoadImage(file); }catch(e){ return {text:'',score:-1}; }
   var im=loaded.im, rawUrl=loaded.url;
@@ -19297,16 +20406,32 @@ window.handleTranscriptImport=async function(files){
   if(!list.length)return;
   if(typeof sbUser==='undefined'||!sbUser){try{frToast('Log in first — your past classes save to your account.');}catch(e){}try{onAuthBtn();}catch(e){}return;}
   document.getElementById('tiBack').classList.add('open');document.body.style.overflow='hidden';
-  tiRender('busy','Loading text recognition…');
-  try{ await loadOcr(); }catch(e){ tiRender('done','Text recognition didn’t load — check your connection and try again.'); return; }
+  /* Only pay for Tesseract if something here is actually an image. A PDF-only upload used to
+     sit on "Loading text recognition…" for several seconds downloading a 3MB OCR engine it was
+     never going to use — and failed outright on a flaky connection, for no reason at all. */
+  var anyImg=list.some(function(f){ return !(typeof isPdfFile==='function'&&isPdfFile(f)); });
+  if(anyImg){
+    tiRender('busy','Loading text recognition…');
+    try{ await loadOcr(); }catch(e){ tiRender('done','Text recognition didn’t load — check your connection and try again.'); return; }
+  }
   var allText='', n=Math.min(list.length,4);
+  var allPdf=!anyImg, pdfEmpty=0;
   for(var fi=0; fi<n; fi++){
     var lbl='Reading your transcript'+(n>1?' ('+(fi+1)+'/'+n+')':'');
     var one=await tiReadOne(list[fi],lbl);
     allText+='\n'+(one.text||'');
+    if(one&&one.empty)pdfEmpty++;
   }
   tiRows=tiParse(allText);
-  tiRender('done',tiRows.length?('Found '+tiRows.length+' class'+(tiRows.length===1?'':'es')+'. OCR is approximate — uncheck anything wrong, fix terms if needed.'):'');
+  /* "OCR is approximate" is a warning we earned on pixels. It is simply untrue of a PDF's text
+     layer, and telling someone their exact data might be wrong makes them re-check all of it
+     for nothing. Say which one they got. */
+  var note=allPdf
+    ? 'Read straight from the PDF text, so these are exact — uncheck anything you don’t want, fix terms if needed.'
+    : 'OCR is approximate — uncheck anything wrong, fix terms if needed.';
+  tiRender('done',tiRows.length
+    ? ('Found '+tiRows.length+' class'+(tiRows.length===1?'':'es')+'. '+note)
+    : (pdfEmpty?'That PDF has no text in it — it looks scanned. Screenshot it instead and upload that.':''));
 };
 /* Paste path, matching the schedule importer's: a Degree Progress Report or transcript
    selected and copied in a browser gives PERFECT text, with nothing guessed from pixels.
@@ -19524,6 +20649,169 @@ window.tiParse=function(text){
   });
   return out.slice(0,40);
 };
+/* ============ LOG A WHOLE TERM AT ONCE =======================================================
+   Tate, 2026-08-27: "you should be able to upload your past classes via image or drop or fill
+   out the planner, at every quarter or semester, because thats when people tend to have their
+   classes in groupings thats easy to upload."
+
+   The transcript importer already reads a whole transcript and has to GUESS which term each
+   course belongs to from headers OCR may have mangled. Doing it a term at a time removes that
+   guess entirely: the student names the term first, so every code found is stamped with a fact
+   rather than an inference. It also matches what people actually have — one screenshot per
+   quarter, which is how a Cal Poly schedule is laid out.
+
+   Three doors, because students arrive with different things: a screenshot, a file dragged onto
+   the page, or text they can select and copy (which is always more accurate than pixels). */
+/* On window because this block is not top-level scope — the transcript importer beside it uses
+   window.* for the same reason. */
+var ptTerm=null, ptRows=[], ptBusy=false;
+function ptSync(){ try{ window.ptTerm=ptTerm; window.ptRows=ptRows; }catch(e){} }
+ptSync();
+function ptEnsure(){
+  var back=document.getElementById('ptBack');
+  if(back)return back;
+  back=document.createElement('div'); back.id='ptBack'; back.className='mback';
+  back.innerHTML='<div class="modal" id="ptModal"></div>';
+  back.addEventListener('mousedown',function(e){ if(e.target===back)closeTermImport(); });
+  document.body.appendChild(back);
+  return back;
+}
+window.openTermImport=function(term,year){
+  if(typeof sbUser==='undefined'||!sbUser){
+    try{frToast('Log in first — past classes save to your account.');}catch(e){}
+    try{onAuthBtn();}catch(e){} return;
+  }
+  var t=(term&&year)?{term:term,year:+year}:termLastDone();
+  ptTerm=t; ptRows=[]; ptBusy=false; ptSync();
+  ptEnsure().classList.add('open'); document.body.style.overflow='hidden';
+  renderTermImport();
+};
+window.closeTermImport=function(){
+  var b=document.getElementById('ptBack'); if(b)b.classList.remove('open');
+  document.body.style.overflow=''; ptRows=[]; ptBusy=false; ptSync();
+};
+window.ptPickTerm=function(term,year){ ptTerm={term:term,year:+year}; ptSync(); renderTermImport(); };
+/* Everything found gets stamped with the term the student chose — no header guessing. */
+function ptParse(text){
+  var out=[],seen={};
+  var have={}; try{ (typeof completedCodes==='function'?completedCodes():[]).forEach(function(c){have[c]=1;}); }catch(e){}
+  String(text||'').split(/\n+/).forEach(function(ln){
+    var codes=(typeof extractCourseCodes==='function')?extractCourseCodes(ln):[];
+    codes.forEach(function(code){
+      var cur=(typeof canonCode==='function')?(canonCode(code)||code):code;
+      if(seen[cur])return; seen[cur]=1;
+      var ci=(typeof classInfo==='function')?classInfo(cur):null;
+      var named=!!(ci&&ci.name)||!!(typeof COURSE_NAME!=='undefined'&&COURSE_NAME[cur]);
+      out.push({code:code,cur:cur,name:(ci&&ci.name)||((typeof COURSE_NAME!=='undefined'&&COURSE_NAME[cur])||''),
+                known:named||(cur!==code),already:!!have[cur],pick:!have[cur]});
+    });
+  });
+  return out.slice(0,20);
+}
+window.ptPasteText=function(){
+  var ta=document.getElementById('ptPaste');
+  var txt=(ta&&ta.value||'').trim();
+  if(!txt){ renderTermImport('Paste or type the class codes for this term first.'); return; }
+  ptRows=ptParse(txt); ptSync();
+  renderTermImport(ptRows.length?'':'No course codes in that — they look like BUS 3438 or BUS 343.');
+};
+window.ptFiles=async function(files){
+  var list=[].slice.call(files||[]); if(!list.length)return;
+  ptBusy=true;
+  var anyImg=list.some(function(f){ return !(typeof isPdfFile==='function'&&isPdfFile(f)); });
+  if(anyImg){                                   // see the note in handleTranscriptImport
+    renderTermImport('Loading text recognition…');
+    try{ await loadOcr(); }catch(e){ ptBusy=false; renderTermImport('Text recognition didn’t load — paste the text instead.'); return; }
+  }
+  var all='',sawPdf=false,pdfEmpty=0;
+  for(var i=0;i<Math.min(list.length,3);i++){
+    var isPdf=(typeof isPdfFile==='function'&&isPdfFile(list[i]));
+    if(isPdf)sawPdf=true;
+    renderTermImport('Reading your '+(isPdf?'PDF':'screenshot')+(list.length>1?(' ('+(i+1)+'/'+Math.min(list.length,3)+')'):'')+'…');
+    try{ var one=await tiReadOne(list[i],'Reading'); all+='\n'+((one&&one.text)||''); if(one&&one.empty)pdfEmpty++; }catch(e){}
+  }
+  ptBusy=false; ptRows=ptParse(all); ptSync();
+  renderTermImport(ptRows.length?''
+    :(pdfEmpty?'That PDF has no text in it — it looks scanned. Screenshot it instead and upload that.'
+      :(sawPdf?'No class codes in that PDF. Try pasting the text instead.'
+              :'Couldn’t read any class codes. Try a full-size screenshot, or paste the text.')));
+};
+window.ptToggle=function(i){ if(ptRows[i])ptRows[i].pick=!ptRows[i].pick; ptSync(); renderTermImport(); };
+window.ptSave=async function(){
+  var picks=ptRows.filter(function(r){return r.pick&&!r.already;});
+  if(!picks.length){ try{frToast('Nothing selected.');}catch(e){} return; }
+  if(typeof sb==='undefined'||!sb||!sbUser){ try{frToast('Log in first.');}catch(e){} return; }
+  try{
+    var seen={},rows=[];
+    picks.forEach(function(r){
+      var k=r.cur+'|'+ptTerm.term+'|'+ptTerm.year; if(seen[k])return; seen[k]=1;
+      rows.push({user_id:sbUser.id,code:r.cur,term:ptTerm.term,year:ptTerm.year,professor:null});
+    });
+    var res=await sb.from('class_history').upsert(rows);
+    if(res.error)throw res.error;
+    closeTermImport();
+    if(typeof loadMyHistory==='function')await loadMyHistory();
+    try{ if(window.schMarkFromHistory)window.schMarkFromHistory(); }catch(e){}
+    try{ if(typeof pqRerender==='function')pqRerender(); }catch(e){}
+    try{ if(typeof updateWatchTabCounts==='function')updateWatchTabCounts(); }catch(e){}
+    try{frToast(rows.length+' class'+(rows.length===1?'':'es')+' logged to '+ptTerm.term+' '+ptTerm.year+' ✓');}catch(e){}
+  }catch(e){ try{frToast('Couldn’t save — '+((e&&e.message)||'try again.'));}catch(_e){} }
+};
+function renderTermImport(msg){
+  var el=document.getElementById('ptModal'); if(!el||!ptTerm)return;
+  var terms=termsBack(14);
+  var chips=terms.map(function(t){
+    var on=(t.term===ptTerm.term&&t.year===ptTerm.year);
+    return '<button type="button" class="pt-chip'+(on?' on':'')+'" onclick="ptPickTerm(\''+t.term+'\','+t.year+')">'
+      +escapeHtml(t.term+' '+t.year)+'<span class="pt-sys">'+termSystemWord(t)+'</span></button>';
+  }).join('');
+  var picked=ptRows.filter(function(r){return r.pick&&!r.already;}).length;
+  var list=ptRows.length
+    ? '<div class="pt-list">'+ptRows.map(function(r,i){
+        return '<label class="pt-row'+(r.already?' done':'')+'">'
+          +'<input type="checkbox" '+(r.pick&&!r.already?'checked':'')+(r.already?' disabled':'')
+          +' onchange="ptToggle('+i+')">'
+          +'<span class="pt-code">'+escapeHtml(r.cur)+'</span>'
+          +'<span class="pt-name">'+escapeHtml(r.name||(r.known?'':'not in the catalog'))+'</span>'
+          +(r.already?'<span class="pt-al">already logged</span>':'')
+        +'</label>';
+      }).join('')+'</div>'
+    : '';
+  el.innerHTML='<div class="rate-wrap"><button class="mclose" onclick="closeTermImport()">&times;</button>'
+    +'<div class="rate-step" style="text-align:left">'
+    +'<div class="rate-kicker">One term at a time</div>'
+    +'<h2 class="rate-h" style="margin-bottom:4px">Log '+escapeHtml(ptTerm.term+' '+ptTerm.year)+'</h2>'
+    +'<p class="fr-mut" style="margin:0 0 14px">Cal&nbsp;Poly ran <b>quarters</b> through Summer 2026 and <b>semesters</b> from Fall 2026 — pick the term the way you took it.</p>'
+    +'<div class="pt-chips">'+chips+'</div>'
+    +'<div class="pt-drop" id="ptDrop" tabindex="0" role="button"'
+      +' onclick="document.getElementById(\'ptFile\').click()"'
+      +' onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();document.getElementById(\'ptFile\').click();}">'
+      +'<b>Drop a PDF or screenshot of that term</b>'
+      +'<span>or click to choose one — it never leaves your browser</span></div>'
+    +'<input type="file" id="ptFile" accept="image/*,application/pdf,.pdf" multiple hidden onchange="ptFiles([...this.files]);this.value=\'\'">'
+    +'<div class="pt-or">or type / paste the codes</div>'
+    +'<textarea id="ptPaste" class="pt-ta" rows="3" placeholder="BUS 3438, BUS 3431, ECON 3021"></textarea>'
+    +'<button type="button" class="pt-read" onclick="ptPasteText()">Read these</button>'
+    +(msg?'<div class="pt-msg">'+escapeHtml(msg)+'</div>':'')
+    +list
+    +'<div class="si-actions" style="margin-top:16px">'
+      +'<span class="fr-mut" style="font-size:12px">'+(picked?(picked+' selected'):'Nothing selected yet')+'</span>'
+      +'<button class="btn primary" onclick="ptSave()"'+(picked?'':' disabled')+'>Log to '+escapeHtml(ptTerm.term+' '+ptTerm.year)+'</button>'
+    +'</div></div></div>';
+  var dz=document.getElementById('ptDrop');
+  if(dz&&!dz._wired){
+    dz._wired=1;
+    ['dragenter','dragover'].forEach(function(ev){ dz.addEventListener(ev,function(e){
+      e.preventDefault(); e.stopPropagation(); dz.classList.add('over'); }); });
+    ['dragleave','drop'].forEach(function(ev){ dz.addEventListener(ev,function(e){
+      e.preventDefault(); e.stopPropagation(); dz.classList.remove('over'); }); });
+    dz.addEventListener('drop',function(e){
+      var f=(e.dataTransfer&&e.dataTransfer.files)?[].slice.call(e.dataTransfer.files):[];
+      if(f.length)ptFiles(f);
+    });
+  }
+}
+try{if(typeof A11Y_MODALS!=='undefined')A11Y_MODALS.push({id:'ptBack',close:'closeTermImport'});}catch(e){}
 window.confirmTranscriptImport=async function(){
   var picks=tiRows.filter(function(r){return r.pick&&!r.already;});
   if(!picks.length){try{frToast('Nothing selected.');}catch(e){}return;}
@@ -20825,16 +22113,33 @@ function hmClassChips(codes){
 function hmFriendMeets(f){
   var meets=[],unknown=[],seen={};
   var byCode={},rowOf={};
+  /* ---- EVERY section they're in, not one per course -----------------------------------------
+     This kept exactly one meeting per COURSE CODE: the first crn, the first row, and a
+     seen[code] guard that skipped the rest. A friend in two sections of one course — a lecture
+     plus its activity, or an enrolled section plus a waitlisted one — had all but one silently
+     dropped from every week anyone else saw. Reported live 2026-08-26: Tate's own schedule shows
+     six sections; the card his friend was looking at showed four, with the enrolled BUS 3431
+     replaced by the waitlisted one and UNIV 4401 gone entirely.
+     Their own my_sections rows are the truth, so those are emitted FIRST, one meeting each. The
+     per-course fallback below then only runs for courses no row covered. */
+  var codesDone={};
   ((f&&Array.isArray(f.secs))?f.secs:[]).forEach(function(sr){
     if(!sr||!sr.code)return;
     if(sr.crn&&byCode[sr.code]==null)byCode[sr.code]=String(sr.crn);
-    /* A my_sections row carries the friend's OWN days and instructor — the exact section,
-       not the course's first one. Prefer it over any lookup. */
     if(rowOf[sr.code]==null&&(sr.days||sr.section||sr.instructor))rowOf[sr.code]=sr;
+    var mm=(sr.days&&typeof parseMeet==='function')?parseMeet(sr.days):null;
+    if(!mm)return;
+    var wlp0=null; try{ if(f&&f.wl&&typeof f.wl==='object'&&f.wl[sr.code]!=null)wlp0=f.wl[sr.code]; }catch(_w){}
+    meets.push({code:sr.code,meet:mm,assumed:false,section:sr.section||'',
+                crn:String(sr.crn||''),instructor:sr.instructor||'',
+                wl:(sr.status==='waitlisted')||(wlp0!=null&&!sr.status),
+                wlPos:(sr.status==='waitlisted')?(sr.wlPos||wlp0||null):wlp0});
+    codesDone[sr.code]=1;
   });
   var codes=(f&&Array.isArray(f.classes)&&f.classes.length)?f.classes.slice():Object.keys(byCode);
   codes.forEach(function(code){
     if(!code||seen[code])return; seen[code]=1;
+    if(codesDone[code])return;            // their own rows already spoke for this course
     var sec=null;
     /* Best case: they shared the class number, so we know exactly which section. */
     if(byCode[code]&&typeof secByCrn==='function')sec=secByCrn(code,byCode[code]);
@@ -21342,7 +22647,9 @@ function hmMiniCalHtml(){
   // conflict show (not just the first). Overlaps split into side-by-side lanes below.
   var meetsAll=(typeof myClassMeets==='function')?myClassMeets(codes):[];
   var meets=meetsAll.filter(function(m){return m.meet&&m.meet.days&&m.meet.start!=null&&m.meet.end!=null;});
-  var head='<div class="hm-ct">My calendar<button class="hm-more" onclick="event.stopPropagation();hmOpenCal()">Open →</button></div>';
+  /* "My schedule", not "My calendar" (Tate, 2026-08-26). The card shows the sections Cal Poly
+     has this student in — that is a schedule. A calendar is the grid it happens to be drawn on. */
+  var head='<div class="hm-ct">My schedule<button class="hm-more" onclick="event.stopPropagation();hmOpenCal()">Open →</button></div>';
   /* Sharing a week is the thing people actually do with a week. It sits under the calendar
      rather than in a menu, and doubles as the re-import path now that My Classes' header
      doesn't carry one. */
