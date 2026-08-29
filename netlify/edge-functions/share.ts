@@ -55,7 +55,11 @@ export default async (request: Request): Promise<Response> => {
      than forwarding the whole string — means a crafted link cannot use this page to inject
      arbitrary parameters into the app. */
   const onward = new URLSearchParams();
-  for (const k of ["sched", "nm", "add"]) {
+  /* `i` is forwarded now: since 2026-08-29 the shared week lives in the bucket under the same id
+     as this picture, rather than base64'd into a ~900-character ?sched= (which is what Tate
+     screenshotted). The app reads ?i= and fetches it. ?sched= stays in this list because every
+     link sent before that date still carries its own payload and must keep opening. */
+  for (const k of ["i", "sched", "nm", "add"]) {
     const v = url.searchParams.get(k);
     if (v) onward.set(k, v);
   }
