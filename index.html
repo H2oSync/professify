@@ -1760,6 +1760,11 @@ if(typeof qrcode==="function")window.qrcode=qrcode;
              what day it is) in two columns. They're one card on the rail now — see the
              Today card in hmRenderRailR(). -->
         <div id="hmAlert"></div>
+        <!-- Your current professors. Lives here in the DOM, but hmPlaceCurProf() moves it into
+             the right rail under "Rate a professor" at >=1140px (Tate, 2026-08-28) and brings it
+             back here below that, where the rail does not exist. On a phone the stylesheet orders
+             it below the friends strip so Tate's Aug 2026 doctrine still holds. -->
+        <div id="hmCurProf"></div>
         <!-- On phones the right rail is display:none and this feed led the page, so a
              signed-in student saw an empty social stream above the fold and their actual
              schedule nowhere. hmPlaceRail() moves the rail into this slot below 1140px and
@@ -1869,6 +1874,14 @@ if(typeof qrcode==="function")window.qrcode=qrcode;
   .hm-center{display:flex;flex-direction:column}
   .hm-center > #hmAlert{order:0}
   .hm-center > #hmStripWrap{order:1}
+  /* Your current professors is NOT on phone Home (Tate, 2026-08-29). It sat second, under the
+     friends strip, and with six current rows plus the past-professors button it filled the whole
+     screen: the feed this app opens for was pushed off the bottom by a card about classes the
+     student is already in. Below this breakpoint hmPlaceCurProf() moves the single node into
+     Schedule → My Classes instead, under the classes those professors teach. This rule is the
+     belt to that braces: if the move ever fails (no Schedule pane in the DOM), the card stays
+     hidden here rather than reappearing where it was taken from. */
+  .hm-center > #hmCurProf{display:none}
   .hm-center > #hmQuadWrap{order:2}
   .hm-center > #hmRailSlot{order:3}
   /* Phone Home ENDS at "You're all caught up" (Tate, 2026-08-25). The relocated rail put the
@@ -1878,10 +1891,10 @@ if(typeof qrcode==="function")window.qrcode=qrcode;
      nothing becomes unreachable; it just stops being tacked onto the end of a finished feed.
      Desktop keeps the rail in its own column, untouched. */
   .hm-center > #hmRailSlot{display:none}
-  /* Highest / Lowest rated are a browse surface, not a check-in one. They stay on desktop
-     where the right rail is free real estate beside the feed; on a phone they were 60% of
-     the first screen and neither is about you or anyone you know. Explore is one tap away
-     in the bottom bar, which is where browsing belongs. */
+  /* hm-desk hides a browse surface on a check-in screen. It carried the Highest / Lowest rated
+     cards until 2026-08-28; those are gone, replaced by "Your current professors", which is
+     about the student's own week and therefore deliberately does NOT carry this class. The rule
+     stays for whatever browse surface lands on Home next. */
   .hm-desk{display:none!important}
 }
 /* Phone: the mini calendar has to survive ~390px. Trim the gutter and the type rather than
@@ -2255,6 +2268,126 @@ html[data-auth="in"] #schedGuestNote{display:none!important}
 .pr-st svg{width:15px;height:14.25px;display:block}
 .pr-st .pr-b svg path{fill:rgba(var(--fg-rgb),.20)}
 .pr-st .pr-f svg path{fill:#E8B93B}
+
+/* ---- Your current professors --------------------------------------------------------------
+   Same .hm-prow component as the cards it replaced, tightened: this is a list you scan for a
+   name, not a leaderboard you read. */
+.cp-card .cp-ct{font-size:19px;font-weight:600;letter-spacing:-.01em;text-transform:none;
+  color:var(--text);padding-bottom:13px;border-bottom:1px solid var(--line);margin-bottom:2px}
+.cp-row{padding:10px 0;gap:12px}
+.cp-row .pr-av{width:46px;height:46px}
+.cp-row .pr-nm{line-height:1.2}
+.cp-row .pr-dept{margin-top:1px}
+.cp-row .pr-stars{margin-top:3px}
+.cp-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.cp-codes{font-family:var(--mono);font-size:11.5px;letter-spacing:-.01em;color:var(--text-2);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Gold, the same gold a waitlisted section wears on every calendar in the app. Not knowing who
+   teaches a class you are fighting to get into is exactly the anxiety this card answers. */
+.cp-wl{flex:none;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--mid);border:1px solid currentColor;border-radius:999px;padding:1px 7px;line-height:1.5}
+.cp-none{flex:none;font-size:12px;color:var(--faint)}
+/* Five grey stars, not an empty gap — see hmCpGreyStars(). */
+.cp-grey .pr-st .pr-b svg path{fill:rgba(var(--fg-rgb),.14)}
+.cp-rate{margin-left:auto;flex:none;border:1px solid var(--accent);background:transparent;
+  color:var(--accent);border-radius:999px;padding:5px 14px;font:700 12.5px/1.2 inherit;cursor:pointer}
+.cp-rate:hover{background:rgba(var(--accent-rgb),.10)}
+.cp-empty h3{margin:0 0 6px;font-size:19px;font-weight:650;letter-spacing:-.015em;color:var(--text)}
+.cp-empty p{margin:0 0 14px;font-size:13.5px;color:var(--muted);line-height:1.5}
+/* The stars are bigger here than on the old cards — 19x18, the SVG's own 20x19 ratio, because
+   hmStarsHtml clips the gold copy to a percentage WIDTH and distorting the ratio distorts the
+   fraction the partial star is meant to be. */
+.cp-row .pr-st{width:19px;height:18px}
+.cp-row .pr-st svg{width:19px;height:18px}
+/* Below 560px a 19px star row next to a truncated course code is too tight. Tile, name, course
+   and number survive; the stars are the thing that can go, because the number says it exactly. */
+@media (max-width:560px){
+  .cp-row .pr-stars{display:none}
+  /* ...except the GREY ones. A rated row has the number on the right, which says the score
+     exactly, so its stars are decoration at this width. An unrated row has no number, and the
+     words "No ratings yet" were wrapping the meta line onto a second line whenever the row also
+     carried a term chip or a WAITLIST pill — every past row did, so the opened list came out
+     ragged. The five empty stars say the same thing, cost no horizontal space, and are the same
+     trade already made for the 300px rail (.cp-narrow .cp-none). Nothing is invented: an unrated
+     professor still shows empty stars, a Rate pill instead of a score, and "no ratings yet" in
+     the row's tooltip. */
+  .cp-row .pr-stars.cp-grey{display:flex}
+  .cp-row .cp-none{display:none}
+  .cp-row .pr-av{width:42px;height:42px;border-radius:12px;font-size:15px}
+  .cp-row .pr-nm{font-size:15px}
+}
+/* In the 300px right rail the same row has ~150px for the name once the tile and the Rate pill
+   have taken theirs, so everything gives a little back. "No ratings yet" is the one thing that
+   goes entirely: the grey star row and the Rate pill beside it already say it twice, and at this
+   width the words only bought a second line. The full name stays in the row's tooltip. */
+.cp-narrow .cp-row{gap:10px}
+.cp-narrow .cp-row .pr-av{width:40px;height:40px;border-radius:12px;font-size:14px}
+/* In the rail a long name WRAPS rather than truncating. "Kaveepan Lertwachara" needs 185px and
+   the middle column has 158px, and no amount of shaving the tile and the pill closes that on a
+   300px card — measured, not guessed. Two lines is strictly more informative than an ellipsis,
+   and at line-height 1.2 it costs 17px on a row that is otherwise 40px tall. */
+.cp-narrow .cp-row .pr-nm{font-size:14.5px;white-space:normal;overflow:visible;text-overflow:clip;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cp-narrow .cp-codes{font-size:11px}
+.cp-narrow .cp-none{display:none}
+.cp-narrow .cp-wl{font-size:9px;padding:1px 6px}
+.cp-narrow .cp-rate{padding:4px 11px;font-size:11.5px}
+.cp-narrow .cp-row .pr-score{font-size:17px}
+.cp-narrow .cp-ct{font-size:17px;padding-bottom:11px}
+
+/* ---- past professors, opening under the current ones ------------------------------------------
+   Deliberately not a card of its own and not a page of its own (Tate, 2026-08-29): someone
+   deciding whether to take a professor wants both halves of the answer in one place. */
+/* The collapsed row is a ROW: label on the left, count and chevron on the right. It was
+   flex-direction:column — which is what the "Add your past professors" variant needs for its
+   second line, but the count is a <span>, so it became a flex ITEM on its own line and the phone
+   rendered "Past professors" with an orphaned "23" underneath it (Tate, 2026-08-29, screenshot).
+   The two variants are two different axes, which is what they always were. */
+.cp-past-btn{display:flex;flex-direction:row;align-items:center;justify-content:space-between;
+  gap:10px;width:100%;margin-top:8px;padding:13px 0 9px;background:transparent;border:0;
+  border-top:1px solid var(--line-soft);color:var(--text);font:600 13.5px/1.3 inherit;
+  cursor:pointer;text-align:left;-webkit-tap-highlight-color:transparent}
+.cp-past-btn:hover{color:var(--accent)}
+/* A phone has no hover, so the press IS the feedback. */
+.cp-past-btn:active{opacity:.6}
+.cp-past-btn:hover .cp-past-n{border-color:rgba(var(--accent-rgb),.45);color:var(--accent)}
+.cp-past-lbl{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cp-past-r{display:flex;align-items:center;gap:9px;flex:none}
+/* A counted pill rather than a loose grey numeral: it reads as "how many are behind this" at a
+   glance, and being a flex item of its own row it can never wrap away from its label again. */
+.cp-past-n{flex:none;min-width:22px;padding:1.5px 8px;border:1px solid var(--line);
+  border-radius:999px;font-size:11.5px;font-weight:700;font-variant-numeric:tabular-nums;
+  color:var(--muted);text-align:center;line-height:1.5}
+/* A CSS chevron, not a glyph: it rotates, so open/closed is visible without the label changing
+   out from under a screen reader. aria-expanded drives it, so the two can never disagree. */
+.cp-past-cv{flex:none;width:8px;height:8px;border-right:1.8px solid currentColor;
+  border-bottom:1.8px solid currentColor;border-radius:1px;opacity:.7;
+  transform:rotate(45deg) translate(-2px,-2px);transition:transform .18s ease}
+.cp-past-btn[aria-expanded="true"] .cp-past-cv{transform:rotate(225deg) translate(-2px,-2px)}
+@media (prefers-reduced-motion:reduce){.cp-past-cv{transition:none}}
+/* "Add your past professors" keeps the two-line stack — it has a sub-line explaining itself. */
+.cp-past-add{flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:2px;
+  color:var(--accent)}
+.cp-past-add:hover{color:var(--accent)}
+.cp-past-sub{font-size:12px;font-weight:400;color:var(--muted);line-height:1.4}
+.cp-past-none{margin-top:8px;padding-top:11px;border-top:1px solid var(--line-soft);
+  font-size:12.5px;color:var(--faint);line-height:1.5}
+.cp-past-list{margin-top:2px}
+/* The Schedule-tab home for the card on a phone. Collapses entirely on desktop, where
+   the node is in the right rail and this slot has no children. */
+#hmCurProfSchedSlot:empty{display:none}
+#hmCurProfSchedSlot{margin-top:16px}
+/* The past rows are the same component one step back, so they read as the same list continued
+   rather than a different one: the term they were is the extra thing they carry. */
+/* .cp-term, not .cp-when: the CLASS PAGE declares its own .cp-when 80 lines below this one
+   (display:flex, 14px, --text-2) and, at equal specificity, later wins. The past-professor
+   term chip was quietly inheriting it everywhere except the rail, where .cp-narrow .cp-when
+   happened to outrank it. Two components, two names. */
+.cp-term{flex:none;font-size:11.5px;color:var(--faint);white-space:nowrap}
+.cp-past .pr-av{opacity:.85}
+.cp-empty .cp-past-btn{margin-top:14px}
+.cp-narrow .cp-past-btn{font-size:12.5px}
+.cp-narrow .cp-term{font-size:10.5px}
 /* ============ CLASS PAGE (Tate's 2026-08-25 mock) ============
    Four columns per section row: identity, when, seats, actions. They collapse to a stack on a
    phone in that same reading order, so the row never becomes a grid you have to decode.
@@ -2730,6 +2863,12 @@ html[data-auth="in"] #schedGuestNote{display:none!important}
            permanently invisible container: the tab counted 4, the panel showed nothing.
            schedMineWrap (toggled by setSchedTab) is the only thing that should hide this pane. -->
       <div id="watchMineOut"></div>
+      <!-- "Your current professors" lives in the Home right rail on desktop. A phone has no
+           right rail, and on Home the card filled the screen under the friends strip
+           (Tate, 2026-08-29), so below 1140px hmPlaceCurProf() moves the single node here
+           instead — under the classes those professors teach, which is where somebody on a
+           phone goes looking for them anyway. Empty on desktop, by design. -->
+      <div id="hmCurProfSchedSlot"></div>
     </div>
     <div id="schedWatchWrap" style="display:none">
       <!-- Classes and professors are two different things you're weighing — sections you might
@@ -3302,6 +3441,17 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
       <!-- Friends | Groups. A toggle, not a sixth bottom tab: the doctrine keeps that bar at
            five slots forever, and Friends stays the default so the existing workflow gains
            zero taps. Same control the Schedule hub uses for Planner/Watchlist/My Classes. -->
+      <!-- ===== THE RAIL LAYOUT ======================================================
+           Direction one of the 2026-08-29 mockups. The rail is STATIC and always on a
+           desktop — Tate opened Friends after the first build and said "friends doesnt
+           look like it updated", because the shell only appeared once you had already
+           opened a conversation. A layout you have to earn is not a layout.
+           The middle column holds whatever Friends was already showing: the list, the
+           Groups pane, or an open thread. The third column only exists while a thread is
+           open, because it is about the people in one. -->
+      <div id="frShell">
+      <aside id="frRail" class="msg-rail"></aside>
+      <div id="frMain">
       <div class="gp-toggle" id="gpToggle" style="display:none">
         <button id="gpTabFriends" class="on" onclick="gpSetTab('friends')">Friends</button>
         <button id="gpTabGroups" onclick="gpSetTab('groups')">Groups<span id="gpCount" class="fr-secount"></span></button>
@@ -3390,9 +3540,12 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
 
       </div><!-- /frFriendsPane -->
 
-      <!-- One open thread at a time, taking the whole pane. A thread is a place you are IN,
-           not a panel beside the list — and on a phone there is no room for both anyway. -->
+      <!-- One open thread at a time. It replaces the list in the middle column rather than the
+           whole tab, so the rail beside it never goes away. -->
       <div id="frThreadPane" style="display:none"></div>
+      </div><!-- /frMain -->
+      <aside id="frSched" class="msg-sched"></aside>
+      </div><!-- /frShell -->
 
       <!-- Stubs kept in the DOM so every guarded getElementById still resolves. The two request
            sections are rendered into the single list above; these are never shown. -->
@@ -3901,7 +4054,7 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
 /* Feature flags. Groups ships dark: the code is in the file and the toggle does not render
    until this is true, so it can be reviewed and merged without appearing to students. */
 window.PROFESSIFY_FLAGS={groups:true,messages:true};   /* Groups ON — Tate, 2026-08-25. Friends-only; groups are device-local (localStorage). */
-window.PROFESSIFY_BUILD='2026-08-28 19:05';
+window.PROFESSIFY_BUILD='2026-08-29 19:40';
 /* Paint the build stamp everywhere it appears. */
 try{
   (function(){
@@ -8742,17 +8895,22 @@ async function initBackend(){
   }catch(e){}
   if(!window.supabase)return;
   try{
-    // auth.lock: supabase-js wraps every auth call in a cross-tab exclusive
-    // Web Lock. With several copies of this file open (index-2, index-3, old
-    // tabs), they all share the file:// origin and therefore ONE lock — and
-    // Chrome throttles background tabs, so a backgrounded tab holding the lock
-    // stalls getSession() here indefinitely. That's the "friends only load
-    // when I leave Chrome and come back" bug: tab-switching woke the lock
-    // holder. A pass-through lock trades multi-tab token-refresh coordination
-    // (harmless for this app) for never blocking on another tab.
-    sb=window.supabase.createClient(c.SUPABASE_URL,c.SUPABASE_ANON_KEY,{
-      auth:{lock:async(_name,_timeout,fn)=>await fn()}
-    });
+    // NO auth.lock option, deliberately — and this is the second deliberate choice here.
+    //
+    // It used to pass a pass-through lock: supabase-js wrapped every auth call in a cross-tab
+    // exclusive Web Lock, and with several copies of this file open (index-2, index-3, old tabs)
+    // they all shared the file:// origin and therefore ONE lock. Chrome throttles background
+    // tabs, so a backgrounded tab holding the lock stalled getSession() here indefinitely —
+    // that was the "friends only load when I leave Chrome and come back" bug, where
+    // tab-switching woke the lock holder.
+    //
+    // supabase-js v2.107.0 made lockless coordination the default: a client constructed WITHOUT
+    // a lock option no longer touches navigator.locks at all, and cross-tab refreshes are
+    // resolved server-side instead. So the stall the workaround existed to prevent cannot happen
+    // without it, and passing a pass-through lock now only opts back OUT of the library's own
+    // coordination — while logging a deprecation warning on every load (seen on 2.112.4,
+    // 2026-08-29). `lock` is removed outright in v3.
+    sb=window.supabase.createClient(c.SUPABASE_URL,c.SUPABASE_ANON_KEY);
     // Belt and braces: even if auth stalls for any other reason, give up after
     // 4s and continue signed-out — onAuthStateChange still picks the session
     // up the moment it becomes available.
@@ -14250,6 +14408,144 @@ window.SCHED_COMING=[["College of Liberal Arts","Anthropology-Geography","Art & 
 .rev-share.on .rev-sw{background:var(--accent);border-color:var(--accent)}
 .rev-share.on .rev-sw::after{left:16px;background:var(--accent-ink)}
 @media (prefers-reduced-motion:reduce){.rev-share .rev-sw,.rev-share .rev-sw::after{transition:none}}
+
+/* ================= THE RAIL LAYOUT — Friends as a three-pane app ==========================
+   Direction one of the 2026-08-29 mockups, which is the one Tate picked. Conversations you
+   could switch to on the left, whatever you are looking at in the middle, and — while a thread
+   is open — the schedules of the people in it on the right.
+
+   The rail is ALWAYS there on a desktop. The first build only assembled it once a thread was
+   open, and Tate opened the tab and said "friends doesnt look like it updated": the middle
+   column was the Friends list, unchanged, with nothing beside it. A layout you have to earn by
+   guessing is not the layout he chose. */
+#view-friends > .wrap{max-width:1240px}
+#frShell{display:grid;grid-template-columns:238px minmax(0,1fr);gap:0;
+  border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--panel);
+  min-height:560px;height:calc(100vh - 168px)}
+#frShell.thread-on{grid-template-columns:238px minmax(0,1fr) 302px}
+#frMain{min-width:0;min-height:0;overflow-y:auto;padding:16px 18px 20px}
+/* A thread fills its column edge to edge; everything else in there is a reading pane. */
+#frShell.thread-on #frMain{padding:0;overflow:hidden;display:flex;flex-direction:column}
+#frShell.thread-on #frThreadPane{flex:1;min-height:0;display:flex}
+#frShell .msg-thread{border:0;border-radius:0;min-height:0;flex:1;width:100%}
+#frShell .msg-body{max-height:none}
+#frShell .msg-back{display:none}        /* the rail is the way back, and it is always there */
+/* The list already draws its own section headings; inside the shell it loses the outer card
+   padding it used to need when it was the whole page. */
+#frShell #frFriendsPane > .fr-section:first-child{margin-top:0}
+
+/* ---- left: conversations, then the friends you have not started one with ---- */
+.msg-rail{border-right:1px solid var(--line);background:var(--panel-2);
+  display:flex;flex-direction:column;min-width:0;min-height:0}
+/* On a desktop the rail IS the message list, so the Messages section in the middle column is
+   the same two conversations printed twice, six inches apart. It stays in the DOM and stays on
+   the phone, where there is no rail. !important because msgRenderList() sets display inline. */
+#frShell #frMsgSec{display:none!important}
+.msg-rsrch{display:flex;align-items:center;gap:7px;padding:11px 11px 9px}
+.msg-rnew{flex:none;width:31px;height:31px;border-radius:9px;border:1px solid var(--line);
+  background:var(--panel);color:var(--muted);font-size:17px;line-height:1;cursor:pointer}
+.msg-rnew:hover{color:var(--accent);border-color:rgba(var(--accent-rgb),.5)}
+.msg-rq{width:100%;border:1px solid var(--line);border-radius:9px;background:var(--panel);
+  color:var(--text);font:inherit;font-size:12.5px;padding:8px 11px}
+.msg-rq::placeholder{color:var(--faint)}
+.msg-rq:focus{outline:none;border-color:rgba(var(--accent-rgb),.55)}
+.msg-rscroll{flex:1;min-height:0;overflow-y:auto;padding:0 7px 10px}
+.msg-rgh{font-size:10px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--faint);padding:11px 6px 5px}
+.msg-rit{display:flex;align-items:center;gap:9px;width:100%;padding:7px 6px;border:0;
+  background:transparent;border-radius:9px;cursor:pointer;text-align:left;color:var(--text);
+  font:inherit;min-width:0}
+.msg-rit:hover{background:var(--panel-3)}
+.msg-rit.on{background:var(--accent);color:var(--accent-ink)}
+.msg-rit.on .msg-rs,.msg-rit.on .msg-rw{color:inherit;opacity:.75}
+.msg-rit .msg-av{width:30px;height:30px;font-size:11px}
+.msg-rmain{flex:1;min-width:0}
+.msg-rn{display:block;font-size:13px;font-weight:650;letter-spacing:-.008em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msg-rit.unread .msg-rn{font-weight:800}
+.msg-rs{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;margin-top:1px}
+.msg-rw{flex:none;font-size:10px;color:var(--faint)}
+.msg-rdot{flex:none;width:7px;height:7px;border-radius:50%;background:var(--accent)}
+.msg-rnone{padding:18px 8px;font-size:12.5px;color:var(--faint);text-align:center}
+
+/* ---- right: the schedules ---- */
+.msg-schedbtn{flex:none;background:transparent;border:1px solid var(--line);border-radius:999px;
+  padding:5px 12px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;display:none}
+.msg-schedbtn[aria-pressed="true"]{color:var(--accent);border-color:rgba(var(--accent-rgb),.5);
+  background:rgba(var(--accent-rgb),.10)}
+.msg-sched{display:none;border-left:1px solid var(--line);background:var(--panel-2);
+  overflow-y:auto;min-width:0;min-height:0;padding:14px 13px 18px}
+#frShell.thread-on .msg-sched{display:block}
+.msch-back{display:none;background:transparent;border:0;padding:0 0 12px;font:inherit;
+  font-size:13px;font-weight:600;color:var(--accent);cursor:pointer}
+.msch-hd{margin-bottom:11px}
+.msch-eye{font-size:9.5px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--faint)}
+.msch-ttl{font-size:15px;font-weight:700;letter-spacing:-.015em;color:var(--text);margin-top:3px}
+/* The grid is gpGrid(), the same one the Groups tab draws, at the width this column has. Its
+   own rules already handle the lanes; these only shrink the furniture to fit 302px. */
+.msch-grid .gp-ghead,.msch-grid .gp-gbody{grid-template-columns:22px repeat(var(--gpcols),1fr);gap:2px}
+.msch-grid .gp-ghead .gp-dh{font-size:10px;padding:2px 0}
+.msch-grid .gp-t{font-size:8.5px}
+.msch-grid .gp-b span{font-size:7.5px}
+.msch-mem{display:flex;flex-wrap:wrap;gap:5px 12px;margin:11px 0 2px}
+.msch-m{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-2);min-width:0}
+.msch-m.nodata{color:var(--faint)}
+.msch-sw{width:9px;height:9px;border-radius:3px;border:1.5px solid;flex:none}
+.msch-mn{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msch-mm{color:var(--faint);white-space:nowrap}
+.msch-sec{font-size:9.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--faint);margin:16px 0 7px;padding-top:12px;border-top:1px solid var(--line-soft)}
+.msch-win{display:flex;align-items:baseline;gap:8px;width:100%;padding:8px 10px;border-radius:9px;
+  border:1px solid rgba(var(--accent-rgb),.30);background:rgba(var(--accent-rgb),.06);
+  color:var(--text);font:inherit;cursor:pointer;text-align:left}
+.msch-win+.msch-win{margin-top:6px}
+.msch-win:hover{border-color:rgba(var(--accent-rgb),.6)}
+.msch-wd{font-size:12px;font-weight:700;flex:none}
+.msch-wt{flex:1;min-width:0;font-size:12px;color:var(--text-2);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.msch-wt i{font-style:normal;font-size:9.5px;letter-spacing:.02em}
+.msch-wl{flex:none;font-size:10.5px;font-weight:700;color:var(--accent);
+  font-variant-numeric:tabular-nums}
+.msch-none{font-size:12px;color:var(--faint);line-height:1.5}
+.msch-unk{margin-top:8px;font-size:11px;color:var(--faint);line-height:1.45}
+.msch-codes{display:flex;flex-wrap:wrap;gap:5px}
+.msch-code{font-family:var(--mono);font-size:10.5px;letter-spacing:-.02em;padding:2.5px 7px;
+  border-radius:999px;border:1px solid var(--line);color:var(--text-2);white-space:nowrap}
+/* Filled = every single person in this conversation is in it. Outlined = some of you are. */
+.msch-code.all{border-color:var(--accent);color:var(--accent);background:rgba(var(--accent-rgb),.09);
+  font-weight:700}
+.msch-more{font-size:10.5px;color:var(--faint);align-self:center}
+
+/* ---- below the rail breakpoint: one pane at a time ----------------------------------------
+   238 + 302 of furniture leaves a tablet nothing to read a thread in, and a phone less than
+   nothing. The shell stops being a grid entirely and the middle column is the tab again. */
+@media (max-width:1099px){
+  #view-friends > .wrap{max-width:1040px}
+  #frShell{display:block;border:0;border-radius:0;height:auto;min-height:0;background:transparent}
+  #frMain,#frShell.thread-on #frMain{padding:0;overflow:visible;display:block}
+  #frShell.thread-on #frThreadPane{display:block}
+  #frRail{display:none}
+  #frShell #frMsgSec{display:block!important}   /* no rail on a phone, so the list comes back */
+  #frShell.thread-on .msg-sched{display:none}
+  #frShell .msg-thread{border:1px solid var(--line);border-radius:16px;min-height:60vh}
+  #frShell .msg-body{max-height:56vh}
+  #frShell .msg-back{display:block}
+  .msg-schedbtn{display:block}
+  /* The schedule comes back OVER the thread, because splitting 390px between a conversation and
+     a calendar gives you neither — and it carries its own way back, since the header that opened
+     it belongs to the thread it just replaced. */
+  #frShell.sched-on .msg-thread{display:none}
+  #frShell.thread-on.sched-on .msg-sched{display:block;border:1px solid var(--line);
+    border-radius:16px;background:var(--panel);padding:15px 15px 20px}
+  .msch-back{display:block}
+}
+@media (max-width:560px){
+  .msch-grid .gp-ghead,.msch-grid .gp-gbody{grid-template-columns:20px repeat(var(--gpcols),1fr)}
+  .msg-schedbtn{padding:5px 10px;font-size:11.5px}
+}
+}
 </style>
 
 <div class="fp-back" id="fpBack">
@@ -18550,6 +18846,13 @@ function myScheduleForShare(){
   }catch(e){}
   return out;
 }
+/* The encoded week, on its own. It is the same string ?sched= has always carried, so a link that
+   puts it in the URL and one that puts it in the bucket decode through exactly one code path. */
+function scPayloadStr(){
+  var cl=myScheduleForShare();
+  if(!cl.length)return '';
+  return _b64urlEnc(_shEncode((typeof APP_TERM!=='undefined'?APP_TERM:''),cl));
+}
 function schedShareLink(){
   var cl=myScheduleForShare();
   if(!cl.length)return '';
@@ -18872,29 +19175,73 @@ function scToken(){
   catch(e){ for(var i=0;i<16;i++)a[i]=Math.floor(Math.random()*256); }
   return Array.prototype.map.call(a,function(b){return ('0'+b.toString(16)).slice(-2);}).join('')+'.png';
 }
+/* The bucket policy is `for insert to authenticated`, so a signed-out student cannot put anything
+   in it — and a SHORT link that points at a bucket object nobody uploaded is a dead link. Every
+   short-link decision downstream asks this first, and falls back to the long self-contained URL
+   when the answer is no. */
+function scCanUpload(){
+  try{
+    if(!scPreviewOn())return false;
+    if(typeof sb==='undefined'||!sb||!sb.storage)return false;
+    if(typeof sbUser==='undefined'||!sbUser||!sbUser.id)return false;
+    return true;
+  }catch(e){ return false; }
+}
 /* Fire and forget, deliberately. navigator.share() has to be called inside the click, so nothing
    here may be awaited — and an upload that fails must cost the student a link preview, never their
    share sheet. */
 function scUploadCard(id,file){
   try{
-    if(!scPreviewOn()||!id||!file)return;
-    if(typeof sb==='undefined'||!sb||!sb.storage)return;
+    if(!scCanUpload()||!id||!file)return;
     sb.storage.from(SC_BUCKET).upload(id,file,{contentType:'image/png',upsert:true})
       .then(function(r){ if(r&&r.error)try{console.warn('[share] card upload failed:',r.error.message);}catch(e){} },
             function(e){ try{console.warn('[share] card upload failed:',e);}catch(_e){} });
   }catch(e){}
 }
-/* /s carries the image id and hands the human on to the app with the same payload the plain link
-   has always used, so an old link and a new one open to exactly the same screen. */
+/* The WEEK, uploaded beside the picture under the same random id. This is what takes the ~700
+   characters of ?sched= out of the link: the recipient's app fetches it from the bucket instead of
+   reading it out of the URL. Same bucket, same policy, same fire-and-forget rules — nothing new to
+   deploy and no new table to migrate. */
+function scUploadPayload(id,payload){
+  try{
+    if(!scCanUpload()||!id||!payload)return;
+    var name=String(id).replace(/\.png$/,'')+'.json';
+    var blob=new Blob([payload],{type:'application/json'});
+    sb.storage.from(SC_BUCKET).upload(name,blob,{contentType:'application/json',upsert:true})
+      .then(function(r){ if(r&&r.error)try{console.warn('[share] payload upload failed:',r.error.message);}catch(e){} },
+            function(e){ try{console.warn('[share] payload upload failed:',e);}catch(_e){} });
+  }catch(e){}
+}
+/* Where the recipient reads it back from. Public bucket, anonymous read — the same bargain the
+   og:image already makes, and it carries exactly what the URL used to carry in the clear. */
+function scPayloadUrl(id){
+  var base=String(cfg().SUPABASE_URL||'').replace(/\/+$/,'');
+  if(!base||!id)return '';
+  return base+'/storage/v1/object/public/'+SC_BUCKET+'/'+String(id).replace(/\.png$/,'')+'.json';
+}
+/* THE LINK (Tate, 2026-08-29: "i want a link with a preview like this sleeper i attached").
+   It used to carry the whole week base64'd into ?sched=, which made it ~900 characters — the thing
+   he screenshotted. The week now lives in the bucket under the same id as the picture, so all this
+   has to carry is that id and the two short strings the preview card prints. ~140 characters, and
+   iMessage hides it entirely once it unfurls.
+
+   Falls back to the long self-contained link whenever the bucket is not usable — signed out, flag
+   off, no site URL. A long link that works beats a short one that 404s. */
 function schedPreviewLink(id){
   var base=((cfg().SITE_URL||'').replace(/\/+$/,''))||'';
   var plain=schedShareLink();
-  if(!scPreviewOn()||!base||!id||plain.indexOf(base+'/?')!==0)return plain;
+  if(!scCanUpload()||!base||!id||plain.indexOf(base+'/?')!==0)return plain;
   var term=(typeof APP_TERM!=='undefined'?APP_TERM:'');
-  return base+'/s?i='+encodeURIComponent(id)+(term?('&tm='+encodeURIComponent(term)):'')
-    +'&'+plain.slice((base+'/?').length);
+  var first=''; try{ first=((myProfile&&myProfile.display_name)||'').split(' ')[0]||''; }catch(e){}
+  var q='i='+encodeURIComponent(id);
+  if(first)q+='&nm='+encodeURIComponent(first);
+  if(term)q+='&tm='+encodeURIComponent(term);
+  try{ if(sbUser&&sbUser.id)q+='&add='+encodeURIComponent(sbUser.id); }catch(e){}
+  return base+'/s?'+q;
 }
-try{ window.schedPreviewLink=schedPreviewLink; window.scPreviewOn=scPreviewOn; }catch(e){}
+try{ window.schedPreviewLink=schedPreviewLink; window.scPreviewOn=scPreviewOn;
+     window.scCanUpload=scCanUpload; window.scPayloadStr=scPayloadStr;
+     window.scPayloadUrl=scPayloadUrl; }catch(e){}
 
 function schedCardOpts(){
   var nm=''; try{ nm=((typeof myProfile!=='undefined'&&myProfile)?myProfile.display_name:'')||''; }catch(e){}
@@ -18952,34 +19299,32 @@ window.scAltText=scAltText;
 function shareMySchedule(){
   if(!(myClasses&&myClasses.length)){ if(typeof frToast==='function')frToast('Add a class to My Classes first, then share your schedule.'); return; }
   var link=schedShareLink(); if(!link)return;
-  /* WHAT ARRIVES IN THE THREAD (Tate, 2026-08-28: "it should actually have a preview of your
-     actual schedule ... with a visual image of actual class names times").
-     A link on its own previews with whatever OG tags the site serves, which for a static site is
-     the same card for everybody — crawlers do not run JavaScript, so no amount of client code can
-     make a link preview show YOUR week. Attaching the PNG does: iOS puts the real image in the
-     message, at full size, with the text under it. So the image is the first choice and the link
-     rides along in the text, which is also the only version that works with no server at all. */
-  var TEXT='Look at my schedule this semester';
+  /* WHAT ARRIVES IN THE THREAD (Tate, 2026-08-29: "the share my schedule returns an image and text
+     i dont want this i want a link with a preview like this sleeper i attached").
+
+     A BARE URL, and nothing else. That is the whole trick behind the Sleeper message he sent: when
+     a message contains only a link, iMessage swallows the URL text and draws the unfurled card in
+     its place. Adding `text` puts the sentence and the raw URL in the bubble ABOVE the card, and
+     adding `files` puts a second, redundant copy of the picture in the thread — which is exactly
+     the screenshot he was complaining about.
+
+     So the sentence moved to where it belongs: og:title, served by /s, printed INSIDE the card.
+     The picture is still the student's real week — it is just the card's image now rather than an
+     attachment. The PNG is still built here, because the desktop fallback sheet offers it as a
+     download and because it is what gets uploaded for og:image. */
   var file=schedCardFileSync(schedCardOpts());
-  /* The id is chosen HERE, before the upload starts, so the link can carry it without waiting on
-     the network. The upload then races the crawler — which is fine, because on iOS the picture is
-     already attached to the message and does not depend on this at all. */
-  if(scPreviewOn()&&file){ var _id=scToken(); scUploadCard(_id,file); link=schedPreviewLink(_id); }
-  var canFiles=false;
-  try{ canFiles=!!(file&&navigator.canShare&&navigator.share&&navigator.canShare({files:[file]})); }catch(e){}
-  if(canFiles){
-    navigator.share({files:[file],text:TEXT+'\n'+link}).catch(function(err){
+  /* The id is chosen HERE, before either upload starts, so the link can carry it without waiting
+     on the network — navigator.share() has to happen inside this click. */
+  if(scCanUpload()&&file){
+    var _id=scToken();
+    scUploadCard(_id,file);
+    scUploadPayload(_id,scPayloadStr());
+    link=schedPreviewLink(_id);
+  }
+  if(navigator.share){
+    navigator.share({url:link}).catch(function(err){
       /* Dismissing the sheet is not a failure and must not be answered with a fallback the
          student did not ask for. */
-      if(err&&(err.name==='AbortError'||err.name==='NotAllowedError'))return;
-      try{ schedCardSheet(link); }catch(e){}
-    });
-    return;
-  }
-  /* A share sheet with no file support still beats a bare link — but it cannot carry the week,
-     so say what it IS carrying rather than promising a picture that will not appear. */
-  if(navigator.share){
-    navigator.share({title:'My Professify schedule',text:TEXT,url:link}).catch(function(err){
       if(err&&(err.name==='AbortError'||err.name==='NotAllowedError'))return;
       try{ schedCardSheet(link); }catch(e){}
     });
@@ -18998,9 +19343,39 @@ function shareMySchedule(){
 /* Parse a meeting string like "TuTh 9:00AM–10:20AM" into day tokens for the mini grid. */
 function _shDays(t){ var out=[]; var s=String(t||''); ['Mo','Tu','We','Th','Fr','Sa','Su'].forEach(function(d){ if(s.indexOf(d)>=0)out.push(d); }); return out; }
 function _shTimeOnly(t){ var m=String(t||'').match(/\d{1,2}:\d{2}\s?[AaPp][Mm].*/); return m?m[0].replace(/\s+/g,''):''; }
-function initSchedShare(){
-  var enc=null,nm='A friend',addId=null;
-  try{ var q=new URLSearchParams(location.search); enc=q.get('sched'); nm=q.get('nm')||'A friend'; addId=q.get('add')||null; }catch(e){ return; }
+/* `qs` is a test seam, not a feature: a file:// page cannot replaceState() to a URL with a query
+   on it, so there is no other way to drive the two link shapes through the real code path. */
+function initSchedShare(qs){
+  var enc=null,nm='A friend',addId=null,imgId=null;
+  try{ var q=new URLSearchParams(qs!=null?qs:location.search); enc=q.get('sched'); nm=q.get('nm')||'A friend';
+       addId=q.get('add')||null; imgId=q.get('i')||null; }catch(e){ return; }
+  /* SHORT LINK: the week is in the bucket under the same id as the preview picture, so fetch it
+     and then run the identical decode path an old ?sched= link takes. Every link anyone has
+     already sent still carries its own payload and never touches the network. */
+  if(!enc&&imgId&&/^[a-z0-9-]{16,64}(\.png)?$/.test(imgId)){
+    var u=scPayloadUrl(imgId);
+    if(u){
+      fetch(u,{cache:'no-store'}).then(function(r){ return r.ok?r.text():null; }).then(function(txt){
+        if(txt)schedShareFrom(String(txt).trim(),nm,addId);
+        else schedShareMissing(nm);
+      }).catch(function(){ schedShareMissing(nm); });
+    }
+    return;
+  }
+  if(!enc)return;
+  schedShareFrom(enc,nm,addId);
+}
+/* Said out loud rather than left as an empty screen. The two ways to get here are a link whose
+   upload never finished and a link old enough that the object was cleaned up; neither is the
+   recipient's fault and neither should look like the app is broken. */
+function schedShareMissing(nm){
+  try{
+    var first=String(nm||'A friend').split(' ')[0];
+    if(typeof frToast==='function')
+      frToast('That schedule link has expired — ask '+first+' to send it again.');
+  }catch(e){}
+}
+function schedShareFrom(enc,nm,addId){
   if(!enc)return;
   /* v2 first, then v1's JSON — every link anyone has already sent has to keep opening. */
   var plain=_b64urlDec(enc), data=null;
@@ -19721,10 +20096,13 @@ function gpMemberBusy(m){
   return {busy:out,unknown:unknown};
 }
 
-/* Everything the two surfaces need, computed once. `muted` is a VIEW filter — see gpToggleMute. */
-function gpCompute(g){
-  var members=gpMembers(g);
-  var mutedMap=gpMuted[g.id]||{};
+/* Everything the surfaces need, computed once. `muted` is a VIEW filter — see gpToggleMute.
+   Takes MEMBERS rather than a group, because a message thread is also a set of people with
+   schedules and asks exactly the same question of them. Two implementations of "when is
+   everyone free" would drift, and the one that drifted would be the one nobody was looking at.
+   gpCompute() below is this function with a group's members and mutes fed into it. */
+function gpRunsFor(members,mutedMap){
+  mutedMap=mutedMap||{};
   var slots=[];                     /* [di][k] -> array of member ids busy */
   for(var di=0;di<5;di++){ slots[di]=[]; for(var k=0;k<GP_NSLOT;k++)slots[di][k]=[]; }
   /* Busy FIRST, then decide who counts. `active` used to be derived from the noData that
@@ -19765,6 +20143,7 @@ function gpCompute(g){
   runs=runs.filter(function(r){ return (r.e-r.s)>=30; });   /* under 30 minutes is not a meeting */
   return {members:members,active:active,runs:runs,slots:slots,muted:mutedMap};
 }
+function gpCompute(g){ return gpRunsFor(gpMembers(g),gpMuted[g.id]||{}); }
 
 /* Ranking, in the brief's order: everyone-free first, then longer, then more members who
    already have class within 30 minutes either side (nobody makes a special trip), then
@@ -19830,7 +20209,11 @@ window.gpToggleMute=function(gid,mid,ev){
 window.gpClearMutes=function(gid,ev){ if(ev){ev.stopPropagation();} gpMuted[gid]={}; gpSaveMutes(); gpRenderDetail(); };
 
 /* ---- the overlay grid: one block per class, one lane per member, free bands behind ---- */
-function gpGrid(g,c,only){
+/* dayFn names the handler the day headers call, because the thread pane reuses this grid and
+   its days belong to a conversation, not to a group gpFind() could ever resolve. Groups pass
+   nothing and keep gpSetDay. */
+function gpGrid(g,c,only,dayFn){
+  dayFn=dayFn||'gpSetDay';
   var act=c.active, n=Math.max(1,act.length);
   var lane={}; act.forEach(function(m,i){ lane[m.id]=i; });
   var cols=(only==null)?[0,1,2,3,4]:[only];
@@ -19846,7 +20229,7 @@ function gpGrid(g,c,only){
       var focused=(only!=null);
       var full=(typeof GP_DAYFULL!=='undefined')?GP_DAYFULL[GP_DAYS[d]]:GP_DAYLBL[d];
       return '<button type="button" class="gp-dh'+(focused?' on':'')+'"'
-        +' onclick="gpSetDay(\''+g.id+'\','+(focused?-1:d)+')"'
+        +' onclick="'+dayFn+'(\''+escAcc(g.id)+'\','+(focused?-1:d)+')"'
         +' aria-pressed="'+(focused?'true':'false')+'"'
         +' title="'+escAcc(focused?('Showing '+full+' \u2014 tap for the whole week'):('Show only '+full))+'">'
         +GP_DAYLBL[d]+(focused?'<span class="gp-dh-x">\u2715</span>':'')+'</button>';
@@ -20391,6 +20774,240 @@ function msgFitRows(t,payload){
   }).join('');
 }
 
+/* ---- the schedule pane ------------------------------------------------------------------------
+   Tate, 2026-08-29: "when your messaging one person have both of your overlapped schedules off
+   to the right and when your in a group have the schedules there too."
+
+   One component for both, because a DM is a group of two and the question is identical: when are
+   the people in this conversation all free. It is answered by gpRunsFor(), the same function the
+   Groups tab uses — not a second copy of the maths that could quietly disagree with it.
+
+   The honest-data rules come along with that function and are the reason it is worth reusing:
+   somebody who has shared nothing is NOT counted free, they are named and left out of the
+   denominator; a class with no parseable meeting time is unknown, not absent. Early in a term
+   that is the common case, and counting silence as availability would inflate every window this
+   pane shows in the one direction that gets people to turn up to nothing. */
+
+/* Conversation members in the shape gpMemberBusy() reads: `me` for yourself, a friend id for
+   everyone else, which is what findFriend() takes. You sort first so your own lane is leftmost
+   in the grid — the one lane a reader is looking for. */
+function msgSchedMembers(t){
+  var out=[];
+  (t.members||[]).forEach(function(u){
+    var mine=msgIsMe(u), p=msgPerson(u);
+    out.push({id:mine?'me':u, me:mine, name:mine?'You':p.name, ini:mine?'YOU':msgIni(p.name)});
+  });
+  out.sort(function(a,b){ return (b.me?1:0)-(a.me?1:0); });
+  out.forEach(function(m,i){ m.color=GP_COLORS[i%GP_COLORS.length]; });
+  return out;
+}
+
+/* Every course code we know a person is in — NOT msgSecsFor(), which drops anything without a
+   parseable meeting time. A shared async class is still a shared class; it just cannot be drawn
+   on the grid. Returns null when we know nothing about them at all, which is different from
+   knowing they take nothing. */
+function msgCodesFor(uid){
+  try{
+    if(msgIsMe(uid))return (typeof myClasses!=='undefined'?myClasses:[]).slice();
+    var f=(typeof friendsList!=='undefined'?friendsList:[]).filter(function(x){return x&&x.id===uid;})[0];
+    if(!f)return null;
+    var seen={};
+    (f.classes||[]).forEach(function(c){ if(c)seen[c]=1; });
+    (Array.isArray(f.secs)?f.secs:[]).forEach(function(r){ if(r&&r.code)seen[r.code]=1; });
+    return Object.keys(seen);
+  }catch(e){}
+  return null;
+}
+/* Courses more than one person in this thread is taking. `all` is true only when every member
+   is in it — the difference between "you two share this" and "the whole group is in this". */
+function msgSharedCodes(t){
+  var by={}, n=(t.members||[]).length;
+  (t.members||[]).forEach(function(u){
+    var codes=msgCodesFor(u); if(!codes)return;
+    var first=msgPerson(u).first, seen={};
+    codes.forEach(function(c){ if(seen[c])return; seen[c]=1; (by[c]=by[c]||[]).push(first); });
+  });
+  return Object.keys(by).filter(function(c){ return by[c].length>1; }).sort()
+    .map(function(c){ return {code:c, who:by[c], all:by[c].length===n}; });
+}
+
+/* "Both" when it is two people, "all" when it is more, and neither when somebody in the thread
+   is not in the maths — then it names how many it really speaks for, because a heading that
+   says "all" while one person is uncounted is the whole failure mode of this pane. */
+function msgSchedLabel(c){
+  var total=(c.members||[]).length, n=(c.active||[]).length;
+  if(!n)return 'No schedules to compare yet';
+  if(n===total)return (n===2)?'When you’re both free':(n>1?'When you’re all free':'When you’re free');
+  return 'When '+n+' of you are free';
+}
+
+var msgSchedDay={};                        /* conversation id -> focused day, or null for the week */
+window.msgSetDay=function(cid,d){ msgSchedDay[cid]=(d<0?null:d); msgRenderSched(); };
+
+/* Pre-fills the composer with the window you tapped. It does NOT send: the app never puts words
+   in somebody's mouth, it just saves them typing the time out. */
+window.msgUseWindow=function(di,s0,e0){
+  var el=document.getElementById('msgInput'); if(!el)return;
+  var day=GP_DAYFULL[GP_DAYS[di]]||'';
+  /* fmtMin(), not gpRange() — gpRange returns MARKUP (an <i> around the meridiem and a
+     &thinsp; between the ends) and this string goes into an <input>, where an entity is four
+     literal characters a student would have to delete before sending. */
+  var f=(typeof fmtMin==='function')?fmtMin:function(t){return t;};
+  var txt=day+' '+f(s0)+'–'+f(e0)+'?';
+  el.value=el.value?(el.value.replace(/\s+$/,'')+' '+txt):txt;
+  el.focus();
+};
+
+function msgSchedHtml(t){
+  var mem=msgSchedMembers(t);
+  var c=gpRunsFor(mem,{});
+  var day=(msgSchedDay[t.id]!=null)?msgSchedDay[t.id]:null;
+  var wins=gpRank(c).filter(function(r){ return r.key==='all'; }).slice(0,3);
+  var shared=msgSharedCodes(t);
+
+  /* Members, with what we do and don't know about each. No control here — muting is a Groups
+     idea about a group you own; a conversation's membership is not yours to filter. */
+  var rows=c.members.map(function(m){
+    var meta=m.noData?'no schedule shared'
+      :((m.unknown&&m.unknown.length)?(m.unknown.length+' with no set time'):'');
+    return '<div class="msch-m'+(m.noData?' nodata':'')+'">'
+      +'<span class="msch-sw" style="background:'+(m.noData?'transparent':m.color)+';border-color:'+m.color+'"></span>'
+      +'<span class="msch-mn">'+msgEsc(m.name)+'</span>'
+      +(meta?('<span class="msch-mm">'+msgEsc(meta)+'</span>'):'')+'</div>';
+  }).join('');
+
+  var winHtml=wins.length
+    ? wins.map(function(r){
+        return '<button class="msch-win" onclick="msgUseWindow('+r.di+','+r.s+','+r.e+')" '
+          +'title="Put this time in the message box">'
+          +'<span class="msch-wd">'+msgEsc(GP_DAYFULL[GP_DAYS[r.di]])+'</span>'
+          +'<span class="msch-wt">'+gpRange(r.s,r.e)+'</span>'
+          +'<span class="msch-wl">'+msgEsc(gpDur(r.e-r.s))+'</span></button>';
+      }).join('')
+    : (c.active.length
+        ? '<div class="msch-none">No window you all share between 7am and 10pm this week.</div>'
+        : '<div class="msch-none">Nobody in this conversation has imported a schedule yet.</div>');
+
+  var sharedHtml=shared.length
+    ? ('<div class="msch-codes">'+shared.slice(0,8).map(function(x){
+         return '<span class="msch-code'+(x.all?' all':'')+'" title="'
+           +escAcc(x.who.join(', '))+'">'+msgEsc(x.code)+'</span>'; }).join('')
+       +(shared.length>8?('<span class="msch-more">+'+(shared.length-8)+'</span>'):'')+'</div>')
+    : '<div class="msch-none">No classes in common this term.</div>';
+
+  /* Anyone we cannot place is named rather than dropped from the denominator in silence. */
+  var unk=[];
+  c.active.forEach(function(m){ (m.unknown||[]).forEach(function(code){
+    unk.push(String(m.name).split(' ')[0]+' · '+code); }); });
+
+  return '<div class="msch">'
+    /* The way out. On a phone this pane REPLACES the thread, and the header that opened it goes
+       with the thread — so without this the schedule was a room with no door. Desktop hides it:
+       there the thread is still sitting right there beside this. */
+    +'<button class="msch-back" onclick="msgToggleSched()">\u2190 Back to the conversation</button>'
+    +'<div class="msch-hd"><div class="msch-eye">Schedules</div>'
+      +'<div class="msch-ttl">'+msgEsc(msgSchedLabel(c))+'</div></div>'
+    +'<div class="msch-grid">'+gpGrid({id:t.id},c,day,'msgSetDay')+'</div>'
+    +'<div class="msch-mem">'+rows+'</div>'
+    +'<div class="msch-sec">Open windows</div>'+winHtml
+    +(unk.length?('<div class="msch-unk">Not counted — no set meeting time: '
+        +msgEsc(unk.slice(0,4).join(', '))+'</div>'):'')
+    +'<div class="msch-sec">Classes in common</div>'+sharedHtml
+    +'</div>';
+}
+
+function msgRenderSched(){
+  var host=document.getElementById('frSched'); if(!host)return;
+  var t=msgThreads.filter(function(x){return x.id===msgOpenId;})[0];
+  /* No thread open, no schedules to compare — the column collapses rather than standing there
+     empty asking to be filled with something. */
+  if(!t){ host.innerHTML=''; return; }
+  host.innerHTML=msgSchedHtml(t);
+}
+/* Phone: one thing at a time. The schedule takes the pane and the thread steps aside, rather
+   than the two of them splitting 390px between them. */
+window.msgToggleSched=function(){
+  var sh=document.getElementById('frShell'); if(!sh)return;
+  sh.classList.toggle('sched-on');
+  var b=document.getElementById('msgSchedBtn');
+  if(b)b.setAttribute('aria-pressed',sh.classList.contains('sched-on')?'true':'false');
+};
+
+/* ---- the rail ----------------------------------------------------------------------------------
+   Conversations, then the friends you have not started one with. Groups are deliberately NOT
+   here: a group in this app is a free-time calculator with its own tab, and a group THREAD
+   already appears under Conversations — putting both in one list would make two different
+   things answer to the same name. */
+function msgRailHtml(){
+  var q=String(window._msgRailQ||'').trim().toLowerCase();
+  function hit(s){ return !q||String(s||'').toLowerCase().indexOf(q)>=0; }
+  var convs=msgThreads.filter(function(t){ return hit(msgTitle(t)); });
+  var inDm={};
+  msgThreads.forEach(function(t){
+    if(t.kind==='group')return;
+    (t.members||[]).forEach(function(u){ if(!msgIsMe(u))inDm[u]=1; });
+  });
+  var rest=((typeof friendsList!=='undefined'&&friendsList)||[])
+    .filter(function(f){ return f&&!inDm[f.id]&&hit(f.name); });
+
+  var h='<div class="msg-rsrch">'
+    +'<input id="msgRailQ" class="msg-rq" placeholder="Search" autocomplete="off" value="'
+    +escAcc(window._msgRailQ||'')+'" oninput="msgRailFilter(this.value)">'
+    /* The Messages section in the middle column is hidden while this rail is up — it was the
+       same two conversations printed twice — so the button that made a group came with it. */
+    +'<button class="msg-rnew" onclick="msgNewGroup()" title="New group"'
+    +' aria-label="New group">+</button></div>'
+    +'<div class="msg-rscroll">';
+  if(convs.length){
+    h+='<div class="msg-rgh">Conversations</div>';
+    h+=convs.map(function(t){
+      var others=(t.members||[]).filter(function(u){return !msgIsMe(u);});
+      var av=(t.kind==='group'&&others.length>1)
+        ? '<span class="msg-av stack">'+((t.members||[]).length)+'</span>'
+        : msgAva(msgPerson(others[0]||(t.members||[])[0]));
+      var pv=t.last
+        ? ((msgIsMe(t.last.sender)?'You: ':(t.kind==='group'?(msgPerson(t.last.sender).first+': '):''))
+           +(t.last.kind==='class'?'suggested a class'
+            :t.last.kind==='professor'?'suggested a professor':(t.last.body||'')))
+        : 'No messages yet';
+      var un=msgUnread(t);
+      return '<button class="msg-rit'+(t.id===msgOpenId?' on':'')+(un?' unread':'')
+        +'" onclick="msgOpen(\''+escAcc(t.id)+'\')">'+av
+        +'<span class="msg-rmain"><span class="msg-rn">'+msgEsc(msgTitle(t))+'</span>'
+        +'<span class="msg-rs">'+msgEsc(pv)+'</span></span>'
+        +'<span class="msg-rw">'+msgEsc(msgAgo(t.last_at))+'</span>'
+        +(un?'<span class="msg-rdot"></span>':'')+'</button>';
+    }).join('');
+  }
+  if(rest.length){
+    h+='<div class="msg-rgh">Friends</div>';
+    h+=rest.slice(0,40).map(function(f){
+      var shared=[]; try{ shared=friendSharedCodes(f)||[]; }catch(e){}
+      var sub=shared.length?(shared.length+' class'+(shared.length===1?'':'es')+' shared')
+                           :'No classes in common';
+      return '<button class="msg-rit" onclick="msgWith(\''+escAcc(f.id)+'\',event)">'
+        +msgAva(msgPerson(f.id))
+        +'<span class="msg-rmain"><span class="msg-rn">'+msgEsc(f.name||'')+'</span>'
+        +'<span class="msg-rs">'+msgEsc(sub)+'</span></span></button>';
+    }).join('');
+  }
+  if(!convs.length&&!rest.length)h+='<div class="msg-rnone">Nothing matches “'+msgEsc(q)+'”.</div>';
+  return h+'</div>';
+}
+window.msgRailFilter=function(v){
+  window._msgRailQ=v;
+  var host=document.getElementById('frRail'); if(!host)return;
+  host.innerHTML=msgRailHtml();
+  var i=document.getElementById('msgRailQ');
+  if(i){ i.focus(); try{ i.setSelectionRange(i.value.length,i.value.length); }catch(e){} }
+};
+function msgRenderRail(){
+  var host=document.getElementById('frRail'); if(!host)return;
+  /* Never rebuild the field the user is typing into. */
+  if(document.activeElement&&document.activeElement.id==='msgRailQ')return;
+  host.innerHTML=msgRailHtml();
+}
+
 /* ---- rendering ------------------------------------------------------------------------------- */
 function msgBodyHtml(t,m){
   var mine=msgIsMe(m.sender);
@@ -20440,6 +21057,9 @@ function msgRowHtml(t,m,prev){
 }
 
 function msgRenderList(){
+  /* The rail is the same data one column narrower, so it refreshes on the same beat — a thread
+     going unread in the inbox and staying bold in the rail would be two answers to one fact. */
+  try{ msgRenderRail(); }catch(e){}
   var sec=document.getElementById('frMsgSec'), out=document.getElementById('frMsgOut');
   if(!sec||!out)return;
   if(!msgOn()||!msgThreads.length){ sec.style.display='none'; return; }
@@ -20479,10 +21099,23 @@ function msgRenderThread(){
     : '<div class="msg-empty">No messages yet. Suggest a class, or just say hi.</div>';
   var who=(t.members||[]).filter(function(u){return !msgIsMe(u);})
     .map(function(u){return msgPerson(u).name;}).join(', ');
+  /* A direct thread is TITLED with that person's name, so the member line underneath was the
+     same name printed twice. It only carries information in a group. */
+  if(who===msgTitle(t))who='';
+  /* Realtime re-renders this whole pane, and it used to take a half-typed message with it.
+     Bank the draft and the schedule pane's open/closed state across the rebuild. */
+  var draft=''; try{ var _i=document.getElementById('msgInput'); if(_i)draft=_i.value||''; }catch(e){}
+  /* sched-on now lives on the static shell, so it survives this rebuild on its own — but the
+     button's aria-pressed is rebuilt here and has to agree with it. */
+  var schedOn=false;
+  try{ var _sh=document.getElementById('frShell'); schedOn=!!(_sh&&_sh.classList.contains('sched-on')); }catch(e){}
+  /* The shell is static markup; this only fills the middle column. */
   pane.innerHTML='<div class="msg-thread">'
     +'<div class="msg-head">'
     +'<button class="msg-back" onclick="msgClose()" aria-label="Back to Friends">&larr;</button>'
     +'<span class="msg-htitle"><b>'+msgEsc(msgTitle(t))+'</b>'+(who?('<small>'+msgEsc(who)+'</small>'):'')+'</span>'
+    +'<button class="msg-schedbtn" id="msgSchedBtn" aria-pressed="'+(schedOn?'true':'false')+'"'
+    +' onclick="msgToggleSched()" title="Show when everyone is free">Schedules</button>'
     +'<button class="msg-leave" onclick="msgLeave()">Leave</button>'
     +'</div>'
     +'<div class="msg-body" id="msgBody">'+body+'</div>'
@@ -20492,16 +21125,24 @@ function msgRenderThread(){
     +'onkeydown="if(event.key===\'Enter\'){event.preventDefault();msgSendText();}">'
     +'<button class="msg-go" onclick="msgSendText()" aria-label="Send">&uarr;</button>'
     +'</div></div>';
+  msgRenderRail();
+  msgRenderSched();
   var b=document.getElementById('msgBody'); if(b)b.scrollTop=b.scrollHeight;
+  if(draft){ var i2=document.getElementById('msgInput'); if(i2)i2.value=draft; }
 }
 
 window.msgOpen=async function(cid){
+  var was=msgOpenId;
   msgOpenId=cid;
+  /* Switching threads from the rail must not inherit the previous one's focused day. */
+  if(was&&was!==cid){ try{ delete msgSchedDay[was]; }catch(e){} }
   var fp=document.getElementById('frFriendsPane'), tp=document.getElementById('frThreadPane');
   var tog=document.getElementById('gpToggle');
   if(fp)fp.style.display='none';
   if(tog)tog.style.display='none';
   if(tp)tp.style.display='';
+  /* The third column exists only while a thread does. */
+  try{ var sh=document.getElementById('frShell'); if(sh)sh.classList.add('thread-on'); }catch(e){}
   msgRenderThread();
   await msgLoadRows(cid);
   msgRenderThread();
@@ -20509,7 +21150,11 @@ window.msgOpen=async function(cid){
 };
 window.msgClose=function(){
   msgOpenId=null;
+  window._msgRailQ='';
   var fp=document.getElementById('frFriendsPane'), tp=document.getElementById('frThreadPane');
+  try{ var sh=document.getElementById('frShell');
+       if(sh){ sh.classList.remove('thread-on'); sh.classList.remove('sched-on'); } }catch(e){}
+  try{ var sc=document.getElementById('frSched'); if(sc)sc.innerHTML=''; }catch(e){}
   if(tp){ tp.style.display='none'; tp.innerHTML=''; }
   if(fp)fp.style.display='';
   try{ if(typeof gpFlagOn==='function'&&gpFlagOn()){var tg=document.getElementById('gpToggle'); if(tg)tg.style.display='';} }catch(e){}
@@ -20569,6 +21214,9 @@ window.msgRefresh=async function(){
 };
 try{
   window.msgLoadThreads=msgLoadThreads; window.msgRenderList=msgRenderList;
+  window.msgSchedHtml=msgSchedHtml; window.msgSchedMembers=msgSchedMembers;
+  window.msgSharedCodes=msgSharedCodes; window.msgRenderSched=msgRenderSched;
+  window.msgRailHtml=msgRailHtml; window.gpRunsFor=gpRunsFor;
   window.msgThreadWith=msgThreadWith;   window.msgCreateGroup=msgCreateGroup;
   window.msgSend=msgSend;               window.msgFit=msgFit;
   window.msgStopRealtime=msgStopRealtime;
@@ -20864,6 +21512,10 @@ function renderFriends(){
   var _gt=document.getElementById('gpToggle');
   if(_gt)_gt.style.display=gpFlagOn()?'':'none';
   if(gpFlagOn()){ try{ gpSetTab(gpTab); }catch(e){} }
+  /* The rail is furniture of the tab, not of an open thread — it has to be drawn when Friends is
+     drawn, or the layout only appears once you have already found your way into a conversation.
+     (Tate, 2026-08-29: "friends doesnt look like it updated".) */
+  try{ msgRenderRail(); }catch(e){}
 
   /* Messages: painted from memory every render, fetched once and then kept live by realtime. */
   try{ msgRenderList(); }catch(e){}
@@ -21777,6 +22429,12 @@ window.setSchedTab=function(t){
   });
   if(t==='mine'){
     try{renderMyClasses();updateWatchTabCounts();}catch(e){}
+    /* On a phone "Your current professors" lives HERE, not on Home (Tate, 2026-08-29). Render and
+       place it on the way in, so the pane is right even when Home has never been opened this
+       session. On desktop hmPlaceCurProf() puts it straight back in the right rail and the slot
+       below collapses to nothing. */
+    try{ if(typeof hmRenderCurProfs==='function')hmRenderCurProfs(); }catch(e){}
+    try{ if(typeof hmPlaceCurProf==='function')hmPlaceCurProf(); }catch(e){}
   }
   if(t==='watch'){
     try{updateWatchTabCounts();renderWatch();renderWatchClasses();}catch(e){}
@@ -24119,7 +24777,7 @@ function hmPlaceRail(){
     }
   }catch(e){}
 }
-try{ window.addEventListener('resize',function(){ if(window._hmRailT)clearTimeout(window._hmRailT); window._hmRailT=setTimeout(function(){hmPlaceRail();hmFitWatch();hmStickRails();},150); }); }catch(e){}
+try{ window.addEventListener('resize',function(){ if(window._hmRailT)clearTimeout(window._hmRailT); window._hmRailT=setTimeout(function(){hmPlaceRail();hmPlaceCurProf();hmFitWatch();hmStickRails();},150); }); }catch(e){}
 /* 8s is past the Doherty threshold by an order of magnitude — if neither feed has answered by
    then, it isn't slow, it's gone. */
 function hmArmFeedTimeout(){
@@ -24505,8 +25163,321 @@ function hmFitWatch(){
   }catch(e){}
 }
 try{ window.hmFitWatch=hmFitWatch; }catch(e){}
+/* =================================================================================================
+   YOUR CURRENT PROFESSORS
+   The people teaching the classes this student is actually in this term — replacing the two
+   "Highest / Lowest rated in your major" cards.
+
+   WHY IT REPLACES THEM
+   Those two were leaderboards, and they carried `hm-desk`, so they did not render on a phone at
+   all. This card is the opposite kind of thing: it is about the student's own week, so it renders
+   at every width and gets no hm-desk. It is also the app's best review-acquisition surface —
+   the professor you are sitting in front of on Tuesday is the one you have something to say about.
+
+   AN UNRATED INSTRUCTOR IS A NORMAL ROW, NOT A GAP
+   matchProfId() returns null for any ambiguous surname on purpose (see its own comment about the
+   seat feed's "Coby Snyder" resolving to PolyRatings' Susan Snyder), and instructors with no
+   PolyRatings entry never enter that index at all. So a real share of rows have no score, and
+   they get a grey star row, "No ratings yet", and a Rate pill — not an empty right-hand column.
+   ================================================================================================= */
+function hmCpDept(codes){ return String((codes&&codes[0])||'').split(/\s+/)[0]||''; }
+/* "ITP 2010 · 2010L" — the subject is said once. Repeating "ITP" on every chip of a row that is
+   about one professor teaching one course's lecture and lab is noise, not information. */
+function hmCpCodes(codes){
+  var subj=null;
+  return (codes||[]).map(function(c,i){
+    var parts=String(c).split(/\s+/);
+    if(parts.length<2)return c;
+    if(i===0){ subj=parts[0]; return c; }
+    return (parts[0]===subj)?parts.slice(1).join(' '):c;
+  }).join(' · ');
+}
+/* hmStarsHtml() deliberately returns NOTHING for a null rating, because on a leaderboard every
+   row has a score and an empty five-star row would read as "rated zero" — a claim about the
+   professor. Here unrated is an expected state and the words beside it say so, so five grey
+   stars are the honest shape: they say a scale exists and nothing has been put on it yet. */
+function hmCpGreyStars(){
+  var svg='<svg viewBox="0 0 20 19" aria-hidden="true"><path d="'+PR_STAR+'"/></svg>';
+  var out='';
+  for(var i=0;i<5;i++)out+='<span class="pr-st"><span class="pr-b">'+svg+'</span></span>';
+  return '<div class="pr-stars cp-grey" aria-hidden="true">'+out+'</div>';
+}
+
+/* One row per PERSON. Lecture and lab are separate entries in meta.secs, so without this the
+   same professor appears twice on nearly every schedule. */
+function hmCurProfList(){
+  var out=[], byKey={};
+  var codes=(typeof myClasses!=='undefined'&&myClasses)?myClasses:[];
+  codes.forEach(function(code){
+    var meta=(typeof myClassMeta!=='undefined')?myClassMeta[code]:null;
+    var secs=(meta&&Array.isArray(meta.secs)&&meta.secs.length)
+      ? meta.secs : [{prof:(meta&&meta.prof)||'',status:'enrolled'}];
+    secs.forEach(function(s){
+      var raw=String((s&&s.prof)||'').trim(); if(!raw)return;
+      /* Cal Poly writes co-taught sections into one field, and single people as "Last, First" —
+         same punctuation, opposite meanings. splitInstructors() already knows the difference. */
+      var names=(typeof splitInstructors==='function')?splitInstructors(raw):[raw];
+      names.forEach(function(one){
+        one=String(one||'').trim();
+        if(!one||/^(staff|tba|to be arranged|to be announced)$/i.test(one))return;
+        var disp=one;
+        if(one.indexOf(',')>=0){
+          var cp=one.split(','), sn=(cp[0]||'').trim(), fn=(cp.slice(1).join(' ')||'').trim();
+          disp=(fn?fn+' ':'')+sn;
+        }
+        var pid=null;
+        try{ pid=(typeof matchProfId==='function')?(matchProfId(one)||matchProfId(disp)):null; }catch(e){}
+        var id=pid||('sp:'+disp.toLowerCase());
+        var row=byKey[id];
+        if(!row){
+          var p=(typeof PROFESSORS!=='undefined')?PROFESSORS[id]:null;
+          row=byKey[id]={id:id,name:(p&&p.name)||disp,dept:(p&&p.dept)||'',p:p||null,
+                         codes:[],wl:false,seen:{}};
+          out.push(row);
+        }
+        if(!row.seen[code]){ row.seen[code]=1; row.codes.push(code); }
+        if(s&&s.status==='waitlisted')row.wl=true;
+      });
+    });
+  });
+  /* RATED FIRST, then unrated — and stable inside each group, so schedule order survives
+     (Tate, 2026-08-29). This is a partition, not a ranking: professors are not sorted best to
+     worst against each other, because ranking the people you are already stuck with answers a
+     question nobody asked. What it does do is put the rows that have something to tell you
+     above the rows that are asking you for something. */
+  var rated=[], unrated=[];
+  out.forEach(function(r){ ((r.p&&r.p.rating!=null)?rated:unrated).push(r); });
+  return rated.concat(unrated);
+}
+
+
+/* ---- and the ones you already had -----------------------------------------------------------
+   Same list, one term back. Built from myHistory (class_history: code, term, year, professor),
+   which is the only place the app knows who taught you before — the seat feed only carries the
+   current term.
+
+   Anyone teaching you NOW is left out of this list even if you had them before: they already
+   have a row six pixels up, and the current row is the more useful of the two. */
+function hmPastProfList(currentIds){
+  var out=[], byKey={}, cur=currentIds||{};
+  var hist=(typeof myHistory!=='undefined'&&myHistory)?myHistory:[];
+  hist.forEach(function(h){
+    var raw=String((h&&h.professor)||'').trim();
+    if(!raw||/^(staff|tba|to be arranged|to be announced|unknown)$/i.test(raw))return;
+    var disp=raw;
+    if(raw.indexOf(',')>=0){
+      var cp=raw.split(','), sn=(cp[0]||'').trim(), fn=(cp.slice(1).join(' ')||'').trim();
+      disp=(fn?fn+' ':'')+sn;
+    }
+    var pid=null;
+    try{ pid=(typeof matchProfId==='function')?(matchProfId(raw)||matchProfId(disp)):null; }catch(e){}
+    var id=pid||('sp:'+disp.toLowerCase());
+    if(cur[id])return;
+    var row=byKey[id];
+    if(!row){
+      var p=(typeof PROFESSORS!=='undefined')?PROFESSORS[id]:null;
+      row=byKey[id]={id:id,name:(p&&p.name)||disp,dept:(p&&p.dept)||'',p:p||null,
+                     codes:[],seen:{},past:true,when:'',rank:-1};
+      out.push(row);
+    }
+    if(h.code&&!row.seen[h.code]){ row.seen[h.code]=1; row.codes.push(h.code); }
+    /* The most recent term you had them, so the row can say WHEN rather than just that you did —
+       and so the list can be ORDERED by it. Computed from every entry rather than trusting the
+       first: myHistory arrives newest-first from loadMyHistory(), but a class typed in by hand
+       lands wherever the array happens to end, and this row's label would then name the wrong
+       term. TERM_ORDER is Winter/Spring/Summer/Fall = 0..3, so year*10+term is calendar order
+       (Fall 2025 = 20253 sits below Winter 2026 = 20260), which is exactly what "most recently
+       taken" means. */
+    var TO=(typeof TERM_ORDER!=='undefined'&&TERM_ORDER)?TERM_ORDER:{Winter:0,Spring:1,Summer:2,Fall:3};
+    var yr=Number(h.year)||0, hasT=!!(h.term&&(h.term in TO));
+    if(yr||hasT){
+      var rk=yr*10+(hasT?TO[h.term]:0);
+      if(rk>row.rank){
+        row.rank=rk;
+        /* Only ever says what this record actually carries. A term with no year says the term;
+           a year with no term says the year; neither says nothing at all. */
+        row.when=h.term?(h.term+(yr?(' '+yr):'')):(yr?String(yr):'');
+      }
+    }
+  });
+  /* MOST RECENTLY TAKEN FIRST (Tate, 2026-08-29). Deliberately NOT the rated-first partition the
+     current list uses: these professors are already behind you, so "which of these did I have
+     last term" is the question this list gets asked, and a rating you can read on every row does
+     not need to reorder them to be found. sort() is stable, so several professors from the same
+     term keep the order myHistory gave them, and the rows whose term we never learned (rank -1)
+     sink to the bottom rather than claiming a position in a timeline. */
+  out.sort(function(a,b){ return b.rank-a.rank; });
+  return out;
+}
+var hmPastOpen=false;
+/* One button, two states, ONE label. The label used to flip to "Hide past professors", which
+   moves the row's width under the cursor mid-tap and re-announces the control to a screen reader
+   as though it were a different button. The chevron and aria-expanded carry the state instead,
+   which is what they are for, and the count stays put in both states so the row never jumps. */
+function hmPastBtnHtml(n){
+  return '<button class="cp-past-btn" aria-expanded="'+(hmPastOpen?'true':'false')+'" '
+    +'onclick="hmTogglePast(event)">'
+    +'<span class="cp-past-lbl">Past professors</span>'
+    +'<span class="cp-past-r"><span class="cp-past-n">'+n+'</span><i class="cp-past-cv"></i></span>'
+    +'</button>';
+}
+window.hmTogglePast=function(ev){ if(ev)ev.stopPropagation(); hmPastOpen=!hmPastOpen; hmRenderCurProfs(); };
+window.hmGoPastClasses=function(ev){
+  if(ev)ev.stopPropagation();
+  /* show('past') already routes to the Schedule tab's Past Classes pane, where BOTH ways in
+     live — upload a transcript (PDF or screenshot) or type a class. */
+  try{ if(typeof show==='function')show('past'); }catch(e){}
+};
+
+function hmCurProfRow(r){
+  var p=r.p, rating=(p&&p.rating!=null)?p.rating:null;
+  var r5=(rating!=null&&typeof to5==='function')?to5(rating):null;
+  var stars=(r5!=null&&typeof hmStarsHtml==='function')?hmStarsHtml(r5):hmCpGreyStars();
+  var dept=r.dept||hmCpDept(r.codes);
+  var evals=(p&&p.evals)||0;
+  /* The review count lives HERE, not on the meta line: an unlabelled number next to a course
+     code reads as another course number. */
+  var ttl=r.name+' — '+(r5!=null?(r5.toFixed(1)+' out of 5'):'no ratings yet')
+    +(evals?(' · '+evals+' rating'+(evals===1?'':'s')):'')
+    +' · '+r.codes.join(', ')+(r.wl?' (waitlisted)':'')
+    +(r.past?(', '+(r.when||'a past term')):'');
+  var meta='<span class="cp-codes">'+esc(hmCpCodes(r.codes))+'</span>'
+    +(r.wl?'<span class="cp-wl">waitlist</span>':'')
+    /* A past row says WHEN you had them. Without it "BUS 2010" on this card is ambiguous with
+       the rows above it, which are this term. */
+    +(r.past&&r.when?('<span class="cp-term">'+esc(r.when)+'</span>'):'')
+    +(rating==null?'<span class="cp-none">No ratings yet</span>':'');
+  var right=(rating!=null)
+    ? '<span class="pr-score" style="color:'+scoreColor(rating)+'">'+r5.toFixed(1)+'</span>'
+    : '<button class="cp-rate" onclick="hmRateInstructor(\''+escAcc(r.id)+'\',\''+escAcc(r.name)+'\',\''+escAcc(dept)+'\',event)">Rate</button>';
+  return '<div class="hm-prow cp-row'+(r.past?' cp-past':'')+'" title="'+escAcc(ttl)+'" '
+    +'onclick="hmOpenInstructor(\''+escAcc(r.id)+'\',\''+escAcc(r.name)+'\',\''+escAcc(dept)+'\')">'
+    +'<span class="pr-av" style="'+((typeof profTintStyle==='function')?profTintStyle(rating):'')+'">'
+    +esc((typeof hmIni==='function')?hmIni(r.name):'?')+'</span>'
+    +'<div class="pr-mid"><div class="pr-nm">'+esc(r.name)+'</div>'
+    +'<div class="pr-dept cp-meta">'+meta+'</div>'
+    +stars+'</div>'+right+'</div>';
+}
+
+window.hmRateInstructor=function(id,name,dept,ev){
+  if(ev)ev.stopPropagation();
+  /* A scraped instructor has no PROFESSORS entry until someone needs one — the same lazy
+     registration reviewScrapedProf() does, so the rate form has something to attach to. */
+  try{ if(/^sp:/.test(id)&&typeof spRegister==='function')spRegister(id,name,dept); }catch(e){}
+  try{ if(typeof startRate==='function')startRate(id); }catch(e){}
+};
+window.hmOpenInstructor=function(id,name,dept){
+  try{ if(/^sp:/.test(id)&&typeof spRegister==='function')spRegister(id,name,dept); }catch(e){}
+  /* openWatchedProf already routes a scraped id to the instructor card and a rated one to the
+     profile — and it fails closed when the seat feed has not landed, which is the right answer
+     rather than opening an empty modal. */
+  try{ if(typeof openWatchedProf==='function')return openWatchedProf(id); }catch(e){}
+  try{ if(typeof openProf==='function')openProf(id); }catch(e){}
+};
+
+/* Desktop puts this card in the right rail under the Rate button; a phone has no right rail at
+   all. Rather than render it twice, the single node is moved — the same trick hmPlaceRail() uses,
+   and for the same reason: one DOM for both layouts, so a rotate or a resize needs no re-render
+   and nothing can drift between two copies.
+   The rail's own HTML is rebuilt by hmRenderRailR(), which would destroy a child moved into it,
+   so this must run AFTER that — see renderHome(). */
+function hmPlaceCurProf(){
+  try{
+    var el=document.getElementById('hmCurProf'); if(!el)return;
+    var wide=window.matchMedia('(min-width:1140px)').matches;
+    var slot=document.getElementById('hmCurProfSlot');
+    /* The card is 530px in the centre column and 300px in the rail, on the SAME viewport — so
+       the compact variant keys off where the card actually is, not off a media query, which
+       would get the phone (400px, centre) wrong in both directions. */
+    el.classList.toggle('cp-narrow', !!(wide&&slot));
+    if(wide&&slot){ if(el.parentNode!==slot)slot.appendChild(el); return; }
+    /* NARROW: not on Home at all (Tate, 2026-08-29). Six current rows plus the past-professors
+       button filled the entire phone screen under the friends strip, so the feed the app opens
+       for was below the fold on a card about classes the student is already enrolled in. It goes
+       to Schedule → My Classes instead, under those very classes. Still one node and one
+       renderer — only the destination changed, so a rotate still needs no re-render. */
+    var sslot=document.getElementById('hmCurProfSchedSlot');
+    if(sslot){ if(el.parentNode!==sslot)sslot.appendChild(el); return; }
+    /* No Schedule pane in this document (a stripped test page). Park it back in the centre
+       column, where the phone stylesheet keeps it hidden, rather than leaving it inside a rail
+       that hmRenderRailR() is about to overwrite. */
+    var center=document.querySelector('.hm-center');
+    if(center&&el.parentNode!==center)center.appendChild(el);
+  }catch(e){}
+}
+try{ window.hmPlaceCurProf=hmPlaceCurProf; }catch(e){}
+
+function hmRenderCurProfs(){
+  var host=document.getElementById('hmCurProf'); if(!host)return;
+  var list=[];
+  try{ list=hmCurProfList(); }catch(e){}
+  if(!list.length){
+    /* The highest-value empty state on Home: this student has no schedule, and every other
+       thing this app does gets better the moment they import one. */
+    /* No current schedule — but past professors may still be worth showing, and if there are
+       none of those either, the two buttons are the two things that fix it. */
+    var pastOnly=[]; try{ pastOnly=hmPastProfList({}); }catch(e){}
+    host.innerHTML='<div class="hm-card cp-card cp-empty">'
+      +'<h3>Who\u2019s teaching you this term?</h3>'
+      +'<p>Import your schedule and the professors behind your classes show up here, with their ratings.</p>'
+      +'<button class="btn primary" onclick="openSchedImport()">Import my schedule</button>'
+      +(pastOnly.length
+        ? (hmPastBtnHtml(pastOnly.length)
+           +(hmPastOpen?('<div class="cp-past-list">'+pastOnly.map(hmCurProfRow).join('')+'</div>'):''))
+        : '<button class="cp-past-btn cp-past-add" onclick="hmGoPastClasses(event)">Add your past professors'
+          +'<span class="cp-past-sub">Upload your transcript, or add a class</span></button>')
+      +'</div>';
+    return;
+  }
+  /* All of them, no "Show all" (Tate, 2026-08-29). Four rows plus a link was one more tap
+     between a student and the answer to "who is teaching me", on a card whose entire job is
+     that question — and the tail of the list is where the unrated ones live, which is exactly
+     the part worth reaching. */
+  /* PAST PROFESSORS open UNDER the current ones, on this card — not on a page of their own
+     (Tate, 2026-08-29). Somebody deciding whether to take a professor wants both halves of the
+     answer in one place: the people teaching them now, and the people who already did. */
+  var curIds={}; list.forEach(function(r){ curIds[r.id]=1; });
+  var past=[];
+  try{ past=hmPastProfList(curIds); }catch(e){}
+  var logged=false;
+  try{ logged=!!((typeof myHistory!=='undefined'&&myHistory)&&myHistory.length); }catch(e){}
+  var tail;
+  if(!logged){
+    /* Nothing logged. The button does not pretend to expand something that is not there — it
+       goes to the one screen that fixes it, where a transcript upload and a manual add both
+       live. */
+    tail='<button class="cp-past-btn cp-past-add" onclick="hmGoPastClasses(event)">'
+      +'Add your past professors<span class="cp-past-sub">Upload your transcript, or add a class</span></button>';
+  }else if(!past.length){
+    /* Logged, but everyone in it is already above — say that rather than opening an empty list. */
+    tail='<div class="cp-past-none">Everyone you\u2019ve had before is teaching you again this term.</div>';
+  }else{
+    tail=hmPastBtnHtml(past.length)
+      +(hmPastOpen?('<div class="cp-past-list">'+past.map(hmCurProfRow).join('')+'</div>'):'');
+  }
+  host.innerHTML='<div class="hm-card cp-card">'
+    +'<div class="hm-ct cp-ct">Your current professors</div>'
+    +list.map(hmCurProfRow).join('')
+    +tail
+    +'</div>';
+}
+try{ window.hmRenderCurProfs=hmRenderCurProfs; window.hmCurProfList=hmCurProfList; }catch(e){}
+
 function hmRenderRailR(){
   var host=document.getElementById('hmRailR'); if(!host)return;
+  /* Park "Your current professors" back in the centre column BEFORE this rebuilds the rail.
+     hmPlaceCurProf() moves that node INTO the rail, and `host.innerHTML=out` below would take
+     it with the rest of the rail's children — so on the first re-render of Home (a friend list
+     landing, a feed refresh, anything) the card vanished for the rest of the session and no
+     amount of re-rendering brought it back, because the node it renders into was gone.
+     hmPlaceCurProf() runs again after this and puts it where it belongs. */
+  try{
+    var _cp=document.getElementById('hmCurProf');
+    if(_cp&&host.contains(_cp)){
+      var _c=document.querySelector('.hm-center');
+      if(_c)_c.appendChild(_cp); else _cp.remove();
+    }
+  }catch(e){}
   var out='';
   /* ---- Today: the date, and nothing else -------------------------------------------------
      This card has now been three things. It started as a 30px numeral with a class count; the
@@ -24531,12 +25502,21 @@ function hmRenderRailR(){
   }catch(e){}
   /* the supply verb — right above Highest rated (Tate's placement) */
   out+='<button class="hm-ratebtn" onclick="openRate()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 17.3l-5.4 3 1-6-4.4-4.2 6-.9L12 3.6l2.8 5.6 6 .9-4.4 4.2 1 6z" stroke-linejoin="round"/></svg>Rate a professor</button>';
+  /* Your current professors sits HERE on desktop — under the Rate button, above the two ranked
+     cards (Tate, 2026-08-28). The node itself lives in .hm-center and is MOVED into this slot by
+     hmPlaceCurProf(), for the same reason hmPlaceRail() moves the rails: below 1140px the whole
+     right rail is hidden, and this card must not go with it. It is the one thing on Home about
+     the student's own week rather than a leaderboard, so it has to survive on a phone. */
+  out+='<div id="hmCurProfSlot"></div>';
   /* "Friends in your classes" lived here and was removed 2026-08-21 as repetitive. It said
      the same thing as the Friends-activity strip at the top of Home ("1 class with you"),
      which is both more compact and higher on the page — and the Friends tab it linked to
      says it a third time, per friend, with more detail. Three surfaces for one fact. */
   /* highest + lowest rated — REAL DATA ONLY: professors synced from PolyRatings'
-     live API (p.live). Seeded/sample entries can never appear here. */
+     live API (p.live). Seeded/sample entries can never appear here.
+     Removed on 2026-08-28 when "Your current professors" replaced them, and put back the same
+     day (Tate): the new card goes ABOVE these, not instead of them. They keep hm-desk and stay
+     desktop-only for the original reason — a leaderboard is a browse surface. */
   try{
     var pool=[];
     for(var pid in PROFESSORS){var p=PROFESSORS[pid];if(p&&p.live&&p.rating!=null&&p.name&&(p.evals||0)>0)pool.push({id:pid,p:p});}
@@ -24596,7 +25576,8 @@ function hmRenderRailR(){
     bottom=bottom.filter(function(e){return top.indexOf(e)<0;});
     if(bottom.length){
       /* Branding someone "Lowest rated" off three ratings is the more damaging half of this
-         pair, and it was the half with no sample-size caveat at all. */
+         pair, and it was the half with no sample-size caveat at all. It has one now, and it
+         only prints when the 8+ filter did NOT apply — so the caveat and the list always agree. */
       out+='<div class="hm-card hm-desk hm-pcard"><div class="hm-ct hm-pct">Lowest rated'+(scopeLabel||' right now')+'</div>'+bottom.map(ratedRow).join('')
         +(evalFilterApplied?'':'<div class="hm-sortnote">Small sample — some have only a few ratings</div>')
         +'</div>';
@@ -24677,7 +25658,9 @@ window.renderHome=function(){
   }
   if(land)land.style.display='none';
   if(dash)dash.style.display='';
-  hmGreeting();hmRenderAlert();hmRenderStrip();hmRenderComposer();hmRenderFeed();hmRenderRailL();hmRenderRailR();hmPlaceRail();
+  hmGreeting();hmRenderAlert();hmRenderCurProfs();hmRenderStrip();hmRenderComposer();hmRenderFeed();hmRenderRailL();hmRenderRailR();hmPlaceRail();
+  /* After hmRenderRailR(): it rebuilds the rail's innerHTML, which would throw this card away. */
+  try{ hmPlaceCurProf(); }catch(e){}
   /* After hmPlaceRail(): the rail's width — and so its height — depends on which column
      it ended up in, and the fit is measured from that height. */
   try{ hmFitWatch(); }catch(e){}
