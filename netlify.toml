@@ -127,3 +127,23 @@
   for = "/invite.html"
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"
+
+# ---------------------------------------------------------------------------
+# /s — the shared-schedule link preview. Same problem /invite has and the same
+# reason it cannot be solved in the app: iMessage, WhatsApp, Slack and Discord
+# read <meta property="og:*"> WITHOUT running JavaScript, and a query string does
+# not change which file Netlify serves. So every shared schedule previewed with
+# the homepage card, and no amount of client code could ever change that.
+#
+# netlify/edge-functions/share.ts also declares `export const config = { path:
+# "/s" }`, which is on its own enough to route it. This block is here anyway so
+# the route is greppable in the site config rather than only inside the function
+# — someone reading netlify.toml to find out what this site serves should not
+# have to know to go looking in a Deno file.
+#
+# WITHOUT the function deployed, /s returns Netlify's 404 page and a shared link
+# previews as nothing at all. Verified 2026-08-29: it is 404ing right now.
+# ---------------------------------------------------------------------------
+[[edge_functions]]
+  path = "/s"
+  function = "share"
