@@ -4552,7 +4552,7 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
 /* Feature flags. Groups ships dark: the code is in the file and the toggle does not render
    until this is true, so it can be reviewed and merged without appearing to students. */
 window.PROFESSIFY_FLAGS={groups:true,messages:true};   /* Groups ON — Tate, 2026-08-25. Friends-only; groups are device-local (localStorage). */
-window.PROFESSIFY_BUILD='2026-09-08 07:05';
+window.PROFESSIFY_BUILD='2026-09-08 15:15';
 /* Paint the build stamp everywhere it appears. */
 try{
   (function(){
@@ -24850,6 +24850,21 @@ function scCanUpload(){
    uploads are fire-and-forget, the link was still built and sent, the iMessage card still drew the
    student's real week, and only the friend who TAPPED it ever saw anything wrong ("That schedule
    link has expired"). A failure nobody is watching is a failure nobody finds. */
+/* NO upsert ON THESE TWO UPLOADS (8 September 2026, and this is load-bearing).
+   `upsert:true` makes the storage API run INSERT ... ON CONFLICT DO UPDATE, and PostgreSQL
+   refuses that statement unless an UPDATE policy exists for the row — schedule-cards has an
+   INSERT policy and nothing else. So every card upload came back
+
+       403  new row violates row-level security policy
+
+   even for a brand-new key that could not possibly conflict. Measured, not guessed: the same
+   call with upsert returns 403 and without it returns ok, back to back, against production.
+
+   Nothing here ever needs upsert. scToken() is 16 random bytes — 128 bits — chosen fresh for
+   every share, so there is no second write to the same name, ever. The flag bought nothing and
+   cost the entire feature. Do not add an UPDATE policy to make upsert work: that would let any
+   signed-in student overwrite a card in a public bucket, to fix a collision that cannot happen.
+   (avatars is the opposite case — a fixed path per user, a real UPDATE policy, upsert correct.) */
 function scUploadFailed(which,msg){
   try{ console.warn('[share] '+which+' upload failed:',msg); }catch(e){}
   try{ if(typeof trackError==='function')trackError('share '+which+': '+String(msg||'unknown').slice(0,120),'share'); }catch(e){}
@@ -24860,7 +24875,7 @@ function scUploadFailed(which,msg){
 function scUploadCard(id,file){
   try{
     if(!scCanUpload()||!id||!file)return;
-    sb.storage.from(SC_BUCKET).upload(id,file,{contentType:'image/png',upsert:true})
+    sb.storage.from(SC_BUCKET).upload(id,file,{contentType:'image/png'})
       .then(function(r){ if(r&&r.error)scUploadFailed('card',r.error.message); },
             function(e){ scUploadFailed('card',e&&e.message); });
   }catch(e){}
@@ -24874,7 +24889,7 @@ function scUploadPayload(id,payload){
     if(!scCanUpload()||!id||!payload)return;
     var name=String(id).replace(/\.png$/,'')+'.json';
     var blob=new Blob([payload],{type:'application/json'});
-    sb.storage.from(SC_BUCKET).upload(name,blob,{contentType:'application/json',upsert:true})
+    sb.storage.from(SC_BUCKET).upload(name,blob,{contentType:'application/json'})
       .then(function(r){ if(r&&r.error)scUploadFailed('payload',r.error.message); },
             function(e){ scUploadFailed('payload',e&&e.message); });
   }catch(e){}
