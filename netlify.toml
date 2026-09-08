@@ -1,17 +1,113 @@
 # Netlify config for Professify.
 # The app is a single static index.html — no build step.
 
+# ------------------------------------------------------------------------------------------------
+# WHAT GETS SERVED IS AN ALLOWLIST, NOT A DENYLIST — 2026-09-07
+# ------------------------------------------------------------------------------------------------
+# This used to be `publish = "."`, which serves EVERY file in the repo root, and the protection
+# against that was the block of redirects further down: twelve rules naming twelve files that
+# should not be public. That is a denylist, and a denylist only ever knows about the files someone
+# remembered to add. It already failed once — professify.app/index_v7.html served a months-old
+# build whose own disclaimer read "Some sample reviews and grade data are placeholders", i.e.
+# FABRICATED review data on the real domain, one guessed URL away. The redirects were written after
+# that was found, which is exactly the problem: they are a list of mistakes already made.
+#
+# So the site is now built into a directory that contains only what is meant to be public, and
+# that directory is what Netlify publishes. Adding a stray file to the repo can no longer put it on
+# the internet; a file reaches the web only by being named in the list below.
+#
+# index.html is REQUIRED — no index, no deploy, loudly. Everything else is copied if present and
+# reported if not, so a renamed asset degrades a preview card instead of failing the whole build at
+# an awkward moment. The last thing the command prints is every root file it did NOT publish: read
+# that list on the first deploy, because it is the only honest inventory of what used to be live.
+#
+# Edge functions are unaffected: Netlify reads netlify/edge-functions/ from the repo root, not from
+# the publish directory, so /s keeps working.
+# ------------------------------------------------------------------------------------------------
 [build]
-  publish = "."
-  command = ""
+  publish = "public"
+  command = """
+set -eu
+rm -rf public && mkdir -p public
+
+# The only files that may be served from professify.app.
+REQUIRED="index.html"
+# The PWA files were added 2026-09-07. A file not named here is not on the internet: that is the
+# whole point of the allowlist, and it is why robots.txt 404'd for two weeks after being written.
+OPTIONAL="invite.html robots.txt share.png share-card.png share-wide.png invite-card.png invite-card-tall.png manifest.webmanifest sw.js icon-192.png icon-512.png icon-maskable-512.png apple-touch-icon.png"
+
+for f in $REQUIRED; do
+  if [ ! -f "$f" ]; then
+    echo "BUILD FAILED: $f is missing from the repo root. Refusing to publish a site without it."
+    exit 1
+  fi
+  cp "$f" public/
+  echo "published  $f"
+done
+
+for f in $OPTIONAL; do
+  if [ -f "$f" ]; then cp "$f" public/; echo "published  $f"
+  else echo "MISSING    $f  (not published \u2014 anything that links to it will 404)"; fi
+done
+
+# Everything else in the root, INCLUDING DOTFILES. A bare `for f in *` skips them, which is how a
+# stray .env or .netlify/state.json stays invisible in a build log. None of them are published
+# either way \u2014 they are not on the list above \u2014 but a secret sitting in the repo root is
+# worth seeing named on every deploy rather than discovered later.
+echo "--- not published (present in the repo root, deliberately not served) ---"
+for f in * .*; do
+  case "$f" in .|..|.git|.gitignore|.DS_Store|.netlify) continue ;; esac
+  case " $REQUIRED $OPTIONAL public netlify netlify.toml " in
+    *" $f "*) ;;
+    *) echo "  withheld  $f" ;;
+  esac
+done
+echo "--- $(ls public | wc -l) files published ---"
+"""
 
 # Security + caching headers
+#
+# CSP and HSTS added 2026-09-06 during the pre-launch audit. The three that were already here are
+# live and were confirmed so: professify.app/supabase-setup.sql redirects to the homepage, which
+# only happens if this file is deployed. (robots.txt returning 404 is a separate problem — it was
+# never committed — and it is what made an earlier read of this wrongly conclude the config was
+# not deploying at all.)
 [[headers]]
   for = "/*"
   [headers.values]
-    X-Frame-Options = "SAMEORIGIN"
+    # DENY, not SAMEORIGIN. Professify frames nothing of its own, so same-origin framing buys
+    # nothing and leaves the clickjacking surface open to anything that reaches the origin.
+    # frame-ancestors below is the modern control; this is the fallback for older browsers.
+    X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
+
+    # Two years, subdomains included. Do NOT submit to hstspreload.org until you are certain every
+    # professify.app subdomain will be HTTPS forever — getting off that list takes months.
+    Strict-Transport-Security = "max-age=63072000; includeSubDomains; preload"
+
+    # Switch off the browser features the app never uses, so a compromised script cannot either.
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+
+    # ------------------------------------------------------------------------------------------
+    # Built from what Professify ACTUALLY loads, not from a template:
+    #   script-src   'self', plus jsdelivr for the one external script (supabase-js, pinned), plus
+    #                'unsafe-inline' because the whole app is inline <script> and ~180 inline
+    #                onclick handlers. Stated plainly: this CSP therefore cannot stop injected
+    #                script. It is defence in depth behind the escaping in jsAttr(), not a second
+    #                XSS control. Dropping 'unsafe-inline' means moving every handler to
+    #                addEventListener first — real work, and the right work eventually.
+    #   connect-src  Supabase REST + auth + realtime (wss), and the PolyRatings API.
+    #   img-src      data: for inlined QR codes and cached avatars, blob: for canvas exports,
+    #                https: for Supabase Storage avatars.
+    #   frame-ancestors 'none'  is the directive that actually stops clickjacking.
+    #   object-src 'none'; base-uri 'self'  — no plugins, and no injected <base> that could
+    #                silently repoint every relative URL on the page.
+    #
+    # If something breaks, the console names the exact directive that blocked it. Add what it
+    # names — never widen to 'unsafe-eval' or '*' to make the message go away.
+    # ------------------------------------------------------------------------------------------
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; worker-src 'self'; manifest-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api-prod.polyratings.org; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests"
 
 # Don't hard-cache the HTML so deploys show up immediately.
 [[headers]]
@@ -20,8 +116,59 @@
     Cache-Control = "public, max-age=0, must-revalidate"
 
 # ---------------------------------------------------------------------------
-# publish = "." serves EVERY file in the repo root, so each old build left lying
-# around here has been a live, public copy of Professify at its own URL. Verified
+# THE SERVICE WORKER — 2026-09-07
+#
+# must-revalidate is not optional here and it is the one line people get wrong.
+# A service worker is fetched by the browser, but a CDN sitting in front of it
+# obeys Cache-Control like any other file: cache /sw.js for an hour and the
+# worker a student is running is the one from an hour ago, INCLUDING its cache
+# names, so a deploy does not reach them and there is no way to tell from the
+# outside. Zero seconds, revalidate every time. The worker is 9KB.
+#
+# Service-Worker-Allowed is belt and braces: the file is served from the root so
+# its default scope is already "/", but if it ever moves into a subdirectory the
+# scope silently narrows and offline stops working on every page but that one.
+# ---------------------------------------------------------------------------
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+    Service-Worker-Allowed = "/"
+
+# The manifest changes when the app's name, icons or shortcuts do — rare, but a
+# stale one means a student installs an app with last month's shortcuts. Netlify
+# does not set a Content-Type for .webmanifest on its own, and a manifest served
+# as text/plain is ignored by Chrome with no visible error.
+[[headers]]
+  for = "/manifest.webmanifest"
+  [headers.values]
+    Content-Type = "application/manifest+json; charset=utf-8"
+    Cache-Control = "public, max-age=3600, must-revalidate"
+
+# Icons are immutable within a build. If one ever changes, change its FILENAME —
+# an installed app keeps the icon the OS copied at install time, and a week-old
+# CDN copy on top of that means a change nobody sees.
+[[headers]]
+  for = "/icon-*.png"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"
+
+[[headers]]
+  for = "/apple-touch-icon.png"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"
+
+# ---------------------------------------------------------------------------
+# SUPERSEDED AS THE PRIMARY CONTROL (2026-09-07) but deliberately kept.
+# The allowlist at the top of this file is what actually stops these being served
+# now. These rules stay as the backup: if the build command is ever reverted to
+# publish = ".", the twelve worst files are still closed rather than silently
+# reopening. Do not treat this list as the protection — it is a list of mistakes
+# already made, which is why it needed replacing.
+#
+# The original note, kept because it is the evidence:
+# publish = "." served EVERY file in the repo root, so each old build left lying
+# around there was a live, public copy of Professify at its own URL. Verified
 # 2026-08-24: professify.app/index_v7.html returned a working months-old app whose
 # own disclaimer reads "Some sample reviews and grade data are placeholders" —
 # fabricated data, on the real domain, one guessed URL away, with no robots.txt to
