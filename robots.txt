@@ -1,0 +1,22 @@
+# Professify — professify.app
+# The app is one page. Everything below is an old build or a repo file that
+# publish = "." happens to expose; none of it should be indexed. The redirects in
+# netlify.toml already make these unreachable — this is here so anything a crawler
+# picked up before 2026-08-24 gets dropped from the index.
+
+User-agent: *
+Allow: /$
+Allow: /index.html
+
+Disallow: /index-legacy-v0.html
+Disallow: /index_6.html
+Disallow: /index_v7.html
+Disallow: /professify-merged-final_2.html
+Disallow: /professor-plan_26.html
+Disallow: /professor-plan_31.html
+Disallow: /sprint.html
+Disallow: /supabase-setup.sql
+Disallow: /scrape-seats_1.mjs
+Disallow: /BACKEND-SETUP.md
+Disallow: /CONTRIBUTING.md
+Disallow: /README.md
