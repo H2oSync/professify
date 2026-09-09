@@ -1006,8 +1006,23 @@ window.toggleTheme = toggleTheme;
      min-width:0 is the fix; the rest is making the thing look considered — labelled fields
      instead of two bare dropdowns, and a primary button that reads as the answer. */
   .pq-back{background:rgba(6,8,7,.55);backdrop-filter:blur(3px)}
+  /* A DIALOG TALLER THAN THE PHONE (Tate, 2026-09-08: "the popup ... doesnt scroll its cut off
+     you coulnt see the rest"). Six dialogs share these two rules — Log a past class, Edit
+     profile, the avatar cropper, the waitlist spot, Delete account, Legal — and none of them
+     could scroll: the backdrop centres its child and was overflow:visible, and the card had
+     neither a max-height nor an overflow. So anything taller than the viewport was clipped at
+     BOTH ends, with the top unreachable, which is the worst version of this bug: on a 375x554
+     phone "Log a past class" with the waiver open is 556px and Edit profile is 568px.
+     The card gets the max-height, not just the backdrop, because a centred flex child that
+     overflows cannot be scrolled back up to — capping the card keeps centring honest and puts
+     the scroll inside the thing that is too tall. dvh so the iOS URL bar doesn't eat the
+     buttons; the vh line above it is the fallback for browsers without dvh.
+     overscroll-behavior:contain stops a flick at the end of the list scrolling the page behind. */
+  .pq-back{overflow-y:auto;-webkit-overflow-scrolling:touch}
   .pq-dlg{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:24px;
-    width:min(390px,94vw);box-shadow:0 24px 60px rgba(0,0,0,.34)}
+    width:min(390px,94vw);box-shadow:0 24px 60px rgba(0,0,0,.34);
+    max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);
+    overflow-y:auto;overscroll-behavior:contain}
   .pq-dlg h3{font-size:18.5px;font-weight:650;letter-spacing:-.018em;margin:0 0 6px}
   .pq-dlg .d{font-size:13.5px;color:var(--muted);line-height:1.5;margin-bottom:18px}
   .pq-dlg .rowsel{display:flex;gap:10px;margin-bottom:22px}
@@ -4552,7 +4567,7 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
 /* Feature flags. Groups ships dark: the code is in the file and the toggle does not render
    until this is true, so it can be reviewed and merged without appearing to students. */
 window.PROFESSIFY_FLAGS={groups:true,messages:true};   /* Groups ON — Tate, 2026-08-25. Friends-only; groups are device-local (localStorage). */
-window.PROFESSIFY_BUILD='2026-09-08 15:15';
+window.PROFESSIFY_BUILD='2026-09-08 16:10';
 /* Paint the build stamp everywhere it appears. */
 try{
   (function(){
