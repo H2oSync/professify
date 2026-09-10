@@ -23,7 +23,7 @@
        * PORTRAIT for og:image (1200x1500). iMessage draws the og:image at its own aspect ratio,
          so a tall card fills the bubble the way Saturn's does instead of sitting as a thin strip.
          Twitter crops portrait badly, so twitter:image keeps a 1200x630 of the same design. -->
-<meta name="description" content="Real professor ratings from PolyRatings, daily seat and waitlist counts, and which of your friends are in your classes. Free, no ads.">
+<meta name="description" content="Real professor ratings from PolyRatings, daily seat and waitlist counts, and which of your friends are in your classes. Free for students.">
 <link rel="canonical" href="https://professify.app/">
 <meta name="theme-color" content="#154734">
 
@@ -118,7 +118,7 @@ window.PROFESSIFY_CONFIG = {
   SUPABASE_URL: 'https://rqkndeqbcahozidniesn.supabase.co',
   SUPABASE_ANON_KEY: 'sb_publishable_h7Hllays0O3KRORIKfRdzg_iMBVInrD', // publishable key — safe to expose
   SITE_URL: 'https://professify.app', // used to build shareable invite links + QR codes
-  EMAIL_DOMAIN: 'calpoly.edu',  // lock sign-in/sign-up to Cal Poly SLO only. Blank = any .edu
+  EMAIL_DOMAIN: 'calpoly.edu',  // no longer the gate — see SCHOOLS / schoolForEmail() (2026-09-09)
   // Web push. The PUBLIC half of a VAPID pair — it is meant to be in the page, the way the
   // publishable key above is. Generate the pair with `npx web-push generate-vapid-keys`, paste the
   // public key here, and put the PRIVATE key in the edge function's secrets and nowhere else.
@@ -433,7 +433,21 @@ window.toggleTheme = toggleTheme;
      now and is styled by .wl-navbadge alongside the tab-bar badge. */
   .auth-back{position:fixed;inset:0;z-index:130;background:rgba(6,7,9,.62);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:24px}
   .auth-back.open{display:flex;animation:rise .3s var(--ease)}
-  .auth-panel{width:100%;max-width:400px;background:var(--bg);border:1px solid var(--line);border-radius:18px;padding:28px 24px 24px;position:relative;box-shadow:0 30px 80px rgba(0,0,0,.55)}
+  /* THE SIGN-IN CARD WITH THE KEYBOARD UP — 2026-09-08. Same defect as .pq-dlg, on the first
+     screen a new student ever sees. The card is 524px with its real content; the backdrop
+     centres it and neither had a cap or an overflow. At 375x554 that fits by five pixels. The
+     moment they tap the email field the keyboard takes the bottom of the screen, the visible
+     viewport drops to about 430px, and the card hangs 37px off the top and 57px off the
+     bottom — with the sign-in button below the fold and NOTHING to scroll. A modal whose whole
+     job is typing an email cannot assume the keyboard is closed.
+     The cap goes on the card for the same reason it does on .pq-dlg: you cannot scroll back up
+     to the top of an overflowing centred box, so the scroll has to live inside it. */
+  .auth-back{overflow-y:auto;-webkit-overflow-scrolling:touch}
+  /* the account line above the password box — present for the password manager, and muted
+     because it is context, not a field anyone fills in */
+  .st-pwuser{margin:0 0 8px;opacity:.6;cursor:default}
+  .auth-panel{width:100%;max-width:400px;background:var(--bg);border:1px solid var(--line);border-radius:18px;padding:28px 24px 24px;position:relative;box-shadow:0 30px 80px rgba(0,0,0,.55);
+    max-height:calc(100vh - 48px);max-height:calc(100dvh - 48px);overflow-y:auto;overscroll-behavior:contain}
   .auth-x{position:absolute;top:14px;right:16px;background:none;border:0;color:var(--muted);font-size:24px;cursor:pointer;line-height:1}
   .auth-k{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--good);font-weight:700}
   .auth-h{font-size:22px;font-weight:700;margin:6px 0 6px;color:var(--text)}
@@ -1006,8 +1020,23 @@ window.toggleTheme = toggleTheme;
      min-width:0 is the fix; the rest is making the thing look considered — labelled fields
      instead of two bare dropdowns, and a primary button that reads as the answer. */
   .pq-back{background:rgba(6,8,7,.55);backdrop-filter:blur(3px)}
+  /* A DIALOG TALLER THAN THE PHONE (Tate, 2026-09-08: "the popup ... doesnt scroll its cut off
+     you coulnt see the rest"). Six dialogs share these two rules — Log a past class, Edit
+     profile, the avatar cropper, the waitlist spot, Delete account, Legal — and none of them
+     could scroll: the backdrop centres its child and was overflow:visible, and the card had
+     neither a max-height nor an overflow. So anything taller than the viewport was clipped at
+     BOTH ends, with the top unreachable, which is the worst version of this bug: on a 375x554
+     phone "Log a past class" with the waiver open is 556px and Edit profile is 568px.
+     The card gets the max-height, not just the backdrop, because a centred flex child that
+     overflows cannot be scrolled back up to — capping the card keeps centring honest and puts
+     the scroll inside the thing that is too tall. dvh so the iOS URL bar doesn't eat the
+     buttons; the vh line above it is the fallback for browsers without dvh.
+     overscroll-behavior:contain stops a flick at the end of the list scrolling the page behind. */
+  .pq-back{overflow-y:auto;-webkit-overflow-scrolling:touch}
   .pq-dlg{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:24px;
-    width:min(390px,94vw);box-shadow:0 24px 60px rgba(0,0,0,.34)}
+    width:min(390px,94vw);box-shadow:0 24px 60px rgba(0,0,0,.34);
+    max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);
+    overflow-y:auto;overscroll-behavior:contain}
   .pq-dlg h3{font-size:18.5px;font-weight:650;letter-spacing:-.018em;margin:0 0 6px}
   .pq-dlg .d{font-size:13.5px;color:var(--muted);line-height:1.5;margin-bottom:18px}
   .pq-dlg .rowsel{display:flex;gap:10px;margin-bottom:22px}
@@ -3293,7 +3322,13 @@ html[data-auth="in"] #schedGuestNote{display:none!important}
     </div>
     <div id="exContext" class="ex-filters"></div>
 
-    <div id="exOut"></div>
+    <!-- Sean's Explore redesign, ported 2026-09-09: a left-anchored feed with a context rail
+         beside it, instead of a single centred column. The rail is an <aside> that CSS hides
+         below 1040px, so the phone layout is untouched — there is one DOM for both. -->
+    <div class="ex-grid" id="exGrid">
+      <div class="ex-feed"><div id="exOut"></div></div>
+      <aside class="ex-rail" id="exRail" aria-label="Your classes at a glance"></aside>
+    </div>
   </div>
 </main>
 
@@ -3785,7 +3820,7 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
            belongs to openAuth(), which is also the only place that remembers where you were
            trying to go. -->
       <div id="frGoogleWrap" style="display:none;margin-bottom:14px">
-        <button class="btn primary rate-submit" style="background:#fff;color:#1f1f1f" onclick="signInWithGoogle()">Continue with Google (@calpoly.edu)</button>
+        <button class="btn primary rate-submit" style="background:#fff;color:#1f1f1f" onclick="signInWithGoogle()">Continue with Google (school email)</button>
         <div style="text-align:center;font-size:11.5px;color:var(--faint);margin:10px 0">or use your email directly</div>
       </div>
       <button class="btn primary rate-submit" onclick="openAuth('friends')">Sign in with your Cal Poly email</button>
@@ -4252,7 +4287,7 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
       <h2>Set up your plan.</h2>
       <p class="obp">Tell us where you are in school and we'll show your classes term by term — with who's teaching each one.</p>
       <div class="ob-grid">
-        <div class="ob-field full"><label>School</label><div class="ob-school-fixed">Cal Poly, San Luis Obispo</div><div class="selwrap" style="display:none"><select id="obSchool" onchange="obSchoolChange()">
+        <div class="ob-field full"><label>School</label><div class="ob-school-fixed" id="obSchoolFixed">Cal Poly, San Luis Obispo</div><div class="selwrap" style="display:none"><select id="obSchool" onchange="obSchoolChange()">
           <option>Cal Poly, San Luis Obispo</option>
           <option>San Diego State University</option>
           <option>UC Santa Barbara</option>
@@ -4552,7 +4587,7 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
 /* Feature flags. Groups ships dark: the code is in the file and the toggle does not render
    until this is true, so it can be reviewed and merged without appearing to students. */
 window.PROFESSIFY_FLAGS={groups:true,messages:true};   /* Groups ON — Tate, 2026-08-25. Friends-only; groups are device-local (localStorage). */
-window.PROFESSIFY_BUILD='2026-09-08 15:15';
+window.PROFESSIFY_BUILD='2026-09-10 09:20';
 /* Paint the build stamp everywhere it appears. */
 try{
   (function(){
@@ -6929,14 +6964,44 @@ function majorOptionsHtml(sel){
 /* ============ SCHOOLS (per-school config — this is how new schools get added) ============ */
 /* Each school is just a config: term system, term names, launch status, and where ratings come from.
    Quarter vs semester is a SETTING, not separate code — the same engine renders both. */
+/* THREE SCHOOLS, ONE WALL — 2026-09-09.
+   Tate: "i dont want the app to be strictly cal poly ... UCSB and SDSU ... make sure cal poly vs sdsu
+   and ucsb students never are recommended for each other and don't cross over."
+
+   `key` is the value stored in profiles.school and `domain` is what decides it. The deciding happens
+   on the SERVER (professify-schools.sql: a trigger stamps the school from the verified JWT email, and
+   every discovery RPC and the friend-request policy are fenced by it). What the client does with
+   the same table is the visible half — which domains the sign-in form accepts, which school the
+   session belongs to, which rows it will draw — and none of it is the wall. The wall is SQL.
+
+   `ratings` is the honest sentence about where a rating could come from. RateMyProfessors is not
+   an option: no API, and its terms forbid scraping. So at SDSU and UCSB ratings start at zero and
+   the app says so, rather than borrowing a number from somewhere it may not. */
 const SCHOOLS={
-  'Cal Poly, San Luis Obispo':{short:'Cal Poly',termSystem:'semester',terms:['Fall','Spring'],status:'live',ratings:'PolyRatings (open, seeded)',accent:'#1B7A4E',accentRgb:'27,122,78',ink:'#f4f8f4',accentDark:'#4CAF82',accentDarkRgb:'76,175,130',inkDark:'#0f1a14'},
-  'San Diego State University':{short:'SDSU',termSystem:'semester',terms:['Fall','Spring'],status:'building',ratings:'RateMyProfessors + public grade distributions',accent:'#a94a4f',accentRgb:'169,74,79',ink:'#f7eeee'},
-  'UC Santa Barbara':{short:'UCSB',termSystem:'quarter',terms:['Fall','Winter','Spring'],status:'building',ratings:'Daily Nexus grade data + RateMyProfessors',accent:'#4f7ba1',accentRgb:'79,123,161',ink:'#eef3f8'}
+  'Cal Poly, San Luis Obispo':{key:'calpoly',domain:'calpoly.edu',short:'Cal Poly',termSystem:'semester',terms:['Fall','Spring'],status:'live',ratings:'PolyRatings (open, seeded)',accent:'#1B7A4E',accentRgb:'27,122,78',ink:'#f4f8f4',accentDark:'#4CAF82',accentDarkRgb:'76,175,130',inkDark:'#0f1a14'},
+  'San Diego State University':{key:'sdsu',domain:'sdsu.edu',short:'SDSU',termSystem:'semester',terms:['Fall','Spring'],status:'building',ratings:'reviews written by SDSU students on Professify — there is no open ratings source for SDSU',accent:'#a94a4f',accentRgb:'169,74,79',ink:'#f7eeee'},
+  'UC Santa Barbara':{key:'ucsb',domain:'ucsb.edu',short:'UCSB',termSystem:'quarter',terms:['Fall','Winter','Spring'],status:'building',ratings:'reviews written by UCSB students on Professify, and the Daily Nexus’s public grade data',accent:'#4f7ba1',accentRgb:'79,123,161',ink:'#eef3f8'}
 };
+/* email → school key, or null for any domain we do not serve. The same rule as school_from_email()
+   in SQL: the domain itself or a subdomain, anchored, so calpoly.edu.evil.com is not Cal Poly. */
+function schoolForEmail(email){
+  var v=String(email||'').trim().toLowerCase();
+  for(var name in SCHOOLS){ var sc=SCHOOLS[name];
+    if(new RegExp('^[^@\\s]+@([a-z0-9-]+\\.)*'+sc.domain.replace(/\./g,'\\.')+'$').test(v))return sc.key;
+  }
+  return null;
+}
+function schoolNameForKey(k){ for(var name in SCHOOLS){ if(SCHOOLS[name].key===k)return name; } return null; }
+/* The signed-in student's school. The email is the truth (it is what the server uses); the
+   onboarding pick is only a preference for someone browsing signed out. */
+function mySchoolKey(){
+  try{ var k=(typeof sbUser!=='undefined'&&sbUser&&sbUser.email)?schoolForEmail(sbUser.email):null; if(k)return k; }catch(e){}
+  try{ var sc=SCHOOLS[student.school]; if(sc)return sc.key; }catch(e){}
+  return 'calpoly';
+}
 function schoolCfg(){return SCHOOLS[student.school]||SCHOOLS['Cal Poly, San Luis Obispo'];}
 function schoolLive(){return schoolCfg().status==='live';}
-function comingSoonBlock(){const sc=schoolCfg();return `<div class="cat"><span class="lab">${sc.short} — coming soon</span><span class="desc">Professify is live for <b style="color:var(--text-2)">Cal Poly</b> now. <b style="color:var(--text-2)">${sc.short}</b> is next — its courses and instructors will load here, and ratings will come from <b style="color:var(--text-2)">${sc.ratings}</b> (PolyRatings only covers Cal Poly).</span></div>`;}
+function comingSoonBlock(){const sc=schoolCfg();return `<div class="cat"><span class="lab">${sc.short} — opening</span><span class="desc">Professify is open at <b style="color:var(--text-2)">${sc.short}</b> for friends, chats and finding classmates. Live seat counts and professor ratings aren’t here yet: ratings will be <b style="color:var(--text-2)">${sc.ratings}</b> (PolyRatings only covers Cal Poly), so nothing is shown until there is something real to show.</span></div>`;}
 /* ===== Real classes + instructors for other schools (public class schedules). No ratings yet. ===== */
 const SCHOOL_COURSES={
   'UC Santa Barbara':[
@@ -7064,7 +7129,7 @@ function schoolCoursesHtml(){
   const sc=schoolCourses(),cfg=schoolCfg();const q=(exQuery||'').trim().toLowerCase();
   let list=sc.filter(c=>!q||(c.code+' '+c.name+' '+c.profs.join(' ')+' '+(c.subj||'')).toLowerCase().includes(q));
   if(exDept&&exDept!=='All')list=list.filter(c=>c.subj===exDept);
-  const note=`<div class="schoolnote">Real Fall 2026 classes &amp; instructors for <b>${cfg.short}</b>, from its public class schedule. No student ratings yet — those start once ${cfg.short} students join.</div>`;
+  const note=`<div class="schoolnote">Classes &amp; instructors for <b>${cfg.short}</b>, from a snapshot of its public class schedule — no live seat counts yet. No student ratings yet either; those start with the first ${cfg.short} reviews.</div>`;
   if(!list.length)return note+`<div class="cat"><span class="desc">No classes match that search.</span></div>`;
   return note+list.map(c=>`<div class="cls-row"><div class="cls-info"><div class="ct"><span class="code">${c.code}</span><span class="nm">${c.name}</span></div><div class="cls-sub"><span class="cls-units">${c.subj}</span></div></div><div class="cls-right"><div class="pm nohover"><div class="ini">${initials(c.profs[0].replace(',',''))}</div><span class="nm">${c.profs.join(' · ')}</span></div><span class="rate norate">No ratings yet</span></div></div>`).join('');
 }
@@ -9708,83 +9773,319 @@ function clsSecRowsFor(secs,code){
       +'<span class="cs-meets">'+when+(pills?(' '+pills):'')+rowchips+'</span>'+seatCell+acts+'</div>';
   }).join('');
 }
+/* ================================================================================================
+   EXPLORE CONTEXT RAIL — Sean's three widgets, ported 2026-09-09
+   ------------------------------------------------------------------------------------------------
+   Three cards beside the feed. Every number below is read live at render from the same sources the
+   rest of the app reads: watchClasses (your saved list), realSeat() (the scraped seat feed),
+   FRIENDS, and the professor watchlist. Nothing is stored on a rail row, so a rail painted now and
+   a rail painted in ten minutes disagree only where Cal Poly does.
+
+   Sean's rail has a footer button on "Going fast" reading "Notify me when seats open". It is NOT
+   here, and that is deliberate: pushEnable() would subscribe the browser, and the function that
+   would send the alert (supabase/functions/push-send) is written but not deployed. A button that
+   asks for notification permission and then never notifies is the dead end this app has a standing
+   rule against. Ship push-send and this becomes four lines.
+
+   Module 3 follows the tab: saved CLASSES while browsing classes, saved PROFESSORS while browsing
+   professors, because that is what "Saved" means on the screen you are looking at.
+   ================================================================================================ */
+
+/* How full is this course, as a fraction, when we can actually compute it? Returns null rather
+   than a guess: a meter drawn from an unknown capacity is a picture of a number we do not have. */
+function exSeatFill(s){
+  try{
+    if(!s||!s.real)return null;
+    /* Full or waitlisted is a STATUS Cal Poly reported, not a ratio we computed, so it needs no
+       capacity to be true. Gating it behind cap>0 silently dropped a saved class the feed had
+       marked full from "Going fast" whenever the capacity column was blank. (Review.) */
+    if(s.cls==='full'||s.cls==='wait')return 1;
+    if(s.cls!=='open'||s.n==null||s.cap==null||!(s.cap>0))return null;
+    return Math.max(0,Math.min(1,(s.cap-s.n)/s.cap));
+  }catch(e){ return null; }
+}
+/* "26 left" when we know it, the status word when we only know that. Never a printed zero
+   standing in for an absent count — see the note on secSeat(). */
+function exSeatNum(s){
+  if(!s||s.unknown||s.cls==='unknown')return {t:'',c:''};
+  if(s.cls==='open')return (s.n!=null)?{t:s.n+' left',c:(s.n<=10?'red':'green')}:{t:'open',c:'green'};
+  if(s.cls==='wait')return {t:(s.wl>0?(s.wl+' waiting'):'waitlist'),c:'mid'};
+  return {t:'full',c:'red'};
+}
+function exCourseName(code){
+  try{
+    var ci=(typeof classInfo==='function')?classInfo(code):null;
+    if(ci&&ci.name)return ci.name;
+    if(typeof fp_name==='function'){ var n=fp_name(code); if(n)return n; }
+  }catch(e){}
+  return '';
+}
+function exRailClassRow(code,showMeter,seat){
+  var s=(seat!==undefined)?seat:((typeof realSeat==='function')?realSeat(code):null);
+  var num=exSeatNum(s), fill=showMeter?exSeatFill(s):null;
+  var nm=exCourseName(code);
+  return '<button type="button" class="exm-row" onclick="openClassPage(\''+jsAttr(code)+'\',event)">'
+    +'<span class="exm-rt"><b>'+escapeHtml(code)+'</b>'
+    +(num.t?('<span class="num '+num.c+'">'+escapeHtml(num.t)+'</span>'):'')+'</span>'
+    +(nm?('<span class="exm-rs">'+escapeHtml(nm)+'</span>'):'')
+    +(fill!=null?('<span class="exm-meter"><i style="width:'+Math.round(fill*100)+'%"></i></span>'):'')
+    +'</button>';
+}
+var EXM_ICO={
+  red:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg>',
+  blue:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.4"/><path d="M2.8 19c.6-3.3 3.2-5.2 6.2-5.2s5.6 1.9 6.2 5.2M17 7.5h4.5M19.25 5.25v4.5"/></svg>',
+  green:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 3.5h11a1 1 0 011 1v16l-6.5-4-6.5 4v-16a1 1 0 011-1z"/></svg>'
+};
+function exMod(tone,title,sub,body){
+  return '<section class="ex-mod"><div class="exm-h"><span class="exm-chip '+tone+'">'+EXM_ICO[tone]+'</span>'
+    +'<div><h3>'+title+'</h3><p>'+sub+'</p></div></div>'+body+'</section>';
+}
+function renderExploreRail(){
+  var host=document.getElementById('exRail'); if(!host)return;
+  var out='';
+  var saved=[]; try{ saved=(typeof watchClasses!=='undefined'&&watchClasses)?watchClasses.slice():[]; }catch(e){}
+  var profs=[]; try{ profs=(typeof watchlist!=='undefined'&&watchlist)?watchlist.slice():[]; }catch(e){}
+  var mode=(typeof exMode!=='undefined')?exMode:'classes';
+  var feedUp=(typeof seatFeedLoaded==='function')&&seatFeedLoaded();
+
+  /* ---- 1. Going fast — your saved classes that are nearly gone ---------------------------- */
+  if(mode!=='professors'){
+    var fast=saved.map(function(code){
+      var st=(typeof realSeat==='function')?realSeat(code):null;
+      return {code:code,seat:st,fill:exSeatFill(st)};
+    }).filter(function(x){ return x.fill!=null&&x.fill>=0.75; })
+      .sort(function(a,b){ return b.fill-a.fill; }).slice(0,3);
+    if(fast.length){
+      out+=exMod('red','Going fast','Saved classes nearly full',
+        '<div class="exm-b">'+fast.map(function(x){ return exRailClassRow(x.code,true,x.seat); }).join('')+'</div>');
+    }else if(saved.length&&!feedUp){
+      /* Silence here would read as "nothing is filling up", which is a claim about seats we
+         cannot make with the feed down. */
+      out+=exMod('red','Going fast','Saved classes nearly full',
+        '<p class="exm-empty">Seat counts haven’t loaded yet, so we can’t tell you what’s filling up.</p>');
+    }
+  }
+
+  /* ---- 2. Pass one along — send a class to a friend --------------------------------------- */
+  var fr=[]; try{ fr=(typeof FRIENDS!=='undefined'&&FRIENDS)?FRIENDS:[]; }catch(e){}
+  if(fr.length){
+    /* Faces go through faceHtml() — real photo when there is one, grey initials when there
+       isn't. Sean's eight-colour avatar scheme is not used anywhere in this app; see the note
+       at colorForId(). */
+    var avs=fr.slice(0,3).map(function(f){
+      return '<span class="fr-av" style="background:'+(f.color||'')+'" title="'+escapeHtml(f.name||'')+'">'+faceHtml(f)+'</span>';
+    }).join('');
+    var pick=saved.length?saved[saved.length-1]:'';
+    out+=exMod('blue','Pass one along','Friends picking classes now',
+      '<div class="exm-b"><div class="exm-faces"><span class="fr-avs">'+avs+'</span>'
+      +'<span class="t"><b>'+fr.length+'</b> friend'+(fr.length===1?'':'s')+' on Professify</span></div></div>'
+      +(pick
+        /* Named, not a mystery button: the sheet that opens is about THIS class, so the button
+           says which one. shOpen('class', …) is the existing share sheet — chats first, then
+           friends you haven't messaged. */
+        ? '<button type="button" class="exm-cta" onclick="shOpen(\'class\',\''+jsAttr(pick)+'\',event)">Send '+escapeHtml(pick)+' to a friend</button>'
+        : '<p class="exm-empty">Save a class and you can send it straight to a friend’s chat.</p>'));
+  }
+
+  /* ---- 3. Saved — whichever list this tab is about ---------------------------------------- */
+  if(mode==='professors'){
+    var prows=profs.map(function(id){
+      var p=null; try{ p=PROFESSORS[id]; }catch(e){}
+      var meta=null; try{ meta=watchSpMeta&&watchSpMeta[id]; }catch(e){}
+      /* A watchlist entry with no PROFESSORS record and no watchSpMeta yet — an unrated
+         instructor watched before the seat feed answered — still counts, and still gets a row:
+         the id is "sp:" + their name, so the name is recoverable. Dropping it would make this
+         module's count disagree with the Watchlist tab's, which is the two-answers-to-one-count
+         defect this file has fixed before. */
+      var nm=(p&&p.name)||(meta&&meta.name)||String(id||'').replace(/^sp:/,'').replace(/\b\w/g,function(ch){return ch.toUpperCase();});
+      if(!nm)return '';
+      var dp=''; try{ dp=(p&&typeof pdept==='function')?(pdept(p)||''):((meta&&meta.dept)||''); }catch(e){}
+      /* jsAttr, not escAcc: this value sits inside a JS string inside an HTML attribute, and
+         escAcc only handles the attribute half. Unrated instructors are watched under ids minted
+         from their real name — "sp:daniel o'brien" — and escAcc leaves that apostrophe alone,
+         which makes the handler a syntax error and the row a dead tap. (Caught in review.) */
+      return '<button type="button" class="exm-row" onclick="openProf(\''+jsAttr(id)+'\')">'
+        +'<span class="exm-rt"><b>'+escapeHtml(nm)+'</b></span>'
+        +(dp?('<span class="exm-rs">'+escapeHtml(dp)+'</span>'):'')+'</button>';
+    }).filter(Boolean);
+    out+=exMod('green','Saved professors',
+      profs.length?(profs.length+' on your list'):'Nothing on your list yet',
+      profs.length
+        ? '<div class="exm-b">'+prows.slice(0,5).join('')+'</div>'
+          +'<button type="button" class="exm-f" onclick="show(\'watch\')">View all '+profs.length+' saved →</button>'
+        : '<p class="exm-empty">Tap the bookmark on any professor to keep them here.</p>');
+  }else{
+    out+=exMod('green','Saved classes',
+      saved.length?(saved.length+' on your list'):'Nothing on your list yet',
+      saved.length
+        ? '<div class="exm-b">'+saved.slice(0,5).map(function(c){ return exRailClassRow(c,false); }).join('')+'</div>'
+          +'<button type="button" class="exm-f" onclick="show(\'watch\')">View all '+saved.length+' saved →</button>'
+        : '<p class="exm-empty">Tap the bookmark on any class to watch its seats.</p>');
+  }
+
+  host.innerHTML=out;
+  try{ exStickRail(); }catch(e){}
+  try{ exWatchRail(); }catch(e){}
+}
+/* STICKY, MEASURED — NOT `top:80px`.
+   Sean's spec says `position:sticky; top:80px`. That is the exact defect fixed on Home the day
+   before this port: a rail pinned at a fixed top whose content arrives asynchronously — here, the
+   seat feed filling in "Going fast" — grows past the viewport while pinned, and a pinned element
+   does not scroll. The arithmetic that avoids it is stickRailEl(), shared with Home. */
+function exStickRail(){ stickRailEl(document.getElementById('exRail'),1040); }
+function exWatchRail(){
+  try{
+    if(window._exRailObs||typeof ResizeObserver==='undefined')return;
+    var el=document.getElementById('exRail'); if(!el)return;
+    var pending=false;
+    window._exRailObs=new ResizeObserver(function(){
+      if(pending)return; pending=true;
+      requestAnimationFrame(function(){ pending=false; try{ exStickRail(); }catch(e){} });
+    });
+    window._exRailObs.observe(el);
+  }catch(e){}
+}
+try{ window.renderExploreRail=renderExploreRail; window.exStickRail=exStickRail; window.exWatchRail=exWatchRail; }catch(e){}
+try{ window.addEventListener('resize',function(){
+  if(window._exStickT)clearTimeout(window._exStickT);
+  window._exStickT=setTimeout(exStickRail,120);
+}); }catch(e){}
+/* No ResizeObserver (old Safari): re-measure across the window in which the seat feed realistically
+   lands. Coarser, but it fails the old way rather than a new one. */
+try{ if(typeof ResizeObserver==='undefined'){ [600,1500,3000,6000].forEach(function(ms){ setTimeout(function(){ try{exStickRail();}catch(e){} },ms); }); } }catch(e){}
+
+/* ------------------------------------------------------------------------------------------------
+   THE 4-6 WORD DESCRIPTION — the one field in Sean's spec that does not exist.
+
+   His card is: badge, title, a 4-6 word description, save, and who has taken it. The description
+   is meant to come from `classes.short_description`, and his fallback if that column is missing is
+   "a hardcoded map for the ITP courses to unblock the merge". That fallback cannot ship here. Five
+   hand-written sentences displayed in the same slot, in the same type, as catalog data IS invented
+   course data, and this app does not print a value it cannot source — the rule that keeps HIST 2202
+   honest is the same rule that governs this line.
+
+   So the line is GATED, not faked, and this function is the whole seam. Today no source exists and
+   it returns '' for every course, so the slot collapses and the card is one line shorter. The day a
+   real `short_description` lands — written by a human, or pulled from the catalog — wire it here and
+   every card gets it at once. Nothing else needs to change.
+   ------------------------------------------------------------------------------------------------ */
+function shortDesc(code){
+  try{
+    /* Honest about the plumbing (corrected in review, 2026-09-09): there is NO catalog table in
+       this app. Course records live in five disjoint places — CLASS_INDEX (flowchart courses
+       only, built from MAJOR_CATALOG), COURSE_NAME, GE_COURSES, FLOW_INDEX and the seat feed — and
+       none of them carries a description. So "wire the column here" is not one word: a real source
+       would be a NEW lookup keyed by course code (a `COURSE_SHORT` map, or a column on whichever
+       table someday holds every course), and this function is the one place that would read it.
+       CLASS_INDEX is checked first because it is the only record with a place to hang the field
+       today; the second branch is the seam for the general lookup. Both return '' now. */
+    var ci=(typeof CLASS_INDEX!=='undefined'&&CLASS_INDEX)?CLASS_INDEX[code]:null;
+    var d=ci&&(ci.short_description||ci.shortDesc);
+    if(d)return String(d);
+    if(typeof COURSE_SHORT!=='undefined'&&COURSE_SHORT&&COURSE_SHORT[code])return String(COURSE_SHORT[code]);
+    return '';
+  }catch(e){ return ''; }
+}
 function clsRow(c){
   const ci=(typeof classInfo==='function')?classInfo(c.code):null;
   const allSecs=clsSections(c.code);
   const nSec=allSecs.length;
-  /* The "headline professor" selection that used to live here — curated pick if teaching,
-     else the highest-rated instructor of any section — is gone with the row that displayed
-     it. Nothing else read it, and keeping a "which professor represents this course" answer
-     around invites someone to print it again. There isn't one. */
-  /* NO HEADLINE PROFESSOR (Tate, Aug 2026 — reverting a change that shouldn't have shipped).
-     This row printed one professor and their rating beside the course: "Benjamin Alexander
-     2.3 · +5 more" on a course with twelve sections. Which one is that? Whichever the code
-     picked — the curated pick if they happened to be teaching, otherwise the HIGHEST RATED of
-     the twelve. So a student scanning the list read 2.3 as the rating of a course taught by
-     six different people, and 5.0 beside BUS 4404 was the best of seven, not what they'd get.
-     It is the same defect already fixed on the My Classes card, which used to headline a
-     course with its best-rated instructor and the first section's time as though both were
-     yours. A rating belongs to a professor teaching a SECTION; the collapsed row is about the
-     class. So the row now says how many sections there are and stops — the professors, each
-     with their own rating, seats and time, are one tap down in the expansion where they can
-     be compared honestly. */
-  const nProfs=(function(){var s={};allSecs.forEach(function(x){if(x.name)s[x.name]=1;});return Object.keys(s).length;})();
-  let profHtml;
-  if(nSec){
-    profHtml=`<span class="tbd" style="cursor:pointer">${nProfs?(nProfs+' professor'+(nProfs===1?'':'s')+' · '):''}view sections →</span>`;
-  }
-  /* "Checking this term's sections…" consulted only seatFeedLoaded(), never the failure
-     flag — which is set by a timer on the default-list path and read nowhere else. A searched
-     row therefore sat on "checking…" indefinitely with no error and no retry. A spinner that
-     never resolves is worse than an error: it tells the student to keep waiting. */
-  /* We cannot tell "Cal Poly isn't running this" apart from "our daily scrape missed it" —
-     they look identical from here (zero rows), and they are opposite facts. Verified against
-     the live feed on 2026-08-24: HIST holds 43 sections and not one of them is full or
-     waitlisted, which is impossible for a real department — the scrape is dropping every
-     non-open section, so HIST 2202 has no rows at all. Say what we know. */
-  else if(seatFeedLoaded()) profHtml=`<span class="tbd" title="Cal Poly may still be running this — our section scrape has no rows for it this term">No section data this term · <a href="https://cmsweb.pscs.calpoly.edu/psc/CSLOPRD/EMPLOYEE/SA/s/WEBLIB_HCX_CM.H_CLASS_SEARCH.FieldFormula.IScript_Main" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" style="color:var(--accent)">check Cal Poly →</a></span>`;
-  else if(window._seatLoadFailed) profHtml=`<span class="tbd" title="Couldn’t reach the class schedule — tap Retry above">Seat data unavailable</span>`;
-  else profHtml=`<span class="tbd">Checking this term’s sections…</span>`;
   const sv=isWatchedClass(c.code);
-  /* Tapping a class opens its own page now (Tate, 2026-08-25) — the sections no longer
-     unfold inside the results list. A course with twelve sections used to push every other
-     result off screen, and each section got whatever width the row had left. */
+  /* Tapping a class opens its own page (Tate, 2026-08-25) — the sections do not unfold inside
+     the results list. A course with twelve sections used to push every other result off screen. */
   const expandable=nSec>=1;
-  // With no headline professor, Meets/Seats describe the CLASS: one shared time if all
-  // sections match, otherwise "varies"; seats = live totals across all sections.
-  const meets=(function(){
-    if(!nSec)return (ci&&ci.times&&ci.times.length)?ci.times[0]:'';
-    var uniq={};allSecs.forEach(function(s){if(s.days)uniq[s.days]=1;});
-    var keys=Object.keys(uniq);
-    return keys.length===1?keys[0]:(keys.length?'Varies by section':'');
-  })();
-  /* The two halves of this card read from different sources: the professor line from
-     SEAT_SECTIONS, the seats line from the aggregate index. When the cache hydrates one before
-     the other, a card could claim "Not offered this term" while showing "30/120 open" right
-     beneath it. Contradicting yourself costs more trust than saying less, so when the no-section
-     branch is taken the seats line stays quiet. */
-  const notOfferedRow=(!nSec&&seatFeedLoaded());
-  const seatObj=(!notOfferedRow&&typeof realSeat==='function')?realSeat(c.code):null;
-  const seatVal=notOfferedRow?`<div class="v faint">—</div>`
-    :(seatObj?`<div class="v ${seatObj.cls}">${escapeHtml(seatBadge(seatObj))}</div>`
-       :(seatFeedLoaded()?`<div class="v faint">—</div>`
-       :(window._seatLoadFailed?`<div class="v faint" title="Couldn’t reach the class schedule">unavailable</div>`
-       :`<div class="v faint">checking…</div>`)));
-  const chips=`${typeof friendChipHtml==='function'?friendChipHtml(c.code,null):''}${typeof tookChipHtml==='function'?tookChipHtml(c.code):''}${typeof prereqChipHtml==='function'?prereqChipHtml(c.code):''}`;
-  return `<div class="cls-row${expandable?' expandable':''}" data-code="${escapeHtml(c.code)}"${expandable?` onclick="openClassPage('${escAcc(c.code)}',event)"`:''}>
+
+  /* NO HEADLINE PROFESSOR, AND NOW NO PROFESSOR COUNT EITHER.
+     The original defect (Tate, Aug 2026): this row printed one professor and their rating beside
+     the course — "Benjamin Alexander 2.3 · +5 more" on a course with twelve sections. Which one is
+     that? Whichever the code picked: the curated pick if they happened to be teaching, otherwise
+     the HIGHEST RATED of the twelve. A student scanning the list read 2.3 as the rating of a course
+     taught by six different people. A rating belongs to a professor teaching a SECTION; the
+     collapsed row is about the class. That fix left "6 professors · view sections →" behind, and
+     Sean's redesign takes the last of it: the professors, each with their own rating, seats and
+     time, are one tap down on the class page where they can be compared honestly. */
+
+  /* WHAT SURVIVED THE TEASER, AND WHY (deviation from Sean's spec — 2026-09-09, flagged not buried).
+     His rule is "no ratings, professor counts, units, sections, meeting times, seat counts, or
+     review counts anywhere on a feed card". Ratings, professor counts and meeting times are gone
+     and should be: a rating on this row is the defect above, and "Varies by section" is not a fact
+     you can act on while browsing. Units, section count and seats stay, compressed into the single
+     muted line where his description was going to sit.
+
+     The reason is that the description does not exist (see shortDesc above). Strip the stats too and
+     a card is a code, a title, a bookmark, and — for every student who has not added a friend yet,
+     which is all of them at launch — nothing else. Sean's mockup hides this because every card in it
+     carries a description and almost every card carries friends. On real data that card is not a
+     teaser, it is a list. Seats in particular are the question a student is actually asking in
+     registration week, and his own rail reintroduces them as "Going fast" one column over.
+
+     If short_description ever ships, this line is a one-word change: drop `facts` from the template
+     and the card is his, exactly. */
+  const units=(c.units!=null)?c.units:((ci&&ci.units!=null)?ci.units:null);
+  const desc=shortDesc(c.code);
+
+  /* The two halves of this card read from different sources: sections from SEAT_SECTIONS, seats
+     from the aggregate index. When the cache hydrates one before the other a card could claim
+     "no section data" while showing "30/120 open" beneath it. Contradicting yourself costs more
+     trust than saying less, so when the no-section branch is taken the seat fragment stays quiet. */
+  const notOffered=(!nSec&&seatFeedLoaded());
+  const seatObj=(!notOffered&&typeof realSeat==='function')?realSeat(c.code):null;
+
+  let seatFrag='';
+  if(notOffered){
+    /* We cannot tell "Cal Poly isn't running this" apart from "our daily scrape missed it" — they
+       look identical from here (zero rows) and they are opposite facts. Verified 2026-08-24: HIST
+       holds 43 sections and not one is full or waitlisted, which is impossible for a real
+       department. Say what we know, and hand the student the place that does know. */
+    seatFrag='<span title="Cal Poly may still be running this — our section scrape has no rows for it this term">No section data this term'
+      +' · <a href="https://cmsweb.pscs.calpoly.edu/psc/CSLOPRD/EMPLOYEE/SA/s/WEBLIB_HCX_CM.H_CLASS_SEARCH.FieldFormula.IScript_Main"'
+      +' target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" style="color:var(--accent)">check Cal Poly →</a></span>';
+  }else if(seatObj){
+    // seatBadge() is the ONE seat-status format in this app. Relocated, not reworded.
+    seatFrag='<span class="s-'+seatObj.cls+'">'+escapeHtml(seatBadge(seatObj))+'</span>';
+  }else if(window._seatLoadFailed){
+    seatFrag='<span title="Couldn’t reach the class schedule — tap Retry above">seats unavailable</span>';
+  }else if(!seatFeedLoaded()){
+    seatFrag='<span>checking seats…</span>';
+  }
+
+  const bits=[];
+  if(units!=null)bits.push('<span>'+units+' unit'+(Number(units)===1?'':'s')+'</span>');
+  if(nSec)bits.push('<span>'+nSec+' section'+(nSec===1?'':'s')+(expandable?'<span class="cls-chev">›</span>':'')+'</span>');
+  if(seatFrag)bits.push(seatFrag);
+  const facts=bits.length?('<div class="cx-facts">'+bits.join('<span class="sep">·</span>')+'</div>'):'';
+
+  /* THE FOOTER — who has taken it.
+     tookChipHtml already distinguishes "took this Spring 2026" from "is currently taking this"
+     (Tate, 2026-09-04), which is a distinction Sean's spec does not make and his verifier would
+     fail; the app is the source of truth on that one and the chip is used unchanged. friendChip
+     (enrolled in a section with you) and prereqChip (you have not taken the prerequisite) join it:
+     a warning that a student cannot register for this class is not decoration, and removing it to
+     match a mockup would be a real regression.
+
+     Sean's empty state — "No one in your circle has taken this yet" — renders only when the student
+     HAS friends. With an empty friends list that sentence would sit on every card in the app saying
+     nothing except that you are alone, and the "consistent card height" it exists to protect is
+     already consistent when no card has a footer. */
+  const took=(typeof tookChipHtml==='function')?tookChipHtml(c.code):'';
+  const fri=(typeof friendChipHtml==='function')?friendChipHtml(c.code,null):'';
+  const pre=(typeof prereqChipHtml==='function')?prereqChipHtml(c.code):'';
+  let footer=fri+took+pre;
+  if(!took&&!fri){
+    var hasFriends=false; try{ hasFriends=!!(typeof FRIENDS!=='undefined'&&FRIENDS&&FRIENDS.length); }catch(e){}
+    if(hasFriends)footer+='<span class="cx-none">No one in your circle has taken this yet</span>';
+  }
+
+  return `<div class="cls-row cls-teaser${expandable?' expandable':''}" data-code="${escapeHtml(c.code)}"${expandable?` onclick="openClassPage('${jsAttr(c.code)}',event)"`:''}>
     <div class="cls-top">
       <div class="cls-left">
-        <div class="ct"><span class="code">${c.code}</span><span class="nm">${c.name}</span>${c.type?`<span class="ttag ${c.type==='Core'?'core':''}">${c.type}</span>`:''}</div>
-        ${chips}
+        <div class="ct"><span class="code cx-badge">${escapeHtml(c.code)}</span><span class="nm">${escapeHtml(c.name||'')}</span>${c.type?`<span class="ttag ${c.type==='Core'?'core':''}">${escapeHtml(c.type)}</span>`:''}</div>
+        ${desc?`<p class="cx-desc">${escapeHtml(desc)}</p>`:''}
+        ${facts}
       </div>
-      <div class="cls-prof">${profHtml}<button class="save-ico ${sv?'on':''}" title="Save class" onclick="event.stopPropagation();toggleSaveClass('${c.code}')">${sv?BOOKF:BOOK}</button></div>
+      <div class="cls-prof"><button class="save-ico ${sv?'on':''}" title="Save class" aria-label="${sv?'Remove':'Save'} ${escapeHtml(c.code)}" onclick="event.stopPropagation();toggleSaveClass('${jsAttr(c.code)}')">${sv?BOOKF:BOOK}</button></div>
     </div>
-    <div class="cls-stats">
-      <div class="cls-st"><div class="k">Units</div><div class="v">${c.units!=null?c.units:((ci&&ci.units!=null)?ci.units:'—')}</div></div>
-      <div class="cls-st"><div class="k">Sections</div><div class="v">${nSec||'—'}${expandable?`<span class="cls-chev">›</span>`:''}</div></div>
-      <div class="cls-st"><div class="k">Meets</div><div class="v">${meets?escapeHtml(meets):'—'}</div></div>
-      <div class="cls-st grow"><div class="k">Seats</div>${seatVal}</div>
-    </div>
+    <div class="cx-foot">${footer}</div>
   </div>`;
 }
 /* ============ CLASS PAGE ============
@@ -10265,6 +10566,11 @@ function geBrowserHtml(){
 }
 
 function renderExplore(){
+  /* The rail is painted FIRST and unconditionally. renderExplore() has a dozen early returns —
+     school not live, GE mode, no results, seat feed still loading — and everything the rail shows
+     (your saved classes, your friends) is true on every one of those paths. Hooked on at the
+     bottom it would simply not exist on most of them. */
+  try{ renderExploreRail(); }catch(e){}
   const out=document.getElementById('exOut');
   if(!schoolLive()){out.innerHTML=schoolCourses()?schoolCoursesHtml():comingSoonBlock();return;}
   if(exMode==='ge'){ out.innerHTML=geBrowserHtml(); return; }
@@ -11045,12 +11351,11 @@ function polyProfUrl(p){
   return (p&&p.prId)?('https://polyratings.dev/professor/'+encodeURIComponent(p.prId)):'https://polyratings.dev';
 }
 function eduOk(email){
-  const v=(email||'').trim().toLowerCase();
-  const dom=(cfg().EMAIL_DOMAIN||'').trim().toLowerCase();
-  /* the domain itself OR a subdomain of it: calpoly.edu and my.calpoly.edu are both Cal Poly.
-     Anchored both ends and the dot escaped, so "notcalpoly.edu" and "calpoly.edu.evil.com" fail. */
-  if(dom)return new RegExp('^[^@\\s]+@([A-Za-z0-9-]+\\.)*'+dom.replace(/\./g,'\\.')+'$').test(v);
-  return /^[^@\s]+@[^@\s]+\.edu$/.test(v);
+  /* One rule, in SCHOOLS: an address is acceptable exactly when it belongs to a school we serve.
+     (EMAIL_DOMAIN in cfg is no longer consulted — a single domain cannot describe three schools.)
+     The server applies the same rule and would refuse the profile anyway; this is the version the
+     sign-in form can explain before a code is sent. */
+  return schoolForEmail(email)!=null;
 }
 /* Every refresh flashed signed-out for about a second: the app painted immediately, but
    sbUser stayed null until sb.auth.getSession() came back over the network (raced against a
@@ -11250,6 +11555,13 @@ async function initBackend(){
          treated as the same thing while nothing checked the second. Check it. */
       try{ if(sbUser&&typeof enforceEduDomain==='function'&&!enforceEduDomain()){ sbUser=null; } }catch(e){}
       eduVerified=!!(sbUser&&typeof eduOk==='function'&&eduOk(sbUser.email||''));
+      /* THE EMAIL DECIDES THE SCHOOL. Whatever the onboarding picker said, a signed-in student is at
+         the school their address belongs to — the same rule the server stamps onto the profile. Set
+         it here, once, and every school-gated surface (Explore, planner, theme) follows. */
+      try{
+        if(sbUser){ var _sk=schoolForEmail(sbUser.email||''); var _sn=_sk?schoolNameForKey(_sk):null;
+          if(_sn&&student.school!==_sn){ student.school=_sn; try{ saveProfile(); }catch(_e){} try{ applySchoolTheme(_sn); }catch(_e){} try{ var _f=document.getElementById('obSchoolFixed'); if(_f)_f.textContent=_sn; var _o=document.getElementById('obSchool'); if(_o)_o.value=_sn; }catch(_e){} } }
+      }catch(_e){}
       // If the invite welcome is up and the guest just signed in, dismiss it —
       // the friends load will auto-send the request to the inviter.
       if(sbUser&&window._inviteLandingOpen){window._inviteLandingOpen=false;try{if(typeof closeModal==='function')closeModal();}catch(_e){}}
@@ -11497,7 +11809,7 @@ function refreshGuestChrome(){ try{ markSignedOutSchedule(); }catch(e){} }
 function authFriendlyErr(msg){
   var m=String(msg||'');
   if(/not authorized|Email address .* not authorized|is not authorized/i.test(m))
-    return 'We can’t send a code to that address. Use your @calpoly.edu email — if that’s what you entered, let Tate know and he’ll check the sender.';
+    return 'We can’t send a code to that address. Use your Cal Poly, SDSU or UCSB email — if that’s what you entered, let Tate know and he’ll check the sender.';
   if(/rate limit|too many requests|only request this after|429/i.test(m))
     return 'Too many codes requested just now — there’s an hourly limit on verification emails. Wait a minute and hit resend.';
   if(/signups not allowed|Signups not allowed/i.test(m))
@@ -11649,6 +11961,18 @@ function authSetMode(m){ window._authMode=(m==='signup')?'signup':'login'; authE
    manager offers to save and fill it — which is the point of the whole exercise.
    ================================================================================================ */
 var _authPendingPw='';      /* signup only, seconds-lived, cleared in a finally. Never persisted. */
+/* DID THIS ACCOUNT ALREADY SET A PASSWORD? (Tate, 2026-09-08: "this doesnt have to show new
+   password everytime".) Supabase does not tell the client whether a password exists — an OTP-only
+   account and a password account both report provider 'email' — so the Settings card kept saying
+   "Set a password" to people who had already set one.
+   This is a MEMORY OF AN OBSERVATION, not a claim: it is written only when we have just watched a
+   password work (a successful signInWithPassword) or just written one (updateUser). Per user id,
+   so a shared browser cannot leak one account's state into another's, and when we have never seen
+   either the card falls back to wording that is true whichever it is. The password itself is
+   never stored — only the fact that one exists. */
+function pwSeenKey(){ try{ return 'professify_pw_set_'+((sbUser&&sbUser.id)||''); }catch(e){ return ''; } }
+function pwMarkSet(){ try{ var k=pwSeenKey(); if(k)localStorage.setItem(k,'1'); }catch(e){} }
+function pwKnownSet(){ try{ var k=pwSeenKey(); return !!(k&&localStorage.getItem(k)==='1'); }catch(e){ return false; } }
 var _authPwMin=8;
 
 /* AN AGE THE TERMS ALREADY CLAIM — 2026-09-07
@@ -11723,7 +12047,7 @@ function authEmailStep(){
     +'</div>'
     +'<p class="auth-sub">'+((ctx&&ctx.sub)||sub)+'</p>'
     +'<form id="authForm" onsubmit="authPrimary();return false">'
-      +'<input id="authEmail" class="auth-input" type="email" name="email" autocomplete="email" placeholder="you@calpoly.edu" oninput="authCheckForm()">'
+      +'<input id="authEmail" class="auth-input" type="email" name="email" autocomplete="email" placeholder="you@calpoly.edu · sdsu.edu · ucsb.edu" oninput="authCheckForm()">'
       +(isNew?authYearField():'')
       +authPwField(isNew)
       +'<div id="authErr" class="auth-err"></div>'
@@ -11751,7 +12075,7 @@ function authCheckForm(){
       : 'Professify is for students '+AUTH_MIN_AGE+' and over. We check the year and don\u2019t keep it.';
   }
   var looksComplete=/^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$/.test(v);
-  authSay((looksComplete&&!eduOk(v))?'Use your @calpoly.edu email — that’s how we keep reviews real.':'');
+  authSay((looksComplete&&!eduOk(v))?'Use your Cal Poly, SDSU or UCSB email — that’s how we keep reviews real.':'');
   var hint=document.getElementById('authPwHint');
   if(hint&&isNew){
     if(!pw) hint.textContent='At least '+_authPwMin+' characters. Anything you’ll actually remember.';
@@ -11778,11 +12102,11 @@ function authCheckEmail(){
   var v=(document.getElementById('authEmail').value||'').trim();
   var b=document.getElementById('authSend'); if(b)b.disabled=!eduOk(v);
   var looksComplete=/^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$/.test(v);
-  authSay((looksComplete&&!eduOk(v))?'Use your @calpoly.edu email \u2014 that\u2019s how we keep reviews real.':'');
+  authSay((looksComplete&&!eduOk(v))?'Use your Cal Poly, SDSU or UCSB email \u2014 that\u2019s how we keep reviews real.':'');
 }
 async function authSendCode(noPassword){
   var email=(document.getElementById('authEmail').value||'').trim();
-  if(!eduOk(email)){authSay('Use your @calpoly.edu email.');return;}
+  if(!eduOk(email)){authSay('Use your Cal Poly, SDSU or UCSB email.');return;}
   /* Stash the chosen password for the few seconds until the code comes back. Module scope, never
      storage — a password in localStorage survives the tab, the session and the student. */
   var pwEl=document.getElementById('authPw');
@@ -11895,7 +12219,7 @@ async function authVerify(email){
 async function authLoginPassword(){
   var email=((document.getElementById('authEmail')||{}).value||'').trim();
   var pw   =((document.getElementById('authPw')||{}).value||'');
-  if(!eduOk(email)){authSay('Use your @calpoly.edu email.');return;}
+  if(!eduOk(email)){authSay('Use your Cal Poly, SDSU or UCSB email.');return;}
   if(!pw){authSay('Enter your password.');return;}
   if(!backendReady()){authSay(backendConfigured&&typeof backendConfigured==='function'&&backendConfigured()?'Couldn’t reach the server — check your connection and try again.':'Accounts aren’t switched on for this deploy yet.');return;}
   var btn=document.getElementById('authSend'); var label=btn?btn.textContent:'';
@@ -11905,6 +12229,7 @@ async function authLoginPassword(){
     if(r.error)throw r.error;
     if(r.data&&r.data.session){
       sbUser=r.data.session.user; eduVerified=true;
+      pwMarkSet();   /* we just watched this password work, so stop offering to "set" one */
       updateAuthUI(); if(typeof renderAccountSection==='function')renderAccountSection(); closeAuth();
       try{authHandoff();}catch(e){}
       return;
@@ -11940,6 +12265,7 @@ async function setPasswordSave(){
     var r=await sb.auth.updateUser({password:pw});
     if(r&&r.error)throw r.error;
     el.value='';
+    pwMarkSet();
     try{frToast('Password saved. You can log in with it from now on.');}catch(e){}
     renderPasswordCard(true);
   }catch(e){
@@ -11956,16 +12282,27 @@ async function setPasswordSave(){
 function renderPasswordCard(justSaved){
   var host=document.getElementById('setPwCard'); if(!host)return;
   if(typeof sbUser==='undefined'||!sbUser){ host.innerHTML=''; return; }
+  var have=justSaved||pwKnownSet();
+  var email=''; try{ email=(sbUser&&sbUser.email)||''; }catch(e){}
+  /* A REAL FORM WITH THE ACCOUNT'S EMAIL IN IT. A lone password box in a div is invisible to a
+     password manager: it has nothing to file the password under, so it never offers to save it —
+     which is why setting one here did not make the next login any easier. The username field is
+     readonly and shown rather than hidden: managers routinely skip zero-size and display:none
+     fields, and saying WHICH account you are setting a password for is worth a line anyway. */
   host.innerHTML=
      '<p class="st-note">'+(justSaved
         ? 'Saved. Next time, log in with your email and this password — no code, no waiting on an inbox.'
-        : 'Set a password and you can log in without waiting for a code. Leave it and the code will keep working; both always do.')+'</p>'
-    +'<div class="st-pwrow">'
-      +'<input id="setPw" class="auth-input" type="password" autocomplete="new-password" placeholder="New password" style="margin:0"'
-        +' oninput="var b=document.getElementById(\'setPwGo\');if(b)b.disabled=this.value.length<'+_authPwMin+'"'
-        +' onkeydown="if(event.key===\'Enter\'){event.preventDefault();setPasswordSave();}">'
-      +'<button id="setPwGo" class="set-btn" disabled onclick="setPasswordSave()">Save password</button>'
-    +'</div>'
+        : (have
+           ? 'You already have a password. Type a new one here to change it — the emailed code keeps working either way.'
+           : 'Set a password and you can log in without waiting for a code. Leave it and the code will keep working; both always do.'))+'</p>'
+    +'<form id="setPwForm" onsubmit="setPasswordSave();return false">'
+      +(email?('<input class="auth-input st-pwuser" type="email" name="username" autocomplete="username" value="'+escapeHtml(email)+'" readonly tabindex="-1" aria-label="Account this password is for">'):'')
+      +'<div class="st-pwrow">'
+        +'<input id="setPw" class="auth-input" type="password" name="new-password" autocomplete="new-password" placeholder="'+(have?'New password':'Choose a password')+'" style="margin:0"'
+          +' oninput="var b=document.getElementById(\'setPwGo\');if(b)b.disabled=this.value.length<'+_authPwMin+'">'
+        +'<button id="setPwGo" class="set-btn" type="submit" disabled>'+(have?'Change password':'Save password')+'</button>'
+      +'</div>'
+    +'</form>'
     +'<div id="setPwErr" class="auth-err" style="margin-top:6px"></div>';
 }
 
@@ -16335,9 +16672,13 @@ function updateNavAvatar(){
   else { av.style.display='none'; g.style.display=''; }
 }
 /* --- profile persistence: makes it feel like *their* account --- */
-function saveProfile(){ try{ localStorage.setItem('professify-profile', JSON.stringify({major:student.major,conc:student.conc,year:student.year,standing:student.standing,minor:student.minor})); }catch(e){} }
+function saveProfile(){ try{ localStorage.setItem('professify-profile', JSON.stringify({school:student.school,major:student.major,conc:student.conc,year:student.year,standing:student.standing,minor:student.minor})); }catch(e){} }
 function loadProfile(){
   var p; try{p=JSON.parse(localStorage.getItem('professify-profile')||'null');}catch(e){p=null;}
+  /* School is restored before the major gate: a UCSB student has no major to save yet, and without
+     this line the first paint would be Cal Poly's until the session arrives. The session still wins
+     (see onAuthStateChange) — this is only the memory of what it said last time. */
+  try{ if(p&&p.school&&SCHOOLS[p.school]){ student.school=p.school; } }catch(e){}
   if(!p||!p.major)return false;
   student.major=p.major;
   /* 'General / Open' was a placeholder we invented, saved into real profiles by the old
@@ -19075,7 +19416,7 @@ function hydrateFriendsFromCache(){
     if(!sbUser||friendsLoaded)return false;
     var raw=localStorage.getItem('professify_friends_cache_'+sbUser.id); if(!raw)return false;
     var c=JSON.parse(raw); if(!c||c.uid!==sbUser.id||!Array.isArray(c.friendsList))return false;
-    friendsList=c.friendsList;
+    friendsList=sameSchoolOnly(c.friendsList);
     /* secs and avatar_url were BOTH missing from this map while the live loader carried
        them. The cache is hydrated on every load, so until the network answered — and forever
        if it never did — every friend looked like they had no section data at all. That is
@@ -19084,7 +19425,7 @@ function hydrateFriendsFromCache(){
        card degrades to a chip list saying "we can't tell which sections they're in". It could
        tell; it had just thrown the answer away. avatar_url going missing is the same bug
        wearing a different hat: friends' faces lost their photos on every cached render. */
-    FRIENDS=friendsList.map(function(f){return {id:f.id,name:f.name,ini:initials(f.name),color:colorForId(f.id),classes:f.classes||[],crns:f.crns||f.sections||[],secs:f.secs||[],history:f.history||[],avatar_url:f.avatar_url||''};});
+    FRIENDS=friendsList.map(function(f){return {id:f.id,name:f.name,ini:initials(f.name),color:colorForId(f.id),school:f.school||'',classes:f.classes||[],crns:f.crns||f.sections||[],secs:f.secs||[],history:f.history||[],avatar_url:f.avatar_url||''};});
     incomingRequests=Array.isArray(c.incoming)?c.incoming:[];
     outgoingRequests=Array.isArray(c.outgoing)?c.outgoing:[];
     friendsLoaded=true;                 // show cached friends now; refresh updates them
@@ -19192,7 +19533,11 @@ async function _loadFriendsDataInner(){
        then dropped on the floor for non-friends, which is not a control — the row had already
        crossed the wire. The column is revoked at the database now (professify-lockdown.sql §2);
        this is the client half, so the request stops asking for a column it has no business in. */
-    for(const sel of ['id,display_name,instagram_handle,avatar_url,username',
+    /* `school` first; the fallbacks are for a database professify-schools.sql has not reached
+       yet, where the column does not exist (the pinned_friends lesson: one missing column 42703s
+       the whole request). Rows without it are treated as same-school — RLS is the wall, not this. */
+    for(const sel of ['id,display_name,instagram_handle,avatar_url,username,school',
+                      'id,display_name,instagram_handle,avatar_url,username',
                       'id,display_name,instagram_handle,avatar_url',
                       'id,display_name,instagram_handle']){
       const r=await sb.from('profiles').select(sel).in('id',otherIds);
@@ -19322,8 +19667,9 @@ async function _loadFriendsDataInner(){
     if(histErr)console.error('[professify] class_history read failed:',histErr.message);
     (hist||[]).forEach(h=>{(histMap[h.user_id]=histMap[h.user_id]||[]).push({code:h.code,term:h.term,year:h.year,professor:h.professor||'',at:h.created_at});});
   }
-  friendsList=friendIds.map(id=>({id,name:(profMap[id]&&profMap[id].display_name)||'Classmate',handle:(profMap[id]&&profMap[id].instagram_handle)||'',email:'',   /* no longer fetched — see the select list in _loadFriendsDataInner */avatar_url:(profMap[id]&&profMap[id].avatar_url)||'',username:(profMap[id]&&profMap[id].username)||'',classes:classMap[id]||[],crns:crnsMap[id]||[],secs:secsMap[id]||[],history:histMap[id]||[],classAdds:addMap[id]||[],wl:wlMap[id]||{},color:colorForId(id)}));
-  FRIENDS=friendsList.map(f=>({id:f.id,name:f.name,ini:initials(f.name),color:colorForId(f.id),classes:f.classes,crns:f.crns||f.sections||[],secs:f.secs||[],history:f.history,avatar_url:f.avatar_url||''}));
+  friendsList=friendIds.map(id=>({id,name:(profMap[id]&&profMap[id].display_name)||'Classmate',handle:(profMap[id]&&profMap[id].instagram_handle)||'',email:'',   /* no longer fetched — see the select list in _loadFriendsDataInner */avatar_url:(profMap[id]&&profMap[id].avatar_url)||'',username:(profMap[id]&&profMap[id].username)||'',school:(profMap[id]&&profMap[id].school)||'',classes:classMap[id]||[],crns:crnsMap[id]||[],secs:secsMap[id]||[],history:histMap[id]||[],classAdds:addMap[id]||[],wl:wlMap[id]||{},color:colorForId(id)}));
+  friendsList=sameSchoolOnly(friendsList);
+  FRIENDS=friendsList.map(f=>({id:f.id,name:f.name,ini:initials(f.name),color:colorForId(f.id),school:f.school||'',classes:f.classes,crns:f.crns||f.sections||[],secs:f.secs||[],history:f.history,avatar_url:f.avatar_url||''}));
   /* avatar_url was read into profMap and then not carried onto the request rows, so a friend
      request — and every notification built from one — could only ever draw initials for someone
      whose photo we already had in hand. */
@@ -23857,6 +24203,17 @@ let FRIENDS=[];
 /* myProfile is declared up with sb/sbUser — see the note there. Re-declaring it here
    reset it to null after boot had already loaded the cached profile. */
 let friendsList=[];
+/* BELT TO THE DATABASE'S BRACES. RLS already refuses a cross-campus row (professify-schools.sql),
+   so this should never remove anything. It exists for the row that arrives anyway — a cached list
+   from before the migration, a friendship made before the wall — and for the verifier, which
+   feeds it one on purpose. A row with no `school` field is from a database that has not been
+   migrated and is kept: dropping every friend on a schema gap would be the worse failure. */
+function sameSchoolOnly(list){
+  try{
+    var mine=mySchoolKey();
+    return (list||[]).filter(function(f){ return !f||!f.school||f.school===mine; });
+  }catch(e){ return list||[]; }
+}
 let incomingRequests=[];
 let outgoingRequests=[];
 let contactMatches=[];
@@ -23874,7 +24231,7 @@ function enforceEduDomain(){
     const bad=sbUser.email;
     try{sb.auth.signOut();}catch(e){}
     sbUser=null;eduVerified=false;
-    alert('Please sign in with your @calpoly.edu email'+(bad?` — "${bad}" isn't one.`:'.'));
+    alert('Please sign in with your Cal Poly, SDSU or UCSB email'+(bad?` — "${bad}" isn't one.`:'.'));
     return false;
   }
   return true;
@@ -28240,7 +28597,9 @@ async function signInWithGoogle(){
     if(typeof openAuth==='function')openAuth('friends');
     return;
   }
-  try{await sb.auth.signInWithOAuth({provider:'google',options:{hd:'calpoly.edu',redirectTo:window.location.href}});}catch(e){}
+  /* `hd` would pin the Google picker to one Workspace domain; with three schools it is dropped and
+     enforceEduDomain() does the gating after the round-trip, same as for the email code. */
+  try{await sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:window.location.href}});}catch(e){}
 }
 frSyncSaved();
 if(typeof updateFriendsBadge==='function')updateFriendsBadge();
@@ -28365,57 +28724,137 @@ window.plRenderRecord=function(){
   var host=document.getElementById('plRecordHead'); if(!host)return;
   var si=(typeof sbUser!=='undefined'&&sbUser);
   if(!si){ host.innerHTML=''; return; }
+  if(typeof schoolLive==='function'&&!schoolLive()){
+    host.innerHTML='<div class="plr-sub">Your record and degree ledger are Cal Poly-only for now — '+escapeHtml(schoolCfg().short)+' requirements aren’t encoded yet.</div>';
+    return;
+  }
   var esc=(typeof escapeHtml==='function')?escapeHtml:function(x){return String(x);};
   /* "done" is the same set the % below is computed from — the record plus its local mirror
      (completedCodes), minus waivers — so the two numbers can never disagree on a failed read. */
   var sat=0, wv={}; try{ waivedCodes().forEach(function(c){wv[canonCode(c)]=1;}); sat=Object.keys(wv).length; }catch(e){}
   var done=0; try{ var dn={}; completedCodes().forEach(function(c){ var k=canonCode(c); if(!wv[k])dn[k]=1; }); done=Object.keys(dn).length; }catch(e){ done=(typeof myHistory!=='undefined'?myHistory:[]).length; }
   var now=(typeof myClasses!=='undefined'?myClasses:[]).length;
-  /* % of the major: plan codes satisfied (taken or waived) over plan codes, like the old card */
-  var pct=null, plan=null, majorName='';
+  var majorName='', mm=null;
   try{
     majorName=(typeof student!=='undefined'&&student.major)||'';
-    /* the flowchart's coded slots, expanded for the chosen concentration */
-    var mk=document.getElementById('schMajorSel'); var mm=(mk&&typeof SCHED_MAJORS!=='undefined')?SCHED_MAJORS[mk.value]:null;
+    /* the flowchart, expanded for the chosen concentration */
+    var mk=document.getElementById('schMajorSel'); mm=(mk&&typeof SCHED_MAJORS!=='undefined')?SCHED_MAJORS[mk.value]:null;
     if(mm&&typeof window.schExpandConcPublic==='function')mm=window.schExpandConcPublic(mm);
-    if(mm){ plan=[]; var seenP={}; (mm.terms||[]).forEach(function(t){ (t.slots||[]).forEach(function(sl){ if(!sl.code)return; var cs=(typeof window.schSlotCodes==='function')?window.schSlotCodes(sl.code):[canonCode(sl.code)]; var c0=cs[0]; if(c0&&!seenP[c0]){ seenP[c0]=1; plan.push(c0); } }); }); if(!plan.length)plan=null; }
   }catch(e){}
   /* THE DENOMINATOR IS THE WHOLE DEGREE, not the coded half of it (Tate, 2026-09-03). Counting only
      slots that name a course made a senior one class from done read "33% of Business Administration"
-     — Business Administration is 14 coded slots and 29 shapes (GE areas, electives), and the shapes
-     are two thirds of the degree. They are matched against the record the same way the list is; see
-     uncodedSatisfied() in the planner block. */
+     — the GE areas and electives are two thirds of the degree, and they are matched against the
+     record the same way the list is (uncodedSatisfied, in the planner block).
+
+     ...AND THERE IS NO SINGLE PERCENTAGE ANY MORE — 2026-09-09.
+     Tate: "so im almost done with my degree and it still says 70% done. make sure this is accurate."
+     It was accurate and it could never say 100. Business Administration has 43 slots on its
+     flowchart and, with no concentration chosen, 12 of them cannot be judged from a record: seven
+     concentration slots with no course list yet, "Senior Project Course" (names no course), two
+     "X or Y" choices, and two electives whose titles ("Technology Management Course") name neither
+     a subject nor a level. Those sat in the denominator, so the ceiling was 31/43 = 72%; choosing a
+     concentration turns its seven into coded slots and lifts it to 38/43 = 88%. (The first draft of
+     this comment said 8 and 81% — the concentration-chosen count, misremembered; corrected in
+     review against the data.) A number that is right and cannot reach the top reads as wrong,
+     every time.
+
+     Cornell's CoursePlan (courseplan.io, looked at 2026-09-09) never prints one: each requirement
+     bucket carries its own `filled / needed`, and the buckets the app cannot judge are drawn grey
+     with the catalog sentence and a link, rather than hidden inside a total. That is what this is.
+     Their word is "filled", not "completed" — a course placed against a requirement; the registrar
+     decides completion. Same rule as the DPR import: the app reads the record, it does not replace
+     the audit.
+
+     Rows: Major courses · <Concentration> · General education · Electives — each `filled / needed`
+     with in-progress shown as a second segment — then one grey row for the slots we can't check,
+     listed by their flowchart title. The header line sums only the checkable rows. Every number is
+     a count of slots; nothing is divided. */
+  var led=null;
   if(mm){
-    var have={}; try{ completedCodes().forEach(function(c){have[c]=1;}); }catch(e){}
-    var takingM={}; try{ (myClasses||[]).forEach(function(c){takingM[canonCode(c)]=1;}); }catch(e){}
+    /* ONE COMPLETION FILLS ONE SLOT (review, 2026-09-09). Several flowcharts name the same course in
+       more than one slot because it is repeatable — HIST 1101 "Learn by Doing History" three times,
+       ARCH 4401 three times, MU 1150 twice. A presence map (`have[c]=1`) marked all three filled from
+       one term on the record. So the record is counted as OCCURRENCES — one per class_history row,
+       which is one per term taken — and each slot consumes one. A code known only from the local
+       mirror or a waiver has no row count and counts once. The old percentage had the same defect,
+       rounded out of sight; exact per-row integers make it visible, so it is fixed here. */
+    var have={}; try{
+      (typeof myHistory!=='undefined'?myHistory:[]).forEach(function(h){ if(h&&h.code){ var k=canonCode(h.code); have[k]=(have[k]||0)+1; } });
+      completedCodes().forEach(function(c){ if(!have[c])have[c]=1; });
+    }catch(e){}
+    var takingM={}; try{ (myClasses||[]).forEach(function(c){ var k=canonCode(c); takingM[k]=(takingM[k]||0)+1; }); }catch(e){}
     var uc={done:{},taking:{}};
     try{ if(typeof window.plUncodedSatisfied==='function')uc=window.plUncodedSatisfied(mm,completedCodes(),(myClasses||[]).slice()); }catch(e){}
-    var d=0, ip=0, n=0;
+    var chk=(typeof window.plSlotCheckable==='function')?window.plSlotCheckable:function(sl){return !!(sl&&sl.code);};
+    var rows={major:{label:'Major courses',f:0,t:0,n:0},conc:null,ge:{label:'General education',f:0,t:0,n:0},el:{label:'Electives',f:0,t:0,n:0}};
+    var cant=[], concUnchosen=0, concNote='', concLabel='';
     (mm.terms||[]).forEach(function(t){ (t.slots||[]).forEach(function(sl){
-      n++;
-      var cs=sl.code?((typeof window.schSlotCodes==='function')?window.schSlotCodes(sl.code):[canonCode(sl.code)]):[];
-      if(cs.length){ if(cs.some(function(c){return have[c];}))d++; else if(cs.some(function(c){return takingM[c];}))ip++; }
-      else if(uc.done[sl.id])d++;
-      else if(uc.taking[sl.id])ip++;
+      var isConc=(sl.type==='concentration')||/concentration/i.test(sl.note||'');
+      if(!chk(sl)){
+        if(isConc){
+          concUnchosen++;
+          if(!concNote)concNote=sl.note||'';
+          /* schExpandConc titles a chosen-but-listless concentration "<Name> concentration course"
+             and an unchosen one plain "Concentration course". Carry the name when there is one, so a
+             Sociology student who picked Organizations is not told to choose a concentration. */
+          if(!concLabel){ var tl=String(sl.title||''); concLabel=/^Concentration course$/i.test(tl)?'Concentration':tl.replace(/\s*course\s*$/i,''); }
+        }
+        else cant.push(sl);
+        return;
+      }
+      var row;
+      if(sl.code){
+        if(isConc){ if(!rows.conc){ var cn=String(sl.note||'').replace(/\s*concentration\s*$/i,''); rows.conc={label:(cn?esc(cn)+' concentration':'Concentration'),f:0,t:0,n:0}; } row=rows.conc; }
+        else row=rows.major;
+        var cs=(typeof window.schSlotCodes==='function')?window.schSlotCodes(sl.code):[canonCode(sl.code)];
+        row.n++;
+        var hit=cs.find(function(c){return have[c]>0;});
+        if(hit){ have[hit]--; row.f++; }
+        else { var th=cs.find(function(c){return takingM[c]>0;}); if(th){ takingM[th]--; row.t++; } }
+      }else{
+        row=(sl.type==='ge')?rows.ge:rows.el;
+        row.n++; if(uc.done[sl.id])row.f++; else if(uc.taking[sl.id])row.t++;
+      }
     }); });
-    if(n)pct={done:Math.round(100*d/n), withNow:Math.round(100*(d+ip)/n), n:n};
+    var list=[rows.major,rows.conc,rows.ge,rows.el].filter(function(r){return r&&r.n>0;});
+    var F=0,T=0,N=0; list.forEach(function(r){F+=r.f;T+=r.t;N+=r.n;});
+    led={rows:list,F:F,T:T,N:N,cant:cant,concUnchosen:concUnchosen,concNote:concNote,concLabel:concLabel||'Concentration',src:mm.src||''};
   }
   var open=!!window.plRecordOpen;
+  function ledRow(r){
+    var pf=r.n?Math.round(100*r.f/r.n):0, pt=r.n?Math.round(100*r.t/r.n):0;
+    return '<div class="plr-row"><span class="plr-rl">'+r.label+'</span>'
+      +'<span class="plr-rn"><b>'+r.f+'</b> / '+r.n+(r.t?('<small> · '+r.t+' in progress</small>'):'')+'</span>'
+      +'<span class="plr-rbar"><i style="width:'+pf+'%"></i><i class="now" style="width:'+pt+'%"></i></span></div>';
+  }
+  var ledHtml='';
+  if(led){
+    ledHtml='<div class="plr-ledger">'+led.rows.map(ledRow).join('');
+    var cantN=led.cant.length+led.concUnchosen;
+    if(cantN){
+      var items=[];
+      if(led.concUnchosen)items.push('<li><b>'+esc(led.concLabel)+' · '+led.concUnchosen+' course'+(led.concUnchosen===1?'':'s')+'</b>'+(led.concNote?(' — '+esc(led.concNote)):'')+'</li>');
+      led.cant.forEach(function(sl){ items.push('<li>'+esc(sl.title||'Untitled requirement')+(sl.units!=null?(' <small>· '+sl.units+' units</small>'):'')+'</li>'); });
+      ledHtml+='<div class="plr-row plr-cant"><span class="plr-rl">We can’t check these from your record</span><span class="plr-rn">'+cantN+'</span></div>'
+        +'<ul class="plr-cantlist">'+items.join('')+'</ul>';
+    }
+    ledHtml+='</div>';
+  }
   host.innerHTML=
     '<div class="plr-top">'
       +'<div class="plr-nums">'
         +'<span class="plr-n"><b>'+done+'</b>done</span>'
         +'<span class="plr-n"><b>'+now+'</b>in progress</span>'
         +(sat?('<span class="plr-n"><b>'+sat+'</b>satisfied</span>'):'')
-        +(pct?('<span class="plr-pct">'+pct.done+'% of '+esc(majorName)+(pct.withNow>pct.done?(' <small>· '+pct.withNow+'% with this term</small>'):'')+'</span>'):'')
+        +(led?('<span class="plr-pct"><b>'+led.F+' of '+led.N+'</b> '+esc(majorName)+' requirements filled'+(led.T?(' <small>· '+led.T+' in progress</small>'):'')+((led.cant.length+led.concUnchosen)?(' <small>· '+(led.cant.length+led.concUnchosen)+' we can’t check</small>'):'')+'</span>'):'')
       +'</div>'
       +'<div class="plr-acts">'
         +'<button type="button" class="plr-btn" onclick="document.getElementById(\'transcriptFile\').click()">Import DPR</button>'
         +'<button type="button" class="plr-btn" onclick="pcShowManual();try{document.getElementById(\'histCode\').focus();}catch(e){}">Log a class</button>'
       +'</div>'
     +'</div>'
-    +(pct?('<div class="plr-bar"><i style="width:'+pct.done+'%"></i><i class="now" style="width:'+(pct.withNow-pct.done)+'%"></i></div>'):'')
-    +'<div class="plr-sub">'+(pct?'Counted from your Degree Progress Report and what you’ve logged against your major’s flowchart — nothing assumed. ':(done||sat?'Counted from what you’ve logged. ':'Import your Degree Progress Report once and every term of it lands here. '))
+    +ledHtml
+    +'<div class="plr-sub">'+(led?('Filled means a course on your record is placed against a requirement — Cal Poly’s degree audit decides what’s complete. '+(led.src?('<a class="plr-src" href="'+esc(led.src)+'" target="_blank" rel="noopener noreferrer">Official requirements →</a> '):'')):(done||sat?'Counted from what you’ve logged. ':'Import your Degree Progress Report once and every term of it lands here. '))
       +((done||sat)?('<button type="button" class="plr-link" onclick="plToggleRecord()">'+(open?'Hide':'See all '+(done+sat))+'</button>'):'')+'</div>';
   var sec=document.getElementById('plRecord'); if(sec)sec.classList.toggle('open',open);
 };
@@ -30428,7 +30867,7 @@ var LEGAL_DOCS={
     '<div class="lg-date">Last updated '+LEGAL_UPDATED+'</div>'
     +'<div class="lg-key">Professify is a student project, not a Cal Poly service. It is not affiliated with, endorsed by, or reviewed by California Polytechnic State University, PolyRatings, or RateMyProfessors.</div>'
     +'<h4>Who can use it</h4>'
-    +'<p>You need a current <code>@calpoly.edu</code> address, and you must be 13 or older. One account per person. Don’t share your account or sign in as someone else.</p>'
+    +'<p>You need a current school address at Cal Poly (<code>@calpoly.edu</code>), SDSU (<code>@sdsu.edu</code>) or UCSB (<code>@ucsb.edu</code>), and you must be 13 or older. One account per person. Don’t share your account or sign in as someone else.</p>'
     +'<h4>What you post</h4>'
     +'<p>Reviews must be your own first-hand experience of a class you actually took. Write about the teaching, not the person. Specifically, don’t post:</p>'
     +'<ul>'
@@ -30563,7 +31002,7 @@ var LEGAL_DOCS={
     '<div class="lg-date">Last updated '+LEGAL_UPDATED+'</div>'
     +'<div class="lg-key">No system is secure, and nobody honest will tell you otherwise. What follows is what Professify actually does, so you can judge for yourself what to put in it.</div>'
     +'<h4>Signing in</h4>'
-    +'<p>There is no password to steal — sign-in is a one-time code emailed to your <code>@calpoly.edu</code> address. Sessions are held in your browser and refresh in the background; signing out clears them.</p>'
+    +'<p>There is no password to steal — sign-in is a one-time code emailed to your school address. Sessions are held in your browser and refresh in the background; signing out clears them.</p>'
     +'<h4>How your data is separated</h4>'
     +'<p>Every table uses database-level row policies, so who can read a row is decided by the database rather than by the app asking nicely. Friend access is checked against an accepted friendship each time, not cached and trusted.</p>'
     +'<p>Messages work the same way and one step further: reading a conversation requires a membership row, and that check runs inside the database on every query. A conversation you are not in does not return a filtered version — it returns nothing.</p>'
@@ -30849,7 +31288,13 @@ async function epCheckUsername(u){
   var msg=document.getElementById('epUserMsg');
   if(typeof sb==='undefined'||!sb){ if(msg){msg.textContent='Can’t check right now — you can still save.';msg.className='ep-hint';} _epUserOk=true; return; }
   try{
-    var r=await sb.from('profiles').select('id').ilike('username',u).limit(1);
+    /* profiles SELECT is fenced by school (professify-schools.sql), so a direct read would call a
+       handle free that a student at another campus holds, and the unique index would refuse the
+       save. username_taken() answers across every school without exposing the row. Falls back to
+       the old read where the function does not exist yet. */
+    var r=await sb.rpc('username_taken',{u:u});
+    if(!r.error){ r={data:(r.data?[{id:'x'}]:[]),error:null}; }
+    else if(/function|schema cache|does not exist/i.test(r.error.message||'')){ r=await sb.from('profiles').select('id').ilike('username',u).limit(1); }
     if(r.error){
       /* Column missing = the migration hasn't run. Say that instead of implying it's taken. */
       if(/column|schema cache|does not exist/i.test(r.error.message||'')){
@@ -31878,10 +32323,17 @@ function hmMiniWeekHtml(meets,opts){
          gotoSection() already exists for the Planner hand-off: Explore, filtered to the
          course, section list open, row scrolled to. stopPropagation so it can never also
          fire whatever sits around it. */
+      /* THE THIRD ARGUMENT IS NOT OPTIONAL (Tate, 2026-09-08: "when i click bus 4445 it doesnt
+         do anything"). cbTap's own===0 means "this is a friend's week"; it was being called
+         with two arguments, so own arrived undefined, `own!==0` was true, and any class the
+         viewer is ALSO in took the mcOpenOnList branch — which changes the page UNDERNEATH the
+         friend's sheet. Nothing visible happens, exactly as reported. It only ever broke on
+         shared classes, which is why the rest of the week felt fine.
+         hmMiniWeekHtml has one caller and it is always a friend, so this is a constant 0. */
       var tapCode=jsAttr(m.code);
       return '<div class="'+cls+' cb-tap" role="button" tabindex="0"'
-        +' onclick="event.stopPropagation();cbTap(\''+tapCode+'\',\'\')"'
-        +' onkeydown="if(event.key===\'Enter\'){event.preventDefault();event.stopPropagation();cbTap(\''+tapCode+'\',\'\')}"'
+        +' onclick="event.stopPropagation();cbTap(\''+tapCode+'\',\'\',0)"'
+        +' onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();event.stopPropagation();cbTap(\''+tapCode+'\',\'\',0)}"'
         +' style="top:'+top.toFixed(1)+'px;height:'+Math.max(h,18).toFixed(1)+'px;'
         +'left:calc('+left.toFixed(3)+'% + 2px);width:calc('+w.toFixed(3)+'% - 4px)" title="'+esc2(tip+' \u2014 tap for sections & seats')+'">'
         +'<span class="cb-top"><span class="cb-code">'+esc2(m.code)+'</span>'
@@ -31901,7 +32353,14 @@ function hmMiniWeekHtml(meets,opts){
   var anyCol=anyList?('<div class="cal-col cal-any"><div class="cal-dh">ASYNC</div>'
     +'<div class="cal-day cal-anyday" style="height:'+gridH+'px">'
     +anyList.map(function(a){
-        return '<div class="cal-block'+(a.wl?' wl':'')+' cal-anyblk" title="'+esc2(a.code+' — asynchronous, no set meeting time'+(a.wl?(' · on the waitlist'+(a.wlPos?' #'+a.wlPos:'')):''))+'">'
+        /* An async class is still a class you can want the sections and seats for, and these
+           blocks had no handler at all — so BUS 4411 and UNIV 4401 sat in the rail doing
+           nothing while the timed blocks beside them opened. Same tap, same friend's-week 0. */
+        var tapA=jsAttr(a.code);
+        return '<div class="cal-block'+(a.wl?' wl':'')+' cal-anyblk cb-tap" role="button" tabindex="0"'
+          +' onclick="event.stopPropagation();cbTap(\''+tapA+'\',\'\',0)"'
+          +' onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();event.stopPropagation();cbTap(\''+tapA+'\',\'\',0)}"'
+          +' title="'+esc2(a.code+' — asynchronous, no set meeting time'+(a.wl?(' · on the waitlist'+(a.wlPos?' #'+a.wlPos:'')):'')+' — tap for sections & seats')+'">'
           +'<span class="cb-top"><span class="cb-code">'+esc2(a.code)+'</span></span>'
           +'<span class="mode-pill async mp-sm">Async</span></div>';
       }).join('')
@@ -32077,34 +32536,78 @@ function hmFriendSchedCard(f){
    screen never needs to move, so it keeps the ordinary top offset under the header. The two
    rails are measured independently, because Watchlist and Lowest-rated are different lengths
    and each should hold at its own end. */
-function hmStickRails(){
+/* ONE RULE FOR EVERY STICKY RAIL — 2026-09-09.
+   Home's two rails and Explore's one all want the same thing: scroll with the page until the last
+   card is on screen, then hold. The arithmetic lived here and was about to be copied for Explore
+   (review caught the duplicate). It is one function now; the callers only decide which elements
+   and which breakpoint. The reasoning for the arithmetic is unchanged:
+     h <= avail  ->  top = restTop                 short rail: pin under the header
+     h >  avail  ->  top = innerHeight - h - GAP   tall rail: scroll it, then pin its BOTTOM
+   A stretched grid item can never come unstuck, so every caller's CSS sets align-self:start. */
+function stickRailEl(el,minWidth){
   try{
-    if(window.innerWidth<1140){
-      ['hmRailL','hmRailR'].forEach(function(id){
-        var e=document.getElementById(id); if(e){e.style.position='';e.style.top='';}
-      });
-      return;
-    }
+    if(!el)return;
+    if(window.innerWidth<minWidth){ el.style.position=''; el.style.top=''; return; }
     var hdr=document.querySelector('header.nav');
     var hh=hdr?Math.round(hdr.getBoundingClientRect().height):64;
     var GAP=16, restTop=hh+GAP;
+    var h=el.offsetHeight;
+    if(!h){ el.style.position=''; el.style.top=''; return; }
+    var avail=window.innerHeight-restTop-GAP;
+    el.style.position='sticky';
+    el.style.top=Math.round(h<=avail?restTop:(window.innerHeight-h-GAP))+'px';
+  }catch(e){}
+}
+try{ window.stickRailEl=stickRailEl; }catch(e){}
+function hmStickRails(){
+  try{
     ['hmRailL','hmRailR'].forEach(function(id){
       var el=document.getElementById(id); if(!el)return;
       /* Below the breakpoint the rail is moved into #hmRailSlot and flows with the feed. */
       if(el.parentElement&&el.parentElement.id==='hmRailSlot'){ el.style.position=''; el.style.top=''; return; }
-      var h=el.offsetHeight;
-      if(!h){ el.style.position=''; el.style.top=''; return; }
-      var avail=window.innerHeight-restTop-GAP;
-      el.style.position='sticky';
-      el.style.top=Math.round(h<=avail?restTop:(window.innerHeight-h-GAP))+'px';
+      stickRailEl(el,1140);
     });
   }catch(e){}
 }
 try{ window.hmStickRails=hmStickRails; }catch(e){}
+/* MEASURED ONCE, GROWS LATER — 2026-09-08 (Tate: "the professors that i currently have, past
+   professors and highest rated wont scroll up or down and i have to scroll all the way back to
+   the top on feed to be able to get it back").
+
+   hmStickRails ran 120ms after render and on resize, and never again. The right rail's three
+   professor lists are filled from PolyRatings, which answers long after that. So the sequence
+   was: measure a SHORT rail (h <= avail) -> pin it at restTop -> the lists arrive -> the rail is
+   now three times the viewport, still pinned by its top at 80px. A sticky element does not
+   scroll once it is pinned, so everything below the fold in that rail became unreachable. The
+   only escape was scrolling back above the sticky threshold, which is exactly what he described.
+
+   The number was never wrong. It was just computed against a rail that no longer existed. So
+   recompute whenever a rail actually changes size, rather than guessing when loading is "done" —
+   any fixed delay is the same bug with a longer fuse. rAF-coalesced because ResizeObserver fires
+   per element and both rails move at once, and because hmStickRails writes styles that the
+   observer would otherwise see as another change. */
 try{ window.addEventListener('resize',function(){
   if(window._hmStickT)clearTimeout(window._hmStickT);
   window._hmStickT=setTimeout(hmStickRails,120);
 }); }catch(e){}
+function hmWatchRails(){
+  try{
+    if(window._hmRailObs||typeof ResizeObserver==='undefined')return;
+    var pending=false;
+    window._hmRailObs=new ResizeObserver(function(){
+      if(pending)return; pending=true;
+      requestAnimationFrame(function(){ pending=false; try{ hmStickRails(); }catch(e){} });
+    });
+    ['hmRailL','hmRailR'].forEach(function(id){
+      var el=document.getElementById(id); if(el)window._hmRailObs.observe(el);
+    });
+  }catch(e){}
+}
+try{ window.hmWatchRails=hmWatchRails; }catch(e){}
+/* No ResizeObserver (old Safari): re-measure a few times across the window in which the feeds
+   realistically land, instead of once at 120ms. Coarser, but it fails the same way as before
+   rather than a new way. */
+try{ if(typeof ResizeObserver==='undefined'){ [600,1500,3000,6000].forEach(function(ms){ setTimeout(function(){ try{hmStickRails();}catch(e){} },ms); }); } }catch(e){}
 function hmPlaceRail(){
   try{
     var slot=document.getElementById('hmRailSlot');
@@ -33463,16 +33966,18 @@ function hmRenderLanding(){
            what the product runs on, so the ask sits on the landing page next to Browse. The
            verify gate still handles identity, so this is safe to show before signup. */
         +'<button class="lp-rate" onclick="openRate()"><span class="lp-rate-ic">★</span>Already had a professor? <b>Rate them</b> →</button>'
-        +'<div class="lp-trust"><span>Real ratings from PolyRatings</span><span class="d"></span><span>Verified .edu students</span><span class="d"></span><span>No ads, ever</span></div>'
+        +'<div class="lp-trust"><span>Real ratings from PolyRatings</span><span class="d"></span><span>Verified .edu students</span><span class="d"></span><span>Free for students</span></div>'
       +'</div>'
       +'<div class="lp-r"><div class="lp-card"><div class="lp-ch"><h3>Highest rated right now</h3>'+livePill+'</div>'+lb
         +'<div class="lp-foot">Live from PolyRatings’ public API. Tap any professor to read their real reviews — no account needed.</div></div></div>'
     +'</div>'
     +'<div class="lp-pill-h">Everything you need to pick your term</div>'
+    /* Order is what a student actually decides on, not what the data pipeline is proudest of:
+       who they'll sit with, who's teaching, whether the week fits, whether it counts. */
     +'<div class="lp-pills">'
-      +lpPill('star','Real ratings, zero ads','Live from PolyRatings, every review from a verified Cal Poly student. Never a paywall.')
-      +lpPill('user','Who’s teaching + open seats','See who teaches each section, how they’re rated, and how many seats are left.')
-      +lpPill('users','Your friends’ schedules','See who shares your classes and who to take — the part no one else has.')
+      +lpPill('users','Your friends’ schedules','See which friends are in a class before you pick it — and take it together.')
+      +lpPill('star','The right professor','Every section shows who’s teaching and how Cal Poly students rated them.')
+      +lpPill('clock','A schedule that fits','Open seats and waitlists, laid out on your week — so you register with a plan that works.')
       +lpPill('cal','Your whole degree','Flowchart, prerequisites, and past classes in one place — plan the term.')
     +'</div></div>';
 }
@@ -33480,7 +33985,8 @@ function lpPill(ic,t,d){
   var svg={star:'<path d="M12 17.3l-5.4 3 1-6-4.4-4.2 6-.9L12 3.6l2.8 5.6 6 .9-4.4 4.2 1 6z" stroke-linejoin="round"/>',
     user:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>',
     users:'<circle cx="9" cy="8" r="3.1"/><path d="M3.4 19c0-3 2.5-5 5.6-5s5.6 2 5.6 5"/><path d="M16.2 5.9a2.9 2.9 0 0 1 0 5.8"/>',
-    cal:'<rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/>'}[ic];
+    cal:'<rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9h18M8 2.5v4M16 2.5v4"/>',
+    clock:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'}[ic];
   return '<div class="lp-pill"><div class="lp-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">'+svg+'</svg></div><h4>'+t+'</h4><p>'+d+'</p></div>';
 }
 window.renderHome=function(){
@@ -33502,6 +34008,7 @@ window.renderHome=function(){
   try{ hmFitWatch(); }catch(e){}
   /* After the rails have their content, not before — the pin point is derived from their height. */
   hmStickRails();
+  hmWatchRails();   /* and keep watching: the professor lists arrive long after this call */
 };
 /* re-render when Home is shown */
 var _hmShow=window.show;
@@ -34555,6 +35062,23 @@ try{ window.hmIdleRepaint=hmIdleRepaint; window.hmSig=hmSig; }catch(e){}
 .plr-bar i{display:block;height:100%;background:var(--accent);transition:width .35s ease}
 .plr-bar i.now{background:rgba(var(--accent-rgb),.35)}
 .plr-sub{font-size:12.5px;color:var(--faint);line-height:1.5}
+/* the ledger — one row per requirement bucket, its own denominator, no total percentage */
+.plr-ledger{margin:12px 0 8px;display:flex;flex-direction:column;gap:7px}
+.plr-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;align-items:baseline;font-size:13px}
+.plr-rl{color:var(--text-2);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plr-rn{color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}
+.plr-rn b{font-weight:650}
+.plr-rn small{color:var(--faint);font-weight:400}
+.plr-rbar{grid-column:1/-1;display:flex;height:5px;border-radius:3px;background:var(--panel-2);overflow:hidden}
+.plr-rbar i{display:block;height:100%;background:var(--accent)}
+.plr-rbar i.now{background:color-mix(in srgb,var(--accent) 45%,transparent)}
+.plr-cant{margin-top:4px;padding-top:9px;border-top:1px solid var(--line-soft)}
+.plr-cant .plr-rl,.plr-cant .plr-rn{color:var(--faint)}
+.plr-cantlist{margin:0;padding:0 0 0 14px;font-size:12.5px;color:var(--faint);line-height:1.55;columns:2;column-gap:18px}
+.plr-cantlist li{break-inside:avoid}
+.plr-cantlist b{font-weight:600;color:var(--muted)}
+@media(max-width:640px){.plr-cantlist{columns:1}}
+.plr-src{color:var(--muted);text-decoration:underline;text-underline-offset:2px}
 .plr-link{border:0;background:transparent;color:var(--accent);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;padding:0}
 @media(max-width:640px){ .pl-record{padding:14px 14px 12px} .plr-n b{font-size:21px} }
 </style>
@@ -34828,6 +35352,27 @@ function uncodedSatisfied(m,haveList,takingList){
   return res;
 }
 try{ window.plUncodedSatisfied=function(m,h,t){ return uncodedSatisfied(m,h,t); }; }catch(e){}
+/* CAN THIS SLOT BE CHECKED AGAINST A RECORD AT ALL? — 2026-09-09
+   The one answer, used by the ledger in the record header. It is the same set of rules
+   uncodedSatisfied() applies when it CLAIMS a slot, stated as a predicate, so the header and the
+   planner list can never disagree about which requirements the app is able to judge:
+     · a slot naming a course (or several)          → yes
+     · a GE slot                                     → yes (geAreaOf)
+     · an elective/choice whose title gives a rule   → yes (electiveRule non-null)
+     · an "additional concentration course" with an options list → NOT YET (uncodedSatisfied does
+       not claim these either; the day it does, this line and that one change together)
+     · everything else — an unchosen concentration slot, "Senior Project Course", "X or Y"    → no
+   "No" is not a failure state. It is the honest row in the ledger. */
+function slotCheckable(sl){
+  try{
+    if(!sl)return false;
+    if(sl.code)return true;
+    if(sl.type==='ge')return true;
+    if((sl.type==='elective'||sl.type==='choice')&&electiveRule(sl.title))return true;
+  }catch(e){}
+  return false;
+}
+try{ window.plSlotCheckable=slotCheckable; }catch(e){}
 
 /* ---------- grouping, by reason, in Tate's order ---------- */
 function groups(el){
@@ -34921,6 +35466,17 @@ function notYetHtml(blocked,eligible){
 window.plRenderEligible=function(){
   var host=document.getElementById('plEligible'); if(!host)return;
   mount();
+  /* No flowcharts for this school yet: say so, instead of offering Cal Poly's 65 majors to an SDSU
+     student as if one of them were theirs. The DPR import is Cal Poly's report too. */
+  if(typeof schoolLive==='function'&&!schoolLive()){
+    var _sc=schoolCfg();
+    host.innerHTML='<div class="pl-empty">Degree tracking for '+escapeHtml(_sc.short)+' isn’t built yet — its majors and requirements aren’t in Professify. Friends, chats and class search work today.</div>';
+    try{ document.getElementById('plNyBody').innerHTML=''; }catch(e){}
+    /* the major / concentration knobs list Cal Poly's majors — hidden with the list they drive */
+    try{ var _c=document.getElementById('plCtl'); if(_c)_c.style.display='none'; }catch(e){}
+    return;
+  }
+  try{ var _c2=document.getElementById('plCtl'); if(_c2)_c2.style.display=''; }catch(e){}
   renderControls();
   var head=document.getElementById('plEligHead');
   var data=rows();
@@ -34968,8 +35524,11 @@ function mount(){
   if(mounted)return; mounted=true;
   /* You plan the term AFTER this one. The select's first option is Fall by accident of markup. */
   try{ var ts=termSel(); if(ts&&!ts.getAttribute('data-user')){ var nx=(typeof termNext==='function'&&typeof termNow==='function')?termNext(termNow()):null; if(nx&&nx.term){ ts.value=nx.term; } ts.addEventListener('change',function(){ ts.setAttribute('data-user','1'); }); } }catch(e){}
-  try{ var cs=document.getElementById('schConcSel'); if(cs)cs.addEventListener('change',function(){ setTimeout(plRenderEligible,0); }); }catch(e){}
-  try{ var ms=document.getElementById('schMajorSel'); if(ms)ms.addEventListener('change',function(){ setTimeout(plRenderEligible,0); }); }catch(e){}
+  /* Both the list AND the record header follow these selects — the ledger's concentration row and
+     its denominator change with them, and until 2026-09-09 only the list was re-rendered. */
+  var _plFollow=function(){ setTimeout(function(){ try{plRenderEligible();}catch(e){} try{ if(typeof plRenderRecord==='function')plRenderRecord(); }catch(e){} },0); };
+  try{ var cs=document.getElementById('schConcSel'); if(cs)cs.addEventListener('change',_plFollow); }catch(e){}
+  try{ var ms=document.getElementById('schMajorSel'); if(ms)ms.addEventListener('change',_plFollow); }catch(e){}
 }
 function renderTray(data){
   var tray=document.getElementById('plTray'), pk=document.getElementById('plPicks'), un=document.getElementById('plUnits'); if(!tray)return;
@@ -35292,6 +35851,130 @@ try{ var _rf=window.renderFriends; if(typeof _rf==='function'){ window.renderFri
   .set-btn:active,.auth-submit:active,.auth-alt:active,.nt-btn:active,.chip:active,.pill:active,
   .sf-pill:active,.myr-row:active,.sl-row:active{transform:none;transition:none}
 }
+</style>
+<style>
+/* ================================================================================================
+   EXPLORE REDESIGN — Sean's spec, ported 2026-09-09
+   ------------------------------------------------------------------------------------------------
+   Sean handed over `explore-v6.html` with a token block he described as "sampled pixel-by-pixel
+   out of a screenshot of the live app", flagging one value (--code-blue) as a guess. He was
+   right about all of them, and the guess was off by two in one channel:
+
+     his --page  #F6F4F1  =  our --bg      in [data-theme="light"]
+     his --card  #FFFFFF  =  our --panel   in [data-theme="light"]
+     his --ink   #2D2C2B  ~  our --text    (rgba(28,27,26,.92) over #F6F4F1 -> #2E2D2C)
+     his --ink-2 #737270  ~  our --muted   (rgba(28,27,26,.60) over #F6F4F1 -> #74726F)
+     his --brand-green #1B7A4E = our --accent in light
+     his --code-blue   #1F6FA8 ~ our --blue-ink #1D6FA8 in light
+
+   So he sampled the LIGHT theme and rebuilt its palette by eye. That means this whole design
+   maps onto tokens the app already has, and not one of his literals appears below. Which matters
+   because the app has THREE themes — dark is the default, light and cream are opt-in — and a
+   port written in his hexes would have been a light-only island inside a dark app.
+
+   Two values need a per-theme rule rather than a straight token swap:
+
+     .cx-badge  Sean's course-code badge is solid blue with white text. --blue-ink is dark in
+                light (#1D6FA8) and cream (#1C5E86) but LIGHT in dark (#5AA9E0), where white on
+                it fails contrast. So: solid in the two light themes, and the app's existing
+                tinted-badge treatment (blue text on a 13% wash, 30% border — the same shape as
+                .hmc-ac) in dark.
+
+   And one thing in his spec is deliberately NOT ported: `position:sticky;top:80px` on the rail.
+   That is the exact bug fixed on Home the day before this (see hmStickRails): a rail pinned at a
+   fixed top whose content arrives asynchronously grows past the viewport and becomes unreachable
+   — you cannot scroll a pinned element, and the only escape is scrolling back above the sticky
+   threshold. Tate reported it as "wont scroll up or down and i have to scroll all the way back
+   to the top". exStickRail() below is hmStickRails' height-aware version, watched by a
+   ResizeObserver so it re-measures when the seat feed lands rather than once at render.
+
+   Sean's avatar system (eight solid colours keyed off a hash of the initials) is NOT ported
+   either. colorForId() in this app returns a constant grey on purpose — per-person avatar
+   colours were removed on 2026-08-25 with Tate's reasoning recorded at that function. Faces here
+   go through faceHtml()/avaHtml() like every other face in the app: the real profile photo when
+   there is one, grey initials when there isn't.
+   ================================================================================================ */
+
+/* ---- layout: feed + context rail ---- */
+.ex-rail{display:none}
+@media(min-width:1040px){
+  /* .wrap is 1040 max with 24px of padding, so the content box is 992: 668 of feed + 24 gap +
+     300 of rail. 300 and not Sean's 360 because Home's rail is 300 and a student moving between
+     the two tabs should not see the page furniture change width under them. */
+  .ex-grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:24px;align-items:start}
+  /* align-self:start is what lets a grid item be sticky at all — a stretched item can never
+     come unstuck. Same note as .hm-rail. */
+  .ex-rail{display:block;align-self:start}
+}
+
+/* ---- the card is a teaser ----
+   Sean: "the browse page's job is to make you want to click; the detail page's job is to answer."
+   Everything this card used to print — professor count, meeting times, the four-up stats strip —
+   is on the class page one tap down, which already exists. Nothing was deleted. */
+.cls-teaser{padding:14px 18px}
+.cls-teaser .cls-top{align-items:flex-start}
+.cls-teaser .ct{gap:10px;align-items:center}
+.cx-badge{
+  display:inline-block;padding:3px 9px;border-radius:8px;
+  font-size:12.5px;font-weight:700;line-height:1.35;white-space:nowrap;
+  background:color-mix(in srgb,var(--blue-ink) 13%,transparent);
+  color:var(--blue-ink);
+  border:1px solid color-mix(in srgb,var(--blue-ink) 30%,transparent);
+}
+:root[data-theme="light"] .cx-badge,
+:root[data-theme="cream"] .cx-badge{background:var(--blue-ink);color:#fff;border-color:var(--blue-ink)}
+.cls-teaser .nm{font-size:14.5px;color:var(--text);font-weight:500}
+.cx-desc{margin:7px 0 0;font-size:13px;color:var(--muted);line-height:1.45}
+.cx-facts{margin-top:7px;font-size:12px;color:var(--faint);display:flex;gap:7px;flex-wrap:wrap;align-items:baseline}
+.cx-facts .sep{opacity:.4}
+.cx-facts .s-open{color:var(--good);font-weight:650}
+.cx-facts .s-wait{color:var(--mid);font-weight:650}
+.cx-facts .s-full{color:var(--low);font-weight:650}
+.cx-facts .cls-chev{margin-left:3px}
+.cx-foot{margin-top:11px;padding-top:10px;border-top:1px solid var(--line-soft);display:flex;flex-direction:column;gap:7px}
+.cx-foot:empty{display:none}
+.cx-none{font-size:12px;color:var(--faint)}
+.cls-teaser .cls-prof{align-items:flex-start;gap:0;padding-top:1px}
+
+/* ---- rail modules ----
+   Sean: "the widgets are not tinted surfaces". Colour appears only in the icon chip, the meter
+   fill and one number; the card itself is --panel like every other card on the page. */
+.ex-mod{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 15px}
+.ex-mod + .ex-mod{margin-top:12px}
+.exm-h{display:flex;gap:10px;align-items:flex-start}
+.exm-chip{flex:none;width:28px;height:28px;border-radius:9px;display:grid;place-items:center}
+.exm-chip svg{width:15px;height:15px}
+.exm-chip.red{background:color-mix(in srgb,var(--low) 15%,transparent);color:var(--low)}
+.exm-chip.blue{background:color-mix(in srgb,var(--blue-ink) 15%,transparent);color:var(--blue-ink)}
+.exm-chip.green{background:var(--accent-dim);color:var(--accent)}
+.exm-h h3{margin:0;font-size:13.5px;font-weight:650;color:var(--text);letter-spacing:-.005em}
+.exm-h p{margin:2px 0 0;font-size:11.5px;color:var(--faint);line-height:1.35}
+.exm-b{margin-top:12px;display:flex;flex-direction:column;gap:11px}
+.exm-row{display:block;width:100%;text-align:left;background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer}
+.exm-rt{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.exm-rt b{font-size:12.5px;font-weight:650;color:var(--text)}
+.exm-rt .num{font-size:11.5px;font-weight:650;white-space:nowrap;font-variant-numeric:tabular-nums}
+.exm-rt .num.red{color:var(--low)}
+.exm-rt .num.green{color:var(--good)}
+.exm-rt .num.mid{color:var(--mid)}
+.exm-rs{font-size:11.5px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.exm-meter{height:4px;border-radius:999px;background:var(--panel-3);margin-top:6px;overflow:hidden}
+.exm-meter i{display:block;height:100%;border-radius:999px;background:var(--low)}
+@media (hover:hover){.exm-row:hover .exm-rt b{color:var(--accent)}}
+.exm-row:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
+.exm-empty{margin-top:11px;font-size:12px;color:var(--faint);line-height:1.45}
+.exm-f{margin-top:12px;width:100%;background:transparent;border:1px solid var(--line);border-radius:9px;
+  padding:7px 10px;font:650 12px inherit;color:var(--muted);cursor:pointer}
+@media (hover:hover){.exm-f:hover{color:var(--text);border-color:var(--faint)}}
+.exm-cta{margin-top:12px;width:100%;background:var(--blue-ink);border:1px solid var(--blue-ink);border-radius:9px;
+  padding:8px 10px;font:650 12px inherit;color:#fff;cursor:pointer}
+@media (hover:hover){.exm-cta:hover{filter:brightness(1.06)}}
+.exm-faces{display:flex;align-items:center;gap:9px}
+.exm-faces .fr-avs{display:flex}
+.exm-faces .fr-av{margin-left:-6px}
+.exm-faces .fr-av:first-child{margin-left:0}
+.exm-faces span.t{font-size:12px;color:var(--muted)}
+.exm-faces span.t b{color:var(--text);font-weight:650}
 </style>
 <script>
 /* ================================================================================================
