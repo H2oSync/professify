@@ -1,5 +1,5 @@
 /* =================================================================================================
-   professify.app/s  —  the link preview for a shared schedule
+   termchamp.com/s  —  the link preview for a shared schedule
    Netlify Edge Function. Deno runtime, no dependencies.
 
    WHY A FUNCTION AND NOT A STATIC FILE
@@ -20,7 +20,7 @@
    the preview actually working, with a silent fallback to the generic card if it was missed. */
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "https://rqkndeqbcahozidniesn.supabase.co";
 const BUCKET       = "schedule-cards";
-const FALLBACK_IMG = "https://professify.app/share-card.png";
+const FALLBACK_IMG = "https://termchamp.com/share-card.png";
 
 /* The image id comes out of a URL a stranger can craft, so it is matched against a shape rather
    than trusted: 16-64 lowercase hex/dash characters and a .png. That keeps og:image inside this
@@ -74,7 +74,7 @@ export default async (request: Request): Promise<Response> => {
 <!-- One person's link to one other person. The homepage is what gets indexed. -->
 <meta name="robots" content="noindex, follow">
 <meta property="og:type"         content="website">
-<meta property="og:site_name"    content="Professify">
+<meta property="og:site_name"    content="TermChamp">
 <meta property="og:url"          content="${esc(url.origin + url.pathname + url.search)}">
 <meta property="og:title"        content="${esc(title)}">
 <meta property="og:description"  content="${esc(desc)}">
@@ -108,7 +108,7 @@ export default async (request: Request): Promise<Response> => {
     <div class="logo" aria-hidden="true">P</div>
     <h1>${esc(title)}</h1>
     <p>${esc(desc)}</p>
-    <a id="go" href="${esc(go)}">Open in Professify</a>
+    <a id="go" href="${esc(go)}">Open in TermChamp</a>
   </div>
 <script>
 (function(){
