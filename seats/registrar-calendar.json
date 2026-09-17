@@ -1,0 +1,158 @@
+{
+  "_README": [
+    "Cal Poly SLO's published registration calendar, transcribed from the Registrar's own",
+    "",
+    "RULES FOR EDITING THIS FILE:",
+    "  1. Every date here must appear VERBATIM on the page named in `source`. Not derived from a",
+    "     neighbouring date, not inferred from last year, not 'about a week after the add deadline'.",
+    "     The first draft invented two window start dates that way and both were wrong. Each window",
+    "     therefore quotes the calendar rows it came from in its `note`.",
+    "  2. Dates are Pacific LOCAL dates (America/Los_Angeles). cadence.mjs converts; do not",
+    "     pre-convert to UTC here.",
+    "  3. `term_code` is PeopleSoft's STRM, written only once the live class search has confirmed it",
+    "     (see resolveTerm in term.mjs). null means 'not yet confirmed' — NOT 'guess it'.",
+    "  4. A term missing from this file is not 'nothing happening'. An uncovered date reads as",
+    "     UNKNOWN and keeps polling daily with a loud warning, and the file's own horizon warns",
+    "     separately when it is running out.",
+    "  5. Windows may OVERLAP — a term's 15-week and second 7.5-week sessions share one open",
+    "     enrolment period. cadence.mjs takes the most intense match, and applies every matching",
+    "     window's boundary rules, not just the winner's.",
+    "  6. `to` is the last day anything can change, which is the LATE ENROLMENT APPEAL deadline, not",
+    "     the add deadline — an approved appeal enrols a student and moves a seat.",
+    "  7. `deadlines` are the dates seats actually move fastest: the published last-day-to-drop and",
+    "     last-day-to-add. They exist BECAUSE of rule 6: once `to` became the appeal deadline, a",
+    "     rule that tightened near `to` tightened a week late and left the two busiest days of each",
+    "     session on the slow base interval.",
+    "  8. The LAST DAY TO ENROL WITHOUT A PERMISSION NUMBER belongs in `deadlines` too, and is",
+    "     arguably the busiest of them: it is the last day the whole unregistered population can",
+    "     self-add, where the later add deadline is individually approved permission numbers.",
+    "     Only the 15-week sessions have one — a 7.5-week session requires a permission number",
+    "     from its first day of classes, so its published table has no such row."
+  ],
+  "verified_on": "2026-09-14",
+  "timezone": "America/Los_Angeles",
+  "terms": [
+    {
+      "label": "Fall 2026",
+      "term_code": "2268",
+      "term_code_confirmed": "in production since 2026-09-07 — the scraper has returned real Fall 2026 sections under this code",
+      "source": "https://registrar.calpoly.edu/fall-semester",
+      "schedule_available": "2026-04-27",
+      "windows": [
+        {
+          "kind": "appointments",
+          "from": "2026-05-11",
+          "to": "2026-06-30",
+          "note": "'May 11 Registration opens for registration appointments' … 'June 30 End of registration appointments for continuing students'. Unit cap 16 on May 30, 18 on Jun 10."
+        },
+        {
+          "kind": "appointments",
+          "from": "2026-08-10",
+          "to": "2026-08-13",
+          "note": "'August 10 New transfer and graduate student registration' … 'August 11-13 New first-year student registration'."
+        },
+        {
+          "kind": "open_enrollment",
+          "from": "2026-08-15",
+          "to": "2026-08-21",
+          "note": "15-week: 'August 15 Open Enrollment begins (8:00 a.m.)' … 'August 21 Open Enrollment ends'."
+        },
+        {
+          "kind": "open_enrollment",
+          "from": "2026-08-15",
+          "to": "2026-10-14",
+          "note": "SECOND 7.5-WEEK SESSION, whose own table reads 'August 15 Open Enrollment begins' and 'October 14 Open Enrollment ends'. Both published; the start is shared with the 15-week session. OVERLAPS the two windows around it."
+        },
+        {
+          "kind": "add_drop",
+          "from": "2026-08-24",
+          "to": "2026-09-21",
+          "deadlines": [
+            "2026-08-28",
+            "2026-09-04",
+            "2026-09-14"
+          ],
+          "note": "15-week: 'August 24 Fall 2026 Classes Begin' … 'August 28 Last day to enroll in open classes without a permission number' … 'September 4 Last day to drop or swap classes' … 'September 14 Last day to add via Student Center with a permission number' … 'September 21 Last day to submit Late Enrollment Appeal'."
+        },
+        {
+          "kind": "add_drop",
+          "from": "2026-10-15",
+          "to": "2026-10-28",
+          "deadlines": [
+            "2026-10-20",
+            "2026-10-21"
+          ],
+          "note": "SECOND 7.5-WEEK SESSION: 'October 15 Classes begin' … 'October 20 Last day to drop or swap classes' … 'October 21 Last day to add classes with a permission number' … 'October 28 Last day to submit Late Enrollment Appeal'. All four rows are in the second-session table."
+        }
+      ],
+      "last_day_anything_can_change": "2026-10-28",
+      "last_day_note": "NOT Sep 14, and not Oct 21 either. The 15-week add deadline passes Sep 14, the second 7.5-week session adds until Oct 21, and its late enrolment appeals are decided through Oct 28. Gating on any earlier date takes a term dark while its seats can still move."
+    },
+    {
+      "label": "Spring 2027",
+      "term_code": null,
+      "term_code_confirmed": null,
+      "source": "https://registrar.calpoly.edu/spring-semester-planning-calendar",
+      "schedule_available": "2026-10-05",
+      "windows": [
+        {
+          "kind": "appointments",
+          "from": "2026-10-19",
+          "to": "2026-11-03",
+          "note": "'October 19 Round 1 Registration opens' (16 units, 12 waitlist) … 'November 3 End of first round of registration appointments'."
+        },
+        {
+          "kind": "appointments",
+          "from": "2026-11-04",
+          "to": "2026-11-17",
+          "note": "'November 4 Round 2 Registration begins' (20 units, 12 waitlist) … 'November 17 End of Registration appointments for continuing students'."
+        },
+        {
+          "kind": "open_enrollment",
+          "from": "2026-11-18",
+          "to": "2027-01-22",
+          "note": "15-week: 'November 18 Open Enrollment begins' … 'January 22 Open Enrollment ends'."
+        },
+        {
+          "kind": "open_enrollment",
+          "from": "2026-11-18",
+          "to": "2027-03-24",
+          "note": "SECOND 7.5-WEEK SESSION, whose own table reads 'November 18 Open Enrollment begins' and 'March 24 Open Enrollment ends'. Both published; the start is shared with the 15-week session."
+        },
+        {
+          "kind": "add_drop",
+          "from": "2027-01-25",
+          "to": "2027-02-22",
+          "deadlines": [
+            "2027-01-29",
+            "2027-02-05",
+            "2027-02-12"
+          ],
+          "note": "15-week: 'January 25 Spring 2027 Classes Begin' … 'January 29 Last day to enroll in open classes without permission number' … 'February 5 Last day to drop or swap classes' … 'February 12 Last day to add classes via Student Center with permission number' … 'February 16 Late Enrollment Appeal period begins' / 'February 22 Late Enrollment Appeal period ends'."
+        },
+        {
+          "kind": "add_drop",
+          "from": "2027-03-25",
+          "to": "2027-04-08",
+          "deadlines": [
+            "2027-03-31",
+            "2027-04-01"
+          ],
+          "note": "SECOND 7.5-WEEK SESSION: 'March 25 Spring 2027 Classes Begin' … 'March 31 Last day to drop or swap classes' … 'April 1 Last day to add classes via Student Center with permission number' … 'April 2 Late appeal begins' / 'April 8 Late Enrollment Appeal period ends'."
+        }
+      ],
+      "last_day_anything_can_change": "2027-04-08",
+      "last_day_note": "Second 7.5-week session's late enrolment appeal deadline."
+    },
+    {
+      "label": "Summer 2027",
+      "term_code": null,
+      "term_code_confirmed": null,
+      "source": "https://registrar.calpoly.edu/academic-calendar",
+      "schedule_available": "2027-02-22",
+      "windows": [],
+      "last_day_anything_can_change": null,
+      "last_day_note": "PLACEHOLDER — the Summer 2027 planning calendar was not published as of 2026-09-14. Only the schedule-available date (Feb 22, stated on the Spring calendar) and first/last day of instruction (Jun 1 / Aug 6, from the academic calendar) are known, and NO registration window is published. windows is EMPTY ON PURPOSE: cadence.mjs reports this term as UNKNOWN rather than silently treating it as dark. Fill it in when the Registrar publishes."
+    }
+  ]
+}
