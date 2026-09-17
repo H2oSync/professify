@@ -20,6 +20,7 @@ Read this before running anything:
 
 | File | Why |
 |---|---|
+| `professify-free-now.sql` | **Do not run.** It creates the `free_now` table for the "I'm free now" declaration, and Tate removed that control on 2026-09-05 — a timetable can show nothing is scheduled, only a person can say they are free, and with no control there is nobody to say it. Push kept the half a timetable can prove ("done for the day"), which needs none of this. Its other half, `profiles.pinned_friends`, is live and now lives in `professify-pinned-friends.sql`. Kept as the written-down version of a decision, not as something to execute. |
 | `professify-phone-drop.sql` | Drops the phone-number lookup. **Tate decided on 2026-09-07 to keep it** for contact sync in the mobile app. It is here as the written-down version of a decision that was made and reversed, not as something to execute. |
 
 ## Not run yet
@@ -27,7 +28,11 @@ Read this before running anything:
 | File | State |
 |---|---|
 | `professify-share-cards.sql` | Written 2026-09-08. Lets the `schedule-cards` bucket accept `application/json` and tightens its INSERT policy. Until this runs, every shared-schedule link opens on "That schedule link has expired". See `claude/share-preview-2026-09-08.md`. |
-| `professify-free-now.sql` | Checked on production 2026-09-08: `free_now` does not exist. Never run. |
+| `professify-review-refusals.sql` | Written 2026-09-11. **Run this one first.** Raises the review cap 5 → 30 and adds the trigger that names WHICH of the four insert conditions refused a review — until it runs, every refusal still reaches the student as an unexplained "the server wouldn't accept that review", and the server cap is still 5 while the client says 30. Also installs `why_cant_i_review()`. Proven against a replica by `check-revsql.mjs`. See `claude/review-refusals-and-friend-emails-2026-09-11.md`. |
+| `professify-friend-emails.sql` | Written 2026-09-11. Adds `friend_emails()` so accepted friends can see each other's school address for group projects, without re-granting the revoked column. Until it runs the contact row simply never appears — the client degrades silently and warns the console. |
+| `professify-pinned-friends.sql` | Written 2026-09-12. Section 2 of `professify-free-now.sql`, lifted verbatim: `profiles.pinned_friends` plus the 2-pin check constraint. The Home feed still ranks pinned friends first and `epPins()` reads the column on every render, so without it pins silently do not save. Verified on a replica: installs, re-runs clean, two pins allowed, three refused. |
+| `professify-term-scope.sql` | Written 2026-09-12. Adds `term` to `my_sections`, `saved_classes` and `watch_sections`, stamps everything that exists as `2268`, and widens each table's unique key to include it. Nothing changes on screen — with one term in the data, `(user_id, code, term)` is equivalent to `(user_id, code)`, which is why this is safe today and expensive on 5 October. Keys are discovered from the catalog, not assumed: these three tables were created outside this repo. Verified against two plausible shapes (natural PKs, and surrogate `id` plus a natural unique index), idempotent on both, and it refuses a partial index rather than rebuilding a copy without its predicate. |
+| `professify-view-security.sql` | Written 2026-09-12, from the three CRITICAL "Security Definer View" warnings in the Supabase Advisor. Drops `professor_review_stats` (never read by anything since `supabase-setup.sql`); keeps `reviews_public` and `prof_activity_7d` as definer views on purpose and says why in a `comment on view`; revokes the unused direct grant on `prof_activity_7d` so `trending_profs()` is the only path. **Also fixes a real defect the Advisor could not see: `reviews_public` had no removed-review filter, so a review a moderator took down was still served to the public.** Proven against a replica as an anonymous reader by `check-viewsec.mjs`. |
 
 ## Confirmed live on production (checked 2026-09-07 / 2026-09-08)
 
@@ -40,6 +45,7 @@ Read this before running anything:
 | `professify-analytics.sql` | `log_events` accepts `'error'`; `analytics_summary` returns the errors block |
 | `professify-push.sql` | 3 tables, the seat-change trigger, 3 policies on `push_subscriptions`, 0 on `push_outbox` (deliberate — only the service role writes it) |
 | `professify-missing-bits.sql` | `profiles.pinned_friends` and `get_inviter()` both present |
+| `professify-schools.sql` | Run 2026-09-10; self-check clean — 24 profiles all stamped `calpoly`, the `profiles_read` policy is school-scoped, six RPCs scoped, no unscoped original callable by `authenticated`. It landed at the repo ROOT that day because GitHub's web uploader cannot place a file in a subfolder; moved here 2026-09-10. See `claude/deploy-2026-09-10.md`. |
 
 ## Everything else
 
