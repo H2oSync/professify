@@ -19,6 +19,10 @@
  */
 import { chromium } from 'playwright';
 import { writeFile } from 'node:fs/promises';
+import { planFor, describe } from './cadence.mjs';
+import { resolveTerm, termCandidates, matchesTerm, termsNamedIn } from './term.mjs';
+import { buildUpsertRows, dedupeByClassNbr, confirmTerm } from './rows.mjs';
+import { indexableAgainstPage, bandPlan, mergeBands } from './bands.mjs';
 
 const CFG = {
   URL: process.env.CP_URL || 'https://cmsweb.pscs.calpoly.edu/psc/CSLOPRD/EMPLOYEE/SA/c/COMMUNITY_ACCESS.CLASS_SEARCH.GBL',
@@ -29,6 +33,14 @@ const CFG = {
   HEADLESS: process.env.CP_HEADLESS !== '0',
   SUPABASE_URL: process.env.SUPABASE_URL || '',
   SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY || '',
+
+  /* THE REGISTRAR'S CLOCK (cadence.mjs). The scraper used to run every morning whether or not a
+     seat could move; now Cal Poly's published calendar decides. CP_IGNORE_CALENDAR=1 runs anyway
+     — for a manual pull, or for the day the calendar file is wrong and the data matters more. */
+  TERM_LABEL: process.env.CP_TERM_LABEL || '',
+  IGNORE_CALENDAR: process.env.CP_IGNORE_CALENDAR === '1',
+  /* Resolve the term code against the live page and print it, without scraping anything. */
+  DISCOVER_ONLY: process.env.CP_DISCOVER_TERM === '1' || process.argv.includes('--discover-term'),
 };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -203,7 +215,19 @@ function parseList(page, subject) {
 }
 
 async function fetchDetail(page, index) {
-  await page.evaluate(i => { const a = document.getElementById('MTG_CLASS_NBR$' + i); if (a) a.click(); }, index);
+  /* CLICK NOTHING AND WAIT ANYWAY — the shape of the 40-minute stall.
+     `if (a) a.click()` made a missing link a no-op, and the wait below then sat for its full 12
+     seconds before .catch() swallowed the timeout. Two hundred orphaned indices is forty minutes
+     of a lane doing nothing, with not one line in the log saying so.
+     A missing link is now an immediate, named failure. It should also be unreachable: the caller
+     checks the page's link count against the list length before it starts. */
+  const clicked = await page.evaluate(i => {
+    const a = document.getElementById('MTG_CLASS_NBR$' + i);
+    if (!a) return false;
+    a.click();
+    return true;
+  }, index);
+  if (!clicked) return { missing: true, index };
   await page.waitForFunction(() => /Class Capacity|Enrollment Total/i.test(document.body.innerText) && document.getElementById('CLASS_SRCH_WRK2_SSR_PB_BACK'), null, { timeout: 12000 }).catch(() => {});
   // NOTE: real meeting day/time AND instructor already come from the fast LIST page
   // (parseList -> cells[2]/cells[4]); they're verified correct, so we do NOT touch them
@@ -258,7 +282,42 @@ async function fetchDetail(page, index) {
 const statusBadge = s => { s = (s || '').toLowerCase(); return s.includes('wait') ? 'Waitlist' : s.includes('open') ? 'Open' : s.includes('clos') ? 'Closed' : null; };
 
 async function run() {
-  console.log(`Professify seat scraper v2 — term ${CFG.TERM}, subjects [${CFG.SUBJECTS.join(', ')}], counts=${CFG.FETCH_DETAILS ? 'on' : 'off'}, headless=${CFG.HEADLESS}`);
+  console.log(`Professify seat scraper v2 — term ${CFG.TERM || '(resolve ' + CFG.TERM_LABEL + ')'}, subjects [${CFG.SUBJECTS.join(', ')}], counts=${CFG.FETCH_DETAILS ? 'on' : 'off'}, headless=${CFG.HEADLESS}`);
+
+  /* ---- the registrar's clock -------------------------------------------------------------
+     Ask the calendar before spending anything. This is belt-and-braces: the workflow already
+     gates on plan.mjs, so a lane that gets here is normally due. It is repeated inside the
+     scraper because the workflow is not the only way this runs — a local invocation, a rerun of
+     an old job, or a matrix entry that was queued hours ago all arrive with no gate at all, and
+     a rerun of yesterday's job hammering Cal Poly for a term nobody can enrol in is exactly the
+     behaviour this whole change exists to stop.
+
+     Exit 0, not an error: "nothing to do" is a correct outcome, and a red run for it teaches
+     everyone to ignore red runs. */
+  if (!CFG.IGNORE_CALENDAR && !CFG.DISCOVER_ONLY) {
+    const plan = planFor(new Date());
+    console.log(describe(plan));
+    const label = CFG.TERM_LABEL;
+    const mine = label
+      ? plan.terms.find(t => t.label === label)
+      : plan.terms.find(t => t.term_code && t.term_code === CFG.TERM);
+    if (!mine) {
+      console.log(`• No calendar entry matches ${label || 'term ' + CFG.TERM} — running anyway rather than skipping a term the calendar has not heard of.`);
+    } else if (mine.phase === 'dark') {
+      console.log(`• Skipping: ${mine.why}. Set CP_IGNORE_CALENDAR=1 to override.`);
+      return;
+    }
+    /* THIS CHECKS THE PHASE, NOT THE SLOT — and that distinction is the whole point.
+       plan.mjs decides whether this MINUTE is a scheduled pull, using a five-minute tolerance
+       around the aligned slot. By the time a lane reaches this line it has paid for a checkout,
+       setup-node, `npm install` and `npx playwright install --with-deps chromium` — reliably two
+       to six minutes. Re-asking "is this minute a slot?" therefore asks a question whose answer
+       has already expired: the lane prints one line and exits 0 having scraped nothing, and a
+       cron running more than five minutes late (which GitHub explicitly does not promise not to
+       do) takes the scraper to ZERO pulls a day with every run green.
+       `dark` is the only thing a lane can usefully re-check, because it is a property of the DAY
+       and cannot expire while the job installs a browser. */
+  }
   const browser = await chromium.launch({ headless: CFG.HEADLESS });
   const ctx = await browser.newContext({
     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
@@ -278,7 +337,61 @@ async function run() {
   if (!gotForm) { await dumpDiag(page, 'noform'); }
 
   await setField(page, 'CLASS_SRCH_WRK2_INSTITUTION', CFG.INSTITUTION, 'institution'); // populates subjects
-  await setField(page, 'SLO_SS_DERIVED_STRM', CFG.TERM, 'term');                        // validates term
+
+  /* ---- which term is this, really? -------------------------------------------------------
+     A wrong STRM does not fail. The search accepts it, returns nothing, and the run goes green
+     with an empty result that is indistinguishable from "no classes this term". So the code is
+     either one production has already proven (CP_TERM), or one the live page confirms by name
+     (term.mjs). Never one computed from a convention and trusted. */
+  const termIO = {
+    log: m => console.log(m),
+    /* setField returns FALSE after three failed attempts and otherwise only logs, so discarding
+       its result makes "the field silently kept its old value" indistinguishable from success —
+       and the old value is a different term. */
+    setTerm: async code => {
+      const stuck = await setField(page, 'SLO_SS_DERIVED_STRM', code, 'term');
+      if (!stuck) throw new Error(`could not set the term field to ${code} — it still reads "${await readField(page, 'SLO_SS_DERIVED_STRM')}"`);
+    },
+    /* Only the term field's own row, not the whole page: elsewhere on this page sits a notice
+       about when the NEXT term's schedule becomes available, and a page-wide search for
+       "Spring 2027" would happily match that and confirm the wrong term. */
+    readEcho: () => page.evaluate(() => {
+      const el = document.querySelector('[id^="SLO_SS_DERIVED_STRM"]');
+      if (!el) return '';
+      const row = el.closest('tr, .ps_box-group, div');
+      return ((row && row.innerText) || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+    }),
+    subjectCount: () => page.evaluate(() => {
+      const s = document.querySelector('select[id^="SSR_CLSRCH_WRK_SUBJECT_SRCH"]');
+      return s ? s.options.length : 0;
+    }),
+    /* The one signal neighbouring text cannot contaminate: what the field itself now holds. */
+    readField: () => readField(page, 'SLO_SS_DERIVED_STRM'),
+  };
+
+  if (CFG.TERM && !CFG.DISCOVER_ONLY) {
+    await termIO.setTerm(CFG.TERM);
+    /* rows.mjs decides; see the note there on why an UNREADABLE echo degrades while a
+       CONTRADICTING one refuses. */
+    const verdict = confirmTerm(
+      { code: CFG.TERM, label: CFG.TERM_LABEL, echo: await termIO.readEcho(), back: await readField(page, 'SLO_SS_DERIVED_STRM') },
+      termsNamedIn, matchesTerm);
+    if (verdict.degraded) console.log(`::warning title=Term echo unreadable::${verdict.note}`);
+    console.log(`• ${verdict.note}`);
+  } else {
+    const label = CFG.TERM_LABEL;
+    if (!label) throw new Error('set CP_TERM, or CP_TERM_LABEL so the term code can be resolved');
+    console.log(`• Resolving "${label}" — candidates ${termCandidates(label).join(', ')}`);
+    const found = await resolveTerm(termIO, label);
+    CFG.TERM = found.code;
+    console.log(`\n==> TERM CODE for ${label} is ${found.code}  (page says ${JSON.stringify(found.echo.slice(0, 60))}, ${found.subjects} subjects)`);
+    console.log(`    Write it into seats/registrar-calendar.json as this term's term_code, with a note saying how it was confirmed.`);
+    if (process.env.GITHUB_STEP_SUMMARY) {
+      const { appendFileSync } = await import('node:fs');
+      appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Term discovery\n\n**${label} = \`${found.code}\`** — page echo: \`${found.echo.slice(0, 60)}\`, ${found.subjects} subjects.\n\nAdd to \`seats/registrar-calendar.json\`.\n`);
+    }
+    if (CFG.DISCOVER_ONLY) { await browser.close(); return; }
+  }
   console.log(`• After setup — institution="${await readField(page, 'CLASS_SRCH_WRK2_INSTITUTION')}" term="${await readField(page, 'SLO_SS_DERIVED_STRM')}"`);
 
   // ---- Cal Poly's hard 300-section search cap -------------------------------------------
@@ -385,47 +498,105 @@ async function run() {
     return { list, outcome, diag, criterionState, openOnlyState, overLimit: outcome.msg === 'over-limit' };
   }
 
+  /**
+   * Fetch seat counts for one band's rows, against the result page that produced them.
+   *
+   * THE GUARD IS THE POINT. `list[i]` is reached by clicking `MTG_CLASS_NBR$i`, so the index is
+   * the only key tying a row to its section — and it is only valid on the page that emitted the
+   * list. Enriching a list against a different page does not fail: it writes real numbers onto
+   * the wrong sections, upserts them clean, and the app shows a student a seat count belonging to
+   * a class they are not looking at. Counting the links first turns that from a silent corruption
+   * into a refusal with a name.
+   *
+   * When it refuses, rows are left WITHOUT counts rather than with wrong ones, and they are
+   * upserted list-only so the numbers already in the table survive untouched.
+   */
+  async function enrichLive(list, label) {
+    if (!CFG.FETCH_DETAILS || !list.length) return;
+    const links = await page.evaluate(() => document.querySelectorAll('a[id^="MTG_CLASS_NBR$"]').length);
+    const v = indexableAgainstPage(list.length, links);
+    if (!v.ok) {
+      console.warn(`    !! ${label}: REFUSING to fetch seat counts — ${v.reason}`);
+      await dumpDiag(page, label.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-indexmismatch');
+      return;
+    }
+    let missing = 0;
+    for (let i = 0; i < list.length; i++) {
+      const c = await fetchDetail(page, i);
+      if (c && c.missing) { missing++; continue; }
+      Object.assign(list[i], c);
+      list[i]._enriched = true;
+      if (!String(list[i].days || '').trim() && c.days_detail) list[i].days = c.days_detail;  // detail-page fallback
+      if (i === 0) console.log(`    ↳ sample: ${list[0].course_code} — seats cap=${list[0].capacity} avail=${list[0].available} · time="${list[0].days || 'none'}" · instr="${list[0].instructor || 'none'}" · mode="${list[0].instruction_mode || 'NOT FOUND'}" · loc="${list[0].location || 'none'}"`);
+      if ((i + 1) % 25 === 0) console.log(`    …${i + 1}/${list.length} (${label})`);
+    }
+    /* Unreachable if the guard above held — which is exactly why it is reported rather than
+       ignored. It would mean the page changed under the loop. */
+    if (missing) console.warn(`    !! ${label}: ${missing} of ${list.length} rows had no result link mid-loop — the page changed while counts were being fetched.`);
+  }
+
   const all = [];
   let searchesRun = 0;
   for (let s = 0; s < CFG.SUBJECTS.length; s++) {
     const subj = CFG.SUBJECTS[s];
-    const collected = [];          // survives an error mid-subject, so partial data is never lost
+    /* Bands that finished BEFORE an error, so a subject that dies half way still writes what it
+       already has. It holds whole bands, each already enriched against its own page — partial
+       data, never mismatched data. */
+    const salvage = [];
     try {
-      // Pass 1: the whole subject in one search (what every subject under the cap needs).
+      /* ENRICH EACH BAND WHILE ITS OWN RESULT PAGE IS LOADED.
+         The list index IS the DOM id suffix — `list[i]` is reached by clicking
+         `MTG_CLASS_NBR$i` — so a list and a page belong together and nothing else ties a row to
+         its link. The previous version concatenated both bands' lists and then walked the
+         combined list against whichever page happened to be loaded last, which wrote the high
+         band's seat counts onto the low band's rows and then spent twelve seconds per orphaned
+         index discovering there was nothing to click. See bands.mjs for the full trace.
+         So: search, enrich, merge — in that order, per band, never across them. */
       let r = await searchOnce(subj, 'G', 0, searchesRun++ === 0);
-      let bandsUsed = 'all';
+      const bandLists = [];
+      let plan = bandPlan(r.overLimit, []);
 
-      if (r.overLimit) {
-        // Over Cal Poly's 300 cap — slice into course-number bands and union them.
-        let done = false;
+      if (!r.overLimit) {
+        /* The common case, and the cheap one: one search, and its page is live right now. */
+        await enrichLive(r.list, subj);
+        bandLists.push(r.list); salvage.push(r.list);
+      } else {
+        /* Over Cal Poly's 300 cap. Probe for a boundary list-only first — enriching a band we
+           might discard because its partner is still over the cap would be minutes wasted. */
+        const attempts = [];
         for (const boundary of CAP_SPLITS) {
           const lowHalf  = await searchOnce(subj, 'L', boundary - 1, false); searchesRun++;
           const highHalf = await searchOnce(subj, 'G', boundary,     false); searchesRun++;
+          attempts.push({ boundary, lowOverLimit: lowHalf.overLimit, highOverLimit: highHalf.overLimit });
           if (!lowHalf.overLimit && !highHalf.overLimit) {
-            collected.push(...lowHalf.list, ...highHalf.list);
-            bandsUsed = `<=${boundary - 1} + >=${boundary}`;
-            r = highHalf;                                   // keep a real outcome for logging
-            done = true;
+            /* The HIGH band's page is the one loaded — it was the last search — so enrich it
+               here rather than paying for the same search twice. */
+            await enrichLive(highHalf.list, `${subj} >=${boundary}`);
+            bandLists.push(highHalf.list); salvage.push(highHalf.list);
+            r = highHalf;                                   // a real outcome, for the log line
             break;
           }
           console.log(`    · ${subj}: split at ${boundary} still over the 300 cap (low=${lowHalf.overLimit ? 'over' : lowHalf.list.length}, high=${highHalf.overLimit ? 'over' : highHalf.list.length}) — trying a finer boundary`);
         }
-        if (!done) {
+        plan = bandPlan(true, attempts);
+        if (!plan.bands) {
           // Never silently under-report: say so loudly and dump what the runner saw.
           console.log(`  ${subj}: STILL over Cal Poly's 300-section cap after every split — this subject needs a finer band list (CAP_SPLITS).`);
           await dumpDiag(page, subj.toLowerCase() + '-overlimit');
+        } else {
+          /* Now the LOW band, searched fresh so its own page is the one being indexed. */
+          const lo = plan.bands.find(x => x.op === 'L');
+          const loRes = await searchOnce(subj, lo.op, lo.num, false); searchesRun++;
+          await enrichLive(loRes.list, `${subj} ${lo.label}`);
+          bandLists.push(loRes.list); salvage.push(loRes.list);
         }
-      } else {
-        collected.push(...r.list);
       }
 
-      // De-duplicate by class number: bands can overlap, and the same section must never be
-      // counted twice.
-      const seenNbr = new Set();
-      const list = collected.filter(x => {
-        const k = String(x.class_nbr || '') + '|' + String(x.section || '') + '|' + String(x.course_code || '');
-        if (seenNbr.has(k)) return false; seenNbr.add(k); return true;
-      });
+      const bandsUsed = plan.label;
+      /* Merge only after every band has its own numbers on it. Bands are disjoint by
+         construction, but a section that appeared twice would make Postgres reject the whole
+         lane's upsert, so the dedupe stays. */
+      const list = mergeBands(bandLists);
 
       const codeSet = new Set(list.map(x => x.course_code).filter(Boolean));
       const blanks = list.filter(x => !x.course_code).length;
@@ -451,21 +622,11 @@ async function run() {
         console.warn(`    !! ${subj}: could not clear "Show Open Classes Only" after 4 attempts — this lane's data is open-classes-only and INCOMPLETE.`);
       }
 
-      if (CFG.FETCH_DETAILS) {
-        for (let i = 0; i < list.length; i++) {
-          const c = await fetchDetail(page, i);
-          Object.assign(list[i], c);
-          if (!String(list[i].days || '').trim() && c.days_detail) list[i].days = c.days_detail;  // detail-page fallback
-          if (i === 0) console.log(`    ↳ sample: ${list[0].course_code} — seats cap=${list[0].capacity} avail=${list[0].available} · time="${list[0].days || 'none'}" · instr="${list[0].instructor || 'none'}" · mode="${list[0].instruction_mode || 'NOT FOUND'}" · loc="${list[0].location || 'none'}"`);
-          if ((i + 1) % 25 === 0) console.log(`    …${i + 1}/${list.length}`);
-        }
-      }
-      list.forEach(x => { x.status = statusBadge(x.status_raw); x.term = CFG.TERM; x.updated_at = new Date().toISOString(); });
       all.push(...list);
     } catch (e) {
       console.error(`  ${subj}: ERROR — ${e.message.split('\n')[0]}`);
       // Keep whatever this subject already produced instead of throwing the whole lane away.
-      const salvaged = collected.filter(x => x && x.class_nbr);
+      const salvaged = mergeBands(salvage).filter(x => x && x.class_nbr);
       if (salvaged.length) {
         salvaged.forEach(x => { x.status = statusBadge(x.status_raw); x.term = CFG.TERM; x.updated_at = new Date().toISOString(); });
         all.push(...salvaged);
@@ -529,21 +690,36 @@ async function upsertCatalog(rows) {
 async function upsertSupabase(rows) {
   if (!CFG.SUPABASE_URL || !CFG.SUPABASE_SERVICE_KEY) { console.log('• Supabase not configured — seats.json written, DB upsert skipped.'); return; }
   const url = `${CFG.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/course_seats?on_conflict=term,class_nbr`;
-  const clean = rows.filter(r => r.class_nbr).map(r => ({
-    term: r.term, class_nbr: r.class_nbr, subject: r.subject, course_code: r.course_code, title: r.title,
-    section: r.section, instructor: r.instructor, days: r.days, dates: r.dates, status: r.status,
-    capacity: r.capacity ?? null, enrolled: r.enrolled ?? null, available: r.available ?? null,
-    waitlist_total: r.waitlist_total ?? null, waitlist_capacity: r.waitlist_capacity ?? null, updated_at: r.updated_at,
-    instruction_mode: r.instruction_mode || null, location: r.location || null, room: r.room || null,
-  }));
+  /* Shaped in rows.mjs so it can be tested without a browser — see the note there on why the
+     seat-count columns are omitted rather than nulled when details are off.
+     TWO BATCHES, NOT ONE, WHEN COUNTS ARE ON. A band whose page-index guard refused (see
+     enrichLive) has rows with no counts, and sending those in the same batch as the enriched
+     ones would write NULL over numbers that are still perfectly good — the same data loss the
+     discovery-pull fix exists to prevent, arriving by a different door. PostgREST needs a uniform
+     key set per request, so they go as their own list-only batch and their existing counts are
+     left alone. */
+  const wantCounts = CFG.FETCH_DETAILS;
+  if (!wantCounts) console.log('• Discovery pull (CP_FETCH_DETAILS=0) — seat-count columns are LEFT UNTOUCHED, not overwritten.');
+  const groups = wantCounts
+    ? [
+        { rows: rows.filter(r => r._enriched), withCounts: true,  tag: 'with counts' },
+        { rows: rows.filter(r => !r._enriched), withCounts: false, tag: 'list-only (counts left untouched)' },
+      ].filter(g => g.rows.length)
+    : [{ rows, withCounts: false, tag: 'list-only' }];
+  if (wantCounts && groups.length > 1) {
+    console.warn(`• ${groups[1].rows.length} row(s) were never enriched — upserting them list-only so their existing seat counts survive.`);
+  }
+  for (const g of groups) await upsertGroup(url, g.rows, g.withCounts, g.tag);
+}
+
+async function upsertGroup(url, rows, withCounts, tag) {
+  const clean = buildUpsertRows(rows, { withCounts });
   // Dedupe by (term, class_nbr): a cross-listed course can appear under two
   // subjects in the same lane with the same class number. Postgres rejects an
   // upsert that affects the same row twice in one command ("ON CONFLICT DO
   // UPDATE command cannot affect row a second time"), which would reject the
   // whole lane's write. Collapse to one row per class number (last wins).
-  const byKey = new Map();
-  for (const r of clean) byKey.set(r.term + '|' + r.class_nbr, r);
-  const deduped = [...byKey.values()];
+  const deduped = dedupeByClassNbr(clean);
   if (deduped.length !== clean.length) console.log(`• Collapsed ${clean.length - deduped.length} cross-listed duplicate class number(s) before upsert.`);
   /* The three new columns may not exist yet. PostgREST rejects the WHOLE batch with a 400
      naming the unknown column, which would take the entire seat feed down — the one failure
@@ -575,7 +751,7 @@ async function upsertSupabase(rows) {
     if (!res.ok) throw new Error(`Supabase upsert failed: HTTP ${res.status}\n${(await res.text()).slice(0, 300)}`);
   }
   const withMode = deduped.filter(r => r.instruction_mode).length;
-  console.log(`• Upserted ${deduped.length} rows into Supabase.` +
+  console.log(`• Upserted ${deduped.length} rows into Supabase (${tag}).` +
     (dropNew ? ' (instruction_mode/location/room skipped — column missing)'
              : ` ${withMode} of them carry an instruction mode.`));
 }

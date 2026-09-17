@@ -1,33 +1,257 @@
-name: Update Cal Poly seats (daily)
+name: Update Cal Poly seats
 
-# Parallel "lanes": each matrix entry is a group of subjects scraped by one
-# runner, all at the same time, so a big pull finishes in minutes instead of
-# hours. Every lane ONLY writes seat data to Supabase — never commits to the
-# repo — so it can't interfere with anyone's app work or pull requests.
+# THE REGISTRAR'S CLOCK
+# =====================
+# This used to be one pull a day at 7:00 Pacific, all year. That is wrong in both directions: for
+# most of the year it re-reads numbers nobody can change, and on the morning Round 1 registration
+# opens it shows students a seat count up to twenty-three hours stale.
+#
+# Now the cron fires often and `seats/cadence.mjs` decides, from Cal Poly's own published calendar
+# (seats/registrar-calendar.json), whether this minute is a scheduled pull and for WHICH TERMS —
+# plural: from 15 to 28 October, Fall 2026's second 7.5-week session is in add/drop while Spring
+# 2027 registration opens, and dropping either one is a term of missing data.
+#
+#   dark             nothing can change for this term          -> never
+#   quiet            between windows; departments still edit    -> daily, list only
+#   published        schedule out, enrolment not open           -> daily, with counts
+#   appointments     Round 1 / Round 2                          -> every 20m (10m on opening day)
+#   open_enrollment  everyone at once                           -> hourly (20m as it closes)
+#   add_drop         classes started                            -> every 3h (20m near a deadline)
+#   unknown          calendar says nothing about today          -> daily, and it SAYS SO loudly
+#
+# THE JOBS, AND WHY THERE ARE FOUR
+#   plan    the gate. Always succeeds, always writes its outputs. Seconds.
+#   guard   fails the run when a term that students can enrol in has no confirmed PeopleSoft term
+#           code. Separate from `plan` on purpose: a blocked term must make the run impossible to
+#           miss WITHOUT stopping the terms that are fine. When those were one job, one missing
+#           code starved a live term for ten days.
+#   scrape  the lanes, fanned out over subject x term.
+#   discover / bench   manual, and deliberately outside the concurrency group below.
+
+# ONE SWEEP IN FLIGHT — scoped to scheduled runs only.
+# Two things this gets right that the obvious version does not:
+#   · It is at the WORKFLOW level. On a job with a 24-entry matrix, `concurrency` puts all 24 legs
+#     in one group and GitHub cancels every pending member — ~22 lanes silently dropped per run.
+#   · The group name is constant only for `schedule`. A human's discover_term dispatch used to
+#     join the same group, go pending behind a sweep, and get superseded by the next cron firing —
+#     and that dispatch is the documented fix for a blocked run.
+concurrency:
+  group: ${{ github.event_name == 'schedule' && 'seats-sweep' || github.run_id }}
+  cancel-in-progress: false
+
 on:
   schedule:
-    - cron: '0 14 * * *'          # 14:00 UTC = 7:00 AM Pacific
+    - cron: '*/10 * * * *'
   workflow_dispatch:
     inputs:
+      mode:
+        description: 'scrape = normal pull | discover_term = resolve a term code against the live page | bench = measure search strategies'
+        default: 'scrape'
+        type: choice
+        options: ['scrape', 'discover_term', 'bench']
+      term_label:
+        description: 'For discover_term, and required for ignore_calendar: the term, e.g. "Spring 2027"'
+        default: 'Spring 2027'
+        type: string
+      term_code:
+        description: 'For ignore_calendar only: the PeopleSoft term code to force, e.g. 2268'
+        default: ''
+        type: string
       details:
-        description: '1 = full seat counts + real times (slower). 0 = discovery/list-only (fast, validates subjects).'
+        description: '1 = full seat counts (slower). 0 = discovery/list-only (leaves seat counts untouched).'
         default: '1'
         type: choice
         options: ['1', '0']
+      ignore_calendar:
+        description: 'Bypass the calendar gate. REQUIRES both term_code and term_label — a code with no label cannot be confirmed against anything.'
+        default: 'false'
+        type: choice
+        options: ['false', 'true']
 
 jobs:
+  # ---------------------------------------------------------------- the gate ----
+  plan:
+    if: github.event.inputs.mode != 'discover_term' && github.event.inputs.mode != 'bench'
+    runs-on: ubuntu-latest
+    outputs:
+      scrape:   ${{ steps.clock.outputs.scrape }}
+      terms:    ${{ steps.clock.outputs.terms }}
+      term:     ${{ steps.clock.outputs.term }}
+      label:    ${{ steps.clock.outputs.term_label }}
+      phase:    ${{ steps.clock.outputs.phase }}
+      details:  ${{ steps.clock.outputs.details }}
+      blocked:  ${{ steps.clock.outputs.blocked }}
+      needs_discovery: ${{ steps.clock.outputs.needs_term_discovery }}
+      discover_labels: ${{ steps.clock.outputs.discover_labels }}
+      horizon:  ${{ steps.clock.outputs.horizon }}
+      unknown:  ${{ steps.clock.outputs.unknown_terms }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - id: clock
+        working-directory: seats
+        env:
+          CP_FORCE_TERM:    ${{ github.event.inputs.ignore_calendar == 'true' && github.event.inputs.term_code || '' }}
+          CP_FORCE_LABEL:   ${{ github.event.inputs.ignore_calendar == 'true' && github.event.inputs.term_label || '' }}
+          CP_FORCE_DETAILS: ${{ github.event.inputs.details || '1' }}
+        # --at the time the RUN was created, not the time this step reached a runner. A run held
+        # by the concurrency group above can be released many minutes after its cron fired, and
+        # the gate's slot tolerance is five minutes — asking "is NOW a slot?" at release time
+        # answers no for most released runs and quietly halves the cadence during registration.
+        run: node plan.mjs --at "${{ github.run_started_at }}"
+
+  # --------------------------------------------- resolve it on the day, automatically ----
+  # THE OCT 5 PROBLEM THIS EXISTS FOR.
+  #
+  # Spring 2027's schedule publishes on 5 October and its PeopleSoft term code does not exist
+  # before then — verified 2026-09-16 by reading the live Term lookup, which returns four terms
+  # and none of them is Spring (claude/term-code-2026-09-16.md). So the first time anything can
+  # resolve that code is the morning of the 5th, and until this job existed the sequence was:
+  #
+  #   Oct 5   Spring flips to `quiet`/discovery. `blocked` is EMPTY, because blocked only counts
+  #           terms in an enrolment phase — so `guard` does not fire, the run is GREEN, and the
+  #           only trace is one ::warning line in a job that ran 144 times that day.
+  #   …       Fourteen days of green runs. Nothing discovers anything. The plan depends entirely
+  #           on a human remembering, on the right morning, to dispatch this workflow by hand.
+  #   Oct 19  Spring reaches `appointments`, blocked fills, guard fires, the run goes RED for the
+  #           first time — at 07:00 on the morning registration opens, at a ten-minute cadence,
+  #           with no slack left at all.
+  #
+  # The fix is not to shout louder on Oct 5. It is to do the thing. Resolving a term code is one
+  # field set and one echo read against a page we already hit all day; there is no reason for a
+  # human to be the one who triggers it. So this job resolves it automatically and then FAILS the
+  # run with the code printed — one red run, on the day there are fourteen days to act, with the
+  # answer already in hand and a one-line commit as the fix.
+  #
+  # IT STILL DOES NOT COMMIT. That rule does not change: a term code is the difference between a
+  # term of real data and a term of silent emptiness, and it gets a human's eyes before it gets
+  # written down. Automating the LOOKUP is not automating the DECISION.
+  autodiscover:
+    needs: plan
+    if: needs.plan.outputs.needs_discovery == 'true' && needs.plan.outputs.discover_labels != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Install deps + Chromium
+        working-directory: seats
+        run: npm install && npx playwright install --with-deps chromium
+      - name: Resolve the missing term code
+        id: find
+        working-directory: seats
+        env:
+          CP_DISCOVER_TERM: '1'
+          CP_TERM: ''
+          # Only the first label. More than one term needing discovery at once has never happened
+          # and would mean the calendar is far out of date; resolving one and failing loudly is
+          # the right move either way, and the message names the rest.
+          CP_TERM_LABEL: ${{ needs.plan.outputs.discover_labels }}
+        run: node scrape-seats.mjs
+      - name: Stop the run until the code is committed
+        if: always()
+        env:
+          LABELS: ${{ needs.plan.outputs.discover_labels }}
+        run: |
+          echo "::error title=Term code found but not committed::$LABELS"
+          echo ""
+          echo "The code is in the step summary above. Put it in seats/registrar-calendar.json as"
+          echo "that term's term_code, with a note saying how it was confirmed, and push."
+          echo ""
+          echo "This run is red on purpose. Until the code is in the file, every scheduled run"
+          echo "skips that term — which on a quiet phase looks exactly like a term with nothing"
+          echo "happening, and on an enrolment phase is a term of students seeing no seats."
+          exit 1
+
+  # ------------------------------------------------- red when a term is unknowable ----
+  # This job exists only to fail. `plan` deliberately exits 0 so the terms it CAN dispatch still
+  # run; this turns the run red so nobody has to notice a warning in a log.
+  guard:
+    needs: plan
+    if: needs.plan.outputs.blocked != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: A term students can enrol in has no confirmed term code
+        env:
+          BLOCKED: ${{ needs.plan.outputs.blocked }}
+        run: |
+          echo "::error title=No term code::$BLOCKED"
+          echo "Blocked: $BLOCKED"
+          echo ""
+          echo "Nothing is guessed and nothing is substituted. A guessed PeopleSoft term code"
+          echo "returns an EMPTY search that looks exactly like a term with no classes."
+          echo ""
+          echo "FIX: run this workflow by hand with mode=discover_term and the term's label."
+          echo "It resolves the code against the live class search and prints it. Commit it into"
+          echo "seats/registrar-calendar.json as that term's term_code, with a note saying how it"
+          echo "was confirmed."
+          exit 1
+
+  # ------------------------------------------------------- resolve a term code ----
+  # Touches the live page once, prints the code, writes it to the run summary. It deliberately
+  # does NOT commit: a term code is the difference between a term of real data and a term of
+  # silent emptiness, and it gets a human's eyes.
+  discover:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'discover_term'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Install deps + Chromium
+        working-directory: seats
+        run: npm install && npx playwright install --with-deps chromium
+      - name: Resolve term code
+        working-directory: seats
+        env:
+          CP_DISCOVER_TERM: '1'
+          CP_TERM: ''
+          CP_TERM_LABEL: ${{ github.event.inputs.term_label }}
+        run: node scrape-seats.mjs
+
+  # ----------------------------------------------------- measure the strategies ----
+  # The narrow-band idea rests on one measurement: what "View Search Results" costs after a
+  # whole-subject search versus after a one-course search. Reports real bytes and milliseconds
+  # and upserts nothing.
+  bench:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'bench'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Install deps + Chromium
+        working-directory: seats
+        run: npm install && npx playwright install --with-deps chromium
+      - name: Benchmark
+        working-directory: seats
+        env:
+          CP_TERM: ${{ vars.CP_TERM || '2268' }}
+          CP_BENCH_SUBJECT: ${{ vars.CP_BENCH_SUBJECT || 'CSC' }}
+        run: node bench.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: bench, path: seats/bench-*.json, if-no-files-found: ignore }
+
+  # ------------------------------------------------------------------ the sweep ----
   scrape:
+    needs: plan
+    if: needs.plan.outputs.scrape == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false            # one bad lane never cancels the others
       max-parallel: 20            # public-repo concurrency headroom is ~20
       matrix:
+        # Subject lanes x the terms the gate says are due. The term axis is what stops a
+        # higher-priority term starving a lower one: both get swept, not just the busier.
+        # `|| '[]'` is insurance: fromJSON('') is a workflow-parse error, not a falsy value.
+        term: ${{ fromJSON(needs.plan.outputs.terms || '[]') }}
         lane:
-          # FULL Cal Poly subject coverage — all majors, every GE, and all
-          # concentration courses (concentrations live inside their subject, so
-          # covering the subject covers them). ~84 subjects balanced to ~185
-          # sections/lane so every lane still finishes in ~13 min. Any subject
-          # with no sections this term simply returns nothing — harmless.
+          # FULL Cal Poly subject coverage — all majors, every GE, and all concentration
+          # courses (concentrations live inside their subject, so covering the subject covers
+          # them). ~84 subjects balanced to ~185 sections/lane. Any subject with no sections
+          # this term simply returns nothing — harmless.
           - 'CSC'
           - 'AERO,CHEM,CRP,GSA,RELS,CPE'
           - 'PSY,AGB,BOT,GER,NR,ENVE'
@@ -70,16 +294,26 @@ jobs:
         env:
           SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          CP_TERM:              ${{ vars.CP_TERM || '2268' }}          # Fall 2026
+          # Both come from the gate. There is no hardcoded term fallback any more: '2268' outlives
+          # the term it names, and a lane that falls back to it refreshes updated_at on months-old
+          # rows and exits green.
+          CP_TERM:              ${{ matrix.term.code }}
+          CP_TERM_LABEL:        ${{ matrix.term.label }}
           CP_SUBJECTS:          ${{ matrix.lane }}
-          CP_FETCH_DETAILS:     ${{ github.event.inputs.details || '1' }}
+          CP_FETCH_DETAILS:     ${{ matrix.term.details }}
+          # The gate already ran and this lane was dispatched by it. The scraper re-checks only
+          # whether the term is DARK — a property of the day, which cannot expire while a job
+          # spends 2-6 minutes installing a browser.
+          # Carried per TERM by the gate, so a manual override applies to the term it named and
+          # leaves the calendar in force for every other term in the same sweep.
+          CP_IGNORE_CALENDAR:   ${{ matrix.term.force }}
         run: node scrape-seats.mjs
 
       - name: Upload diagnostics (screenshots + page text)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: diag-lane-${{ strategy.job-index }}
+          name: diag-${{ matrix.term.code }}-${{ strategy.job-index }}
           path: |
             seats/diag-*.png
             seats/diag-*.txt

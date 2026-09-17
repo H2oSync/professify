@@ -1,4 +1,4 @@
-# Professify — professify.app
+# TermChamp — termchamp.com
 # The app is one page. Everything below is an old build or a repo file that
 # publish = "." happens to expose; none of it should be indexed. The redirects in
 # netlify.toml already make these unreachable — this is here so anything a crawler

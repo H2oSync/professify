@@ -1,29 +1,79 @@
 {
-  "name": "Professify",
-  "short_name": "Professify",
+  "name": "TermChamp",
+  "short_name": "TermChamp",
   "description": "Real Cal Poly professor ratings, daily seat counts, and which of your friends are in your classes.",
   "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["standalone", "minimal-ui", "browser"],
+  "display_override": [
+    "standalone",
+    "minimal-ui",
+    "browser"
+  ],
   "orientation": "any",
   "background_color": "#154734",
   "theme_color": "#154734",
   "lang": "en-US",
   "dir": "ltr",
-  "categories": ["education", "productivity", "social"],
+  "categories": [
+    "education",
+    "productivity",
+    "social"
+  ],
   "icons": [
-    { "src": "/icon-192.png",          "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-512.png",          "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ],
   "shortcuts": [
-    { "name": "My schedule", "short_name": "Schedule", "url": "/?tab=sched",
-      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Friends",     "short_name": "Friends",  "url": "/?tab=friends",
-      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Find a class","short_name": "Explore",  "url": "/?tab=explore",
-      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
+    {
+      "name": "My schedule",
+      "short_name": "Schedule",
+      "url": "/?tab=sched",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Friends",
+      "short_name": "Friends",
+      "url": "/?tab=friends",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Find a class",
+      "short_name": "Explore",
+      "url": "/?tab=explore",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
   ]
 }
