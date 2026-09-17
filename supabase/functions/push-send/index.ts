@@ -26,7 +26,7 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_KEY  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const VAPID_PUB    = Deno.env.get('VAPID_PUBLIC_KEY')!;
 const VAPID_PRIV   = Deno.env.get('VAPID_PRIVATE_KEY')!;
-const VAPID_SUB    = Deno.env.get('VAPID_SUBJECT') ?? 'mailto:hello@professify.app';
+const VAPID_SUB    = Deno.env.get('VAPID_SUBJECT') ?? 'mailto:hello@termchamp.com';
 const CRON_SECRET  = Deno.env.get('CRON_SECRET') ?? '';
 
 const BATCH = 200;          // one run's worth. A backlog drains over consecutive runs rather than
