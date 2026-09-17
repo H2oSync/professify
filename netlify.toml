@@ -178,6 +178,56 @@ echo "--- $(ls public | wc -l) files published ---"
 # immediately. The files themselves should still be deleted from the repo; this is
 # the lock on the door, not the cleanup.
 # ---------------------------------------------------------------------------
+# ==================================================================================================
+# THE RETIRED DOMAIN — 2026-09-16
+# ==================================================================================================
+# The app is termchamp.com now. professify.app stays assigned to this site as a domain alias, on
+# purpose and permanently: every invite link a student has already sent, every QR code printed on a
+# flyer and every share card already sitting in an iMessage thread points at it. Unassigning it
+# breaks all of them at once.
+#
+# These two rules must stay in THIS ORDER, because the first matching rule wins.
+#
+# /sw.js FIRST, and served rather than redirected. A service worker script that answers with a
+# cross-origin redirect is rejected outright by the spec, which means the worker already installed
+# on professify.app could never update — it would sit there indefinitely serving its cached copy of
+# the old app to anyone whose connection is slow, on a domain that no longer exists. Letting the
+# file through is what lets that worker replace itself with the tombstone in sw.js, which drops its
+# caches and unregisters.
+#
+# force = true on the catch-all because index.html and every icon are real files on this site, and
+# without it Netlify serves the file instead of redirecting (see "shadowing" in their redirect
+# docs). :splat carries the path, and the query string is preserved automatically — which is the
+# whole point, since the invite links are /?add=<uuid>.
+#
+# VERIFY BOTH, right after cutover, before telling anyone the move is done:
+#   curl -sI https://professify.app/sw.js   | head -1   -> expect 200
+#   curl -sI 'https://professify.app/?add=x'| head -1   -> expect 301 to termchamp.com
+# If the first one returns anything but 200, delete these two rules. Everything reverts to the
+# behaviour described above: redirects still work, the old worker just stays stale.
+
+[[redirects]]
+  from = "https://professify.app/sw.js"
+  to = "/sw.js"
+  status = 200
+
+[[redirects]]
+  from = "https://www.professify.app/sw.js"
+  to = "/sw.js"
+  status = 200
+
+[[redirects]]
+  from = "https://professify.app/*"
+  to = "https://termchamp.com/:splat"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "https://www.professify.app/*"
+  to = "https://termchamp.com/:splat"
+  status = 301
+  force = true
+
 [[redirects]]
   from = "/index-legacy-v0.html"
   to = "/"

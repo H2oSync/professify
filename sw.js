@@ -27,8 +27,37 @@
 
 /* Bumped by the deploy. The build stamp is written in by hand alongside window.PROFESSIFY_BUILD,
    so a new build gets a new cache and the old one is deleted on activate. */
-const BUILD = '2026-09-10 09:20';
+const BUILD = '2026-09-17 00:20';
 const SHELL = 'professify-shell-' + BUILD;
+
+/* ================================================================================================
+   THE RETIRED ORIGIN — 2026-09-16
+   ================================================================================================
+   The app moved from professify.app to termchamp.com. professify.app stays assigned to the site as
+   a domain alias and 301s everything, and a navigation survives that fine: a navigation request
+   carries redirect:"manual", so fetch() hands back an opaqueredirect whose .ok is false, the cache
+   write below is skipped, and returning it lets the browser follow the redirect. That part needs no
+   help.
+
+   What needs help is what the worker keeps doing AFTERWARDS. It stays installed on the old origin
+   with a full copy of the app in its cache, and the moment the network is slow or absent it serves
+   that copy — so a student on bad Wi-Fi gets a frozen build of the old app on the old domain and is
+   never redirected anywhere. It also holds ~3 MB of cache on their device for a site that no longer
+   exists. Neither is an error. Nothing logs. It would simply go on being subtly wrong.
+
+   So on a retired origin this worker does nothing at all: it stops intercepting, drops its caches
+   and unregisters itself, which leaves the browser to follow the 301 every time.
+
+   The hosts are listed rather than inferred from "not termchamp.com" on purpose. A rule like that
+   would also fire on localhost and on Netlify deploy previews, where the worker is exactly what we
+   are trying to test.
+
+   This only reaches a device if the browser can still FETCH this file from the old origin, which
+   means /sw.js must answer 200 there rather than 301 — see the two rules in netlify.toml. If that
+   is ever not the case the old worker simply stays as it was, which is the behaviour described in
+   the first paragraph: redirects work, staleness persists. Degraded, not broken.                */
+const RETIRED_HOSTS = ['professify.app', 'www.professify.app'];
+const RETIRED = RETIRED_HOSTS.indexOf(self.location.hostname) >= 0;
 
 /* Small, immutable, and needed before the first paint of an installed app. The 2.7 MB document is
    deliberately NOT here: precaching it would download the whole app a second time at install,
@@ -43,6 +72,9 @@ const PRECACHE = [
 ];
 
 self.addEventListener('install', (e) => {
+  /* On the retired origin, skipWaiting IS right: the whole point is to replace the worker that is
+     still serving a cached copy of the old app, and there is nothing to interrupt. */
+  if (RETIRED) { self.skipWaiting(); return; }
   /* addAll fails the whole install if ONE file 404s, which would leave the app with no service
      worker at all over a missing icon. Each is added on its own and a miss is logged. */
   e.waitUntil((async () => {
@@ -57,6 +89,17 @@ self.addEventListener('install', (e) => {
 });
 
 self.addEventListener('activate', (e) => {
+  if (RETIRED) {
+    e.waitUntil((async () => {
+      /* Every cache this origin holds, not just this project's prefix — the origin is retired. */
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+      await self.clients.claim();
+      /* Last, so the two above are not racing a worker that has already been torn down. */
+      await self.registration.unregister();
+    })());
+    return;
+  }
   e.waitUntil((async () => {
     const keys = await caches.keys();
     await Promise.all(keys
@@ -81,6 +124,9 @@ function timed(request, ms) {
 }
 
 self.addEventListener('fetch', (e) => {
+  /* Before anything else. Not responding at all is what lets the 301 happen natively, every time,
+     including when the network is slow enough that the branch below would have served the cache. */
+  if (RETIRED) return;
   const req = e.request;
   if (req.method !== 'GET') return;
 
@@ -106,12 +152,12 @@ self.addEventListener('fetch', (e) => {
         return new Response(
           '<!doctype html><meta charset="utf-8">' +
           '<meta name="viewport" content="width=device-width,initial-scale=1">' +
-          '<title>Professify — offline</title>' +
+          '<title>TermChamp — offline</title>' +
           '<style>html{background:#154734;color:#fff;font:16px/1.5 -apple-system,BlinkMacSystemFont,' +
           '"Segoe UI",sans-serif}body{margin:0;display:grid;place-items:center;min-height:100vh;' +
           'padding:24px;text-align:center}h1{font-size:20px;margin:0 0 8px}p{margin:0;opacity:.8;max-width:34ch}</style>' +
           '<body><div><h1>You’re offline</h1>' +
-          '<p>Professify needs a connection the first time it loads. Open it once with signal and ' +
+          '<p>TermChamp needs a connection the first time it loads. Open it once with signal and ' +
           'it will work without one after that.</p></div>',
           { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
       }
@@ -151,7 +197,7 @@ self.addEventListener('push', (e) => {
   try { d = e.data ? e.data.json() : {}; } catch (_) {
     try { d = { body: e.data ? e.data.text() : '' }; } catch (__) { d = {}; }
   }
-  const title = String(d.title || 'Professify');
+  const title = String(d.title || 'TermChamp');
   e.waitUntil(self.registration.showNotification(title, {
     body: String(d.body || ''),
     icon: '/icon-192.png',
