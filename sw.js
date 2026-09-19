@@ -27,7 +27,7 @@
 
 /* Bumped by the deploy. The build stamp is written in by hand alongside window.PROFESSIFY_BUILD,
    so a new build gets a new cache and the old one is deleted on activate. */
-const BUILD = '2026-09-17 00:20';
+const BUILD = '2026-09-18 20:20';
 const SHELL = 'professify-shell-' + BUILD;
 
 /* ================================================================================================

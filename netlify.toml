@@ -98,6 +98,16 @@ echo "--- $(ls public | wc -l) files published ---"
     #                XSS control. Dropping 'unsafe-inline' means moving every handler to
     #                addEventListener first — real work, and the right work eventually.
     #   connect-src  Supabase REST + auth + realtime (wss), and the PolyRatings API.
+    #
+    #   GOOGLE ANALYTICS, added 2026-09-18. Two directives, and BOTH are required — with only
+    #   the script host allowed the tag loads and then every hit it tries to send is blocked,
+    #   which looks exactly like a working install that reports nothing.
+    #     script-src   www.googletagmanager.com   (gtag.js itself)
+    #     connect-src  *.google-analytics.com, *.analytics.google.com, www.googletagmanager.com
+    #                  Wildcards because GA picks a regional endpoint per visitor
+    #                  (region1.google-analytics.com and friends); naming one host silently
+    #                  drops whichever region a student happens to be routed to.
+    #   img-src already allows https:, which covers GA's fallback image beacon.
     #   img-src      data: for inlined QR codes and cached avatars, blob: for canvas exports,
     #                https: for Supabase Storage avatars.
     #   frame-ancestors 'none'  is the directive that actually stops clickjacking.
@@ -107,7 +117,7 @@ echo "--- $(ls public | wc -l) files published ---"
     # If something breaks, the console names the exact directive that blocked it. Add what it
     # names — never widen to 'unsafe-eval' or '*' to make the message go away.
     # ------------------------------------------------------------------------------------------
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; worker-src 'self'; manifest-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api-prod.polyratings.org; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.googletagmanager.com; worker-src 'self'; manifest-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api-prod.polyratings.org https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests"
 
 # Don't hard-cache the HTML so deploys show up immediately.
 [[headers]]
