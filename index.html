@@ -4969,7 +4969,7 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
    The flag is the whole switch — every gp* surface already gates on gpFlagOn(), so this is
    one word and the code stays in git. Turn it back on the same day the migration runs. */
 window.PROFESSIFY_FLAGS={groups:false,messages:true};
-window.PROFESSIFY_BUILD='2026-09-18 20:20';
+window.PROFESSIFY_BUILD='2026-09-18 20:50';
 /* Paint the build stamp everywhere it appears. */
 try{
   (function(){
@@ -5289,6 +5289,9 @@ function cacheAvatarData(uid,url,data){
   try{
     if(!uid)return;
     if(!data){ localStorage.removeItem(avaCacheKey(uid)); return; }
+    /* The photo is up to 512px now. Everything else the app keeps shares this origin's ~5MB,
+       so an outsized copy is dropped rather than risk crowding out a save that matters. */
+    if(String(data).length>400*1024){ localStorage.removeItem(avaCacheKey(uid)); return; }
     localStorage.setItem(avaCacheKey(uid),JSON.stringify({url:String(url||''),data:data}));
   }catch(e){/* quota — the remote URL still works */}
 }
@@ -33240,7 +33243,48 @@ try{if(typeof A11Y_MODALS!=='undefined')A11Y_MODALS.push({id:'rsBack',close:'rsC
    reads. Needs professify-profiles.sql (avatar_url + username columns, the avatars bucket,
    and its per-owner storage policies) — without it saving degrades to name-only and says so
    rather than silently dropping what they typed. */
-var EP_MAX=256;                       // avatars render at 76px at most; 256 covers retina
+/* 2026-09-17 — profile photos looked soft. Two causes, both fixed here:
+   * 256px was the whole budget. The biggest circle is 76px, which is 228 device px on a 3x
+     phone, so 256 left almost no headroom and every lesser circle was being resampled twice.
+   * The photo went from ~3000px to 256 in ONE drawImage. A 12x reduction in a single step
+     aliases (Safari point-samples it regardless of imageSmoothingQuality), which reads as
+     mush on hair and edges.
+   Now: up to 512px, reduced in halves so no step is more than about 2x, encoded at JPEG 0.92
+   on a white matte (a transparent PNG used to come out black). A small photo is never scaled
+   past its own size, except up to the 256 floor it always had. The first canvas is capped at
+   4x the output so a 48MP photo cannot hit iOS's per-canvas pixel limit (which fails silently
+   as a blank image). */
+var EP_MAX=512, EP_MIN=256, EP_Q=0.92, EP_BIG=220*1024;
+function epEncodeSquare(img,sx,sy,ss){
+  return new Promise(function(resolve,reject){
+    try{
+      var side=Math.round(ss)||EP_MAX;
+      var out=Math.max(EP_MIN,Math.min(EP_MAX,side));
+      var cur=Math.max(out,Math.min(side,out*4));
+      var c=document.createElement('canvas'); c.width=cur; c.height=cur;
+      var ctx=c.getContext('2d'); ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='high';
+      ctx.drawImage(img,sx,sy,ss,ss,0,0,cur,cur);
+      while(cur>out){
+        var nxt=Math.max(out,Math.round(cur/2));
+        var n=document.createElement('canvas'); n.width=nxt; n.height=nxt;
+        var nx=n.getContext('2d'); nx.imageSmoothingEnabled=true; nx.imageSmoothingQuality='high';
+        nx.drawImage(c,0,0,cur,cur,0,0,nxt,nxt);
+        c.width=0; c.height=0;   // hand the bigger bitmap back now; iOS canvas memory is tight
+        c=n; cur=nxt;
+      }
+      var f=document.createElement('canvas'); f.width=out; f.height=out;
+      var fx=f.getContext('2d'); fx.fillStyle='#fff'; fx.fillRect(0,0,out,out); fx.drawImage(c,0,0);
+      c.width=0; c.height=0;
+      f.toBlob(function(blob){
+        if(!blob)return reject(new Error('Couldn’t read that image.'));
+        if(blob.size<=EP_BIG)return resolve(blob);
+        /* A very busy photo can run large at 0.92; one step down keeps it light for the
+           localStorage copy and campus wifi, and is still far sharper than before. */
+        f.toBlob(function(b2){ resolve(b2&&b2.size<blob.size?b2:blob); },'image/jpeg',0.85);
+      },'image/jpeg',EP_Q);
+    }catch(err){ reject(err); }
+  });
+}
 var _epPendingBlob=null, _epPendingUrl=null, _epRemove=false, _epUserTimer=null, _epUserOk=null;
 
 function epAvatarUrlFor(prof){
@@ -33348,14 +33392,11 @@ function epProcessImage(file){
       try{
         var side=Math.min(img.width,img.height);
         var sx=Math.round((img.width-side)/2), sy=Math.round((img.height-side)/2);
-        var c=document.createElement('canvas'); c.width=EP_MAX; c.height=EP_MAX;
-        var ctx=c.getContext('2d'); ctx.imageSmoothingQuality='high';
-        ctx.drawImage(img,sx,sy,side,side,0,0,EP_MAX,EP_MAX);
-        URL.revokeObjectURL(url);
-        c.toBlob(function(blob){
-          if(!blob)return reject(new Error('Couldn’t read that image.'));
-          resolve(blob);
-        },'image/jpeg',0.86);
+        epEncodeSquare(img,sx,sy,side).then(function(blob){
+          URL.revokeObjectURL(url); resolve(blob);
+        },function(){
+          URL.revokeObjectURL(url); reject(new Error('Couldn’t read that image.'));
+        });
       }catch(err){ URL.revokeObjectURL(url); reject(new Error('Couldn’t read that image.')); }
     };
     img.onerror=function(){ URL.revokeObjectURL(url); reject(new Error('Couldn’t read that image.')); };
@@ -33880,18 +33921,17 @@ window.epCropUse=function(){
        you positioned is what gets saved. */
     var k=_epC.fit*_epC.z;
     var sx=-_epC.tx/k, sy=-_epC.ty/k, ss=_epC.S/k;
-    var c=document.createElement('canvas'); c.width=EP_MAX; c.height=EP_MAX;
-    var ctx=c.getContext('2d'); ctx.imageSmoothingQuality='high';
-    ctx.drawImage(_epC.img,sx,sy,ss,ss,0,0,EP_MAX,EP_MAX);
-    c.toBlob(function(blob){
+    epEncodeSquare(_epC.img,sx,sy,ss).then(function(blob){
       var hint=document.getElementById('epPhotoHint');
-      if(!blob){ if(hint){hint.textContent='Couldn’t read that image.';hint.className='ep-hint bad';} return; }
       if(_epPendingUrl){try{URL.revokeObjectURL(_epPendingUrl);}catch(e){}}
       _epPendingBlob=blob; _epPendingUrl=URL.createObjectURL(blob); _epRemove=false;
       if(hint){hint.textContent='Ready to save · '+Math.round(blob.size/1024)+'KB';hint.className='ep-hint good';}
       epPaintAva();
       epCropCancel();
-    },'image/jpeg',0.86);
+    },function(){
+      var hint=document.getElementById('epPhotoHint');
+      if(hint){hint.textContent='Couldn’t read that image.';hint.className='ep-hint bad';}
+    });
   }catch(e){
     var h=document.getElementById('epPhotoHint');
     if(h){h.textContent='Couldn’t read that image.';h.className='ep-hint bad';}
