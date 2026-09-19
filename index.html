@@ -25,7 +25,7 @@
          Twitter crops portrait badly, so twitter:image keeps a 1200x630 of the same design. -->
 <meta name="description" content="Real professor ratings from PolyRatings, daily seat and waitlist counts, and which of your friends are in your classes. Free for students.">
 <link rel="canonical" href="https://termchamp.com/">
-<meta name="theme-color" content="#154734">
+<meta name="theme-color" content="#183178">
 
 <!-- ============ INSTALLABLE ============ 2026-09-07
      Professify is a web page students are asked to keep. Three consequences, and all three are
@@ -2208,6 +2208,15 @@ if(typeof qrcode==="function")window.qrcode=qrcode;
           <h2 class="st-h">Notifications</h2>
           <div id="setPushCard"></div>
         </div>
+        <!-- YOUR REVIEWS — 2026-09-18. Tate: "i want to be able to see in settings the reviews
+             and ratings ive written and be able to taken them down or edit them." The list
+             existed; the only ways in were the desktop ⌘K palette and the delete-account dialog.
+             Hidden when signed out; renderMyReviewsCard() fills it. -->
+        <div class="st-card" id="setReviewsSec" style="display:none">
+          <h2 class="st-h">Your reviews</h2>
+          <p class="st-note">Only you can see this list. Reviews stay anonymous when you edit them, an edited one says so, and the professor’s average is recalculated either way.</p>
+          <div id="setReviews"></div>
+        </div>
         <!-- SAFETY — 2026-09-06. Blocking has to be undoable somewhere findable, or the only way
              back is asking support. This card is that place, and it is where the moderator queue
              appears for the handful of accounts that have one. -->
@@ -4127,6 +4136,14 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
 @media (hover:hover){.myr-del:hover{color:#e2564f}}
 .myr-del.arm{color:#fff;background:#c9433c;border-radius:999px;padding:4px 11px}
 .myr-del[disabled]{opacity:.5;cursor:default}
+/* Edit sits next to Delete and is the quieter of the two: changing what you said is the
+   ordinary thing to do here, removing it is the one that cannot be undone. */
+.myr-edit{background:none;border:0;padding:4px 0;font:inherit;font-size:12px;font-weight:600;
+  color:var(--accent);cursor:pointer;flex:none}
+@media (hover:hover){.myr-edit:hover{text-decoration:underline;text-underline-offset:3px}}
+.myr-edit[disabled]{opacity:.5;cursor:default}
+.myr-when{color:var(--faint)}
+.rp-edited{font-style:italic}
 .myr-undo{font-size:11.5px;color:var(--faint);flex:none}
 .myr-empty{font-size:13.5px;color:var(--muted);line-height:1.6;padding:6px 2px 4px}
 /* ===== ⌘K command palette ===== */
@@ -4969,7 +4986,7 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
    The flag is the whole switch — every gp* surface already gates on gpFlagOn(), so this is
    one word and the code stays in git. Turn it back on the same day the migration runs. */
 window.PROFESSIFY_FLAGS={groups:false,messages:true};
-window.PROFESSIFY_BUILD='2026-09-18 20:50';
+window.PROFESSIFY_BUILD='2026-09-19 13:25';
 /* Paint the build stamp everywhere it appears. */
 try{
   (function(){
@@ -5050,7 +5067,10 @@ window.addEventListener('beforeinstallprompt', function(e){
 });
 window.addEventListener('appinstalled', function(){
   _pwaPrompt=null; pwaSnooze(3650);
-  try{ track('signup', 'installed', 'pwa'); }catch(e){}
+  /* 'pwa' is not one of show()'s tabs, so the GA bridge flattens that surface to 'app' — which
+     would lose the install funnel, the one number that says whether push can ever reach someone.
+     The same fact rides in a whitelisted property instead, and the events table is unchanged. */
+  try{ track('signup', 'installed', 'pwa', {kind:'install', source:'pwa'}); }catch(e){}
   try{ pwaDismiss(); }catch(e){}
 });
 
@@ -11942,6 +11962,10 @@ async function evWho(){
 }
 function track(name, subject, surface, props){
   if(!_evOn) return;
+  /* GA gets the same event, minus `subject` — which is the professor key, and never leaves this
+     origin. Before the sampling gate below on purpose: sampling exists to keep OUR table small,
+     and applying it to GA too would just make GA's counts quietly wrong. */
+  try{ gaEvent(name, surface, props); }catch(e){}
   /* `_evSampled` is decided once per session, not per event — see the note above the click
      listener for why a per-event sample cannot reconstruct a visit. It is undefined until that
      block has run, and `!== false` keeps the earliest events (app_open) rather than dropping them. */
@@ -12382,7 +12406,60 @@ function gaView(v){
     });
   }catch(e){}
 }
-try{ window.gaView=gaView; window.gaAllowed=gaAllowed; }catch(e){}
+/* ================================================================================================
+   THE BRIDGE — 2026-09-18
+   ------------------------------------------------------------------------------------------------
+   Tate: "make sure we are collecting everything important to our product to make it better".
+   Every event the app already records goes to GA too, so the two systems ask the same questions
+   of the same actions — but the bridge is where rule 1 is enforced, and it is deliberately a
+   SUBTRACTION rather than a copy.
+
+   WHAT IS DROPPED, ALWAYS:
+     · `subject` — the second argument of track(). That is the professor key on prof_view and
+       prof_impression, and the scrubbed error text on error. It is the identifying half of every
+       event this app records, and it is never passed here at all rather than filtered later.
+     · `target` and `last` — evTargetName() falls back to an element's own text, so a tap on a
+       professor card is legitimately "a:Jim Mueller" in our own table. Handing that to Google
+       would build the professor history by the back door, one button label at a time. GA gets
+       the event and the surface it happened on, which is what the question "where do people rage
+       click" actually needs.
+   Only the enumerated keys below survive, and each is something this file chose rather than read
+   off the page. Anything a future event adds is dropped until it is named here — fails closed.
+
+   ONE EVENT NEVER ARRIVES, and that is fine: app_open fires while this file is still being
+   parsed, before gaBoot() has run, so _gaOn is false and the bridge drops it. GA counts the same
+   thing itself as session_start / first_visit, from the referrer it reads directly — which is
+   also why app_open's referrer hostname is not worth forwarding. If the boot order ever changes,
+   the surface guard below is what keeps that hostname out.
+
+   TWO NAMES ARE CHANGED because GA4 already owns them: `click` is an enhanced-measurement event
+   and `page_exit` reads like one, so ours are ui_click and surface_exit and nothing mixes. */
+var GA_NAME={click:'ui_click', error:'app_error', page_exit:'surface_exit'};
+var GA_PROPS_OK={mode:1,kind:1,on:1,result:1,reason:1,rows:1,source:1,what:1,dwell:1,depth:1,at:1};
+function gaEvent(name, surface, props){
+  if(!_gaOn||!name) return;
+  try{
+    /* THE SURFACE SLOT IS NOT FREE TEXT EITHER — found in review. Every event sources `surface`
+       from _evSurface, which show() only ever sets to a tab name — except app_open, which
+       repurposes the slot for where the visit came FROM: a referrer hostname like
+       "reddit.com" or "mail.google.com". The props whitelist below never saw it, so the one
+       argument nobody filtered was being forwarded verbatim. Checking it against the same tab
+       list the titles come from makes this fail closed: an unknown surface is 'app'.
+       Nothing is lost by dropping it — where a visit came from is the one thing GA measures
+       natively, and better, from the referrer it reads itself. */
+    var sf=String(surface||'');
+    var p={surface: GA_SURFACES[sf] ? sf : 'app'};
+    if(props&&typeof props==='object'){
+      for(var k in props){
+        if(!GA_PROPS_OK[k]) continue;
+        var v=props[k]; if(v==null) continue;
+        p[k]=(typeof v==='number'||typeof v==='boolean')?v:String(v).slice(0,90);
+      }
+    }
+    gtag('event', GA_NAME[name]||String(name).slice(0,40), p);
+  }catch(e){}
+}
+try{ window.gaView=gaView; window.gaAllowed=gaAllowed; window.gaEvent=gaEvent; }catch(e){}
 try{ gaBoot(); }catch(e){}
 function openProf(id){
   /* Every surface that opens a professor goes through here, so this is the only place the view has
@@ -12406,6 +12483,9 @@ function openProf(id){
 function pfLive(){ var v=document.getElementById('view-prof'); return !!(v&&v.classList.contains('active')); }
 function pfRefresh(){ if(pfLive()&&typeof renderProfPage==='function')renderProfPage(); }
 function closeModal(){
+  /* Closing the sheet abandons an edit. Leaving RATE_EDIT set would turn the student's NEXT
+     review — of anyone — into an update of this row. */
+  try{ window.RATE_EDIT=null; window._rfEditDraft=null; }catch(e){}
   document.getElementById('mback').classList.remove('open');
   /* Another overlay may still be open underneath — the friend's week the professor was opened
      from. Releasing the scroll lock here let the page behind that one scroll away. */
@@ -12821,15 +12901,29 @@ async function loadReviews(id){
        professify-rls-hardening.sql); listing columns here keeps this query working once the
        grant is gone, instead of erroring and showing no reviews at all. */
     const REVIEW_COLS='id,professor_key,professor_name,department,course,score,would_again,'
-      +'tags,note,helpful,created_at,difficulty,teach_ability,hours,format,course_key,grade';
+      +'tags,note,helpful,created_at,difficulty,teach_ability,hours,format,course_key,grade'
+      /* edited_at — 2026-09-18, with professify-review-edit.sql. Asked for LAST and dropped on
+         the retry below, because a deploy that has not run that migration has no such column and
+         PostgREST answers a missing column by failing the whole query: the professor page would
+         lose every review to show a marker on none of them. */
+      +',edited_at';
+    const REVIEW_COLS_PRE_EDIT=REVIEW_COLS.replace(',edited_at','');
     /* reviews_public is the same rows with user_id removed at the database, not filtered out
        here — see professify-messaging.sql. Reading it rather than the base table is what lets
        that table stop being readable by anyone but its author, which is the only way "your
        review is anonymous" is a fact rather than a promise. Falls back to the base table so
        this build still works on a database where the migration has not been run. */
     let {data,error}=await sb.from('reviews_public').select(REVIEW_COLS).eq('professor_key',key).order('created_at',{ascending:false}).limit(200);
+    /* 42703 undefined_column: this build is newer than this database. Ask again without the one
+       column that can be missing, so reviews still render. */
+    if(error&&/edited_at|column/i.test(error.message||'')){
+      const pre=await sb.from('reviews_public').select(REVIEW_COLS_PRE_EDIT).eq('professor_key',key).order('created_at',{ascending:false}).limit(200);
+      if(!pre.error){ data=pre.data; error=null; }
+    }
     if(error&&/does not exist|schema cache/i.test(String(error.message||''))){
-      const fb=await sb.from('reviews').select(REVIEW_COLS).eq('professor_key',key).order('created_at',{ascending:false}).limit(200);
+      let fb=await sb.from('reviews').select(REVIEW_COLS).eq('professor_key',key).order('created_at',{ascending:false}).limit(200);
+      if(fb.error&&/edited_at|column/i.test(fb.error.message||''))
+        fb=await sb.from('reviews').select(REVIEW_COLS_PRE_EDIT).eq('professor_key',key).order('created_at',{ascending:false}).limit(200);
       data=fb.data; error=fb.error;
     }
     if(error)throw error;
@@ -12837,7 +12931,11 @@ async function loadReviews(id){
       dbReviews[key]=data.map(r=>({id:r.id,course:r.course||'',term:(r.term||'').trim(),score:r.score,difficulty:r.difficulty,teach:r.teach_ability,hours:r.hours||'',format:r.format||'',grade:(r.grade||'').trim(),again:r.would_again,/* verified means "written through an authenticated, domain-checked account", which is
              exactly what coming back from the backend row store means. Local preview reviews
              (no backend configured) are NOT that, and now say so. */
-            verified:true,helpful:r.helpful||0,text:r.note||'',tags:Array.isArray(r.tags)?r.tags:[],_db:true}));
+            verified:true,helpful:r.helpful||0,text:r.note||'',tags:Array.isArray(r.tags)?r.tags:[],
+            /* Null unless the author went back and changed what they said. The database decides
+               this (reviews_edit_guard), never the client — an "edited" marker the app could
+               write itself would be exactly the kind of number this product refuses to invent. */
+            edited_at:r.edited_at||null,_db:true}));
       delete dbReviewsError[key];
       if(currentProf===id)pfRefresh();
     }
@@ -12915,6 +13013,10 @@ function rfBlankDraft(course){
 function rfSaveDraft(){
   try{
     var d=rateDraft; if(!d||currentProf==null)return;
+    /* An edit is not a draft. Saving one here would leave the edited text behind as the "pick up
+       where you left off" draft for a NEW review of the same professor, which is how a student
+       ends up posting their old review twice. */
+    if(window.RATE_EDIT&&window.RATE_EDIT.id)return;
     // Nothing worth restoring yet — don't leave a husk that triggers a "picked up where you
     // left off" banner over an empty form.
     var touched=!!(d.score||d.difficulty||d.teach||d.hours||d.format||d.grade||d.term||d.again!==null||(d.text&&d.text.trim())||(d.chips&&d.chips.size)||(d.badChips&&d.badChips.size));
@@ -12955,6 +13057,13 @@ function startRate(id,course){
   var _mb=document.getElementById('mback');
   if(_mb&&!_mb.classList.contains('open')){_mb.classList.add('open');document.body.style.overflow='hidden';}
   if(!eduVerified){rateAuthGate(id,course);return;}
+  /* EDITING one you already wrote (myrEdit). The draft IS the review, so neither a blank form nor
+     a leftover localStorage draft from another sitting may win here. Survives the auth gate above
+     because it is only consumed when the form actually opens. */
+  if(window._rfEditDraft){
+    rateDraft=window._rfEditDraft; window._rfEditDraft=null; window._rfRestored=false;
+    renderRateForm(id); return;
+  }
   var restored=rfRestoreDraft(id,course);
   window._rfRestored=!!restored;
   rateDraft=restored||rfBlankDraft(course);
@@ -13596,11 +13705,16 @@ async function pushState(){
 }
 
 async function pushEnable(){
-  if(!pushSupported())return {ok:false,why:'unsupported'};
-  if(!pushVapid())return {ok:false,why:'unconfigured'};
+  /* SEAT ALERTS ARE THE OCT 5 FEATURE, and this is the funnel they die in: asked, granted,
+     subscribed. Each outcome is a reason string, so "how many students can we actually reach"
+     stops being a guess. */
+  if(!pushSupported()){ try{ track('push_permission', null, 'settings', {result:'unsupported'}); }catch(e){} return {ok:false,why:'unsupported'}; }
+  if(!pushVapid()){ try{ track('push_permission', null, 'settings', {result:'unconfigured'}); }catch(e){} return {ok:false,why:'unconfigured'}; }
   var perm;
-  try{ perm=await Notification.requestPermission(); }catch(e){ return {ok:false,why:'blocked'}; }
-  if(perm!=='granted')return {ok:false,why:perm==='denied'?'denied':'dismissed'};
+  try{ track('push_permission', null, 'settings', {result:'asked'}); }catch(e){}
+  try{ perm=await Notification.requestPermission(); }catch(e){ try{ track('push_permission', null, 'settings', {result:'blocked'}); }catch(_e){} return {ok:false,why:'blocked'}; }
+  if(perm!=='granted'){ try{ track('push_permission', null, 'settings', {result:perm==='denied'?'denied':'dismissed'}); }catch(e){} return {ok:false,why:perm==='denied'?'denied':'dismissed'}; }
+  try{ track('push_permission', null, 'settings', {result:'granted'}); }catch(e){}
   try{
     var reg=await navigator.serviceWorker.ready;
     var sub=await reg.pushManager.getSubscription();
@@ -13620,7 +13734,8 @@ async function pushEnable(){
       user_id:sbUser.id, endpoint:j.endpoint, p256dh:keys.p256dh, auth:keys.auth,
       ua:String(navigator.userAgent||'').slice(0,200)
     },{onConflict:'endpoint'});
-    if(r.error)return {ok:false,why:'save-failed',msg:r.error.message};
+    if(r.error){ try{ track('push_permission', null, 'settings', {result:'save-failed'}); }catch(e){} return {ok:false,why:'save-failed',msg:r.error.message}; }
+    try{ track('push_subscribed', null, 'settings', {}); }catch(e){}
     return {ok:true};
   }catch(e){
     try{ trackError('push subscribe failed: '+(e&&e.message||e),'push'); }catch(_t){}
@@ -13794,7 +13909,12 @@ function renderRateForm(id){
       .rf-fast{font-size:12.5px;color:var(--muted);text-align:center;margin:2px 0 8px}
     </style>
     <div class="rf">
-      <div class="rf-head"><h2 class="rate-h" style="margin:0">Rate ${escapeHtml(p.name)}</h2></div>
+      <!-- THE HEADING IS THE FIRST THING READ, AND IT WAS WRONG IN EDIT MODE — 2026-09-19.
+           "Save changes" and "Editing the review you posted <date>" both sit at the BOTTOM of a
+           form that is taller than a laptop screen, so a student who pressed Edit saw a modal
+           headed "Rate <professor>" and nothing else: the same screen as writing a new one. The
+           form tells you which job it is doing in the place you look first. -->
+      <div class="rf-head"><h2 class="rate-h" style="margin:0">${(window.RATE_EDIT&&window.RATE_EDIT.id)?('Edit your review of '+escapeHtml(p.name)):('Rate '+escapeHtml(p.name))}</h2></div>
       ${window._rfRestored?`<div class="rf-restored">Picked up where you left off. <button type="button" onclick="rfStartOver('${id}')">Start over</button></div>`:''}
       <div class="rf-blk"><label class="rf-lab">Which course? <span style="color:var(--low)" title="Required">*</span></label>${courseField}<div id="rfCourseHint" class="rf-hint" style="margin-top:6px;display:none;color:var(--accent)"></div></div>
       <div class="rf-blk"><label class="rf-lab">When did you take it? <span class="rf-opt">(optional \u2014 one tap, helps students judge how current this is)</span></label><div class="rf-seg rf-term" id="rf-term">${rateTermOptions(4).map(t=>`<button type="button" class="${d.term===t?'on':''}">${t}</button>`).join('')}<button type="button" class="${(d.term===''&&d._termTouched)?'on':''}">Earlier</button></div></div>
@@ -13822,9 +13942,12 @@ function renderRateForm(id){
         <div class="rf-blk"><label class="rf-lab">Anything else? <span class="rf-opt">(optional)</span></label><textarea id="rfNote" class="rf-note" rows="3" maxlength="${RF_HARD_CHARS}" placeholder="One tip for the next student…">${escapeHtml(d.text)}</textarea><div class="rf-count" id="rfCount" aria-live="polite"></div></div>
       </div>
       <div id="rfErr" class="rate-err" style="min-height:0"></div>
-      <button id="rfSubmit" class="btn primary rf-submit" onclick="submitRate('${id}')">Post review</button>
-      <p class="rf-fast">Takes about 15 seconds · add detail above only if you want</p>
-      <p class="rate-fine" style="text-align:center">Posts anonymously · one review per class · verified student</p>
+      <button id="rfSubmit" class="btn primary rf-submit" onclick="submitRate('${id}')">${(window.RATE_EDIT&&window.RATE_EDIT.id)?'Save changes':'Post review'}</button>
+      <p class="rf-fast">${(window.RATE_EDIT&&window.RATE_EDIT.id)?('Editing the review you posted'+(window.RATE_EDIT.created_at?(' '+revDateLabel(window.RATE_EDIT.created_at)):'')+(rfWillMarkEdited()?' · it will show as edited':'')):'Takes about 15 seconds · add detail above only if you want'}</p>
+      <!-- The fine print described the wrong job in edit mode — 2026-09-19. "Posts anonymously ·
+           one review per class" is the rule for WRITING one; under a "Save changes" button it
+           tells a student a constraint that has nothing to do with what they are about to do. -->
+      <p class="rate-fine" style="text-align:center">${(window.RATE_EDIT&&window.RATE_EDIT.id)?'Stays anonymous · the professor’s average updates':'Posts anonymously · one review per class · verified student'}</p>
     </div></div>`;
   setupRateForm();
 }
@@ -13976,7 +14099,15 @@ function rfMakeStars(elId,valId,field,colorFn){
     else if(e.key==='ArrowLeft'||e.key==='ArrowDown')v=Math.max(0.5,(cur||1)-0.5);
     if(v!=null){ e.preventDefault(); commit(v); el.setAttribute('aria-valuenow',String(v)); }
   });
-  paint(rateDraft[field]||0);
+  /* THE READOUT WAS ONLY EVER WRITTEN BY commit() — 2026-09-18. A form opened with values
+     already in it (a restored draft, and now an edit) painted the stars and left the number
+     beside them reading "–": one state, two appearances, which is this project's recurring bug.
+     Initial paint now says the same thing the stars do. */
+  (function(){
+    var v0=rateDraft[field]||0; paint(v0);
+    if(v0){ out.textContent=v0.toFixed(1); out.classList.remove('empty');
+            out.style.color=colorFn?colorFn(v0):'#78b083'; }
+  })();
 }
 function rfSingle(elId,cb){const g=document.getElementById(elId);if(!g)return;g.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{g.querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on');cb(b.textContent);try{rfSaveDraft();}catch(e){}}));}
 /* The submit button used to disable itself until all three required fields were set, with no
@@ -13988,7 +14119,13 @@ function rfMissing(){
   var d=(typeof rateDraft!=='undefined'&&rateDraft)||{};
   if(!(d.course&&String(d.course).trim()))return {field:'rfCourse', msg:'Pick the class you took with this professor — reviews are tied to a specific course.'};
   if(!(d.score>0))return {field:'rf-overall', msg:'Add an overall rating — tap a star.'};
-  if(d.again===null||d.again===undefined)return {field:'rf-again', msg:'One more: would you take this professor again?'};
+  /* A review written through the quick-rate stars can sit with would_again null forever
+     (rsWriteReview writes null; rsFlushDetails only fills it in if the student answers). Asking
+     for that answer before a NEW review is right. Demanding it before someone can fix a typo in
+     a review that has been null since the day they wrote it is not — it would make those reviews
+     uneditable, which is the feature this check would be silently cancelling. */
+  var _editNull=!!(window.RATE_EDIT&&window.RATE_EDIT.id&&window.RATE_EDIT.hadNullAgain);
+  if(!_editNull&&(d.again===null||d.again===undefined))return {field:'rf-again', msg:'One more: would you take this professor again?'};
   return null;
 }
 function rfCheck(){
@@ -14078,6 +14215,26 @@ function revRecency(r){
    actually distinguishes something. When every review on the page has the same source, the
    chip is a constant — it habituates to invisibility and steals the card's strongest color
    from the score. In that case we state the source once under the Reviews header instead. */
+/* Will THIS save be marked as edited? The database stamps edited_at only when the row is more
+   than ten minutes old (reviews_edit_guard), so that the app's own follow-up patch seconds after
+   a review is posted does not mark it. The form says "it will show as edited" only when that is
+   actually true — the alternative is a sentence that is wrong for exactly the student who came
+   straight back to fix a typo. */
+function rfWillMarkEdited(){
+  try{
+    var at=window.RATE_EDIT&&window.RATE_EDIT.created_at; if(!at)return true;
+    var t=new Date(at).getTime(); if(!isFinite(t))return true;
+    return (Date.now()-t)>600000;
+  }catch(e){ return true; }
+}
+try{ window.rfWillMarkEdited=rfWillMarkEdited; }catch(e){}
+/* One date format for reviews, with the year, per the copy rules. Returns '' for anything that
+   is not a real date rather than printing "Invalid Date" at a student. */
+function revDateLabel(v){
+  try{ var d=new Date(v); if(isNaN(d.getTime()))return '';
+    return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }catch(e){ return ''; }
+}
+try{ window.revDateLabel=revDateLabel; }catch(e){}
 function reviewProvenance(r,mixed){
   var segs=[];
   if(r&&r._src==='poly'){ if(mixed!==false)segs.push('<span class="rp-seg rp-poly">From PolyRatings</span>'); if(r.year)segs.push('<span class="rp-seg">Posted '+escapeHtml(r.year)+'</span>');}
@@ -14086,6 +14243,9 @@ function reviewProvenance(r,mixed){
   if(course)segs.push('<span class="rp-seg">Took '+course+'</span>');
   var term=(r&&r.term||'').trim();
   if(term)segs.push('<span class="rp-seg">'+escapeHtml(term)+'</span>');
+  /* Edited, with the date, because "edited" on its own invites the question it should answer.
+     Shown only when the DATABASE stamped it — see sql/professify-review-edit.sql. */
+  if(r&&r.edited_at)segs.push('<span class="rp-seg rp-edited">Edited '+escapeHtml(revDateLabel(r.edited_at))+'</span>');
   if(!segs.length)return '';
   return '<div class="rev-prov">'+segs.join('<span class="rp-dot">·</span>')+'</div>';
 }
@@ -14288,8 +14448,19 @@ async function submitRate(id){
        see professify-review-integrity.sql. Anyone can skip this check by calling the API
        directly, so it is here to give an honest answer before someone writes 200 words,
        not to be the thing standing between a spammer and the table. */
+    /* An edit is an UPDATE of one row, so neither of the two rules below applies to it: the
+       one-per-professor lock is about writing a SECOND review, and the hourly cap is about how
+       many rows an account can create. Thirty edits of one review is still one row. */
+    var _ed=(window.RATE_EDIT&&window.RATE_EDIT.id)?window.RATE_EDIT:null;
+    if(_ed){
+      await rfSaveEdit(_ed,id,p,{course:course,courseKey:courseKey,term:term,score:d.score,
+        difficulty:d.difficulty,teach:d.teach,hours:d.hours,format:d.format,grade:d.grade,
+        again:d.again,tags:tags,text:review.text});
+      return;
+    }
     var _rlProf=(typeof profKeyName==='function')?profKeyName(p):profKey(p);
     if(window.MY_REVIEWED&&MY_REVIEWED[_rlProf]){
+      try{ track('review_refused', null, 'rate', {reason:'already-reviewed'}); }catch(_e){}
       rfErr('You\u2019ve already reviewed '+p.name+'. Edit your existing review from Your reviews instead \u2014 one per professor keeps the average honest.');
       return;
     }
@@ -14305,6 +14476,7 @@ async function submitRate(id){
     _rlHits=(Array.isArray(_rlHits)?_rlHits:[]).filter(function(t){return _rlNow-t<3600000;});
     if(_rlHits.length>=RF_HOURLY_MAX){
       var _mins=Math.max(1,Math.ceil((3600000-(_rlNow-_rlHits[0]))/60000));
+      try{ track('review_refused', null, 'rate', {reason:'hourly-cap'}); }catch(_e){}
       rfErr('That\u2019s '+RF_HOURLY_MAX+' reviews in an hour \u2014 the limit. Try again in '+_mins+' minute'+(_mins===1?'':'s')+'. Nothing you wrote has been lost.');
       return;
     }
@@ -14322,6 +14494,11 @@ async function submitRate(id){
       reviewsGiven++;sbBusy=false;try{rfClearDraft();}catch(e){}
       try{ _rlHits.push(Date.now()); localStorage.setItem('professify_rev_times',JSON.stringify(_rlHits)); }catch(_e){}
       try{ window.MY_REVIEWED=window.MY_REVIEWED||{}; MY_REVIEWED[profKeyName(p)]=1; }catch(_e){}
+      /* A REVIEW LANDED. The count is the product's one flat number, so this is the event that
+         matters most. Nothing about WHICH professor or WHAT was said — not the key, not the
+         score, not the course. A rating value beside a browser pseudonym is a short walk from
+         un-anonymising a review the app promises is anonymous. */
+      try{ track('review_submit', null, 'rate', {kind:'new'}); }catch(_e){}
       renderThanks(id,true);
     }catch(e){
       sbBusy=false;
@@ -14354,6 +14531,15 @@ async function submitRate(id){
       }else{
         _say=(typeof dbFriendlyErr==='function')?dbFriendlyErr(e,'review'):(_m||'Could not post your review. Try again.');
       }
+      /* WHY reviews fail, in a form that can be counted. Reviews sat at 12 for a month partly
+         because a refusal was invisible from outside. What is recorded is the SHAPE of the
+         refusal, never the server's sentence — that can quote what the student typed. */
+      try{
+        var _why = (/duplicate|unique/i.test(_m)||_code==='23505') ? 'duplicate'
+                 : (/row-level security|violates row-level/i.test(_m)||_code==='42501') ? 'rls-unexplained'
+                 : (_code==='P0001') ? 'rule' : (_code||'error');
+        track('review_refused', null, 'rate', {reason:String(_why).slice(0,40)});
+      }catch(_e){}
       rfErr(_say);
       if(btn){btn.disabled=false;btn.textContent='Submit review';}
     }
@@ -14644,22 +14830,41 @@ async function openMyReviews(){
   renderMyReviews();
 }
 function closeMyReviews(){ var h=document.getElementById('myReviewsBack'); if(h){h.style.display='none';h.innerHTML='';} document.body.style.overflow=''; }
-function renderMyReviews(){
-  var host=document.getElementById('myReviewsBack'); if(!host)return;
-  var list=window.MY_REVIEWS||[];
-  var rows=list.map(function(r){
+/* ONE renderer, TWO surfaces — 2026-09-18.
+   This list now appears in Settings (where Tate asked for it) and in the sheet the ⌘K palette
+   and the delete-account dialog open. Rendering it twice would have been two places to fix the
+   next time a row changes, and the account dialog's list is the one a student reads with their
+   finger over "Delete my account" — so both go through myrRowsHtml(). */
+function myrRowLabel(r){
+  var course=(typeof canonCode==='function'&&r.course)?canonCode(r.course):(r.course||'');
+  var bits=[];
+  if(course)bits.push('Took '+escapeHtml(course));
+  if(r.term)bits.push(escapeHtml(String(r.term).trim()));
+  if(r.grade)bits.push('<span class="myr-grade">'+escapeHtml(r.grade)+'</span>');
+  var when=(typeof revDateLabel==='function')?revDateLabel(r.created_at):'';
+  if(when)bits.push('<span class="myr-when">'+escapeHtml(when)+'</span>');
+  /* The marker comes from the database's edited_at and nowhere else. The app never decides that
+     a review "looks edited". */
+  var ed=(typeof revDateLabel==='function'&&r.edited_at)?revDateLabel(r.edited_at):'';
+  if(ed)bits.push('<span class="myr-when">edited '+escapeHtml(ed)+'</span>');
+  return bits.join(' · ');
+}
+function myrRowsHtml(list){
+  return (list||[]).map(function(r){
     var id=myRevProfId(r);
-    var course=(typeof canonCode==='function'&&r.course)?canonCode(r.course):(r.course||'');
     var sc=(r.score!=null)?Number(r.score).toFixed(1):'—';
     var col=(typeof scoreColor==='function')?scoreColor((Number(r.score)||0)/5*4):'var(--accent)';
-    var grade=r.grade?('<span class="myr-grade">'+escapeHtml(r.grade)+'</span>'):'';
     var note=r.note?('<p class="myr-note">'+escapeHtml(r.note)+'</p>'):'';
-    var sub=[course?('Took '+escapeHtml(course)):'', grade].filter(Boolean).join(' · ');
+    var sub=myrRowLabel(r);
     var openable=!!id;
     /* Only a row that actually exists on the server can be deleted from it. A `_local`
        row is a preview that never synced, so there is nothing to delete — offering the
        button there would fail silently and teach the student the button doesn't work. */
     var delable=!!r.id&&!r._local;
+    /* Editing needs the rate form, and the rate form needs the professor in this term's index.
+       A professor who has left is not there, so the button is not offered rather than offered
+       and dead — the same rule as Delete above. Taking it down still works. */
+    var editable=delable&&openable;
     /* One switch, on the review it governs, off until you touch it. It is deliberately NOT in
        Settings: a global "share my reviews" would make a decision about a review you wrote two
        years ago at the moment you flipped it, and the decision people actually want to make is
@@ -14668,12 +14873,13 @@ function renderMyReviews(){
     var foot=(openable||delable||share)
       ? ('<div class="myr-foot">'
          +(openable?'<span class="myr-link">View professor →</span>':'<span class="myr-link" style="visibility:hidden"></span>')
+         +(editable?('<button type="button" class="myr-edit" data-id="'+escapeHtml(String(r.id))+'" onclick="event.stopPropagation();myrEdit(this)">Edit</button>'):'')
          +(delable?('<button type="button" class="myr-del" data-id="'+escapeHtml(String(r.id))+'" onclick="event.stopPropagation();myrDelete(this)">Delete</button>'):'')
          +'</div>'
          +(share?('<div class="myr-share" onclick="event.stopPropagation()">'+share+'</div>'):''))
       : '';
-    /* The row-wide click opens the professor; the delete button stops propagation above so
-       arming it doesn't also navigate away from the thing you're trying to remove. */
+    /* The row-wide click opens the professor; the two buttons stop propagation above so
+       pressing one doesn't also navigate away from the thing you're working on. */
     return '<div class="myr-row"'+(openable?' onclick="closeMyReviews();openProf(\''+id+'\')" style="cursor:pointer"':'')+'>'
       +'<div class="myr-top"><span class="myr-nm">'+escapeHtml(r.professor_name||'Professor')+'</span><span class="myr-score" style="color:'+col+'">'+sc+'<small>/5</small></span></div>'
       +(sub?'<div class="myr-sub">'+sub+'</div>':'')
@@ -14681,12 +14887,156 @@ function renderMyReviews(){
       +foot
     +'</div>';
   }).join('');
-  var body=list.length
-    ? '<div class="myr-list">'+rows+'</div>'
-    : '<div class="myr-empty">You haven’t written any reviews yet. Rate a professor and it’ll show up here so you can find it again.</div>';
-  host.innerHTML='<div class="sl-card"><button class="sl-x" onclick="closeMyReviews()">&times;</button><div class="sl-kick">Your reviews</div><h2 class="sl-h">'+(list.length?(list.length+' review'+(list.length===1?'':'s')+' you’ve written'):'Your reviews')+'</h2>'+body+'<p class="sl-fine">Your reviews post anonymously. Nobody — including your friends — is told which review is yours unless you switch it on above, one review at a time.<br>'
-    +'Deleting your account leaves your reviews up, permanently unlinked from you — delete any you don’t want kept before you close the account.</p></div>';
 }
+/* "You have written none" and "we could not ask" are different sentences. loadMyReviews() has
+   recorded which one happened since 09-07; until now both rendered as the first one, under a
+   confident number. */
+function myrBodyHtml(){
+  var list=window.MY_REVIEWS||[];
+  if(list.length)return '<div class="myr-list">'+myrRowsHtml(list)+'</div>';
+  if(window.MY_REVIEWS_FAILED)
+    return '<div class="myr-empty">Couldn’t load your reviews just now — this list never guesses, so it is showing nothing rather than "none". '
+      +'<button type="button" class="myr-edit" onclick="myrReload()">Try again</button></div>';
+  return '<div class="myr-empty">You haven’t written any reviews yet. Rate a professor and it’ll show up here so you can find it again.</div>';
+}
+async function myrReload(){ try{ await loadMyReviews(); }catch(e){} myrRefresh(); }
+window.myrReload=myrReload;
+function renderMyReviews(){
+  var host=document.getElementById('myReviewsBack'); if(!host)return;
+  var list=window.MY_REVIEWS||[];
+  host.innerHTML='<div class="sl-card"><button class="sl-x" onclick="closeMyReviews()">&times;</button><div class="sl-kick">Your reviews</div><h2 class="sl-h">'+(list.length?(list.length+' review'+(list.length===1?'':'s')+' you’ve written'):'Your reviews')+'</h2>'+myrBodyHtml()+'<p class="sl-fine">Your reviews post anonymously. Nobody — including your friends — is told which review is yours unless you switch it on above, one review at a time.<br>'
+    +'Editing one keeps it anonymous, and an edit made later is marked as edited. Deleting your account leaves your reviews up, permanently unlinked from you — delete any you don’t want kept before you close the account.</p></div>';
+}
+/* Repaints whichever of the two surfaces is on screen. Called after an edit or a delete, so the
+   list a student is looking at can never disagree with what just happened to the row. */
+function myrRefresh(){
+  try{
+    var h=document.getElementById('myReviewsBack');
+    if(h&&h.style.display!=='none'&&h.innerHTML)renderMyReviews();
+  }catch(e){}
+  try{
+    var sec=document.getElementById('setReviewsSec'), c=document.getElementById('setReviews');
+    if(sec&&c&&sec.style.display!=='none')c.innerHTML=myrBodyHtml();
+  }catch(e){}
+}
+window.myrRefresh=myrRefresh;
+/* ---- The Settings card ---------------------------------------------------------------------
+   Tate, 2026-09-18: "i want to be able to see in settings the reviews and ratings ive written
+   and be able to taken them down or edit them." Before this the list existed but was reachable
+   from the ⌘K palette (desktop only) and from inside the delete-account dialog — the one place
+   you meet your own reviews at the worst possible moment. */
+async function renderMyReviewsCard(){
+  var sec=document.getElementById('setReviewsSec'), host=document.getElementById('setReviews');
+  if(!sec||!host)return;
+  var on=(typeof backendReady==='function'&&backendReady()&&typeof sbUser!=='undefined'&&!!sbUser);
+  sec.style.display=on?'':'none';
+  if(!on){ host.innerHTML=''; return; }
+  host.innerHTML='<div class="myr-empty">Loading…</div>';
+  try{ await loadMyReviews(); }catch(e){}
+  /* Settings may have been left while the rows were in flight. */
+  var still=document.getElementById('setReviews');
+  if(still)still.innerHTML=myrBodyHtml();
+}
+window.renderMyReviewsCard=renderMyReviewsCard;
+/* ---- Edit one of your own reviews ----------------------------------------------------------
+   The rate form is the editor. It already knows how to render every field a review has, it
+   already word-filters, and a second form would be a second place for the two to drift apart.
+   What changes is only where the answers go: submitRate() updates the row instead of inserting
+   one. See sql/professify-review-edit.sql for what the database will and will not allow. */
+window.myrEdit=function(btn){
+  var id=btn&&btn.getAttribute('data-id'); if(!id)return;
+  var row=null;
+  try{ (window.MY_REVIEWS||[]).forEach(function(x){ if(String(x.id)===String(id))row=x; }); }catch(e){}
+  if(!row)return;
+  var pid=myRevProfId(row);
+  if(!pid){
+    try{ frToast('That professor isn’t in this term’s index, so the form can’t be opened. You can still delete the review.',6000); }catch(e){}
+    return;
+  }
+  var d=(typeof rfBlankDraft==='function')?rfBlankDraft(row.course||''):{course:'',term:'',score:0,difficulty:0,teach:0,hours:'',format:'',grade:'',again:null,chips:new Set(),badChips:new Set(),text:''};
+  d.course=row.course||'';
+  d.term=String(row.term||'').trim(); d._termTouched=!!d.term;
+  d.score=Number(row.score)||0;
+  d.difficulty=(row.difficulty!=null&&row.difficulty!=='')?Number(row.difficulty):0;
+  d.teach=(row.teach_ability!=null&&row.teach_ability!=='')?Number(row.teach_ability):0;
+  d.hours=row.hours||''; d.format=row.format||''; d.grade=row.grade||'';
+  d.again=(row.would_again===null||row.would_again===undefined)?null:!!row.would_again;
+  d.text=row.note||'';
+  /* Only the "did well" chips are stored on the row (pfReviewRow sends `tags` and nothing else),
+     so those are the only ones that can be put back. Inventing which struggle chips a student
+     had picked is not an option. */
+  try{ (Array.isArray(row.tags)?row.tags:[]).forEach(function(t){ d.chips.add(t); }); }catch(e){}
+  window.RATE_EDIT={id:row.id,professor_key:row.professor_key,created_at:row.created_at,
+    /* whether this review has EVER carried an answer — see rfMissing() */
+    hadNullAgain:(row.would_again===null||row.would_again===undefined)};
+  window._rfEditDraft=d;
+  try{ closeMyReviews(); }catch(e){}
+  try{ startRate(pid,row.course||''); }
+  catch(e){ window.RATE_EDIT=null; window._rfEditDraft=null;
+    try{ frToast('Couldn’t open that review for editing.',5000); }catch(e2){} }
+};
+/* Saving an edit. Mirrors submitRate()'s insert down to the missing-`grade`-column retry, and
+   differs in the two ways that matter: it UPDATES one row by id, and it re-reads the list from
+   the server afterwards rather than patching a local copy — because whether this counts as an
+   "edit" (and so whether the marker appears) is the database's call, not the client's. */
+async function rfSaveEdit(ed,id,p,v){
+  var btn=document.getElementById('rfSubmit');
+  sbBusy=true; if(btn){btn.disabled=true;btn.textContent='Saving…';}
+  var patch={course:v.course||null,course_key:v.courseKey||null,term:v.term||'',score:v.score,
+    difficulty:v.difficulty||null,teach_ability:v.teach||null,hours:v.hours||null,
+    format:v.format||null,grade:v.grade||null,would_again:v.again===true,
+    tags:v.tags||[],note:(v.text||'').trim()||null};
+  /* professor_key and professor_name are deliberately absent: the database refuses to move a
+     review to a different professor, and this update has no business naming columns it is not
+     changing. */
+  var r;
+  try{ r=await sb.from('reviews').update(patch).eq('id',ed.id); }
+  catch(e){ r={error:{message:(e&&e.message)||'network error'}}; }
+  if(r&&r.error&&/grade|column|schema/i.test(r.error.message||'')){
+    var p2=Object.assign({},patch); delete p2.grade;
+    try{ r=await sb.from('reviews').update(p2).eq('id',ed.id); }catch(e2){}
+  }
+  sbBusy=false;
+  if(r&&r.error){
+    if(btn){btn.disabled=false;btn.textContent='Save changes';}
+    var m=(r.error.message||''), code=String(r.error.code||'');
+    if(/duplicate|unique/i.test(m)||code==='23505'){
+      rfErr('You already have a review for that class. Delete one of them, or point this one at the class you actually took.');
+    }else if(/row-level security|violates row-level/i.test(m)||code==='42501'){
+      rfErr('That edit was refused. Nothing you wrote has been lost — if you’ve just signed in on another device, sign back in here and try again.');
+    }else{
+      rfErr((typeof dbFriendlyErr==='function')?dbFriendlyErr(r.error,'save'):'That edit didn’t save. Nothing you wrote has been lost.');
+    }
+    return;
+  }
+  window.RATE_EDIT=null; window._rfEditDraft=null;
+  /* Only if the one draft slot is holding THIS professor's. RATE_DRAFT_KEY is a single global
+     slot, so an unconditional clear here threw away an unfinished review of somebody else that
+     the student had never submitted — an edit is a small, frequent act and must not take
+     anything else with it. rfReadDraft returns null when the stored draft belongs elsewhere. */
+  try{ if(typeof rfReadDraft!=='function'||rfReadDraft(id))rfClearDraft(); }catch(e){}
+  /* The server's copy, including whether it stamped edited_at. */
+  try{ await loadMyReviews(); }catch(e){}
+  try{
+    var fresh=null; (window.MY_REVIEWS||[]).forEach(function(x){ if(String(x.id)===String(ed.id))fresh=x; });
+    var key=ed.professor_key||(p&&typeof profKey==='function'?profKey(p):'');
+    if(fresh&&key&&window.dbReviews&&dbReviews[key]){
+      dbReviews[key]=dbReviews[key].map(function(x){
+        if(String(x.id||'')!==String(ed.id))return x;
+        return Object.assign({},x,{course:fresh.course||'',term:String(fresh.term||'').trim(),
+          score:fresh.score,difficulty:fresh.difficulty,teach:fresh.teach_ability,
+          hours:fresh.hours||'',format:fresh.format||'',grade:(fresh.grade||'').trim(),
+          again:fresh.would_again,text:fresh.note||'',
+          tags:Array.isArray(fresh.tags)?fresh.tags:[],edited_at:fresh.edited_at||null});
+      });
+    }
+  }catch(e){}
+  try{ myrRefresh(); }catch(e){}
+  try{ if(typeof rateExit==='function')rateExit(); else closeModal(); }catch(e){}
+  try{ frToast('Review updated. The professor’s average has been recalculated.',5000); }catch(e){}
+  try{ if(typeof renderHome==='function')renderHome(); }catch(e){}
+}
+try{ window.rfSaveEdit=rfSaveEdit; }catch(e){}
 /* ---- Delete one of your own reviews ----
    Two taps rather than a browser confirm(): a native dialog blocks the page and, on iOS
    Safari inside a modal, can be dismissed by the same tap that opened it. First tap arms,
@@ -14760,7 +15110,11 @@ window.myrDelete=async function(btn){
   }catch(e){}
   try{ if(typeof reviewsGiven==='number'&&reviewsGiven>0)reviewsGiven--; }catch(e){}
 
-  try{ renderMyReviews(); }catch(e){}
+  /* myrRefresh, not renderMyReviews — 2026-09-18. renderMyReviews only ever paints the sheet, so
+     deleting from the new Settings card removed the row from the server and from MY_REVIEWS and
+     left it on screen with its button stuck on "Deleting…", under a toast saying it was gone.
+     Caught by the second-model review, by pressing the button rather than by reading the code. */
+  try{ myrRefresh(); }catch(e){}
   try{ frToast('Review deleted. The professor’s average has been recalculated.',5000); }catch(e){}
   try{ if(typeof renderHome==='function')renderHome(); }catch(e){}
 };
@@ -15553,6 +15907,9 @@ function watchBtn(id){const on=isWatched(id);return `<button class="wl-btn ${on?
 function toggleWatch(id,ev){if(ev){ev.stopPropagation();}const i=watchlist.indexOf(id);
   if(i>=0){watchlist.splice(i,1);if(/^sp:/.test(id)&&watchSpMeta[id]){delete watchSpMeta[id];saveWatchSp();}}
   else{watchlist.push(id);if(typeof watchLandOn==='function')watchLandOn('profs');}
+  /* Watching is the intent signal seat alerts are built on: it says a student cares enough to be
+     told. Which professor is the id — it stays here, so only the direction is recorded. */
+  try{ track('watch_toggle', null, (typeof _evSurface!=='undefined'?_evSurface:null), {kind:'prof', on:(i<0)}); }catch(e){}
   saveWatch();updateWatchUI();}
 function clearWatch(){watchlist=[];watchSpMeta={};saveWatchSp();saveWatch();updateWatchUI();}
 /* ONE count, ONE formula. There used to be three answers to "how many things are on my
@@ -16109,7 +16466,9 @@ function watchLandOn(pane){
   try{ if(typeof watchTab!=='undefined'&&watchTab!==pane){ watchTab=pane;
     try{localStorage.setItem('professify_watch_tab',pane);}catch(e){} } }catch(e){}
 }
-function toggleWatchClass(code,ev){if(ev){ev.stopPropagation();}const i=watchClasses.indexOf(code);if(i>=0)watchClasses.splice(i,1);else{watchClasses.push(code);watchLandOn('classes');}saveWatchClasses();if(typeof updateSavedCount==='function')updateSavedCount();updateWatchUI();}
+function toggleWatchClass(code,ev){if(ev){ev.stopPropagation();}const i=watchClasses.indexOf(code);if(i>=0)watchClasses.splice(i,1);else{watchClasses.push(code);watchLandOn('classes');}
+  try{ track('watch_toggle', null, (typeof _evSurface!=='undefined'?_evSurface:null), {kind:'class', on:(i<0)}); }catch(e){}
+  saveWatchClasses();if(typeof updateSavedCount==='function')updateSavedCount();updateWatchUI();}
 function clearWatchClasses(){watchClasses=[];saveWatchClasses();if(typeof updateSavedCount==='function')updateSavedCount();updateWatchUI();}
 /* Default the Watchlist to the pane that has content — students arrive here straight after
    hitting Watch on a class, and landing on an empty Professors tab read as "it didn't save". */
@@ -17885,6 +18244,9 @@ function renderSettingsPage(){
   }
   setThemeButtons();
   renderAccountSection();
+  /* Not awaited: the rest of Settings must not wait on a network round trip, and the card
+     paints its own "Loading…" until the rows land. */
+  try{ renderMyReviewsCard(); }catch(e){}
   try{ renderBlockedList(); }catch(e){}
   try{
     var mt=document.getElementById('setModTools');
@@ -26834,8 +27196,10 @@ function inviteCopy(link){
        some other way rather than telling them to grab something they cannot see. */
     if(navigator.clipboard&&navigator.clipboard.writeText){
       navigator.clipboard.writeText(link).then(
-        function(){ if(typeof frToast==='function')frToast('Invite link copied — paste it to a friend.'); },
-        function(){ inviteLinkFallback(link); });
+        function(){ if(typeof frToast==='function')frToast('Invite link copied — paste it to a friend.');
+                    /* Growth is invites out versus sign-ups in, and only one half was countable. */
+                    try{ track('invite_copy', null, 'friends', {result:'copied'}); }catch(e){} },
+        function(){ try{ track('invite_copy', null, 'friends', {result:'fallback'}); }catch(e){} inviteLinkFallback(link); });
     }
     else inviteLinkFallback(link);
   }catch(e){ try{ inviteLinkFallback(link); }catch(_e){} }
@@ -32391,6 +32755,14 @@ window.handleTranscriptImport=async function(files){
   /* The report's text is not kept. It carried the student's EMPLID on every page and a grade on
      every row; what survives this function is a list of course codes and terms. */
   allText='';
+  /* THE IMPORT IS THE OCT 19 FLOW, and its failures are invisible from outside: a scanned PDF
+     with no text layer reads as "nothing happened" to the student and to us. The count of rows
+     and which reader produced them, never a course code and never a name. */
+  try{ track('import_result', null, 'past', {
+        kind:(dpr&&dpr.ok)?'degree-report':(allPdf?'pdf-text':'ocr'),
+        rows:tiRows.length,
+        reason:(!tiRows.length&&pdfEmpty)?'scanned-no-text':(tiRows.length?'ok':'nothing-found')
+      }); }catch(e){}
   tiRender('done',tiRows.length
     ? ('Found '+tiRows.length+' class'+(tiRows.length===1?'':'es')+'. '+note)
     : (pdfEmpty?'That PDF has no text in it — it looks scanned. Screenshot it instead and upload that.':''));
@@ -32403,6 +32775,8 @@ window.pasteTranscriptImport=function(){
   var txt=(ta&&ta.value||'').trim();
   if(!txt){ tiRender('paste','Paste your transcript text first — select it in your Degree Progress Report and copy.'); return; }
   tiRows=tiParse(txt);
+  try{ track('import_result', null, 'past', {kind:'paste', rows:tiRows.length,
+        reason:tiRows.length?'ok':'nothing-found'}); }catch(e){}
   tiRender('done',tiRows.length?('Found '+tiRows.length+' class'+(tiRows.length===1?'':'es')+' in what you pasted.'):'');
 };
 /* Parse transcript text: track term headers ("Fall Semester 2026" / "2023 Fall Quarter"),
