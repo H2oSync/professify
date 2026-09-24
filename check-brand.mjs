@@ -20,9 +20,12 @@
 
    Run against a mutated copy with PAGE=file:///abs/path.html node check-brand.mjs */
 import {chromium} from 'playwright';
-import {readFileSync} from 'fs';
+import {readFileSync,existsSync} from 'fs';
 const R=[]; const ok=(c,n,d='')=>R.push({n,c:!!c,d});
-const F=process.env.PAGE||'file:///mnt/user-data/outputs/index.html';
+/* Cowork's outputs folder when it exists, otherwise this checkout (Claude Code, a laptop). */
+const HERE=new URL('.',import.meta.url).pathname;
+const F=process.env.PAGE||(existsSync('/mnt/user-data/outputs/index.html')
+  ?'file:///mnt/user-data/outputs/index.html':'file://'+HERE+'index.html');
 const SRC=F.replace('file://','');
 const NAME='TermChamp';
 
@@ -110,7 +113,8 @@ await b.close();
 
 /* ---- 3. the manifest agrees with the app ------------------------------------------------------ */
 try{
-  const m=JSON.parse(readFileSync('/home/claude/repo/manifest.webmanifest','utf8'));
+  const m=JSON.parse(readFileSync(existsSync('/home/claude/repo/manifest.webmanifest')
+    ?'/home/claude/repo/manifest.webmanifest':HERE+'manifest.webmanifest','utf8'));
   ok(m.name===NAME && m.short_name===NAME,'the manifest carries the new name',JSON.stringify([m.name,m.short_name]));
   ok(Array.isArray(m.icons) && m.icons.some(i=>i.purpose==='maskable'),
      'and still ships a maskable icon — Android crops to the inner 80% and the cap sits near the edge');

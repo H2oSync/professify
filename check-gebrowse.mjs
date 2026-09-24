@@ -9,13 +9,16 @@
    checking that the screen counts what it knows and stops there. */
 import {chromium} from 'playwright';
 import fs from 'fs';
-const SRC=fs.readFileSync('/mnt/user-data/outputs/index.html','utf8');
+/* Cowork's outputs folder when it exists, otherwise this checkout (Claude Code, a laptop). */
+const DEF=fs.existsSync('/mnt/user-data/outputs/index.html')
+  ?'/mnt/user-data/outputs/index.html':new URL('.',import.meta.url).pathname+'index.html';
+const SRC=fs.readFileSync(DEF,'utf8');
 const R=[]; const ok=(n,c,d='')=>R.push({n,c:!!c,d});
 const b=await chromium.launch();
 const errs=[];
 const p=await b.newPage({viewport:{width:1400,height:1100}});
 p.on('pageerror',e=>errs.push(e.message));
-await p.goto(process.env.PAGE||'file:///mnt/user-data/outputs/index.html');   /* PAGE= points a mutation run at a broken copy */
+await p.goto(process.env.PAGE||'file://'+DEF);   /* PAGE= points a mutation run at a broken copy */
 await p.waitForFunction(()=>!!window.PROFESSIFY_BUILD,{timeout:20000});
 await p.waitForTimeout(1900);
 
