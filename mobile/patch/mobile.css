@@ -1,0 +1,137 @@
+<style id="mobile-pass1">
+/* ================================================================================================
+   PHONE, PASS 1 — 2026-09-24 (Tate: "lets work on getting the stale images that I have in design
+   and make into a mobile app and bring it to life")
+   Source: ~/Downloads/Professify mobile design scope/Professify Phone.html (26 screens, 09-12).
+   Everything here is inside max-width:640px. Desktop is untouched.
+
+   What is NOT ported, on purpose, because a later decision overrode the 09-12 mock:
+     · seat counts on Explore rows ("16/40") — removed 09-12/09-16: a course-wide total reads
+       "full" while one section is open;
+     · "free now / until 3:30p" under friends' faces — Free Now was removed 09-05, presence is
+       off until it has its own design;
+     · shared-class blocks in a second colour on friends' weeks — the colour axis is enrolled vs
+       waitlisted since 08-30, and who is in a class is carried by the faces.
+   ================================================================================================ */
+
+/* ---- The status bar and the home indicator ---------------------------------------------------
+   The page asks iOS for black-translucent, which draws the installed app UNDER the status bar,
+   but the viewport never said viewport-fit=cover, so every env(safe-area-inset-*) in this file
+   resolved to 0 and nothing could make room for it. The meta tag now says cover; these are the
+   two edges that use it. The tab bar already pads by env(safe-area-inset-bottom) — it just had
+   nothing to read until now. */
+header.nav{padding-top:env(safe-area-inset-top)}
+
+/* Everything else that sits against the top of the screen (review, 2026-09-24: the header was the
+   only thing that read the safe area, so every sheet, dialog and the backend-down banner would
+   have slid under the status bar in the installed app). max() keeps each one's own padding
+   wherever there is no inset — every browser that is not a notched phone gets exactly what it
+   had. Values are each backdrop's existing padding, read from its own rule. */
+.auth-back{padding-top:max(24px,calc(env(safe-area-inset-top) + 10px));padding-bottom:max(24px,calc(env(safe-area-inset-bottom) + 10px))}
+.set-back{padding-top:max(56px,calc(env(safe-area-inset-top) + 10px))}
+.ob-back{padding-top:max(24px,calc(env(safe-area-inset-top) + 10px))}
+.pq-back{padding-top:max(16px,calc(env(safe-area-inset-top) + 10px));padding-bottom:max(16px,calc(env(safe-area-inset-bottom) + 10px))}
+.sl-back{padding-top:max(20px,calc(env(safe-area-inset-top) + 10px));padding-bottom:max(20px,calc(env(safe-area-inset-bottom) + 10px))}
+.sc-back{padding-top:max(22px,calc(env(safe-area-inset-top) + 10px));padding-bottom:max(22px,calc(env(safe-area-inset-bottom) + 10px))}
+.fp-back,.fp-cmpback{padding-top:max(30px,calc(env(safe-area-inset-top) + 10px))}
+/* The two centred dialogs are capped to the screen minus their backdrop's padding. The padding now
+   grows with the inset, so the cap has to shrink by the same amount — otherwise a card taller than
+   the space left over is centred by overflowing BOTH ways, and its top slides back under the status
+   bar (caught by the keyboard-up sign-in test: top 47 under a 59px bar). */
+.auth-panel{max-height:calc(100dvh - max(24px,calc(env(safe-area-inset-top) + 10px)) - max(24px,calc(env(safe-area-inset-bottom) + 10px)))}
+.pq-dlg{max-height:calc(100dvh - max(16px,calc(env(safe-area-inset-top) + 10px)) - max(16px,calc(env(safe-area-inset-bottom) + 10px)))}
+/* "We can't reach the server" is built in JS with an inline top:12px; the id wins with !important. */
+#sbDeadBanner{top:calc(12px + env(safe-area-inset-top))!important}
+@media(max-width:560px){ .notif-panel{top:calc(64px + env(safe-area-inset-top))} }
+
+/* ---- Explore, every width: blue for classes, purple for professors (Tate, 09-24) -------------
+   The switch's tile takes the colour of the side it is on; in Professors mode the heading's eyebrow
+   and a watched professor's mark follow it. Nowhere else in the app changes colour — the accent
+   question for the rest of the app is still open (brief §9). */
+:root{--course:#3A7DB8;--prof:#7458D6;--prof-ink:#B7A4F5}
+:root[data-theme="light"],:root[data-theme="cream"]{--course:#2A6FA5;--prof:#5B3FA6;--prof-ink:#5B3FA6}
+.ex-seg-thumb{background:var(--course)}
+.ex-seg-v:has(#ex-profs.active) .ex-seg-thumb{background:var(--prof)}
+.ex-seg-v button.active{color:#fff}
+#exOut .pcard .wl-btn.on{color:var(--prof-ink)}
+/* The long heading is a phone thing; desktop keeps its one-line label. */
+.ex-head .ex-eb,.ex-head .ex-ht,.ex-head .ex-hs{display:none}
+
+@media(max-width:640px){
+
+  /* ---- Explore's top row, per the 09-23 map ----------------------------------------------------
+     Search with its chips underneath on the left; the Classes | Professors switch as a tall tile on
+     the right. This is the 09-15 desktop row, sized for a thumb — pass 1 had restacked it from the
+     older 09-12 mock, and the newer map reverses that. The question line stays in the heading rotor
+     but off screen (review, 09-24). */
+  .ex-q{position:absolute!important;width:1px;height:1px;margin:0;padding:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
+  .ex-top{flex-direction:row;align-items:stretch;gap:10px;margin:12px 0 10px}
+  .ex-top-l{gap:8px}
+  .ex-top .ex-spot{height:46px;padding:0 14px}
+  .ex-top .ex-spot input{font-size:16px}              /* 16px or iOS zooms the page on focus */
+  .ex-seg-v{width:122px;padding:4px}
+  .ex-seg-v button{font-size:14.5px;min-height:42px}
+  /* The chips scroll sideways rather than wrap, and are tap-sized. A scrolling row owns its own
+     horizontal gesture — the swipe engine's inScroller() gives way to it. */
+  .ex-top-l .ex-gesw{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .ex-top-l .ex-gesw::-webkit-scrollbar{display:none}
+  .ex-top-l .ex-gesw button{height:42px;padding:0 14px;border-radius:12px;flex:none;white-space:nowrap;font-size:13.5px}
+
+  /* ---- The heading: eyebrow, title, why ------------------------------------------------------- */
+  .ex-head{display:flex;flex-direction:column;gap:2px;margin:8px 2px 12px;text-transform:none;letter-spacing:0}
+  .ex-head .ex-hl{display:none}
+  .ex-head .ex-eb{display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:650;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--blue-ink)}
+  .ex-head .ex-eb::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+  .ex-head-p .ex-eb{color:var(--prof-ink)}
+  .ex-head .ex-ht{display:block;font-size:18px;font-weight:650;color:var(--text);letter-spacing:-.01em;line-height:1.3}
+  .ex-head .ex-hs{display:block;font-size:13.5px;color:var(--muted);line-height:1.35}
+  .ex-saved-empty{color:var(--muted);font-size:14.5px;line-height:1.5;padding:18px 4px}
+
+  /* ---- Explore rows: one glance each ----------------------------------------------------------
+     The teaser card stacked its save button on a line of its own (the generic phone rule sends
+     .cls-top to a column), so every class cost ~200px and three filled the screen. The bookmark
+     goes back beside the title, the title truncates instead of wrapping, and the friend line
+     loses its pill. Nothing is removed — units, sections, friends and save are all still here. */
+  .cls-teaser{padding:13px 15px}
+  .cls-teaser .cls-top{flex-direction:row;align-items:flex-start;gap:12px}
+  .cls-teaser .cls-left{flex:1;min-width:0}
+  .cls-teaser .ct{flex-wrap:nowrap;min-width:0}
+  /* A title gets two lines before it is cut — "Principles of M…" told a student nothing. */
+  .cls-teaser .ct{align-items:flex-start}
+  .cls-teaser .ct .nm{min-width:0;flex:1;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+    line-height:1.3;padding-top:3px;font-weight:600}
+  .cls-teaser .ct .code{flex:none}
+  .cls-teaser .ttag{flex:none;text-transform:none;letter-spacing:0;font-size:12px;padding:2px 8px;margin-top:3px}
+  /* Professors: a round face, the name in ink rather than link colour. */
+  #exOut .pcard .ini{border-radius:50%}
+  #exOut .pcard h3{color:var(--text)}
+  .cls-teaser .cx-facts{margin-top:5px}
+  .cls-teaser .cx-desc{margin:7px 0 0;font-size:14.5px;color:var(--text-2,var(--muted));line-height:1.4;
+    overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .cls-teaser .cls-prof{flex:none}
+  /* The mark, not a box around it: the map draws a bare bookmark. Still a 42px target. */
+  .cls-teaser .save-ico{width:42px;height:42px;margin:-8px -10px -8px 0;border-color:transparent;background:transparent}
+  .cls-teaser .save-ico.on{color:var(--course);border-color:transparent;background:transparent}
+  .cls-teaser .save-ico svg{width:20px;height:20px}
+  #exOut .pcard .wl-btn{border-color:transparent;background:transparent;width:42px;height:42px;padding:0;justify-content:center;top:6px;right:4px}
+  .cls-teaser .cx-foot{margin-top:9px;padding-top:9px}
+  .cls-teaser .cx-fr{background:none;border:0;padding:0;min-height:0}
+  .cls-list{gap:8px}
+
+  /* ---- Schedule: the sub-tab row is a row you can swipe ---------------------------------------
+     The panes move with the finger (the engine adds .swp); these are the same curves the view
+     transition uses, so a sub-tab turn and a tab change feel like one system. */
+  /* A bottom sheet ends above the home indicator, not under it. */
+  .mback .modal{padding-bottom:env(safe-area-inset-bottom)}
+
+  .swp.sw-drag{transition:none!important;animation:none!important;will-change:transform}
+  .swp.sw-out{transition:transform .19s cubic-bezier(.32,.72,0,1),opacity .19s linear;animation:none!important}
+  .swp.sw-in{animation:none!important}
+  .swp.sw-in.from-right{animation:swInL .22s cubic-bezier(.32,.72,0,1) both!important}
+  .swp.sw-in.from-left {animation:swInR .22s cubic-bezier(.32,.72,0,1) both!important}
+}
+@media(max-width:640px) and (prefers-reduced-motion:reduce){
+  .swp.sw-out,.swp.sw-in.from-right,.swp.sw-in.from-left{transition:none!important;animation:none!important}
+}
+</style>

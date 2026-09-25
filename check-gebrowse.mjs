@@ -75,9 +75,11 @@ const door=await p.evaluate(()=>{
 });
 ok('exploreAsksOneQuestionWithTwoAnswers', door.btns.join('|')==='Classes|Professors', door.btns.join('|'));
 ok('geIsNoLongerAThirdSegment', door.noThirdSegment);
+/* 2026-09-24: the chip row follows the 09-23 feature map — GEs · My major (All classes with no
+   major on file) · Saved. The doctrine is unchanged: GEs is a filter UNDER Classes, one lit at a time. */
 ok('itIsAFilterUnderClasses',
-   door.onClasses.join('|')==='All classes*|GEs' && door.onGe.join('|')==='All classes|GEs*',
-   {onClasses:door.onClasses,onGe:door.onGe});
+   door.onClasses.join('|')==='GEs|All classes*|Saved' && door.onGe.join('|')==='GEs*|All classes|Saved',
+   JSON.stringify({onClasses:door.onClasses,onGe:door.onGe}));
 ok('andClassesStaysLitWhileBrowsingGes', door.classesStaysLit && door.profsOff,
    'a GE is a kind of class — the segment above should still say so');
 ok('andTheSearchBoxSaysWhatItSearchesNow', /GE/i.test(door.placeholder), door.placeholder);
