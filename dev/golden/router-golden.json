@@ -1,0 +1,631 @@
+{
+ "catalog": {
+  "subjects": [
+   "BUS",
+   "CSC",
+   "STAT",
+   "ME",
+   "COMM"
+  ],
+  "courses": {
+   "BUS 4442": "x",
+   "CSC 1001": "y",
+   "STAT 2170": "z",
+   "COMM 2204": "q"
+  },
+  "professors": [
+   "Beth Chance",
+   "Kurt Voelker",
+   "Ajay Kathuria"
+  ],
+  "geAreas": [],
+  "friends": [
+   {
+    "id": "1",
+    "name": "Maya Ortiz"
+   },
+   {
+    "id": "2",
+    "name": "Garrett Haller"
+   }
+  ]
+ },
+ "cases": [
+  {
+   "q": "settings",
+   "tool": "go_to",
+   "args": {
+    "where": "settings"
+   }
+  },
+  {
+   "q": "take me to settings",
+   "tool": "go_to",
+   "args": {
+    "where": "settings"
+   }
+  },
+  {
+   "q": "where do i change my password",
+   "tool": "go_to",
+   "args": {
+    "where": "account"
+   }
+  },
+  {
+   "q": "how do i change my profile picture",
+   "tool": "go_to",
+   "args": {
+    "where": "edit profile"
+   }
+  },
+  {
+   "q": "open my watchlist",
+   "tool": "go_to",
+   "args": {
+    "where": "watchlist"
+   }
+  },
+  {
+   "q": "take me to my watchlist",
+   "tool": "go_to",
+   "args": {
+    "where": "watchlist"
+   }
+  },
+  {
+   "q": "my qr code",
+   "tool": "go_to",
+   "args": {
+    "where": "my qr code"
+   }
+  },
+  {
+   "q": "how do i invite friends",
+   "tool": "go_to",
+   "args": {
+    "where": "invite link"
+   }
+  },
+  {
+   "q": "how do i import my schedule",
+   "tool": "go_to",
+   "args": {
+    "where": "import schedule"
+   }
+  },
+  {
+   "q": "where are my past classes",
+   "tool": "go_to",
+   "args": {
+    "where": "past classes"
+   }
+  },
+  {
+   "q": "open the planner",
+   "tool": "go_to",
+   "args": {
+    "where": "planner"
+   }
+  },
+  {
+   "q": "privacy policy",
+   "tool": "go_to",
+   "args": {
+    "where": "privacy policy"
+   }
+  },
+  {
+   "q": "terms of service",
+   "tool": "go_to",
+   "args": {
+    "where": "terms"
+   }
+  },
+  {
+   "q": "notifications",
+   "tool": "go_to",
+   "args": {
+    "where": "notifications"
+   }
+  },
+  {
+   "q": "my reviews",
+   "tool": "go_to",
+   "args": {
+    "where": "my reviews"
+   }
+  },
+  {
+   "q": "edit my review",
+   "tool": "go_to",
+   "args": {
+    "where": "my reviews"
+   }
+  },
+  {
+   "q": "go home",
+   "tool": "go_to",
+   "args": {
+    "where": "home"
+   }
+  },
+  {
+   "q": "log out",
+   "tool": "go_to",
+   "args": {
+    "where": "account"
+   }
+  },
+  {
+   "q": "dark mode",
+   "tool": "set_theme",
+   "args": {
+    "theme": "dark"
+   }
+  },
+  {
+   "q": "switch to light",
+   "tool": "set_theme",
+   "args": {
+    "theme": "light"
+   }
+  },
+  {
+   "q": "help",
+   "tool": "help",
+   "args": {}
+  },
+  {
+   "q": "what can you do",
+   "tool": "help",
+   "args": {}
+  },
+  {
+   "q": "watch bus 4442",
+   "tool": "watch",
+   "args": {
+    "kind": "class",
+    "course": "BUS 4442"
+   }
+  },
+  {
+   "q": "alert me when a seat opens in bus 4442",
+   "tool": "watch",
+   "args": {
+    "kind": "class",
+    "course": "BUS 4442"
+   }
+  },
+  {
+   "q": "watch bus 4442-02",
+   "tool": "watch",
+   "args": {
+    "kind": "section",
+    "course": "BUS 4442",
+    "section": "2"
+   }
+  },
+  {
+   "q": "stop watching csc 1001",
+   "tool": "watch",
+   "args": {
+    "kind": "class",
+    "course": "CSC 1001",
+    "off": true
+   }
+  },
+  {
+   "q": "watch beth chance",
+   "tool": "watch",
+   "args": {
+    "kind": "professor",
+    "name": "Beth Chance"
+   }
+  },
+  {
+   "q": "add bus 4442 to my watchlist",
+   "tool": "watch",
+   "args": {
+    "kind": "class",
+    "course": "BUS 4442"
+   }
+  },
+  {
+   "q": "put beth chance on my watchlist",
+   "tool": "watch",
+   "args": {
+    "kind": "professor",
+    "name": "Beth Chance"
+   }
+  },
+  {
+   "q": "rate beth chance",
+   "tool": "rate_professor",
+   "args": {
+    "name": "Beth Chance"
+   }
+  },
+  {
+   "q": "rate beth chance for stat 2170",
+   "tool": "rate_professor",
+   "args": {
+    "name": "Beth Chance",
+    "course": "STAT 2170"
+   }
+  },
+  {
+   "q": "i want to rate my stat 2170 professor",
+   "tool": "rate_professor",
+   "args": {
+    "course": "STAT 2170"
+   }
+  },
+  {
+   "q": "rate a professor",
+   "tool": "go_to",
+   "args": {
+    "where": "rate"
+   }
+  },
+  {
+   "q": "leave a review",
+   "tool": "go_to",
+   "args": {
+    "where": "rate"
+   }
+  },
+  {
+   "q": "message maya about bus 4442",
+   "tool": "draft_message",
+   "args": {
+    "friend": "Maya Ortiz",
+    "course": "BUS 4442"
+   }
+  },
+  {
+   "q": "ask maya about beth chance",
+   "tool": "draft_message",
+   "args": {
+    "friend": "Maya Ortiz",
+    "name": "Beth Chance"
+   }
+  },
+  {
+   "q": "text garrett",
+   "tool": "draft_message",
+   "args": {
+    "friend": "Garrett Haller"
+   }
+  },
+  {
+   "q": "send bus 4442 to maya",
+   "tool": "share",
+   "args": {
+    "course": "BUS 4442",
+    "friend": "Maya Ortiz"
+   }
+  },
+  {
+   "q": "share beth chance with garrett",
+   "tool": "share",
+   "args": {
+    "name": "Beth Chance",
+    "friend": "Garrett Haller"
+   }
+  },
+  {
+   "q": "share my schedule",
+   "tool": "go_to",
+   "args": {
+    "where": "share my schedule"
+   }
+  },
+  {
+   "q": "add john smith as a friend",
+   "tool": "add_friend",
+   "args": {
+    "person": "john smith"
+   }
+  },
+  {
+   "q": "add a friend",
+   "tool": "go_to",
+   "args": {
+    "where": "add friend"
+   }
+  },
+  {
+   "q": "mayas schedule",
+   "tool": "friend_profile",
+   "args": {
+    "friend": "Maya Ortiz",
+    "tab": "classes"
+   }
+  },
+  {
+   "q": "what has garrett taken",
+   "tool": "friend_profile",
+   "args": {
+    "friend": "Garrett Haller",
+    "tab": "took"
+   }
+  },
+  {
+   "q": "what is maya taking",
+   "tool": "friend_profile",
+   "args": {
+    "friend": "Maya Ortiz",
+    "tab": "classes"
+   }
+  },
+  {
+   "q": "compare beth chance and kurt voelker",
+   "tool": "compare_professors",
+   "args": {
+    "a": "Beth Chance",
+    "b": "Kurt Voelker"
+   }
+  },
+  {
+   "q": "compare professors",
+   "tool": "go_to",
+   "args": {
+    "where": "compare professors"
+   }
+  },
+  {
+   "q": "would people take beth chance again",
+   "tool": "professor_stats",
+   "args": {
+    "name": "Beth Chance"
+   }
+  },
+  {
+   "q": "how hard is kurt voelker",
+   "tool": "professor_stats",
+   "args": {
+    "name": "Kurt Voelker"
+   }
+  },
+  {
+   "q": "add bus 4442",
+   "tool": "add_section",
+   "args": {
+    "course": "BUS 4442"
+   }
+  },
+  {
+   "q": "enroll me in bus 4442 section 2",
+   "tool": "add_section",
+   "args": {
+    "course": "BUS 4442",
+    "section": "2"
+   }
+  },
+  {
+   "q": "bus 4442 section 2",
+   "tool": "open_section",
+   "args": {
+    "course": "BUS 4442",
+    "section": "2"
+   }
+  },
+  {
+   "q": "bus 4442-02",
+   "tool": "open_section",
+   "args": {
+    "course": "BUS 4442",
+    "section": "2"
+   }
+  },
+  {
+   "q": "bus 4442",
+   "tool": "open_class",
+   "args": {
+    "course": "BUS 4442"
+   }
+  },
+  {
+   "q": "beth chance",
+   "tool": "open_professor",
+   "args": {
+    "name": "Beth Chance"
+   }
+  },
+  {
+   "q": "my classes on tuesday",
+   "tool": "my_day",
+   "args": {
+    "days": [
+     "Tu"
+    ]
+   }
+  },
+  {
+   "q": "when am i free on tuesday",
+   "tool": "my_free",
+   "args": {
+    "days": [
+     "Tu"
+    ]
+   }
+  },
+  {
+   "q": "do i have any conflicts",
+   "tool": "my_conflicts",
+   "args": {}
+  },
+  {
+   "q": "how many units am i taking",
+   "tool": "my_units",
+   "args": {}
+  },
+  {
+   "q": "what do i still need",
+   "tool": "my_requirements",
+   "args": {}
+  },
+  {
+   "q": "can i take stat 2170",
+   "tool": "prereqs",
+   "args": {
+    "course": "STAT 2170"
+   }
+  },
+  {
+   "q": "can i take bus 4442 and csc 1001",
+   "tool": "fit_pair",
+   "args": {
+    "a": "BUS 4442",
+    "b": "CSC 1001"
+   }
+  },
+  {
+   "q": "swap my bus 4442 to a later section",
+   "tool": "swap_section",
+   "args": {
+    "course": "BUS 4442",
+    "prefer": "later"
+   }
+  },
+  {
+   "q": "which friends are in bus 4442",
+   "tool": "friends_in",
+   "args": {
+    "course": "BUS 4442"
+   }
+  },
+  {
+   "q": "when does registration open",
+   "tool": "when_registration",
+   "args": {}
+  },
+  {
+   "q": "open bus sections on tuesday after 2pm",
+   "tool": "search_sections",
+   "args": {
+    "subject": "BUS",
+    "open_only": true,
+    "days": [
+     "Tu"
+    ],
+    "start_after": "14:00"
+   }
+  },
+  {
+   "q": "bus 100 mondays at 3pm",
+   "tool": "search_sections",
+   "args": {
+    "subject": "BUS",
+    "days": [
+     "Mo"
+    ],
+    "at_time": "15:00"
+   }
+  },
+  {
+   "q": "recommend a ge that i still need to take and fits my schedule and also has the highest rated professors",
+   "tool": "search_sections",
+   "args": {
+    "fits_my_schedule": true,
+    "scope": "ge_unmet",
+    "sort": "rating"
+   }
+  },
+  {
+   "q": "build me a 15 unit schedule with the GEs I need, no fridays, best professors",
+   "tool": "build_term",
+   "args": {
+    "units": 15,
+    "scope": "ge_unmet",
+    "days_off": [
+     "Fr"
+    ],
+    "sort": "rating"
+   }
+  },
+  {
+   "q": "make my schedule for next quarter with no 8ams and nothing after 5",
+   "tool": "build_term",
+   "args": {
+    "start_after": "09:00",
+    "end_before": "17:00"
+   }
+  },
+  {
+   "q": "which professor of mine has the highest rating",
+   "tool": "my_professors",
+   "args": {}
+  },
+  {
+   "q": "my worst professor",
+   "tool": "my_professors",
+   "args": {
+    "order": "asc"
+   }
+  },
+  {
+   "q": "find one that friends have taken in the past",
+   "tool": "friends_took",
+   "args": {}
+  },
+  {
+   "q": "a ge i still need that my friends took",
+   "tool": "friends_took",
+   "args": {
+    "scope": "ge_unmet"
+   }
+  },
+  {
+   "q": "what is the capital of germany",
+   "tool": "cant_answer",
+   "args": {
+    "reason": "not_about_classes"
+   }
+  },
+  {
+   "q": "what do i register for first",
+   "tool": "game_plan",
+   "args": {}
+  },
+  {
+   "q": "what should i register for first in plan b",
+   "tool": "game_plan",
+   "args": {
+    "plan": "B"
+   }
+  },
+  {
+   "q": "my game plan",
+   "tool": "game_plan",
+   "args": {}
+  },
+  {
+   "q": "game plan for plan c",
+   "tool": "game_plan",
+   "args": {
+    "plan": "C"
+   }
+  },
+  {
+   "q": "backup sections for plan a",
+   "tool": "game_plan",
+   "args": {
+    "plan": "A"
+   }
+  },
+  {
+   "q": "what order should i register",
+   "tool": "game_plan",
+   "args": {}
+  },
+  {
+   "q": "take me to my plans",
+   "tool": "go_to",
+   "args": {
+    "where": "watchlist"
+   }
+  }
+ ]
+}

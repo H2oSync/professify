@@ -34,7 +34,7 @@ rm -rf public && mkdir -p public
 REQUIRED="index.html"
 # The PWA files were added 2026-09-07. A file not named here is not on the internet: that is the
 # whole point of the allowlist, and it is why robots.txt 404'd for two weeks after being written.
-OPTIONAL="invite.html robots.txt share.png share-card.png share-wide.png invite-card.png invite-card-tall.png manifest.webmanifest sw.js icon-192.png icon-512.png icon-maskable-512.png apple-touch-icon.png"
+OPTIONAL="hawk-router.js hawk-ask.js hawk-ask.css invite.html robots.txt share.png share-card.png share-wide.png invite-card.png invite-card-tall.png manifest.webmanifest sw.js icon-192.png icon-512.png icon-maskable-512.png apple-touch-icon.png"
 
 for f in $REQUIRED; do
   if [ ! -f "$f" ]; then

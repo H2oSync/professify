@@ -27,7 +27,7 @@
 
 /* Bumped by the deploy. The build stamp is written in by hand alongside window.PROFESSIFY_BUILD,
    so a new build gets a new cache and the old one is deleted on activate. */
-const BUILD = '2026-09-24 19:34';
+const BUILD = '2026-09-25 15:35';
 const SHELL = 'professify-shell-' + BUILD;
 
 /* ================================================================================================
@@ -68,7 +68,10 @@ const PRECACHE = [
   '/icon-512.png',
   '/icon-maskable-512.png',
   '/apple-touch-icon.png',
-  '/manifest.webmanifest'
+  '/manifest.webmanifest',
+  '/hawk-router.js',
+  '/hawk-ask.js',
+  '/hawk-ask.css'
 ];
 
 self.addEventListener('install', (e) => {
@@ -153,7 +156,7 @@ self.addEventListener('fetch', (e) => {
           '<!doctype html><meta charset="utf-8">' +
           '<meta name="viewport" content="width=device-width,initial-scale=1">' +
           '<title>TermChamp — offline</title>' +
-          '<style>html{background:#154734;color:#fff;font:16px/1.5 -apple-system,BlinkMacSystemFont,' +
+          '<style>html{background:#183178;color:#fff;font:16px/1.5 -apple-system,BlinkMacSystemFont,' +
           '"Segoe UI",sans-serif}body{margin:0;display:grid;place-items:center;min-height:100vh;' +
           'padding:24px;text-align:center}h1{font-size:20px;margin:0 0 8px}p{margin:0;opacity:.8;max-width:34ch}</style>' +
           '<body><div><h1>You’re offline</h1>' +

@@ -1,0 +1,477 @@
+/* Hawk — the ask box.
+
+   NOT a modal. There is no scrim, nothing is dimmed or blurred, and the rest of the app stays
+   fully clickable while it is open. That is the whole point: you keep it open, you move around
+   the app, and it is still there to ask.
+
+   Small on purpose. It holds one answer — the last one — and sizes itself to that answer, so it
+   never becomes a panel. A box that grows with every question is a drawer with extra steps.
+
+   THE NAVY IS DELIBERATE AND IS ITS OWN SURFACE. The app's accent is green; this box is navy,
+   matching the mark's tile rather than the buttons. Tate's mockup, 2026-09-21. The three values
+   below were sampled out of that mockup rather than guessed, so nothing here is "about right".
+   See the note on --hawk-navy in §9's open brand decision: the tile is #183178 and these are not
+   it, which is a question for the brand pass, not for this file. */
+
+:root {
+  --hawk-navy: #1a224e;      /* header and the ask bar */
+  --hawk-navy-lift: #20295d; /* the body, one step lighter */
+  --hawk-dim: #aaaec2;       /* secondary text on navy */
+  --hawk-rule: rgba(255, 255, 255, .10);
+  /* Hawk's face, once. The launcher and the greeting both draw it, and a second copy of a 7.8KB
+     data URI in the same stylesheet is 7.8KB nobody needs. */
+  --hawk-face: url("data:image/png;base64,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");
+}
+
+.hawk-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------------------------------------
+   The way in
+   ------------------------------------------------------------------------------------------------ */
+.hawk-fab {
+  position: fixed;
+  right: 14px;
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  z-index: 9000;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border: 2px solid rgba(255, 255, 255, .22);
+  border-radius: 999px;
+  background-color: var(--hawk-navy);
+  background-image: var(--hawk-face);
+  background-size: cover;
+  background-position: center;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgba(4, 12, 36, .34);
+}
+.hawk-fab:hover { border-color: rgba(255, 255, 255, .45); }
+.hawk-fab:focus-visible { outline: 3px solid #8fa6ff; outline-offset: 3px; }
+.hawk-fab[hidden] { display: none !important; }
+
+/* On a phone the icon stands alone — the corner is scarce and the wordmark is the first thing
+   that can go without costing anything a returning student needs. */
+@media (max-width: 720px) {
+  .hawk-fab { bottom: calc(var(--hawk-navclear, 74px) + env(safe-area-inset-bottom, 0px)); }
+}
+
+/* ------------------------------------------------------------------------------------------------
+   The box
+   ------------------------------------------------------------------------------------------------ */
+/* The box sits ABOVE the launcher rather than over it. The hawk circle is never covered and never
+   hidden, so there is always one thing in that corner you can press — which is the whole ask:
+   move around the app, and Hawk is still right there. 52px of button plus a 10px gap. */
+.hawk-box {
+  position: fixed;
+  z-index: 9010;
+  right: 14px;
+  bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  width: 340px;
+  max-width: calc(100vw - 28px);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--hawk-navy-lift);
+  color: #fff;
+  /* A shadow rather than a scrim. It lifts the box off the page without taking the page away. */
+  box-shadow: 0 16px 44px rgba(4, 12, 36, .34);
+}
+
+/* A phone is not a small desktop: the box spans the width, still sits above the tab bar, and is
+   capped so the page above it stays readable. A sheet that eats the screen is a modal with extra
+   steps. */
+@media (max-width: 720px) {
+  .hawk-box {
+    left: 10px;
+    right: 10px;
+    width: auto;
+    max-width: none;
+    bottom: calc(var(--hawk-navclear, 74px) + 62px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* ------------------------------------------------------------------------------------------------
+   Header
+   ------------------------------------------------------------------------------------------------ */
+/* The header is the handle. `touch-action: none` is what stops a phone scrolling the page out
+   from under a drag, and `user-select: none` stops the title highlighting as you move it. */
+.hawk-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 11px 10px 11px 14px;
+  background: var(--hawk-navy);
+  border-bottom: 1px solid var(--hawk-rule);
+  cursor: grab;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.hawk-box--moving .hawk-head { cursor: grabbing; }
+/* No shadow transition mid-drag — it reads as lag on a slow phone. */
+.hawk-box--moving { box-shadow: 0 22px 60px rgba(4, 12, 36, .46); }
+.hawk-x { cursor: pointer; }
+.hawk-head__spark { display: flex; color: #fff; flex: none; }
+.hawk-head__name { font-size: 14px; font-weight: 700; color: #fff; }
+.hawk-head__sub { font-size: 13px; color: var(--hawk-dim); }
+.hawk-x {
+  margin-left: auto;
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: var(--hawk-dim);
+  font-size: 19px;
+  line-height: 1;
+  padding: 4px 7px;
+  cursor: pointer;
+  border-radius: 999px;
+}
+.hawk-x:hover { color: #fff; }
+
+/* ------------------------------------------------------------------------------------------------
+   The answer — one at a time
+   ------------------------------------------------------------------------------------------------ */
+.hawk-log {
+  flex: 1 1 auto;
+  max-height: min(58vh, 460px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px;
+}
+
+.hawk-said {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 5px;
+  padding: 0 2px 9px;
+}
+.hawk-said__q { font-size: 12px; color: var(--hawk-dim); }
+.hawk-fix {
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px dashed var(--hawk-rule);
+  color: var(--hawk-dim);
+}
+
+.hawk-note {
+  padding: 7px 2px 2px;
+  font-size: 11.5px;
+  color: var(--hawk-dim);
+  line-height: 1.45;
+}
+/* Shown only while a question is away at the model. A still box reads as a broken one. */
+.hawk-thinking { opacity: .75; }
+@media (prefers-reduced-motion: no-preference) {
+  .hawk-thinking { animation: hawk-pulse 1.4s ease-in-out infinite; }
+  @keyframes hawk-pulse { 0%, 100% { opacity: .45; } 50% { opacity: .95; } }
+}
+/* The one marker that says this answer left the device. */
+.hawk-fix--ai {
+  border-style: solid;
+  border-color: rgba(159, 180, 255, .45);
+  color: #9fb4ff;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+
+.hawk-row {
+  display: flex;
+  width: 100%;
+  box-sizing: border-box;
+  gap: 10px;
+  align-items: center;
+  text-align: left;
+  padding: 10px 12px;
+  min-height: 46px;
+  margin-bottom: 6px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .07);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.hawk-row:hover { background: rgba(255, 255, 255, .13); }
+.hawk-row:focus-visible { outline: 2px solid #8fa6ff; outline-offset: 2px; }
+/* The nearest thing is not the thing. It is visibly quieter than an answer, because a near-miss
+   that looks like an answer is the one a student registers for by mistake. */
+.hawk-row--near { background: rgba(255, 255, 255, .035); }
+
+.hawk-row__code {
+  font-family: ui-monospace, Menlo, monospace;
+  font-weight: 700;
+  font-size: 12px;
+  color: #9fb4ff;
+  flex: none;
+}
+.hawk-row--near .hawk-row__code { color: var(--hawk-dim); }
+.hawk-row__main { flex: 1 1 auto; min-width: 0; }
+.hawk-row__name {
+  display: block;
+  font-size: 13px;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hawk-row--near .hawk-row__name { color: var(--hawk-dim); }
+.hawk-row__near {
+  display: block;
+  font-size: 10.5px;
+  color: var(--hawk-dim);
+  margin-top: 1px;
+}
+/* A section that collides with the week you already have is not a result you can act on, and it
+   should not look like one. Amber, not red: it is a fact about your schedule, not an error. */
+.hawk-row__clash {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #ffcf7a;
+  margin-top: 1px;
+}
+
+.hawk-chip {
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 4px 9px;
+}
+/* Tuned for a dark ground rather than reused from the light build — the light-mode chip colours
+   measured under 3:1 here, which is a legibility failure, not a style preference. */
+.hawk-chip--open { color: #7fe3b5; background: rgba(127, 227, 181, .15); }
+.hawk-chip--wait { color: #ffcf7a; background: rgba(255, 207, 122, .15); }
+.hawk-chip--full { color: var(--hawk-dim); background: rgba(255, 255, 255, .09); }
+
+.hawk-went {
+  padding: 2px 2px 0;
+  font-size: 11px;
+  color: #7fe3b5;
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------------------------------------------
+   The empty state — Hawk introduces itself
+   ------------------------------------------------------------------------------------------------ */
+.hawk-hint {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 2px 10px;
+}
+.hawk-hint__face {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  background-size: cover;
+  background-position: center;
+  background-image: var(--hawk-face);
+}
+.hawk-hint__lead { font-size: 15px; font-weight: 700; color: #fff; }
+.hawk-hint__sub { font-size: 13px; color: var(--hawk-dim); margin-top: 2px; }
+
+.hawk-foot {
+  flex: none;
+  padding: 0 14px 10px;
+  font-size: 10.5px;
+  color: var(--hawk-dim);
+  background: var(--hawk-navy-lift);
+}
+
+/* ------------------------------------------------------------------------------------------------
+   Asking
+   ------------------------------------------------------------------------------------------------ */
+.hawk-ask {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 12px 12px 16px;
+  background: var(--hawk-navy);
+  border-top: 1px solid var(--hawk-rule);
+}
+.hawk-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #fff;
+  font: 400 16px/1.3 inherit;   /* 16px so iOS does not zoom the page when it is focused */
+}
+.hawk-input::placeholder { color: var(--hawk-dim); font-size: 14px; }
+.hawk-send {
+  flex: none;
+  min-height: 38px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--hawk-navy);
+  font: 700 14px/1 inherit;
+  cursor: pointer;
+}
+.hawk-send:disabled { opacity: .45; cursor: default; }
+.hawk-send:focus-visible { outline: 3px solid #8fa6ff; outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hawk-box { transition: none !important; animation: none !important; }
+}
+
+/* ------------------------------------------------------------------------------------------------
+   Added with the schedule tools — 2026-09-24
+   ------------------------------------------------------------------------------------------------ */
+/* A good-news line (prereqs met, registration date) reads in the seat-open green, not white. */
+.hawk-note--good { color: #7fe3b5; font-weight: 600; }
+
+/* "Not it?" — the feedback the learning loop runs on. Small, quiet, always there, never in the way. */
+.hawk-notit {
+  display: block;
+  margin: 2px 0 0 auto;
+  padding: 4px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--hawk-dim);
+  font: 500 11px/1 inherit;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.hawk-notit:hover { color: #fff; }
+.hawk-notit:focus-visible { outline: 2px solid #8fa6ff; outline-offset: 2px; }
+
+/* Chips stack on the right, so the time column keeps its width whatever the row carries. */
+.hawk-row__chips { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.hawk-row__chips .hawk-chip { padding: 3px 8px; font-size: 10px; }
+/* Who teaches it, under the time — never inline with it, where two chips would crush both. */
+.hawk-row__sub { display: block; font-size: 11px; color: var(--hawk-dim); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hawk-row--near .hawk-row__sub { color: var(--hawk-dim); }
+
+/* How a hard question was read — shown before the answer, so a wrong reading is visible at once. */
+.hawk-read {
+  margin: 0 2px 8px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  background: rgba(159, 180, 255, .10);
+  color: #cdd7ff;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.hawk-read::before { content: 'Reading that as: '; color: var(--hawk-dim); }
+.hawk-count { padding: 2px 2px 4px; font-size: 10.5px; color: var(--hawk-dim); }
+
+/* Rich rows: code as a small label, the title free to take two lines, the who/when/why line free to
+   wrap. Chips stay top-right. */
+.hawk-row--rich { align-items: flex-start; padding-top: 11px; padding-bottom: 11px; }
+.hawk-row--rich .hawk-row__code { display: block; font-size: 10.5px; margin-bottom: 3px; letter-spacing: .02em; }
+.hawk-row--rich .hawk-row__name {
+  white-space: normal;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  line-height: 1.3; font-weight: 600;
+}
+.hawk-row--rich .hawk-row__sub { white-space: normal; line-height: 1.35; margin-top: 3px; }
+
+
+/* ---- 2026-09-23: the verified explanation, and Build my term --------------------------------- */
+/* The one line the model writes. Checked against the rows before it is shown. */
+.hawk-say {
+  margin: -2px 2px 9px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #fff;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .hawk-say { animation: hawk-say-in .25s ease-out; }
+  @keyframes hawk-say-in { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } }
+}
+.hawk-say[hidden] { display: none; }
+
+.hawk-opts { display: flex; gap: 6px; margin: 0 2px 8px; }
+.hawk-opt {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  padding: 6px 9px;
+  border-radius: 9px;
+  border: 1px solid var(--hawk-rule);
+  background: transparent;
+  color: var(--hawk-dim);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.hawk-opt__name { font-size: 11.5px; font-weight: 700; }
+.hawk-opt__meta { font-size: 10.5px; }
+.hawk-opt.is-on { background: #fff; border-color: #fff; color: var(--hawk-navy); }
+.hawk-opt:focus-visible { outline: 2px solid #9fb4ff; outline-offset: 1px; }
+
+/* The week at a glance. Five lanes; saved classes dimmed so what the option adds stands out. */
+.hawk-week {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  margin: 0 2px 9px;
+  padding-bottom: 12px;
+}
+.hawk-week__col { display: flex; flex-direction: column; align-items: stretch; gap: 3px; }
+.hawk-week__day { font-size: 9.5px; font-weight: 700; color: var(--hawk-dim); text-align: center; }
+.hawk-week__lane {
+  position: relative;
+  height: 64px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, .05);
+}
+.hawk-week__blk {
+  position: absolute; left: 2px; right: 2px;
+  border-radius: 3px;
+  background: #9fb4ff;
+}
+.hawk-week__blk--fixed { background: rgba(255, 255, 255, .28); }
+.hawk-week__scale {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  display: flex; justify-content: space-between;
+  font-size: 9px; color: var(--hawk-dim);
+}
+
+/* "Not it?" stays in Hawk: the other readings, then two quiet links. */
+.hawk-alts {
+  margin: 8px 0 2px;
+  padding: 10px 10px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--hawk-rule);
+}
+.hawk-alts__head { font-size: 11.5px; font-weight: 700; color: #fff; margin: 0 2px 8px; }
+.hawk-alts .hawk-row { min-height: 40px; padding: 8px 11px; }
+.hawk-alts__links { display: flex; gap: 14px; margin: 4px 2px 0; }
+.hawk-alts__link {
+  border: 0; background: none; padding: 4px 0; font: inherit; font-size: 11.5px;
+  color: #cdd7ff; text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.hawk-alts__link:focus-visible { outline: 2px solid #9fb4ff; outline-offset: 2px; }
+.hawk-alts__noted { font-size: 10.5px; color: var(--hawk-dim); margin: 6px 2px 0; }
+
+/* Save a built term as Plan A, B or C (2026-09-25). */
+.hawk-plansave { margin: 6px 2px 8px; padding: 10px; border-radius: 11px; background: var(--hawk-navy); display: flex; flex-direction: column; gap: 8px; }
+.hawk-plansave__hd { font-size: 12.5px; font-weight: 700; color: #fff; }
+.hawk-plansave__row { display: flex; gap: 6px; }
+.hawk-plansave__btn { flex: 1 1 0; min-height: 40px; border-radius: 9px; border: 1px solid var(--hawk-rule); background: transparent; color: #fff; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.hawk-plansave__btn:focus-visible, .hawk-plansave__undo:focus-visible { outline: 2px solid #9fb4ff; outline-offset: 1px; }
+.hawk-plansave__done { font-size: 12px; color: #7fe3b5; font-weight: 600; line-height: 1.45; }
+.hawk-plansave__undo { background: none; border: 0; padding: 0; color: #cdd7ff; font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; min-height: 28px; }
+@media (hover: hover) { .hawk-plansave__btn:hover { border-color: rgba(255,255,255,.35); } }
