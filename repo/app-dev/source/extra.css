@@ -1,0 +1,24 @@
+
+/* ---------- TermChamp wiring: states the prototype never had ---------- */
+.tc-signin{min-height:100%;display:flex;flex-direction:column;align-items:stretch;justify-content:center;padding:calc(var(--sb) + 24px) 24px 40px;text-align:center}
+.tc-signin .tc-logo{width:84px;height:84px;margin:0 auto 10px;border-radius:22px}
+.tc-signin .tc-champ{width:120px;height:140px;object-fit:contain;margin:0 auto 6px}
+.tc-signin h1{font-size:26px;font-weight:1000;line-height:1.15;color:var(--navy);text-wrap:balance;margin:6px 0 8px}
+.tc-signin p{color:var(--muted);font-weight:700;font-size:15.5px;line-height:1.45;margin:0 auto 20px;max-width:32ch}
+.tc-signin .btn{display:grid;place-items:center}
+.tc-form{display:grid;gap:12px;text-align:left;margin-bottom:8px}
+.tc-form label{display:grid;gap:6px;font-weight:900;font-size:14px;color:var(--ink3)}
+.tc-form input{height:50px;border-radius:14px;border:1.5px solid var(--line);background:#fff;padding:0 14px;font:inherit;font-size:16px;font-weight:700;color:var(--ink)}
+.tc-form input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}
+.tc-err{background:#FEF2F2;color:#B91C1C;border-radius:12px;padding:10px 12px;font-weight:800;font-size:14px;line-height:1.4;text-align:left;margin:6px 0}
+.tc-fine{font-size:13.5px!important;margin-top:18px!important}
+a.btn.tc-a{display:grid;place-items:center;text-decoration:none}
+.tc-desc{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.sg.tc-wrap{flex-wrap:wrap;gap:4px}
+.sg.tc-wrap button{flex:1 0 auto;min-width:52px;padding:0 10px}
+.tc-spin{display:block;width:22px;height:22px;margin:12px auto 0;border-radius:50%;border:3px solid var(--blue-soft2);border-top-color:var(--blue);animation:tcspin .8s linear infinite}
+.tc-spin.big{width:34px;height:34px;margin-top:24px}
+@keyframes tcspin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.tc-spin{animation-duration:2.4s}}
+button:focus-visible,a:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+.side a{color:inherit}
