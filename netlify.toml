@@ -54,10 +54,23 @@ done
 # stray .env or .netlify/state.json stays invisible in a build log. None of them are published
 # either way \u2014 they are not on the list above \u2014 but a secret sitting in the repo root is
 # worth seeing named on every deploy rather than discovered later.
+# App 2.0, the phone app — its own folder, published at /app/ (2026-09-28). Missing is not fatal:
+# the desktop site does not depend on it.
+if [ -f app/index.html ]; then
+  mkdir -p public/app
+  cp app/index.html public/app/
+  echo "published  app/index.html"
+  if [ -f app/manifest.webmanifest ]; then
+    cp app/manifest.webmanifest public/app/
+    echo "published  app/manifest.webmanifest"
+  fi
+else
+  echo "MISSING    app/index.html  (the phone app at /app/ will 404)"
+fi
 echo "--- not published (present in the repo root, deliberately not served) ---"
 for f in * .*; do
   case "$f" in .|..|.git|.gitignore|.DS_Store|.netlify) continue ;; esac
-  case " $REQUIRED $OPTIONAL public netlify netlify.toml " in
+  case " $REQUIRED $OPTIONAL public netlify netlify.toml app " in
     *" $f "*) ;;
     *) echo "  withheld  $f" ;;
   esac
@@ -139,6 +152,14 @@ echo "--- $(ls public | wc -l) files published ---"
 # its default scope is already "/", but if it ever moves into a subdirectory the
 # scope silently narrows and offline stops working on every page but that one.
 # ---------------------------------------------------------------------------
+[[headers]]
+  for = "/app/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+[[headers]]
+  for = "/app/manifest.webmanifest"
+  [headers.values]
+    Content-Type = "application/manifest+json; charset=utf-8"
 [[headers]]
   for = "/sw.js"
   [headers.values]

@@ -27,7 +27,7 @@
 
 /* Bumped by the deploy. The build stamp is written in by hand alongside window.PROFESSIFY_BUILD,
    so a new build gets a new cache and the old one is deleted on activate. */
-const BUILD = '2026-09-25 15:35';
+const BUILD = '2026-09-28 01:00';
 const SHELL = 'professify-shell-' + BUILD;
 
 /* ================================================================================================
@@ -137,18 +137,23 @@ self.addEventListener('fetch', (e) => {
   try { url = new URL(req.url); } catch (_) { return; }
   if (url.origin !== self.location.origin) return;   // Supabase, PolyRatings, fonts, CDN: untouched
 
-  /* The document. Network first, 4.5s, then whatever we have. */
+  /* The document. Network first, 4.5s, then whatever we have.
+     TWO DOCUMENTS, TWO KEYS — 2026-09-28. The phone app lives at /app/ on the same origin, under
+     this same worker. With one '/' key, opening /app/ overwrote the desktop's offline copy with the
+     phone app and the other way round, so going offline showed whichever was opened last. Each
+     now keeps its own copy; everything else still shares '/' (so ?tab=… is still one copy). */
   if (req.mode === 'navigate') {
+    const docKey = (url.pathname === '/app' || url.pathname.indexOf('/app/') === 0) ? '/app/' : '/';
     e.respondWith((async () => {
       try {
         const fresh = await timed(req, 4500);
         if (fresh && fresh.ok) {
           const c = await caches.open(SHELL);
-          c.put('/', fresh.clone()).catch(() => {});   // key on '/' so ?tab=… all share one copy
+          c.put(docKey, fresh.clone()).catch(() => {});
         }
         return fresh;
       } catch (_) {
-        const hit = await caches.match('/', { ignoreSearch: true });
+        const hit = await caches.match(docKey, { ignoreSearch: true });
         if (hit) return hit;
         /* Nothing cached and no network: say so in a sentence, rather than handing the browser
            its own dinosaur. This is the only HTML this worker ever authors. */
