@@ -64,7 +64,7 @@ const KEY = 'termchamp-app-v1';
 function initialState() {
   return {
     tab: 'home', stack: { home: [{ s: 'home' }], explore: [{ s: 'explore' }], rate: [{ s: 'rate' }], schedule: [{ s: 'schedule' }], friends: [{ s: 'friends' }] },
-    homeFriend: 'me', homeDay: null,
+    homeDay: null,
     exMode: 'classes', q: '', subj: 'All', openOnly: false, savedOnly: false, saved: [], exLimit: 40,
     plan: 'A', schedTab: 'mine', schedDay: null,
     draft: null, lastRated: null,
@@ -138,79 +138,75 @@ function signinView() {
   const si = UI.signin;
   if (TC.phase === 'boot') return `<div class="tc-signin"><img class="tc-logo" src="${LOGO}" alt="Term Champ"><div class="tc-spin big"></div></div>`;
   if (TC.phase === 'offline') return `<div class="tc-signin"><img class="tc-logo" src="${LOGO}" alt="Term Champ"><h1>Can’t reach TermChamp</h1><p>Check your connection, then try again.</p><button class="btn" data-a="reload">Try again</button></div>`;
-  if (TC.phase === 'noprofile') return `<div class="tc-signin"><img class="tc-logo" src="${LOGO}" alt="Term Champ"><h1>Finish setting up</h1>
-    <p>You’re signed in as <b>${esc((TC.user && TC.user.email) || '')}</b>, but this account hasn’t been set up yet. Pick your school, major and username on termchamp.com, then come back.</p>
-    <a class="btn tc-a" href="${WEB}/" target="_blank" rel="noopener">Set up on termchamp.com</a>
-    <button class="btn soft" style="margin-top:10px" data-a="reload">I’ve finished — reload</button>
-    <button class="btn ghost" style="margin-top:4px" data-a="signOut">Use a different account</button></div>`;
-  const err = si.err ? `<div class="tc-err" role="alert">${esc(si.err)}</div>` : '';
-  if (si.mode === 'password') return `<div class="tc-signin"><img class="tc-logo" src="${LOGO}" alt="Term Champ"><h1>Sign in</h1>
-    <form data-submit="pw" class="tc-form"><label>Email<input id="si-email" type="email" autocomplete="email" required value="${esc(si.email)}"></label>
-    <label>Password<input id="si-pw" type="password" autocomplete="current-password" required></label>${err}
-    <button class="btn" ${UI.busy.signin ? 'disabled' : ''}>${UI.busy.signin ? 'Signing in…' : 'Sign in'}</button></form>
-    <button class="btn ghost" data-a="siMode" data-x="start">Back</button></div>`;
-  if (si.mode === 'code') return `<div class="tc-signin"><img class="tc-logo" src="${LOGO}" alt="Term Champ"><h1>Email me a code</h1>
-    <form data-submit="sendCode" class="tc-form"><label>Email<input id="si-email" type="email" autocomplete="email" required value="${esc(si.email)}"></label>${err}
-    <button class="btn" ${UI.busy.signin ? 'disabled' : ''}>${UI.busy.signin ? 'Sending…' : 'Send code'}</button></form>
-    <button class="btn ghost" data-a="siMode" data-x="start">Back</button></div>`;
-  if (si.mode === 'verify') return `<div class="tc-signin"><img class="tc-logo" src="${LOGO}" alt="Term Champ"><h1>Check your email</h1>
-    <p>We sent a code to <b>${esc(si.email)}</b>.</p>
-    <form data-submit="verify" class="tc-form"><label>Code<input id="si-code" inputmode="numeric" autocomplete="one-time-code" required maxlength="10"></label>${err}
-    <button class="btn" ${UI.busy.signin ? 'disabled' : ''}>${UI.busy.signin ? 'Checking…' : 'Sign in'}</button></form>
-    <button class="btn ghost" data-a="siMode" data-x="code">Send a new code</button></div>`;
-  return `<div class="tc-signin"><img class="tc-logo" src="${LOGO}" alt="Term Champ"><img class="tc-champ" src="${CHAMP}" alt="">
-    <h1>Your classes, your friends, one app.</h1><p>Sign in with your TermChamp account.</p>${err}
-    ${CFG.GOOGLE_SIGNIN_ENABLED ? '<button class="btn" data-a="google" style="margin-bottom:10px">Continue with Google</button>' : ''}
-    <button class="btn" data-a="siMode" data-x="password">Sign in with email and password</button>
-    <button class="btn ghost" style="margin-top:4px" data-a="siMode" data-x="code">Email me a sign-in code</button>
-    <p class="tc-fine">New to TermChamp? ${webLink('Create your account on termchamp.com', '/')} first.</p></div>`;
+  if (TC.phase === 'profileerr') return `<div class="tc-signin"><img class="tc-logo" src="${LOGO}" alt="Term Champ"><h1>Couldn’t load your profile</h1>
+    <p>You’re signed in as <b>${esc((TC.user && TC.user.email) || '')}</b>, but TermChamp couldn’t read your profile just now. Your account is still there — try again in a moment.</p>
+    <p class="muted" style="font-size:12.5px">Error ${esc(TC.err.profile || '')}</p>
+    <button class="btn" data-a="reload">Try again</button>
+    <button class="btn ghost" style="margin-top:4px" data-a="signOut">Sign out</button></div>`;
+  /* Everything else — landing, sign up, the code, log in, the waitlist and "claim your username" —
+     is Sean's onboarding design (onboard.js). */
+  return onbSignin();
 }
 
 /* ================= screens ================= */
 const SCREENS = {};
 
-SCREENS.home = () => {
-  const ids = ['me', ...TC.friends];
-  const f = ids.indexOf(S.homeFriend) >= 0 ? S.homeFriend : 'me', isMe = f === 'me', P = PEOPLE[f];
-  const secs = personSecs(f), mine = myCodes();
+/* Home (Tate, 2026-09-30): the stories are your friends only — you're not one of them — and the feed
+   below is every friend's week, one card each, not just the one you tapped. Tapping a story jumps to
+   that friend's card. With no friends yet, the feed is your own week plus the invite to add some. */
+function homeWeekCard(id) {
+  const isMe = id === 'me', P = PEOPLE[id], mine = myCodes();
+  const secs = personSecs(id);
   const shared = new Set(isMe ? [] : secs.map(s => s.code).filter(c => mine.has(c)));
-  const stories = ids.map(id => { const p = PEOPLE[id], st = status(id); return `<button class="story ${id === f ? 'on' : ''}" data-a="homeFriend" data-x="${id}"><span class="ring" style="--rc:${st.c || 'transparent'}">${safeImg(p.avatar) ? `<span style="background:${p.color};overflow:hidden"><img src="${esc(safeImg(p.avatar))}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.remove()"></span>` : `<span style="background:${p.color};display:grid;place-items:center;font-weight:900;font-size:17px;color:#0F172A">${esc(p.ini)}</span>`}</span><span class="nm">${esc(id === 'me' ? 'You' : p.short)}</span></button>`; }).join('');
-  const sug = TC.suggestions.find(x => !TC.relation(x));
-  const where = {}; TC.friends.forEach(fr => [...new Set(personSecs(fr).map(s => s.code).concat(PEOPLE[fr].unplaced || []))].forEach(c => { if (!mine.has(c)) (where[c] = where[c] || new Set()).add(fr); }));
-  const whereList = Object.entries(where).map(([c, set]) => [c, [...set]]).sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0])).slice(0, 4);
-  const st = isMe ? null : status(f);
+  const st = isMe ? null : status(id);
   const unplaced = P.unplaced || [];
   const nClasses = secs.length ? new Set(secs.map(s => s.code)).size + unplaced.filter(c => !secs.some(s => s.code === c)).length : unplaced.length;
-  const unread = TC.requests.length + TC.threads.filter(isUnread).length;
-  const bellKey = TC.requests.join(',') + '|' + TC.threads.filter(isUnread).map(t => t.id + (t.last && t.last.created_at)).join(',');
   let week;
-  if (!TC.ready && !TC.mineRows) week = loadingCard('Loading your week…');
+  if (isMe && !TC.ready && !TC.mineRows) week = loadingCard('Loading your week…');
   else if (isMe && TC.err.mine) week = errCard('Couldn’t load your classes.', 'refresh');
+  else if (!isMe && !(TC.friendRows && TC.friendRows[id])) week = loadingCard('Loading ' + P.short + '’s week…');
+  else if (!isMe && TC.err.friendSecs) week = errCard('Couldn’t load ' + P.short + '’s classes.', 'refresh');
   else if (!nClasses) week = `<div class="empty"><b>${isMe ? 'No classes yet' : esc(P.short) + ' hasn’t added classes'}</b>${isMe ? `Add your ${esc(CFG.TERM_LABEL)} classes on ${webLink('termchamp.com', '/')} and your week shows up here.` : ''}</div>`;
   else week = grid(secs, { sel: S.homeDay, act: 'homeDay', shared, one: true, H: 300 }) + (unplaced.length ? `<div class="foot">No times yet for ${unplaced.map(esc).join(', ')}</div>` : '');
-  return {
-    body: `
- <div class="homehdr"><img class="logo" src="${LOGO}" alt="Term Champ"><div class="grow"></div>
-  <button class="iconbtn" data-a="sheet" data-x="notifs" aria-label="Notifications">${ic('bell', 22)}${unread && S.notifSeen !== bellKey ? '<span class="dot"></span>' : ''}</button>
-  <button class="me-btn" data-a="sheet" data-x="profile" aria-label="Your profile" style="overflow:hidden;padding:0">${safeImg(PEOPLE.me.avatar) ? `<img src="${esc(safeImg(PEOPLE.me.avatar))}" alt="" style="width:100%;height:100%;object-fit:cover" onerror="this.remove()">` : esc(PEOPLE.me.ini)}</button></div>
- <div class="stories">${stories}${TC.friends.length ? '' : `<button class="story" data-a="sheet" data-x="addFriend"><span class="ring" style="--rc:transparent"><span style="background:var(--pink-soft);display:grid;place-items:center;color:var(--pink)">${ic('plus', 22, 2.6)}</span></span><span class="nm">Add</span></button>`}</div>
- <div class="card fcard">
-  <button class="top" data-a="${isMe ? 'tab' : 'openFriend'}" data-x="${isMe ? 'schedule' : f}">
-   ${pav(f, 50, 17)}
+  return `<div class="card fcard" id="hf-${esc(id)}">
+  <button class="top" data-a="${isMe ? 'tab' : 'openFriend'}" data-x="${isMe ? 'schedule' : id}">
+   ${pav(id, 50, 17)}
    <div class="grow"><div style="font-weight:900;font-size:18px">${isMe ? 'Your week' : esc(P.name)}</div>
-    <span class="pillchip">${isMe ? `${esc(CFG.TERM_LABEL)} · ${nClasses} class${nClasses === 1 ? '' : 'es'}` : `${shared.size} class${shared.size === 1 ? '' : 'es'} with you`}</span>
+    <span class="pillchip">${isMe ? `${esc(CFG.TERM_LABEL)} · ${nClasses} class${nClasses === 1 ? '' : 'es'}` : TC.err.friendSecs ? 'Classes didn’t load' : `${shared.size} class${shared.size === 1 ? '' : 'es'} with you`}</span>
     ${st && st.free !== null ? `<div style="font-size:12.5px;font-weight:800;color:${st.c || 'var(--muted)'};margin-top:5px">● ${esc(st.t)}</div>` : ''}</div>
    <span class="chev">${ic('chevR', 20)}</span></button>
   ${week}
   ${nClasses && shared.size ? '<div class="foot"><span style="color:#A16207">yellow = shared</span></div>' : ''}
- </div>
+ </div>`;
+}
+
+SCREENS.home = () => {
+  const mine = myCodes();
+  const stories = TC.friends.map(id => { const p = PEOPLE[id], st = status(id); return `<button class="story" data-a="homeFriend" data-x="${esc(id)}"><span class="ring" style="--rc:${st.c || 'transparent'}">${safeImg(p.avatar) ? `<span style="background:${p.color};overflow:hidden"><img src="${esc(safeImg(p.avatar))}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.remove()"></span>` : `<span style="background:${p.color};display:grid;place-items:center;font-weight:900;font-size:17px;color:#0F172A">${esc(p.ini)}</span>`}</span><span class="nm">${esc(p.short)}</span></button>`; }).join('');
+  const addStory = `<button class="story" data-a="sheet" data-x="addFriend"><span class="ring" style="--rc:transparent"><span style="background:var(--pink-soft);display:grid;place-items:center;color:var(--pink)">${ic('plus', 22, 2.6)}</span></span><span class="nm">Add</span></button>`;
+  const sug = TC.suggestions.find(x => !TC.relation(x));
+  const where = {}; TC.friends.forEach(fr => [...new Set(personSecs(fr).map(s => s.code).concat(PEOPLE[fr].unplaced || []))].forEach(c => { if (!mine.has(c)) (where[c] = where[c] || new Set()).add(fr); }));
+  const whereList = Object.entries(where).map(([c, set]) => [c, [...set]]).sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0])).slice(0, 4);
+  const unread = TC.requests.length + TC.threads.filter(isUnread).length;
+  const bellKey = TC.requests.join(',') + '|' + TC.threads.filter(isUnread).map(t => t.id + (t.last && t.last.created_at)).join(',');
+  const friendsErr = !TC.friends.length && TC.err.friends;
+  const feed = TC.friends.length ? TC.friends.map(homeWeekCard).join('')
+    : !TC.ready ? loadingCard('Loading your friends…')
+    : friendsErr ? `<div class="card fcard">${errCard('Couldn’t load your friends.', 'refresh')}</div>` : homeWeekCard('me');
+  return {
+    body: `
+ <div class="homehdr"><h1 class="tc-wordmark" aria-label="TermChamp">Term<span>Champ</span></h1><div class="grow"></div>
+  <button class="iconbtn" data-a="sheet" data-x="notifs" aria-label="Notifications">${ic('bell', 22)}${unread && S.notifSeen !== bellKey ? '<span class="dot"></span>' : ''}</button>
+  ${meBtn()}</div>
+ <div class="stories">${stories}${TC.friends.length || !TC.ready || friendsErr ? '' : addStory}</div>
+ <div class="hfeed">${feed}</div>
  ${sug ? `<div class="mightknow"><div class="mk-t">You might know</div>
   <div class="row">${pav(sug, 52, 17)}<div class="grow"><div style="font-weight:900;font-size:17px">${esc(PEOPLE[sug].name)}</div>
    ${PEOPLE[sug].sub ? `<div class="muted b" style="font-size:13px;margin-top:3px">${esc(PEOPLE[sug].sub)}</div>` : ''}</div>
    <button class="pbtn pink" data-a="addFriend" data-x="${sug}">Add</button></div></div>` : ''}
  ${whereList.length ? `<div class="sec-h">Where your friends are</div>
  <div class="card where" style="margin:0 16px">${whereList.map(([c, fs]) => `<button class="li" data-a="openClass" data-x="${c}"><span class="code">${c}</span><span class="grow b" style="font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(course(c).short || c)}</span>${avStack(fs, 24)}<span style="font-weight:900;font-size:15px;color:var(--blue-ink);min-width:14px;text-align:right">${fs.length}</span></button>`).join('')}</div>` : ''}
- ${TC.ready && !TC.friends.length ? `<div class="card row" style="margin:14px 16px 0;padding:14px 16px"><span class="sq" style="width:44px;height:44px;background:var(--pink-soft);color:var(--pink)">${ic('users', 22)}</span><div class="grow"><div style="font-weight:900;font-size:15.5px">See your friends’ weeks</div><div class="muted b" style="font-size:13px">Add friends and their classes show up here.</div></div><button class="pbtn pink" data-a="sheet" data-x="addFriend">Add</button></div>` : ''}
+ ${TC.ready && !TC.friends.length && !friendsErr ? `<div class="card row" style="margin:14px 16px 0;padding:14px 16px"><span class="sq" style="width:44px;height:44px;background:var(--pink-soft);color:var(--pink)">${ic('users', 22)}</span><div class="grow"><div style="font-weight:900;font-size:15.5px">See your friends’ weeks</div><div class="muted b" style="font-size:13px">Add friends and their classes show up here.</div></div><button class="pbtn pink" data-a="sheet" data-x="addFriend">Add</button></div>` : ''}
  <div class="spacer"></div>`, tabbar: true, fab: true
   };
 };
@@ -270,7 +266,7 @@ function emptyEx() { return S.savedOnly ? `<div class="empty"><b>Nothing saved y
 SCREENS.explore = () => {
   const nf = (S.subj !== 'All' ? 1 : 0) + (S.openOnly ? 1 : 0);
   return {
-    body: `<div class="title">Explore</div>
+    body: `<div class="tc-titlerow"><div class="title">Explore</div>${meBtn()}</div>
  <label class="search"><span style="color:var(--purple)">${ic('search', 22, 2.4)}</span><input id="exq" data-in="q" value="${esc(S.q)}" placeholder="Search classes or professors" autocomplete="off" enterkeyhint="search">${S.q ? `<button data-a="clearQ" class="chev">${ic('x', 18)}</button>` : ''}</label>
  <div class="pad" style="margin-top:14px"><div class="seg ${S.exMode === 'profs' ? 'purple' : ''}"><button class="${S.exMode === 'classes' ? 'on' : ''}" data-a="exMode" data-x="classes">Classes</button><button class="${S.exMode === 'profs' ? 'on' : ''}" data-a="exMode" data-x="profs">Professors</button></div></div>
  <div class="frow"><button class="fchip" data-a="sheet" data-x="filters">${ic('filter', 18, 2.4)} Filters ${nf ? `<span class="n">${nf}</span>` : ''}</button>
@@ -305,7 +301,7 @@ SCREENS.classDetail = ({ code }) => {
   <h1 style="margin-top:12px">${esc(c.title)}</h1>${c.desc ? `<p class="tc-desc">${esc(c.desc)}</p>` : `<p style="opacity:.8">${TC.catalogLoaded ? 'No catalog description on file.' : ''}</p>`}
   <div class="stats"><div class="stat"><small>SECTIONS</small><b>${secsOf(code).length}</b></div><div class="stat"><small>PREREQ</small><b style="font-size:${prereq.length > 9 ? 12 : 16}px;line-height:1.2">${esc(prereq.length > 60 ? prereq.slice(0, 57) + '…' : prereq)}</b></div><div class="stat"><small>OPEN SEATS</small><b>${seatsStat}</b></div></div></div>
  ${fr.length ? `<div class="card row" style="margin:14px 16px 0;padding:12px 14px">${avStack(fr, 30)}<span class="b" style="font-size:14px">${fr.slice(0, 2).map(f => esc(PEOPLE[f].short)).join(', ')}${fr.length > 2 ? ` + ${fr.length - 2} more` : ''} ${fr.length > 1 ? 'are' : 'is'} taking this</span></div>` : ''}
- <div class="sec-h" style="padding-left:18px"><span>Sections</span><span class="planpick">${['A', 'B', 'C'].map(k => `<button class="${S.plan === k ? 'on' : ''}" data-a="pickPlan" data-x="${k}">Plan ${k}</button>`).join('')}</span></div>
+ <div class="sec-h" style="padding-left:18px"><span>Sections</span><span class="planpick">${['A', 'B', 'C'].map(k => `<button class="plan-${k} ${S.plan === k ? 'on' : ''}" data-a="pickPlan" data-x="${k}" aria-pressed="${S.plan === k}"><i class="pdot"></i>Plan ${k}</button>`).join('')}</span></div>
  <div class="muted b" style="font-size:13px;padding:0 18px 10px">Tap + to add a section to Plan ${S.plan}${TC.seatsAt ? ` · seats as of ${agoText(new Date(TC.seatsAt).toISOString()) === 'now' ? 'just now' : agoText(new Date(TC.seatsAt).toISOString()) + ' ago'}` : ''}</div>
  ${profBlocks}<div class="spacer"></div>`, tabbar: true, fab: true
   };
@@ -348,7 +344,7 @@ SCREENS.rate = () => {
   const left = unrated().length;
   const list = TC.rateList;
   return {
-    body: `<div class="title">Rate</div>
+    body: `<div class="tc-titlerow"><div class="title">Rate</div>${meBtn()}</div>
  <div class="muted b" style="padding:0 20px;font-size:14px;margin-top:-6px">${!TC.ready ? 'Loading your professors…' : !list.length ? '' : left ? `${left} professor${left > 1 ? 's' : ''} waiting on your rating` : 'All caught up. Thanks for helping other students pick classes!'}</div>
  ${TC.ready && !list.length ? `<div class="empty"><b>No professors to rate yet</b>Your professors show up here from your ${esc(CFG.TERM_LABEL)} classes and your past classes. Add past classes on ${webLink('termchamp.com', '/')}.</div>` : ''}
  ${list.map(t => `<div class="term">${esc(t.term)}${t.current ? '<span class="curterm">Current term</span>' : ''}</div>
@@ -358,13 +354,19 @@ SCREENS.rate = () => {
 };
 
 const GRADES = ['A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D', 'F', 'P/CR'];
+/* The desktop's "What did the professor do well?" chips, word for word (build.py checks each is in
+   index.html). These are what reviews_public.tags holds and the professor page's tags come from.
+   The desktop's "struggled with" chips are left off: it never saves them, and a switch that
+   saves nothing is a promise the app can't keep. */
+const RATE_TAGS = ['Explains concepts clearly', 'Gave timely, useful feedback', 'Ran engaging discussions', 'Graded fairly & transparently',
+  'Helpful in office hours', 'Explained exam results well', 'Approachable & responsive', 'Used real-world examples', 'Made expectations clear', 'Genuinely cares about students'];
 SCREENS.rateForm = () => {
   const d = S.draft, p = PROFS[d.prof];
   const sg = (key, vals, labels, wrap) => `<div class="sg${wrap ? ' tc-wrap' : ''}">${vals.map((v, i) => `<button class="${d[key] === v ? 'on' : ''}" data-a="draft" data-x="${key}" data-y="${esc(v)}">${labels ? labels[i] : esc(v)}</button>`).join('')}</div>`;
   const codes = d.codes || [];
   return {
     dark: true, body: `<div class="rf"><div class="rf-sheet"><div class="grab" style="margin-top:0"></div>
-  <div class="rf-head">${profAv(d.prof, 48, 16)}<div class="grow"><div class="eyebrow">RATE A PROFESSOR</div><div style="font-size:24px;font-weight:900;line-height:1.15">${esc(p.name)}</div></div><button class="xbtn" data-a="back" aria-label="Cancel">${ic('x', 18, 2.4)}</button></div>
+  <div class="rf-head">${profAv(d.prof, 48, 16)}<div class="grow"><div class="eyebrow">${d.editing ? 'EDIT YOUR REVIEW OF' : 'RATE A PROFESSOR'}</div><div style="font-size:24px;font-weight:900;line-height:1.15">${esc(p.name)}</div></div><button class="xbtn" data-a="back" aria-label="Cancel">${ic('x', 18, 2.4)}</button></div>
   <div class="fcardx">
    <div class="frow2">${codes.length > 1 ? `<div class="flabel" style="margin-bottom:10px">Class</div>${sg('code', codes, null, true)}` : `<div class="row sb"><span class="flabel">Class</span><span class="b" style="color:var(--ink3)">${esc(d.code || '')}${d.term ? ' · ' + esc(d.term) : ''}</span></div>`}</div>
    <div class="frow2 row sb"><span class="flabel">Overall<div class="hint" style="margin-top:2px">${d.stars ? STARLBL[d.stars] : 'Tap to rate'}</div></span><span class="stars">${[1, 2, 3, 4, 5].map(k => `<button data-a="draft" data-x="stars" data-y="${k}" aria-label="${k} stars">${starI(28, k <= d.stars ? SC[d.stars] : '#E6EAF1')}</button>`).join('')}</span></div>
@@ -374,10 +376,11 @@ SCREENS.rateForm = () => {
    ${d.more ? `
    <div class="frow2"><div class="row sb" style="margin-bottom:10px"><span class="flabel">Your grade</span><span class="hint">Never shown with your name</span></div>${sg('grade', GRADES, null, true)}</div>
    <div class="frow2"><div class="flabel" style="margin-bottom:10px">Format</div>${sg('format', ['In person', 'Hybrid', 'Online'])}</div>
+   <div class="frow2"><div class="row sb" style="margin-bottom:10px"><span class="flabel">What did they do well?</span><span class="hint">Pick any</span></div><div class="tc-tags">${RATE_TAGS.map(t => `<button class="${(d.tags || []).includes(t) ? 'on' : ''}" data-a="draftTag" data-x="${esc(t)}" aria-pressed="${(d.tags || []).includes(t)}">${esc(t)}</button>`).join('')}</div></div>
    <div class="frow2"><div class="row sb"><span class="flabel">Review</span><span class="hint" id="revcount">${wordCount(d.review)}/300 words</span></div><textarea class="ta" id="revta" data-in="review" placeholder="What should other students know? Workload, exams, tips…">${esc(d.review || '')}</textarea></div>` : ''}
    ${d.err ? `<div class="frow2"><div class="tc-err" role="alert">${esc(d.err)}</div></div>` : ''}
   </div></div></div>`,
-    bot: `<div class="bottombar"><button class="btn" data-a="postRating" ${d.stars && d.code && !UI.busy.rate ? '' : 'disabled'}>${UI.busy.rate ? 'Posting…' : !d.code ? 'Pick the class' : d.stars ? 'Post rating' : 'Tap a star to rate'}</button></div>`, tabbar: false, fab: false
+    bot: `<div class="bottombar"><button class="btn" data-a="postRating" ${d.stars && d.code && !UI.busy.rate ? '' : 'disabled'}>${UI.busy.rate ? (d.editing ? 'Saving…' : 'Posting…') : !d.code ? 'Pick the class' : d.stars ? (d.editing ? 'Save changes' : 'Post rating') : 'Tap a star to rate'}</button></div>`, tabbar: false, fab: false
   };
 };
 function wordCount(t) { return String(t || '').trim().split(/\s+/).filter(Boolean).length; }
@@ -412,7 +415,7 @@ SCREENS.schedule = () => {
   if (t === 'plans') {
     const secs = planSecs(S.plan), timed = secs.filter(s => !s.async && s.s != null), any = secs.filter(s => s.async || s.s == null), miss = planMissing(S.plan);
     const days = DAYS.map(d => [d, timed.filter(s => s.days.includes(d)).sort((a, b) => a.s - b.s)]).filter(x => x[1].length);
-    inner = `<div class="pad" style="margin-top:14px"><div class="seg">${['A', 'B', 'C'].map(k => `<button class="${S.plan === k ? 'on' : ''}" data-a="pickPlan" data-x="${k}">Plan ${k}</button>`).join('')}</div></div>
+    inner = `<div class="pad" style="margin-top:14px"><div class="seg plans">${['A', 'B', 'C'].map(k => `<button class="plan-${k} ${S.plan === k ? 'on' : ''}" data-a="pickPlan" data-x="${k}" aria-pressed="${S.plan === k}"><i class="pdot"></i>Plan ${k}</button>`).join('')}</div></div>
   <div class="regbar"><span>${secs.length} class${secs.length === 1 ? '' : 'es'}</span><span class="regbadge" style="background:var(--bg);color:var(--muted)">${TC.planShared[S.plan] !== false ? 'Friends can see' : 'Only you'}</span></div>
   ${TC.err.plans ? `<div class="muted b" style="font-size:13px;padding:6px 18px">${TC.err.plans === 'missing' ? 'Plans aren’t set up on this server yet.' : 'Couldn’t load your plans — changes may not save.'}</div>` : ''}
   ${miss ? `<div class="muted b" style="font-size:13px;padding:6px 18px">${miss} section${miss === 1 ? ' in this plan is' : 's in this plan are'} no longer in the ${esc(CFG.TERM_LABEL)} list.</div>` : ''}
@@ -422,6 +425,7 @@ SCREENS.schedule = () => {
    ${list.map(s => { const fr = friendsInSec(s.id); return `<button class="arow" data-a="secSheet" data-x="${s.code}" data-y="${esc(s.id)}"><span class="tm">${hs(s.s)}<small>${hs(s.e)}</small></span><span class="vb"></span><span class="grow"><span style="font-weight:900;font-size:16px">${s.code}</span><span class="muted b" style="display:block;font-size:14px">${esc(profName(s.prof))} · ${secSeatText(s)}</span></span>${avStack(fr, 26)}</button>`; }).join('')}</div>`).join('')}
   <div class="pad" style="margin-top:14px"><button class="btn soft" data-a="tab" data-x="explore">+ Add a class from Explore</button></div>
   <div class="muted b" style="font-size:12.5px;padding:12px 20px 0;line-height:1.45">Plans use ${esc(CFG.TERM_LABEL)} sections. Once the ${esc(CFG.REGISTRATION_TERM)} schedule is posted, plan with those. Sections in a plan get seat alerts.</div>`;
+    inner = `<div class="plancol plan-${S.plan}">${inner}</div>`;
   } else if (t === 'mine') {
     const secs = personSecs('me'), unplaced = PEOPLE.me.unplaced || [];
     const byCode = {}; secs.forEach(s => { (byCode[s.code] = byCode[s.code] || []).push(s); });
@@ -436,12 +440,10 @@ SCREENS.schedule = () => {
    ${fr.length ? `<div class="row" style="gap:8px;margin-top:10px">${avStack(fr, 24)}<span class="b" style="font-size:13px;color:var(--ink3)">${fr.map(f => esc(PEOPLE[f].short)).slice(0, 3).join(', ')} in your section</span></div>` : ''}</button>`; }).join('')}
   ${unplaced.map(code => `<button class="card ccard" style="margin:12px 16px 0;width:calc(100% - 32px)" data-a="openClass" data-x="${code}"><div class="row sb"><span class="code">${code}</span><span class="muted b" style="font-size:13px">No section yet</span></div><div class="ctitle" style="margin:8px 0 0">${esc(course(code).title)}</div></button>`).join('')}`;
   } else {
-    inner = `<div class="card" style="margin:14px 16px 0;padding:18px 16px"><div class="row" style="gap:12px"><span class="sq" style="width:44px;height:44px;background:var(--teal-soft);color:var(--teal)">${ic('grad', 24)}</span><div class="grow"><div style="font-weight:900;font-size:17px">Your degree planner</div><div class="muted b" style="font-size:13.5px">Requirements, GEs and past classes</div></div></div>
-   <p class="muted b" style="font-size:14px;line-height:1.5;margin:12px 0 14px">The full Planner — what your major still needs, your GE areas and the classes you’ve already taken — lives on termchamp.com for now. It’s coming to the phone app next.</p>
-   <a class="btn tc-a" href="${WEB}/" target="_blank" rel="noopener">Open the Planner on termchamp.com</a></div>`;
+    inner = plannerView();
   }
   return {
-    body: `<div class="title">Schedule</div>
+    body: `<div class="tc-titlerow"><div class="title">Schedule</div>${meBtn()}</div>
  <div class="stabs">${[['mine', 'My Classes'], ['plans', 'Plans'], ['planner', 'Planner']].map(([k, l]) => `<button class="${t === k ? 'on' : ''}" data-a="schedTab" data-x="${k}">${l}</button>`).join('')}</div>
  ${inner}<div class="spacer"></div>`, tabbar: true, fab: true
   };
@@ -516,6 +518,22 @@ SCREENS.chat = ({ id }) => {
   };
 };
 
+/* A friend's Plans A–C — only what they chose to share (RLS returns a plan only while its "friends
+   can see" toggle is on, and only to accepted friends). */
+function friendPlansCard(id, shared) {
+  if (!TC.friendPlans || TC.err.friendPlans) return '';     // not loaded (or failed): say nothing rather than "none"
+  const fp = TC.friendPlans[id];
+  const slots = fp ? ['A', 'B', 'C'].filter(k => fp[k]) : [];
+  if (!slots.length) return `<div class="muted b" style="font-size:13px;padding:12px 20px 0">No shared plans.</div>`;
+  UI.fplan = UI.fplan || {};
+  const k = slots.includes(UI.fplan[id]) ? UI.fplan[id] : slots[0];
+  const ids = fp[k], secs = ids.map(x => Object.prototype.hasOwnProperty.call(SEC, x) ? SEC[x] : null).filter(Boolean), miss = ids.length - secs.length;
+  const mine = myCodes(), both = new Set(secs.map(s => s.code).filter(c => mine.has(c)));
+  return `<div class="card tc-sec"><div class="tc-sech"><span>${esc(PEOPLE[id].short)}’s plans</span><span class="planpick">${slots.map(x => `<button class="plan-${x} ${x === k ? 'on' : ''}" data-a="friendPlan" data-x="${id}" data-y="${x}" aria-pressed="${x === k}"><i class="pdot"></i>Plan ${x}</button>`).join('')}</span></div>
+   <div class="muted b" style="font-size:12.5px;margin-bottom:8px">${secs.length} class${secs.length === 1 ? '' : 'es'} · ${esc(CFG.TERM_LABEL)} sections${miss ? ` · ${miss} no longer listed` : ''}</div>
+   ${secs.filter(s => s.s != null).length ? `<div class="plancol plan-${k}">${grid(secs, { sel: S.homeDay, act: 'homeDay', shared: both, one: true, H: 260 })}</div>` : ''}
+   ${secs.map(s => `<button class="li" data-a="openClass" data-x="${s.code}"><span class="code">${s.code}</span><span class="grow" style="min-width:0"><span class="b" style="display:block;font-size:14.5px">${esc(course(s.code).short)}</span><span class="muted b" style="font-size:12.5px">${s.sec ? '§' + esc(s.sec) + ' · ' : ''}${secWhen(s)} · ${esc(profName(s.prof))}</span></span>${both.has(s.code) ? '<span class="st" style="background:#FEF9C3;color:#A16207">You too</span>' : ''}</button>`).join('')}</div>`;
+}
 SCREENS.friend = ({ id }) => {
   const p = PEOPLE[id]; if (!p) return missingScreen('Not found.');
   const secs = personSecs(id), mine = myCodes(), shared = new Set(secs.map(s => s.code).concat(p.unplaced || []).filter(c => mine.has(c))), rel = TC.relation(id), isF = rel === 'friends';
@@ -529,7 +547,8 @@ SCREENS.friend = ({ id }) => {
  ${isF ? `${secs.length ? `<div class="card" style="margin:18px 16px 0;padding:14px 0 12px">${grid(secs, { sel: S.homeDay, act: 'homeDay', shared, one: true, H: 280 })}</div>` : ''}
  <div class="card list" style="margin:12px 16px 0">${codes.map(code => { const s = secs.find(x => x.code === code); return `<button class="li" data-a="openClass" data-x="${code}"><span class="code">${code}</span><span class="grow"><span class="b" style="font-size:15px;display:block">${esc(course(code).short)}</span><span class="muted b" style="font-size:12.5px">${secWhen(s)}</span></span>${shared.has(code) ? '<span class="st" style="background:#FEF9C3;color:#A16207">Shared</span>' : ''}</button>`; }).join('')}
   ${(p.unplaced || []).map(code => `<button class="li" data-a="openClass" data-x="${code}"><span class="code">${code}</span><span class="grow"><span class="b" style="font-size:15px;display:block">${esc(course(code).short)}</span><span class="muted b" style="font-size:12.5px">No section yet</span></span>${shared.has(code) ? '<span class="st" style="background:#FEF9C3;color:#A16207">Shared</span>' : ''}</button>`).join('')}
-  ${!codes.length && !(p.unplaced || []).length ? `<div class="empty"><b>No ${esc(CFG.TERM_LABEL)} classes added</b></div>` : ''}</div>`
+  ${!codes.length && !(p.unplaced || []).length ? `<div class="empty"><b>No ${esc(CFG.TERM_LABEL)} classes added</b></div>` : ''}</div>
+ ${friendPlansCard(id, shared)}`
       : `<div class="empty" style="margin-top:20px"><b>Classes are shared between friends</b>Once you’re friends you’ll see each other’s weeks.</div>`}
  <div class="spacer"></div>`, tabbar: true, fab: true
   };

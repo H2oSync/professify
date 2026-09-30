@@ -212,11 +212,17 @@ const A = {
   siMode: m => { UI.signin.mode = m; UI.signin.err = ''; render(); },
   signOut: () => { UI.sheet = null; TC.signOut(); },
   web: p => { window.open(WEB + (p || '/'), '_blank', 'noopener'); },
-  homeFriend: id => { S.homeFriend = id; render(true); },
+  /* A story jumps to that friend's week in the feed (every friend has a card there). */
+  homeFriend: id => {
+    const el = document.getElementById('hf-' + id); if (!el) return;
+    const calm = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    el.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' });
+    el.classList.remove('hf-flash'); void el.offsetWidth; el.classList.add('hf-flash');
+  },
   homeDay: d => { S.homeDay = d; render(true); }, schedDay: d => { S.schedDay = d; render(true); },
   openClass: code => { UI.champ = false; go('classDetail', { code }); },
   openProf: id => { UI.champ = false; go('profDetail', { id }); },
-  openFriend: id => { UI.champ = false; if (!id) return; if (id === 'me') return setTab('schedule'); go('friend', { id }); },
+  openFriend: id => { UI.champ = false; if (!id) return; if (id === 'me') return setTab('schedule'); if (TC.user) loadFriendPlans(); go('friend', { id }); },
   sheet: type => { UI.sheet = { type }; UI.champ = false; if (type === 'notifs') { S.notifSeen = TC.requests.join(',') + '|' + TC.threads.filter(isUnread).map(t => t.id + (t.last && t.last.created_at)).join(','); save(); } if (type === 'addFriend' && UI.peopleQ) runPeople(UI.peopleQ); render(true); },
   closeSheet: () => { UI.sheet = null; UI.champ = false; render(true); },
   exMode: m => { S.exMode = m; S.exLimit = 40; save(); render(true); },
@@ -244,9 +250,12 @@ const A = {
     const codes = taken.length ? taken : profCourses(pid);
     code = (codes.length === 1 ? codes[0] : null) || (code && codes.includes(code) ? code : null);
     S.draft = { prof: pid, code, codes, term: item ? item[2] : '', stars: 0, diff: 0, again: null, more: false, grade: null, format: null, review: '', err: '' };
+    /* A review the student started and didn't post (refused, closed, phone locked) comes back. */
+    const kept = draftLoad(pid); if (kept) { kept.tags = Array.isArray(kept.tags) ? kept.tags.filter(t => RATE_TAGS.includes(t)) : []; const c = S.draft.code; Object.assign(S.draft, kept, { err: '' }); if (!S.draft.code || (S.draft.codes.length && !S.draft.codes.includes(S.draft.code))) S.draft.code = c; }
     UI.champ = false; UI.sheet = null; go('rateForm');
   },
-  draft: (k, v) => { const d = S.draft; const val = (k === 'stars' || k === 'diff') ? +v : v; d[k] = d[k] === val && k !== 'stars' && k !== 'code' ? null : val; if (k === 'diff' && d.diff === null) d.diff = 0; d.err = ''; render(true); },
+  draft: (k, v) => { const d = S.draft; const val = (k === 'stars' || k === 'diff') ? +v : v; d[k] = d[k] === val && k !== 'stars' && k !== 'code' ? null : val; if (k === 'diff' && d.diff === null) d.diff = 0; d.err = ''; draftSave(); render(true); },
+  draftTag: t => { const d = S.draft; d.tags = d.tags || []; d.tags = d.tags.includes(t) ? d.tags.filter(x => x !== t) : d.tags.concat(t); d.more = true; draftSave(); render(true); },
   draftMore: () => { S.draft.more = !S.draft.more; render(true); },
   postRating: async () => {
     const d = S.draft; if (!d || !d.stars || !d.code || UI.busy.rate) return;
@@ -254,12 +263,14 @@ const A = {
     const r = await TC.postReview(d.prof, d);
     UI.busy.rate = 0;
     if (r.err) { d.err = r.err; render(true); return; }
+    draftClear(d.prof);
     S.lastRated = Object.assign({}, d, { reviewId: r.id, share: false });
     const st = S.stack[S.tab]; st[st.length - 1] = { s: 'rateThanks', p: {} }; render();
   },
   toggleShow: async () => { const d = S.lastRated; if (!d || !d.reviewId) return; const next = !d.share; if (await TC.setShare(d.reviewId, next)) { d.share = next; } else toast('Couldn’t change that — try again'); render(true); },
   rateDone: () => { const st = S.stack[S.tab]; st.pop(); if (!st.length) st.push({ s: S.tab }); render(); },
   rateAnother: () => { const u = unrated(); const st = S.stack[S.tab]; st.pop(); if (!st.length) st.push({ s: S.tab }); if (u.length) A.rateProf(u[0][0], u[0][1]); else render(); },
+  friendPlan: (id, k) => { UI.fplan = UI.fplan || {}; UI.fplan[id] = k; render(true); },
   fFilter: f => { S.friendsFilter = f; render(true); },
   fFilterGo: f => { UI.champ = false; S.friendsFilter = f; setTab('friends'); },
   openChat: id => { UI.champ = false; TC.openThread(id); go('chat', { id }); },
@@ -292,6 +303,14 @@ async function runPeople(q) {
   catch (e) { UI.peopleRes = { err: 'Couldn’t search right now — try again.' }; }
   render(true);
 }
+/* One unposted review per professor, on this phone only, cleared when it posts. */
+/* Keyed by account: on a shared phone, one student's unposted words never open under another's. */
+const DRAFT_KEY = 'termchamp_app_rate_drafts';
+function draftAll() { try { const all = JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}') || {}; const me = (TC.user && TC.user.id) || '-'; return all.u === me ? (all.d || {}) : {}; } catch (e) { return {}; } }
+function draftPut(d) { try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ u: (TC.user && TC.user.id) || '-', d })); } catch (e) {} }
+function draftSave() { const d = S.draft; if (!d || d.editing || !d.prof) return; const all = draftAll(); all[d.prof] = { code: d.code, stars: d.stars, diff: d.diff, again: d.again, grade: d.grade, format: d.format, review: d.review, tags: d.tags || [], more: d.more, at: Date.now() }; draftPut(all); }
+function draftLoad(pk) { const x = draftAll()[pk]; return x && Date.now() - (x.at || 0) < 30 * 86400000 ? x : null; }
+function draftClear(pk) { const all = draftAll(); delete all[pk]; draftPut(all); }
 const SUBMIT = {
   send: async form => {
     const inp = form.querySelector('input'), v = inp.value.trim(); if (!v || UI.busy.send) return;
@@ -304,20 +323,25 @@ const SUBMIT = {
   people: form => runPeople(form.querySelector('input').value),
   pw: async form => {
     const e = form.querySelector('#si-email').value.trim(), p = form.querySelector('#si-pw').value;
-    UI.signin.email = e; UI.busy.signin = 1; UI.signin.err = ''; render();
+    UI.signin.email = e;
+    if (eduOk(e) && schoolForEmail(e) !== 'calpoly') { UI.signin.mode = 'waitlist'; UI.signin.err = ''; return render(); }   // SDSU/UCSB: the waitlist
+    UI.busy.signin = 1; UI.signin.err = ''; render();
     const err = await TC.signInPassword(e, p); UI.busy.signin = 0;
-    if (err) { UI.signin.err = /invalid/i.test(err) ? 'That email and password don’t match. If you signed up with Google, use Continue with Google.' : err; render(); }
+    if (err) { UI.signin.err = /invalid/i.test(err) ? 'That email and password don’t match. If you’ve never set a password, use “Email me a code”.' : /not confirmed/i.test(err) ? 'This address hasn’t been confirmed yet — use “Email me a code” to finish setting it up.' : authFriendlyErr(err); render(); }
   },
   sendCode: async form => {
-    const e = form.querySelector('#si-email').value.trim(); UI.signin.email = e; UI.busy.signin = 1; UI.signin.err = ''; render();
-    const err = await TC.sendCode(e); UI.busy.signin = 0;
-    if (err) { UI.signin.err = /signups? not allowed|not found|user/i.test(err) ? 'No TermChamp account uses that email. Create one on termchamp.com first.' : err; render(); return; }
-    UI.signin.mode = 'verify'; render();
+    const e = form.querySelector('#si-email').value.trim(); UI.signin.email = e;
+    if (eduOk(e) && schoolForEmail(e) !== 'calpoly') { UI.signin.mode = 'waitlist'; UI.signin.err = ''; return render(); }
+    UI.busy.signin = 1; UI.signin.err = ''; render();
+    const err = await TC.sendCode(e, false); UI.busy.signin = 0;
+    if (err) { UI.signin.err = /signups? not allowed|user not found|otp_disabled/i.test(err) ? 'No TermChamp account uses that email yet — tap “Create an account” below.' : authFriendlyErr(err); render(); return; }
+    Object.assign(UI.signin, { mode: 'verify', err: '', note: '', resendAt: Date.now() + 45000 }); render();
   },
   verify: async form => {
-    const c = form.querySelector('#si-code').value.trim(); UI.busy.signin = 1; UI.signin.err = ''; render();
+    const c = onbCode(form); if (c.length < 6 || UI.busy.signin) return;
+    UI.busy.signin = 1; UI.signin.err = ''; UI.signin.note = ''; render();
     const err = await TC.verifyCode(UI.signin.email, c); UI.busy.signin = 0;
-    if (err) { UI.signin.err = /expired|invalid/i.test(err) ? 'That code didn’t work or has expired. Send a new one.' : err; render(); }
+    if (err) { UI.signin.err = /expired|invalid|token/i.test(err) ? 'That code is wrong or expired. Check your newest email or resend it.' : authFriendlyErr(err); render(); }
   }
 };
 function scrollEnd() { const sc = document.getElementById('scroll'); sc.scrollTop = sc.scrollHeight; }
@@ -329,13 +353,21 @@ function render(keep) {
   const ae = document.activeElement, focusId = ae && ae.id && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA') ? ae.id : null, sel = focusId ? [ae.selectionStart, ae.selectionEnd, ae.value] : null;
   const y = sc.scrollTop, champY = (document.getElementById('champscroll') || {}).scrollTop;
   const sh = document.getElementById('sheet');
+  /* A background data load (seats, ratings) must not rebuild a sign-in form under someone typing. */
+  if (keep && TC.phase !== 'ok' && TC.phase !== 'boot' && TC.phase !== 'offline') return;
   if (TC.phase !== 'ok') {
+    if (TC.phase !== 'boot') gaView(TC.phase === 'noprofile' ? 'onboarding' : UI.signin.mode === 'signup' || UI.signin.mode === 'legal' ? 'signup' : UI.signin.mode === 'suVerify' ? 'verify' : UI.signin.mode === 'waitlist' || TC.phase === 'otherschool' ? 'waitlist' : 'signin');
     sc.innerHTML = signinView(); sc.style.paddingTop = ''; sc.style.background = '';
+    if (!focusId) { const c6 = [...sc.querySelectorAll('.code6 input')]; const f = c6.find(i => !i.value) || c6[c6.length - 1]; if (f) f.focus(); }   // iOS offers the emailed code only to a focused field
     ['fixtop', 'fixbot', 'chrome'].forEach(i => { document.getElementById(i).innerHTML = ''; });
     sh.innerHTML = ''; document.getElementById('status').classList.remove('dark');
     if (focusId) { const el = document.getElementById(focusId); if (el) { el.focus(); if (el.value === sel[2]) try { el.setSelectionRange(sel[0], sel[1]); } catch (_) {} } }
     return;
   }
+  /* The selected plan's colour reaches everything that acts on it — the + buttons on class and
+     professor pages, and the section sheet — through --pc on <body>. */
+  ['A', 'B', 'C'].forEach(k => document.body.classList.toggle('plan-' + k, S.plan === k));
+  gaView(S.tab && cur() ? cur().s : 'app');
   const e = cur(); let v;
   try { v = SCREENS[e.s](e.p || {}); } catch (err) { console.error('[termchamp app]', err); v = missingScreen('Something went wrong on this screen.'); }
   sc.innerHTML = v.body;
@@ -371,7 +403,7 @@ document.addEventListener('input', ev => {
   const k = ev.target.dataset.in; if (!k) return;
   if (k === 'q') { S.q = ev.target.value; S.exLimit = 40; clearTimeout(qT); qT = setTimeout(() => { const el = document.getElementById('exlist'); if (el) el.innerHTML = exploreList(); }, 120); }
   else if (k === 'fq') { S.fq = ev.target.value; document.getElementById('flist').innerHTML = friendsList(); }
-  else if (k === 'review') { S.draft.review = ev.target.value; const n = wordCount(ev.target.value), c = document.getElementById('revcount'); if (c) { c.textContent = n + '/300 words'; c.style.color = n > 300 ? '#B91C1C' : ''; } }
+  else if (k === 'review') { S.draft.review = ev.target.value; draftSave(); const n = wordCount(ev.target.value), c = document.getElementById('revcount'); if (c) { c.textContent = n + '/300 words'; c.style.color = n > 300 ? '#B91C1C' : ''; } }
 });
 document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && (UI.sheet || UI.champ)) A.closeSheet(); });
 function fit() { const s = Math.min(1, (innerHeight - 32) / 874, (innerWidth - 32) / 402); document.documentElement.style.setProperty('--s', s); }

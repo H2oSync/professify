@@ -51,3 +51,24 @@ Read this before running anything:
 
 Written before 2026-09-07 and **not re-verified in this session**. Most were run when written.
 Check the object they create actually exists before assuming either way.
+
+## Reviews could not be posted (2026-09-28)
+
+If reviews are refused for everyone, run `professify-review-diagnose.sql` (read-only) and then `professify-review-insert-fix.sql`. The fix moves the insert policy's hourly count into a SECURITY DEFINER function, because `reviews.user_id` is hidden from students since `professify-reviews-anon-fix.sql` and a count over it as the student fails. **Re-run the fix after re-running `professify-review-refusals.sql`, `professify-safety.sql`, `professify-rate-limits.sql` or `professify-review-integrity.sql`** — each of those recreates the old policy.
+
+## professify-school-waitlist.sql (2026-09-29)
+
+This file backs the phone app's "TermChamp is coming to your school — join the list" screen for SDSU and UCSB students.
+
+- It creates `public.school_waitlist`, holding an email address and the school, nothing else.
+- The app can only add to the list. Nobody can read it through the app; only Tate can, in the SQL editor.
+- The database accepts only SDSU and UCSB addresses, checked with `school_from_email()`.
+- Run it once. It's safe to re-run.
+- Until it runs, the app says "The list isn't open yet" and never claims anyone was added.
+
+To see who's on the list:
+
+```sql
+select school, count(*) from public.school_waitlist group by 1;
+select email, created_at from public.school_waitlist where school = 'sdsu' order by created_at;
+```

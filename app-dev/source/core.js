@@ -24,9 +24,65 @@ window.PROFESSIFY_CONFIG = window.PROFESSIFY_CONFIG || {
   REGISTRATION_OPENS: '2026-10-19',
   REGISTRATION_TERM: 'Spring 2027',
   /* Off, as on the desktop (its button renders only when this is on). */
-  GOOGLE_SIGNIN_ENABLED: false
+  GOOGLE_SIGNIN_ENABLED: false,
+  /* Google Analytics — the desktop's property and stream (termchamp.com). Blank = load nothing. */
+  GA_MEASUREMENT_ID: 'G-L98ZTJQ1LY'
 };
 const CFG = window.PROFESSIFY_CONFIG;
+
+/* ================================================================================================
+   GOOGLE ANALYTICS — the desktop's rules (index.html, 2026-09-18), applied to /app:
+   1. GA GETS THE SCREEN, NEVER THE CONTENT. A page view is a fixed screen name and a
+      termchamp.com/app/?tab=<screen> location. No professor, class, person, code, email or
+      anything typed. Events carry only the enumerated props in GA_PROPS_OK.
+   2. GPC and Do Not Track switch it off completely — the tag is never loaded.
+   3. Only on the real site: https and host === SITE_URL's host. localhost, a file, a deploy
+      preview and the Desktop preview load nothing, so none of them reach the production numbers.
+   4. No ads: consent mode denies ad storage, ad user data and ad personalisation before the tag
+      loads; Google Signals off. page_location is pinned so no URL query ever reaches Google.
+   ================================================================================================ */
+const GA_SCREENS = { home: 'Home', explore: 'Explore', rate: 'Rate', schedule: 'Schedule', friends: 'Friends', classDetail: 'Class',
+  profDetail: 'Professor', friend: 'Friend', chat: 'Chat', me: 'Profile', settings: 'Settings', editProfile: 'Edit profile', legal: 'Legal',
+  onb: 'Onboarding', waitlist: 'School waitlist', signin: 'Sign in', signup: 'Sign up', verify: 'Verify email', onboarding: 'Claim username' };
+const GA_PROPS_OK = { method: 1, result: 1, rows: 1, kind: 1 };   // kind carries 'sdsu'/'ucsb' on waitlist_join — a school, never a person
+let _gaOn = false, _gaLast = '';
+function gaAllowedFor(loc, nav, cfg) {
+  const id = String((cfg && cfg.GA_MEASUREMENT_ID) || '').trim();
+  if (!/^G-[A-Z0-9]{4,}$/.test(id)) return '';
+  try { if (nav.globalPrivacyControl === true || nav.globalPrivacyControl === '1') return ''; } catch (e) { return ''; }
+  try { if (nav.doNotTrack === '1' || nav.msDoNotTrack === '1') return ''; } catch (e) { return ''; }
+  if (loc.protocol !== 'https:') return '';
+  let declared = ''; try { declared = new URL(String(cfg.SITE_URL || '')).host; } catch (e) { return ''; }
+  if (!declared || loc.host !== declared) return '';
+  return id;
+}
+function gaBoot() {
+  const id = gaAllowedFor(location, navigator, CFG); if (!id) return;
+  try {
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = function () { window.dataLayer.push(arguments); };
+    gtag('consent', 'default', { ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied', analytics_storage: 'granted' });
+    gtag('js', new Date());
+    gtag('config', id, { send_page_view: false, allow_google_signals: false, allow_ad_personalization_signals: false, page_location: location.origin + '/app/' });
+    const sc = document.createElement('script'); sc.async = true;
+    sc.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(id);
+    sc.onerror = () => { _gaOn = false; };                     // a content blocker is the normal case
+    (document.head || document.documentElement).appendChild(sc);
+    _gaOn = true;
+  } catch (e) { _gaOn = false; }
+}
+/* The screen key, never an id. Unknown screens are 'app' — fails closed. */
+function gaPage(key) { const k = GA_SCREENS[key] ? key : 'app'; return { page_title: 'TermChamp app — ' + (GA_SCREENS[k] || 'App'), page_location: location.origin + '/app/?tab=' + k }; }
+function gaView(key) {
+  if (!_gaOn) return;
+  try { const k = GA_SCREENS[key] ? key : 'app'; if (k === _gaLast) return; _gaLast = k; gtag('event', 'page_view', gaPage(k)); } catch (e) {}
+}
+function gaEvent(name, props) {
+  if (!_gaOn || !name) return;
+  try { const p = { app: 'phone' }; for (const k in (props || {})) { if (!GA_PROPS_OK[k] || props[k] == null) continue; const v = props[k]; p[k] = (typeof v === 'number' || typeof v === 'boolean') ? v : String(v).slice(0, 40); }
+    gtag('event', String(name).slice(0, 40), p); } catch (e) {}
+}
+try { gaBoot(); } catch (e) {}
 const POLYRATINGS_API = 'https://api-prod.polyratings.org';
 
 /* The live data. The screens were written against these names, so they keep them; they start
@@ -41,7 +97,7 @@ let PEOPLE = { me: { name: 'You', short: 'You', ini: '?', color: '#FDBA74', secs
 const TC = {
   sb: null, user: null, profile: null,
   ready: false,            // signed in and the first load finished
-  phase: 'boot',           // boot → signin | noprofile | ok
+  phase: 'boot',           // boot → signin | noprofile | profileerr | otherschool | ok
   err: {},                 // per-area load failures, so a screen can say "couldn't load" instead of "none"
   seatsLoaded: false, profsLoaded: false,
   mySecs: [],              // the student's own registered classes (my_sections), as section objects
@@ -149,17 +205,99 @@ TC.signInPassword = async function (email, pw) {
   const r = await sb.auth.signInWithPassword({ email, password: pw });
   return r.error ? r.error.message : null;
 };
-TC.sendCode = async function (email) {
+/* @@SCHOOLS@@ */
+/* authFriendlyErr's catch-all, in this app's words. */
+function dbFriendlyErr(e) { return dbSay(e, 'Something went wrong. Try again.'); }
+
+/* ---- Sign up, as the desktop does it (2026-09-07): one emailed code proves the .edu address —
+   the reviews policy is built on that — then the password is set on the session the code just
+   made. The password lives in memory for those seconds only: never storage, a URL or a log. ---- */
+TC.sendCode = async function (email, create) {
   const sb = TC.client(); if (!sb) return 'Could not reach TermChamp.';
-  /* shouldCreateUser:false — a brand-new account is made on termchamp.com, where the setup
-     (school, major, username) lives. Here we only sign existing students in. */
-  const r = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
+  /* create:false for "log in with a code" — an address with no account is told so instead of
+     quietly becoming a new, empty one (the desktop's 2026-09-03 rule). */
+  const r = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: !!create } });
   return r.error ? r.error.message : null;
 };
 TC.verifyCode = async function (email, code) {
   const sb = TC.client(); if (!sb) return 'Could not reach TermChamp.';
   const r = await sb.auth.verifyOtp({ email, token: code, type: 'email' });
   return r.error ? r.error.message : null;
+};
+TC.signUpVerify = async function (email, code, pw) {
+  const sb = TC.client(); if (!sb) return { err: 'Could not reach TermChamp.' };
+  const r = await sb.auth.verifyOtp({ email, token: code, type: 'email' });
+  if (r.error || !(r.data && r.data.session)) return { err: (r.error && r.error.message) || 'Could not verify. Try again.' };
+  let pwNote = '';
+  if (pw) {
+    /* Verified is verified: a password that won't save is a reason to say where to set one,
+       never a reason to undo the sign-in that just worked. */
+    try { const up = await sb.auth.updateUser({ password: pw }); if (up && up.error) throw up.error; }
+    catch (e) { if (!/same|different/i.test(String(e && e.message))) pwNote = 'You’re signed in, but your password didn’t save. Set one in Settings.'; }
+  }
+  return { err: null, pwNote };
+};
+/* The profile row, made here the first time an account signs in — the desktop's ensureProfile
+   insert (id, edu_email, display_name) plus what the student just told us. The school is stamped
+   by the server from the verified address; the client never sends one. */
+/* "Tell me when TermChamp reaches my school." Insert-only: the app can add an address and never
+   read the list back (sql/professify-school-waitlist.sql). The database re-checks the domain. */
+TC.joinWaitlist = async function (email) {
+  const sb = TC.client(); if (!sb) return { err: 'Couldn’t reach TermChamp — check your connection and try again.' };
+  const e = String(email || '').trim().toLowerCase(), school = schoolForEmail(e);
+  if (school !== 'sdsu' && school !== 'ucsb') return { err: 'That list is for SDSU and UCSB addresses.' };
+  const r = await sb.from('school_waitlist').insert({ email: e, school });
+  if (!r.error) { gaEvent('waitlist_join', { kind: school }); return { ok: 'joined' }; }
+  if (r.error.code === '23505') return { ok: 'already' };
+  if (r.error.code === '42P01' || /school_waitlist/.test(r.error.message || '') && /does not exist|schema cache/i.test(r.error.message || '')) return { err: 'The list isn’t open yet — try again in a day or two.' };
+  return { err: dbSay(r.error, 'Couldn’t add you to the list.') };
+};
+/* ---- Classes added during onboarding — the desktop's own rows: saved_classes decides WHICH
+   classes are yours; my_sections adds the section (the desktop's pushMySecToDb shape). ---- */
+TC.addMyClass = async function (code, secId) {
+  const sb = TC.client(), me = TC.user.id, s = secId ? SEC[secId] : null;
+  let r = await sb.from('saved_classes').upsert({ user_id: me, term: CFG.TERM, code });
+  if (r.error) return dbSay(r.error, 'Couldn’t add ' + code + '.');
+  if (s) {
+    r = await sb.from('my_sections').upsert({ user_id: me, term: CFG.TERM, code, class_nbr: String(s.id), section: s.sec || null, instructor: s.instructor || null, days: s.rawDays || null, status: 'enrolled', wl_pos: null });
+    if (r.error) { await loadMine(); return dbSay(r.error, code + ' is added, but its section didn’t save — pick it again from the class page.'); }
+  }
+  await loadMine(); return null;
+};
+TC.removeMyClass = async function (code) {
+  const sb = TC.client(), me = TC.user.id;
+  const a = await sb.from('saved_classes').delete().eq('user_id', me).eq('term', CFG.TERM).eq('code', code);
+  if (a.error) return dbSay(a.error, 'Couldn’t remove ' + code + '.');
+  await sb.from('my_sections').delete().eq('user_id', me).eq('term', CFG.TERM).eq('code', code);
+  await loadMine(); return null;
+};
+/* Year, major and concentration from the "Does this look right?" step. */
+TC.updateProfileFields = async function (patch) {
+  let r = await TC.client().from('profiles').update(patch).eq('id', TC.user.id).select('id');
+  /* A concentration the database won't take (no column, or no grant) must not block the rest —
+     it's kept on the device either way, as the desktop does. */
+  if (r.error && 'concentration' in patch && (schemaGap(r.error) || r.error.code === '42501')) { const p2 = Object.assign({}, patch); delete p2.concentration; r = await TC.client().from('profiles').update(p2).eq('id', TC.user.id).select('id'); if (!r.error) { Object.assign(TC.profile, p2); TC.profile.concentration = patch.concentration; concRemember(TC.profile.major, patch.concentration); return null; } }
+  if (r.error) return dbSay(r.error, 'Couldn’t save that.');
+  if (!(r.data || []).length) return 'Couldn’t save that — sign out and back in, then try again.';
+  Object.assign(TC.profile, patch);
+  if ('major' in patch || 'concentration' in patch) concRemember(TC.profile.major, TC.profile.concentration || '');
+  return null;
+};
+TC.createProfile = async function (f) {
+  const sb = TC.client(), u = TC.user;
+  const row = { id: u.id, edu_email: u.email, display_name: f.display_name, username: f.username || null, major: f.major || null, class_standing: f.class_standing || null };
+  if (f.concentration) row.concentration = f.concentration;
+  let r = await sb.from('profiles').insert(row).select('id');
+  if (r.error && (r.error.code === '23505' || /duplicate/i.test(r.error.message || '')) && !/username/i.test((r.error.message || '') + (r.error.details || ''))) {
+    /* The row already exists (another tab, or the desktop got there first): fill it in instead. */
+    const patch = {}; Object.keys(row).forEach(k => { if (k !== 'id' && k !== 'edu_email' && row[k]) patch[k] = row[k]; });   // never blank out what another device set
+    r = await sb.from('profiles').update(patch).eq('id', u.id).select('id');
+  }
+  if (r.error) return /username/i.test((r.error.message || '') + (r.error.details || '')) || (r.error.code === '23505') ? 'That username was just taken — pick another.' : dbSay(r.error, 'Couldn’t save your profile.');
+  if (!(r.data || []).length) return 'Couldn’t save your profile — sign out and back in, then try again.';
+  if (f.major) concRemember(f.major, f.concentration || '');
+  gaEvent('sign_up', { method: 'email_code' });              // a new profile, not every code sign-in
+  return null;
 };
 TC.signOut = async function () { try { await TC.client().auth.signOut(); } catch (e) {} location.replace(location.pathname); };
 
@@ -183,19 +321,43 @@ TC.load = function () {
   TC._loading = loadAll().finally(() => { TC._loading = null; });
   return TC._loading;
 };
+/* The concentration lives on the device, like the desktop's. termchamp.com/app shares the desktop's
+   origin, so the desktop's own memory ('professify-profile') is read first — but only when its
+   major matches this account's, because that key isn't per account. Then the phone's own, which is. */
+const CONC_KEY = 'termchamp_app_conc';
+function concRead(p) {
+  try { const d = JSON.parse(localStorage.getItem('professify-profile') || 'null'); if (d && d.major && d.major === p.major && d.conc && d.conc !== 'General / Open') return String(d.conc); } catch (e) {}
+  try { const m = JSON.parse(localStorage.getItem(CONC_KEY) || 'null'); if (m && m.u === (TC.user && TC.user.id) && m.major === p.major && m.conc) return String(m.conc); } catch (e) {}
+  return null;
+}
+function concRemember(major, conc) {
+  try { localStorage.setItem(CONC_KEY, JSON.stringify({ u: TC.user.id, major: major || '', conc: conc || '' })); } catch (e) {}
+  try { const d = JSON.parse(localStorage.getItem('professify-profile') || 'null'); if (d && d.major && d.major === major) { d.conc = conc || null; localStorage.setItem('professify-profile', JSON.stringify(d)); } } catch (e) {}
+}
 async function loadAll() {
   const sb = TC.client(); if (!sb || !TC.user) return;
   TC.loadedAt = Date.now();
+  /* The phone app only has Cal Poly's classes. An SDSU or UCSB account (made on termchamp.com)
+     gets the "coming to your school" screen, not Cal Poly's seats and professors. */
+  if (schoolForEmail(TC.user.email || '') !== 'calpoly') { TC.phase = 'otherschool'; render(); return; }
   const me = TC.user.id;
+  /* Only the columns `authenticated` is granted (professify-lockdown.sql). `concentration` is NOT
+     one of them: naming it made PostgREST refuse the whole read with 42501 — for your own row — and
+     the app then told a fully set-up student their account "hasn't been set up yet". The desktop
+     never reads it back either; it keeps the concentration on the device ('professify-profile'),
+     and so does this app (concRead below). */
   const p = await sb.from('profiles').select('id,display_name,username,avatar_url,major,class_standing').eq('id', me).maybeSingle();
-  if (p.error && !schemaGap(p.error)) TC.err.profile = p.error.message;
   TC.profile = p.data || null;
+  /* A read that FAILED is not an account with no profile. Saying "finish setting up" over an error
+     sends a real student off to redo a setup they already did. */
+  if (p.error) { TC.err.profile = (p.error.code ? p.error.code + ' · ' : '') + (p.error.message || ''); TC.phase = 'profileerr'; render(); return; }
   if (!TC.profile) { TC.phase = 'noprofile'; render(); return; }
+  TC.profile.concentration = concRead(TC.profile);
   const nm = TC.profile.display_name || TC.profile.username || 'You';
   PEOPLE.me = Object.assign(PEOPLE.me, { name: nm, short: nm.split(/\s+/)[0], ini: initialsOf(nm), avatar: TC.profile.avatar_url || '', color: colorFor(me), handle: TC.profile.username || '' });
-  TC.phase = 'ok'; render();
+  TC.phase = 'ok'; onbResume(); render();
   await Promise.all([loadMine(), loadFriends(), loadPlans(), loadWatches(), loadReviews(), loadThreads()]);
-  loadSuggestions(); loadRateList();
+  loadSuggestions(); loadRateList(); loadFriendPlans();
   TC.ready = true; render(true);
   startRealtime();
 }
@@ -391,7 +553,7 @@ async function loadFriends() {
   TC.requestIds = Object.fromEntries(incoming.map(r => [r.from_user, r.id]));
   TC.sentIds = Object.fromEntries(outgoing.map(r => [r.to_user, r.id]));
   TC.sent = outgoing.map(r => r.to_user);
-  TC.friendRows = {};
+  TC.friendRows = {}; delete TC.err.friendSecs;
   if (ids.length) {
     const [secs, saved, hist] = await Promise.all([
       sb.from('my_sections').select('user_id,code,class_nbr,section,instructor,days,status').in('user_id', ids).eq('term', CFG.TERM),
@@ -405,7 +567,9 @@ async function loadFriends() {
     else TC.err.friendSecs = saved.error.message;
     /* What friends have already TAKEN, with the professor they named — the only source for
        "friends who took this professor". A row with no professor is not guessed at. */
-    TC.took = {};
+    TC.took = {}; TC.tookCode = {};
+    /* Friends' past classes by class — "who took this before you" (friends only, Tate 2026-09-29). */
+    if (!hist.error) (hist.data || []).forEach(h => { const c = canonCode(h.code); if (c && TC.friendRows[h.user_id]) (TC.tookCode[c] = TC.tookCode[c] || []).includes(h.user_id) || TC.tookCode[c].push(h.user_id); });
     if (!hist.error) (hist.data || []).forEach(h => {
       const pk = profKeyOf(h.professor), code = canonCode(h.code); if (!pk || !code) return;
       (TC.took[pk] = TC.took[pk] || []).push({ uid: h.user_id, code, when: [h.term, h.year].filter(Boolean).join(' ') });
@@ -526,6 +690,21 @@ function syncPlanWatch(id) {
   savePlanLocal();
 }
 
+/* Friends' shared plans (the desktop's query): RLS returns only accepted friends' rows with the
+   "friends can see" toggle on. */
+async function loadFriendPlans() {
+  let r; try { r = await TC.client().from('plans').select('user_id,slot,sections').eq('term', CFG.TERM).neq('user_id', TC.user.id); } catch (e) { r = { error: { message: String(e) } }; }
+  if (r.error) { TC.err.friendPlans = schemaGap(r.error) ? 'missing' : r.error.message; return; }
+  delete TC.err.friendPlans; TC.friendPlans = {};
+  (r.data || []).forEach(row => {
+    if (!row || !row.user_id || !/^[ABC]$/.test(row.slot)) return;
+    /* A friend's plan is their own JSON: only real class numbers, and never more than a plan holds. */
+    const ids = (Array.isArray(row.sections) ? row.sections : []).map(x => x && x.class_nbr != null ? String(x.class_nbr) : '')
+      .filter(x => /^\d{3,6}$/.test(x)).slice(0, 12);
+    if (ids.length) (TC.friendPlans[row.user_id] = TC.friendPlans[row.user_id] || {})[row.slot] = ids;
+  });
+  render(true);
+}
 /* ---- Seat alerts (watch_sections). ------------------------------------------------------------ */
 async function loadWatches() {
   const r = await TC.client().from('watch_sections').select('code,class_nbr').eq('user_id', TC.user.id).eq('term', CFG.TERM);
@@ -612,19 +791,20 @@ TC.postReview = async function (pk, d) {
   if (hits.length >= 30) return { err: 'That’s 30 reviews in an hour — the limit. Try again a little later.' };
   const row = { professor_key: reviewKeyOf(pk), professor_name: P.name, department: P.dept || null, course: d.code || null, score: d.stars,
     difficulty: d.diff || null, teach_ability: null, hours: null, format: d.format || null, grade: d.grade || null,
-    would_again: d.again === 'yes', tags: [], note: (d.review || '').trim() || null };
+    would_again: d.again === 'yes', tags: (d.tags || []).filter(t => RATE_TAGS.includes(t)), note: (d.review || '').trim() || null };
+  /* A phone that slept past its access token sends an expired one; refresh first, and once more
+     if the server still says the session expired. */
+  if (!(await TC.freshSession())) return { err: 'You’re signed out, so this review has nowhere to go. Sign in again — nothing you wrote has been lost.' };
   let r = await TC.client().from('reviews').insert(row);
+  if (r.error && isJwtErr(r.error) && await TC.freshSession(true)) r = await TC.client().from('reviews').insert(row);
   if (r.error && /grade/i.test(r.error.message || '') && schemaGap(r.error)) { const x = Object.assign({}, row); delete x.grade; r = await TC.client().from('reviews').insert(x); }
   if (r.error) {
-    const msg = String(r.error.message || '');
-    /* The database's own refusals (see professify-review-refusals.sql) are written for students;
-       anything else is a raw error, which is not. */
-    if (/duplicate|unique/i.test(msg)) return { err: 'You’ve already reviewed ' + P.name + '. One per professor keeps the average honest.' };
-    if (r.error.code === 'P0001' && msg && msg.length < 240) return { err: msg };
-    if (/row-level security|policy/i.test(msg)) return { err: 'That’s the limit on reviews for now — try again later. Nothing you wrote has been lost.' };
-    return { err: 'Couldn’t post your review — check your connection and try again. Nothing you wrote has been lost.' };
+    try { console.error('[termchamp app] review refused:', r.error.code, r.error.message, r.error); } catch (e) {}
+    TC.lastReviewError = { code: r.error.code || '', message: r.error.message || '' };
+    return { err: await TC.explainRefusal(r.error, P.name) };
   }
   hits.push(now); try { localStorage.setItem('professify_rev_times', JSON.stringify(hits)); } catch (e) {}
+  gaEvent('review_submit', { kind: 'new' });              // no score, course or professor — ever
   /* Read our own rows back through my_reviews() — the only way this account can see its own
      review ids — so the "show friends" switch has a row to change. */
   const at = new Date().toISOString();
@@ -637,6 +817,54 @@ TC.postReview = async function (pk, d) {
   const nm = String(P.name).toLowerCase().trim();
   if (TC.reviewsByName) (TC.reviewsByName[nm] = TC.reviewsByName[nm] || []).unshift(Object.assign({}, row, { created_at: at, _mine: true }));
   return { id };
+};
+/* THE APP DOES NOT GUESS WHY A REVIEW WAS REFUSED (the desktop's rule, 2026-09-11). The first cut
+   of this app did exactly that — every row-level-security refusal was told it had hit a limit
+   (Tate, 2026-09-28, with two finished reviews on screen). Now: the database's own sentence when it
+   wrote one (P0001), then why_cant_i_review() for the first check that failed, and when even that
+   can't answer, what is true — it was refused, nothing is lost — plus the error code, so a
+   screenshot is enough to find the cause. */
+function isJwtErr(e) { const m = String((e && e.message) || ''), c = String((e && (e.code || e.status)) || ''); return c === 'PGRST301' || c === '401' || /jwt|token is expired|invalid claim/i.test(m); }
+function errCode(e) { return String((e && e.code) || (e && e.status) || '').slice(0, 12); }
+TC.freshSession = async function (force) {
+  const sb = TC.client(); if (!sb) return false;
+  try {
+    const s = await sb.auth.getSession(); const sess = s.data && s.data.session;
+    if (!sess) return false;
+    if (force || (sess.expires_at && sess.expires_at * 1000 < Date.now() + 60000)) { const r = await sb.auth.refreshSession(); return !r.error && !!(r.data && r.data.session); }
+    return true;
+  } catch (e) { return false; }
+};
+const WHY_SAY = {
+  'signed in': 'You’re signed out, so this review has nowhere to go. Sign in again — nothing you wrote has been lost.',
+  'email claim ends in .edu': 'Reviews can only be posted from a verified school email. Sign in with your .edu address and post again — nothing you wrote has been lost.',
+  'account not suspended': 'This account is suspended, so it can’t post reviews right now.',
+  'under the hourly limit': 'That’s 30 reviews in an hour, which is the limit. Nothing you wrote has been lost — try again in a little while.'
+};
+TC.explainRefusal = async function (e, profName) {
+  const m = String((e && e.message) || ''), code = errCode(e);
+  if (code === 'P0001' && m) { const t = m.trim(); return t.charAt(0).toUpperCase() + t.slice(1) + (/[.!?]$/.test(t) ? '' : '.'); }
+  if (code === '23505' || /duplicate|unique/i.test(m)) return 'You’ve already reviewed ' + profName + ' for this class. One per class keeps the average honest — edit it from your profile.';
+  if (/failed to fetch|networkerror|load failed|network request failed|timeout|aborted/i.test(m)) return 'Couldn’t reach TermChamp — check your connection and post again. Nothing you wrote has been lost.';
+  if (isJwtErr(e)) return 'Your sign-in expired. Sign out and back in, then post again — nothing you wrote has been lost.';
+  if (code === '42P17' || /infinite recursion/i.test(m)) return 'Reviews can’t be posted right now — a server setting is refusing every review, not just yours. Nothing you wrote has been lost; we’re fixing it. (code 42P17)';
+  if (code === '42501' || /row-level security|permission denied|not authorized/i.test(m)) {
+    try {
+      const w = await TC.client().rpc('why_cant_i_review');
+      if (!w.error && Array.isArray(w.data)) {
+        const bad = w.data.find(x => x && x.ok === false);
+        if (bad) return WHY_SAY[bad.check_name] || ('Refused: ' + bad.check_name + '.');
+      }
+      if (w.error && /permission denied/i.test(w.error.message || '')) {
+        /* The known server fault (professify-review-insert-fix.sql): the rule counting your
+           reviews can't read its own table, so it refuses everyone. Say that, not "you". */
+        return 'Reviews can’t be posted right now — a server setting is refusing every review, not just yours. Nothing you wrote has been lost; we’re fixing it. (code ' + (code || '42501') + ')';
+      }
+    } catch (x) {}
+    return 'The server wouldn’t accept that review. Nothing you wrote has been lost — try again, and tell us if it keeps happening. (code ' + (code || 'refused') + ')';
+  }
+  if (code === '23514' || /check constraint/i.test(m)) return 'One of those answers isn’t one the server accepts. Nothing you wrote has been lost. (code ' + (code || '23514') + ')';
+  return 'Couldn’t post your review. Nothing you wrote has been lost — try again, and tell us if it keeps happening. (code ' + (code || 'unknown') + ')';
 };
 TC.setShare = async function (id, on) {
   const r = await TC.client().from('reviews').update({ share_with_friends: !!on }).eq('id', id);

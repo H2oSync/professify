@@ -58,12 +58,10 @@ done
 # the desktop site does not depend on it.
 if [ -f app/index.html ]; then
   mkdir -p public/app
-  cp app/index.html public/app/
-  echo "published  app/index.html"
-  if [ -f app/manifest.webmanifest ]; then
-    cp app/manifest.webmanifest public/app/
-    echo "published  app/manifest.webmanifest"
-  fi
+  for f in index.html planner.js manifest.webmanifest; do
+    if [ -f "app/$f" ]; then cp "app/$f" public/app/; echo "published  app/$f"
+    else echo "MISSING    app/$f"; fi
+  done
 else
   echo "MISSING    app/index.html  (the phone app at /app/ will 404)"
 fi

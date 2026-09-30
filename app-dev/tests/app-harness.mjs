@@ -17,6 +17,24 @@ function session(user) {
   return { access_token: jwt, refresh_token: 'fixture-refresh', token_type: 'bearer', expires_in: 86400, expires_at: exp,
     user: { id: user.id, aud: 'authenticated', role: 'authenticated', email: user.email, email_confirmed_at: '2026-09-01T00:00:00Z', app_metadata: { provider: 'email' }, user_metadata: {} } };
 }
+/* Column grants, as the live database has them (professify-lockdown.sql, -schools.sql,
+   -reviews-anon-fix.sql). A SELECT that names a column outside the grant — or '*', which PostgREST
+   expands to every column — is refused with 42501 for the whole request, own row included. The
+   stand-in used to answer any column, which is how a profile read of `concentration` passed every
+   test here and failed for Tate's real account on the first sign-in. */
+const COL_GRANTS = {
+  profiles: ['id', 'display_name', 'username', 'avatar_url', 'major', 'class_standing', 'pinned_friends', 'instagram_handle', 'school'],
+  reviews: { not: ['user_id'] },
+};
+function colDenied(table, select) {
+  const g = COL_GRANTS[table]; if (!g) return null;
+  const cols = String(select || '*').split(',').map(c => c.trim().split(':').pop().split('(')[0]).filter(Boolean);
+  for (const c of cols) {
+    if (c === '*') return { code: '42501', message: 'permission denied for table ' + table };
+    if (Array.isArray(g) ? !g.includes(c) : g.not.includes(c)) return { code: '42501', message: 'permission denied for table ' + table };
+  }
+  return null;
+}
 function applyFilters(rows, params) {
   let out = rows.slice();
   for (const [k, v] of params) {
@@ -53,11 +71,17 @@ export async function openApp({ signedIn = true, width = 390, height = 844, tabl
   const ctx = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1, timezoneId: tz, isMobile: width < 700, hasTouch: width < 700 });
   const sess = session(FX.ME);
   let nextId = 5000;
+  let authed = signedIn;                 // flips on a successful code or password sign-in
   await ctx.route('**', async route => {
     const req = route.request(); const url = new URL(req.url());
     if (url.origin === origin) return route.continue();
     if (url.href.startsWith('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4/dist/umd/supabase.js'))
       return route.fulfill({ status: 200, contentType: 'text/javascript', headers: { 'access-control-allow-origin': '*' }, body: fs.readFileSync(SB_JS) });
+    if (url.href.startsWith('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/')) {
+      const f = path.join('/tmp/claude-0/pdfjs/package/legacy/build', path.basename(url.pathname));
+      if (fs.existsSync(f)) return route.fulfill({ status: 200, contentType: 'text/javascript', headers: { 'access-control-allow-origin': '*' }, body: fs.readFileSync(f) });
+      return route.fulfill({ status: 404, body: '' });
+    }
     if (url.hostname === 'api-prod.polyratings.org') {
       if (url.pathname.startsWith('/professors.all') && poly) return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ result: { data: poly } }) });
       return route.fulfill({ status: 500, body: '' });
@@ -73,8 +97,13 @@ export async function openApp({ signedIn = true, width = 390, height = 844, tabl
         const a = ask ? ask(body) : null;
         return route.fulfill({ status: 200, headers: cors, contentType: 'application/json', body: JSON.stringify(a || { fallback: 'search', reason: 'fixture' }) });
       }
-      if (p.startsWith('/auth/v1/user')) return route.fulfill({ status: signedIn ? 200 : 401, headers: cors, contentType: 'application/json', body: JSON.stringify(signedIn ? sess.user : { msg: 'no' }) });
-      if (p.startsWith('/auth/v1/')) { log.writes.push({ m, table: 'auth:' + p.slice(9), body }); return route.fulfill({ status: 200, headers: cors, contentType: 'application/json', body: p.includes('token') ? JSON.stringify(sess) : '{}' }); }
+      if (p.startsWith('/storage/v1/object/')) {
+        log.writes.push({ m, table: 'storage:' + p.slice(19), body: null, bytes: (req.postDataBuffer() || Buffer.alloc(0)).length, ctype: req.headers()['content-type'] || '' });
+        return route.fulfill({ status: 200, headers: cors, contentType: 'application/json', body: JSON.stringify({ Key: p.slice(19) }) });
+      }
+      if (p.startsWith('/auth/v1/user') && m !== 'GET') { log.writes.push({ m, table: 'auth:user', body }); return route.fulfill({ status: 200, headers: cors, contentType: 'application/json', body: JSON.stringify(sess.user) }); }
+      if (p.startsWith('/auth/v1/user')) return route.fulfill({ status: authed ? 200 : 401, headers: cors, contentType: 'application/json', body: JSON.stringify(authed ? sess.user : { msg: 'no' }) });
+      if (p.startsWith('/auth/v1/')) { log.writes.push({ m, table: 'auth:' + p.slice(9), body }); const ok = p.includes('token') || p.includes('verify'); if (ok) authed = true; return route.fulfill({ status: 200, headers: cors, contentType: 'application/json', body: ok ? JSON.stringify(sess) : '{}' }); }
       if (p.startsWith('/rest/v1/rpc/')) {
         const fn = p.slice(13); log.reads.push('rpc:' + fn);
         const v = fn in rpc ? rpc[fn] : [];
@@ -85,8 +114,14 @@ export async function openApp({ signedIn = true, width = 390, height = 844, tabl
         const table = p.slice(9);
         if (m !== 'GET' && m !== 'HEAD') {
           log.writes.push({ m, table, body, query: url.search });
+          if (url.searchParams.get('select')) { const d = colDenied(table, url.searchParams.get('select')); if (d) return route.fulfill({ status: 403, headers: cors, contentType: 'application/json', body: JSON.stringify(Object.assign({ details: null, hint: null }, d)) }); }
           const prefer = req.headers()['prefer'] || '';
           let rows = [];
+          if (m === 'PATCH' || m === 'DELETE') {
+            rows = applyFilters(T[table] || [], url.searchParams);
+            if (m === 'PATCH') rows.forEach(r => Object.assign(r, body));
+            else T[table] = (T[table] || []).filter(r => rows.indexOf(r) < 0);
+          }
           if (m === 'POST') {
             const arr = (Array.isArray(body) ? body : [body]).map(r => Object.assign({ id: r.id || (table === 'conversations' ? 'c-new-' + (nextId++) : nextId++), created_at: new Date().toISOString() }, r));
             T[table] = (T[table] || []).concat(arr); rows = arr;
@@ -99,7 +134,8 @@ export async function openApp({ signedIn = true, width = 390, height = 844, tabl
           return route.fulfill({ status: m === 'DELETE' ? 204 : 201, headers: cors, body: '' });
         }
         log.reads.push(table + url.search);
-        const rows = applyFilters(signedIn || table === 'course_seats' || table === 'course_catalog' ? (T[table] || []) : [], url.searchParams);
+        { const d = colDenied(table, url.searchParams.get('select')); if (d) return route.fulfill({ status: 403, headers: cors, contentType: 'application/json', body: JSON.stringify(Object.assign({ details: null, hint: null }, d)) }); }
+        const rows = applyFilters(authed || table === 'course_seats' || table === 'course_catalog' ? (T[table] || []) : [], url.searchParams);
         const h = { ...cors, 'content-range': `0-${Math.max(0, rows.length - 1)}/${rows.length}` };
         const accept = req.headers()['accept'] || '';
         if (accept.includes('vnd.pgrst.object')) {
@@ -124,6 +160,6 @@ export async function openApp({ signedIn = true, width = 390, height = 844, tabl
   await page.goto(origin + '/app/', { waitUntil: 'domcontentloaded' });
   if (time) await page.clock.runFor(wait); else await page.waitForTimeout(wait);
   await page.waitForTimeout(400);
-  const close = async () => { await browser.close(); srv.close(); };
+  const close = async () => { await browser.close(); try { srv.closeAllConnections(); } catch (e) {} await new Promise(res => srv.close(() => res())); };
   return { page, ctx, close, log, origin, tables: T };
 }

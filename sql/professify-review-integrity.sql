@@ -1,3 +1,6 @@
+-- !! 2026-09-28: this file recreates the reviews INSERT policy with a count that cannot read
+-- !! reviews.user_id once professify-reviews-anon-fix.sql has run, which refuses EVERY review.
+-- !! If you re-run this file, run professify-review-insert-fix.sql straight after it.
 -- ============================================================================
 -- Review integrity — server-side limits
 -- ============================================================================

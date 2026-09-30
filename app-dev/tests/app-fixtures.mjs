@@ -62,6 +62,8 @@ export const MESSAGES = [
   { id: 2, conversation_id: CONVS[0].id, sender: FRIENDS[0].id, kind: 'text', body: 'Fixture reply from Avery', payload: null, created_at: '2026-09-27T20:00:00Z' },
   { id: 3, conversation_id: CONVS[1].id, sender: FRIENDS[1].id, kind: 'text', body: 'Fixture group note', payload: null, created_at: '2026-09-26T20:00:00Z' },
 ];
+/* Avery shares Plan A (two real sections); nobody else shares a plan. */
+export const FRIEND_PLANS = [{ user_id: FRIENDS[0].id, term: '2268', slot: 'A', sections: [{ code: 'BUS 3438', class_nbr: seat('BUS 3438', '01').class_nbr }, { code: 'STAT 2170', class_nbr: seat('STAT 2170', '05').class_nbr }], shared: true }];
 export const PLANS = [
   { user_id: ME.id, term: '2268', slot: 'B', sections: [{ code: 'ECON 2303', class_nbr: seat('ECON 2303', '03').class_nbr }, { code: 'BUS 9999', class_nbr: '79999' }], shared: true },
 ];
@@ -70,12 +72,19 @@ export const TABLES = {
   profiles: [ME, ...FRIENDS, STRANGER, SUGGESTED],
   my_sections: MY_SECTIONS, saved_classes: SAVED, watch_sections: B.WATCH,
   friend_requests: FRIEND_REQUESTS, course_seats: SEATS, course_catalog: B.CATALOG,
-  reviews_public: REVIEWS, class_history: HISTORY, plans: PLANS,
+  reviews_public: REVIEWS, class_history: HISTORY, plans: PLANS.concat(FRIEND_PLANS),
   conversations: CONVS, conversation_members: MEMBERS, messages: MESSAGES,
+  course_prereqs: [{ course_code: 'STAT 1210', prereq_json: { req: [['MATH 1000']] } }], class_waivers: [{ user_id: ME.id, code: 'ENGL 1134', reason: 'ap' }], course_equiv: [],
 };
 export const RPC = {
   my_reviews: [], suggest_friends: [{ id: SUGGESTED.id, display_name: SUGGESTED.display_name, username: SUGGESTED.username, avatar_url: null, reason: 'Taking one of your classes', mutuals: 0, score: 10 }],
   search_people: [{ id: SUGGESTED.id, display_name: SUGGESTED.display_name, username: SUGGESTED.username, avatar_url: null }],
   find_profile_by_handle: [],
+  why_cant_i_review: [{ check_name: 'signed in', ok: true, detail: '' }, { check_name: 'email claim ends in .edu', ok: true, detail: '' }, { check_name: 'account not suspended', ok: true, detail: '' }, { check_name: 'under the hourly limit', ok: true, detail: '' }],
+  my_blocks: [{ id: '33333333-3333-4333-8333-333333333339', display_name: 'Blocked Fixture', username: 'bfix', avatar_url: null, created_at: '2026-09-01T00:00:00Z' }],
+  unblock_user: null, username_taken: false,
 };
+export const MY_REVIEW = { id: 77, professor_key: 'faro dummelow|bus', professor_name: 'Faro Dummelow', course: 'BUS 4445', score: 4, difficulty: 3, would_again: true, grade: null, format: 'In person', note: 'Fixture review I wrote.', created_at: '2026-09-20T00:00:00Z', share_with_friends: false };
+export const PREREQS = [{ course_code: 'STAT 1210', prereq_json: { req: [['MATH 1000']] } }, { course_code: 'BUS 1100', prereq_json: { req: [] } }];
+export const WAIVERS = [{ user_id: ME.id, code: 'ENGL 1134', reason: 'ap' }];
 export { seat };
