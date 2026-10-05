@@ -26,6 +26,13 @@ export const COUNT_COLS = ['capacity', 'enrolled', 'available', 'waitlist_total'
  */
 export function buildUpsertRows(rows, { withCounts }) {
   return (rows || []).filter(r => r.class_nbr).map(r => {
+    /* course_seats.term is NOT NULL and part of the conflict key. A row without it is refused by
+       Postgres with a bare 23502 that names neither the cause nor the fix, and from 2026-09-17 to
+       2026-10-04 that is exactly what every lane did. Say it plainly instead. */
+    if (!r.term) throw new Error(`row ${r.course_code || '?'} (class ${r.class_nbr}) has no term — every row must be stamped with CFG.TERM before the upsert`);
+    /* updated_at too: left out, PostgREST keeps the old value on an update, so a refreshed row
+       would still look as old as it was — the app would under-report how fresh its seats are. */
+    if (!r.updated_at) throw new Error(`row ${r.course_code || '?'} (class ${r.class_nbr}) has no updated_at — stamp it with the time it was read`);
     const row = {
       term: r.term, class_nbr: r.class_nbr, subject: r.subject, course_code: r.course_code, title: r.title,
       section: r.section, instructor: r.instructor, days: r.days, dates: r.dates, status: r.status,
