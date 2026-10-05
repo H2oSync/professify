@@ -90,8 +90,8 @@
     },
     {
       "label": "Spring 2027",
-      "term_code": null,
-      "term_code_confirmed": null,
+      "term_code": "2274",
+      "term_code_confirmed": "2026-10-05 — a forced list-only sweep under 2274 (run 37370480934) returned 3,467 sections across 60 subjects, every one dated 2027 and 3,250 of them 01/25/2027 – (the 15-week Spring session); discover_term could not confirm by name because the page no longer echoes the term description",
       "source": "https://registrar.calpoly.edu/spring-semester-planning-calendar",
       "schedule_available": "2026-10-05",
       "windows": [
