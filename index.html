@@ -1018,6 +1018,8 @@ window.toggleTheme = toggleTheme;
   .del-keep b{color:var(--text)}
   .del-keep:empty{display:none}
   .del-keep .dk-h{display:block;font-weight:700;color:var(--text);margin-bottom:3px}
+  .del-keep .dk-sw{display:flex;gap:9px;align-items:flex-start;cursor:pointer}
+  .del-keep .dk-sw input{margin-top:3px;width:16px;height:16px;accent-color:var(--accent);flex:none}
   .del-keep button{background:none;border:0;padding:0;margin-top:7px;font:inherit;font-size:12.5px;
     color:var(--accent);text-decoration:underline;text-underline-offset:2px;cursor:pointer}
   .del-go{background:#c9433c;color:#fff}
@@ -2295,9 +2297,9 @@ if(typeof qrcode==="function")window.qrcode=qrcode;
                opposite, and it is the line a student reads immediately before pressing the button.
                A promise the product cannot keep is worse than a scary one it can: someone deletes
                their account expecting their reviews to go, and they do not. -->
-          <p class="st-note">Removes your profile, classes, sections, past classes, friends, messages and blocks.
-            <b>Your reviews stay up</b>, permanently unlinked from you — delete any you want gone <em>before</em> you close the account.
-            Permanent, with no undo and no export.</p>
+          <p class="st-note">Other students stop seeing your account at once. After <b>30 days</b> your profile, classes, sections,
+            past classes, friends, messages and blocks are permanently deleted — sign in before then to recover it.
+            You choose whether your reviews stay up with no name on them, or go with it.</p>
           <button class="set-btn danger" onclick="openDeleteAccount()">Delete my account</button>
         </div>
       </section>
@@ -4943,7 +4945,7 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
 <div class="pq-back" id="delBack" onclick="if(event.target===this)closeDeleteAccount()">
   <div class="pq-dlg del-dlg">
     <h3>Delete your account?</h3>
-    <div class="d">This can't be undone. Here's exactly what gets removed:</div>
+    <div class="d">Other students stop seeing it right away. After <b>30 days</b> it's permanently deleted, with everything below — sign in before then to recover it.</div>
     <ul class="del-list" id="delList"></ul>
     <div class="del-keep" id="delKeep"></div>
     <div class="del-warn" id="delWarn"></div>
@@ -5002,7 +5004,7 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
    The flag is the whole switch — every gp* surface already gates on gpFlagOn(), so this is
    one word and the code stays in git. Turn it back on the same day the migration runs. */
 window.PROFESSIFY_FLAGS={groups:false,messages:true};
-window.PROFESSIFY_BUILD='2026-09-30 17:30';
+window.PROFESSIFY_BUILD='2026-10-04 19:50';
 /* Paint the build stamp everywhere it appears. */
 try{
   (function(){
@@ -12929,6 +12931,9 @@ async function initBackend(){
       if(sbUser&&awaitingLink&&currentProf!=null){awaitingLink=false;startRate(currentProf,(typeof pendingRateCourse!=='undefined'?pendingRateCourse:''));}
       const uid=sbUser?sbUser.id:null;
       const notLoaded=(typeof friendsLoaded==='undefined')||!friendsLoaded;
+      /* 30 days to recover (2026-10-04): asked once per signed-in account */
+      if(uid&&window._pdAsked!==uid){window._pdAsked=uid;setTimeout(function(){try{if(typeof window.checkPendingDeletion==='function')window.checkPendingDeletion();}catch(_e){}},0);}
+      if(!uid)window._pdAsked=null;
       if(uid&&(uid!==lastAuthUid||notLoaded)){lastAuthUid=uid;try{if(typeof kickFriendsLoad==='function')kickFriendsLoad();}catch(_e){}}
       if(!uid){lastAuthUid=null;try{FRIENDS=[];myProfile=null;friendsList=[];incomingRequests=[];outgoingRequests=[];if(typeof stopFriendRealtime==='function')stopFriendRealtime();if(typeof msgStopRealtime==='function'){msgStopRealtime();msgThreads=[];msgRows={};msgOpenId=null;msgReady=null;window._msgLoaded=false;try{msgRenderList();}catch(_e){}}if(typeof renderFriends==='function')renderFriends();if(typeof updateFriendsBadge==='function')updateFriendsBadge();}catch(e){}}
     });
@@ -13252,7 +13257,7 @@ var DB_CTX_MSG={
   save:    'Couldn’t save that.',
   remove:  'Couldn’t remove that.',
   auth:    'Couldn’t sign you in. Try again in a moment.',
-  account: 'Couldn’t delete your account. Nothing was removed — try again, or email us and we’ll do it by hand.'
+  account: 'Couldn’t delete your account. Nothing was removed — try again, or email support@termchamp.com and we’ll do it by hand.'
 };
 function dbFriendlyErr(e, ctx){
   var msg=String((e&&(e.message||e.msg))||'');
@@ -33878,7 +33883,7 @@ window.openDeleteAccount=async function(){
     n.classes=await q('saved_classes');
     n.sections=await q('my_sections');
     n.past=await q('class_history');
-    n.reviews=await q('reviews');
+    try{ var mr=await sb.rpc('my_reviews'); n.reviews=(mr&&!mr.error&&Array.isArray(mr.data))?mr.data.length:null; }catch(e){ n.reviews=null; }
     n.watch=await q('watch_sections');
     var fr=await sb.from('friend_requests').select('*',{count:'exact',head:true})
              .or('from_user.eq.'+sbUser.id+',to_user.eq.'+sbUser.id);
@@ -33903,19 +33908,26 @@ window.openDeleteAccount=async function(){
      connects the review to a person. Two things this screen owes the student: that the
      review outlives the account, and that once anonymous it can never be taken back. If
      they don't want that, the way out is to delete the reviews first, so we point at it. */
-  if(keep&&n.reviews){
-    var one=(n.reviews===1);
-    keep.innerHTML='<span class="dk-h">Your '+n.reviews+' review'+(one?'':'s')+' stay'+(one?'s':'')+', without your name</span>'
-      +'Other students are using '+(one?'it':'them')+', and '+(one?'it\u2019s':'they\u2019re')+' already part of the '
-      +'professor'+(one?'\u2019s':'s\u2019')+' average. We remove the link to you, so afterwards nothing connects '
-      +(one?'it':'them')+' to you — which also means <b>'+(one?'it':'they')+' can\u2019t be edited or taken down later</b>.'
-      +'<br><button type="button" onclick="closeDeleteAccount();openMyReviews()">Delete '+(one?'it':'them')+' first instead →</button>';
+  /* 30 days to recover (2026-10-04): the reviews are a choice, as on the phone — keep them up with no
+     name (on by default), or delete them with the account. Shown whenever there are reviews, or
+     when we couldn't count them (a choice is never hidden because a count failed). */
+  if(keep&&n.reviews!==0){
+    var one=(n.reviews===1), what=n.reviews==null?'my reviews':(one?'my review':'my '+n.reviews+' reviews');
+    keep.innerHTML='<label class="dk-sw"><input type="checkbox" id="delKeepRev" checked onchange="delKeepLine()">'
+      +'<span><span class="dk-h">Keep '+what+' up anonymously</span><span id="delKeepLine"></span></span></label>';
+    delKeepLine();
   }
   if(warn){
-    warn.innerHTML='Everything in the list above is gone for good the moment you confirm. '
-      +'There is no undo and no backup we can restore from.';
+    warn.innerHTML='You have 30 days to change your mind: sign in and choose <b>Recover my account</b>. '
+      +'After that it\u2019s gone for good. We email you when you ask and again when it\u2019s done.';
   }
   setTimeout(function(){ if(inp)inp.focus(); },60);
+};
+window.delKeepLine=function(){
+  var cb=document.getElementById('delKeepRev'), el=document.getElementById('delKeepLine'); if(!el)return;
+  el.innerHTML=(!cb||cb.checked)
+    ? 'They stay up for other students with no name on them. Nothing links them to you afterwards, so they <b>can\u2019t be edited or removed later</b>.'
+    : 'They\u2019re deleted along with your account.';
 };
 window.closeDeleteAccount=function(){
   var b=document.getElementById('delBack'); if(b)b.classList.remove('open');
@@ -33933,17 +33945,26 @@ window.delRun=async function(){
   if(go){go.disabled=true;go.textContent='Deleting…';}
   if(err)err.textContent='';
   var uid=sbUser.id;
-  /* Storage isn't reachable from SQL, so the photo goes first. A failure here must not stop
-     the deletion — an orphaned image is a far smaller problem than an account that says it
-     deleted itself and didn't. */
-  try{ await sb.storage.from('avatars').remove([uid+'/avatar.jpg']); }catch(e){}
+  var cb=document.getElementById('delKeepRev'), delRev=!!(cb&&!cb.checked);
+  /* 30 days to recover (2026-10-04): nothing is deleted now; the database's nightly job deletes it
+     after the 30 days (sql/professify-delete-account-30-days.sql). */
   var r;
-  try{ r=await sb.rpc('delete_my_account'); }
+  try{ r=await sb.rpc('request_account_deletion',{p_delete_reviews:delRev}); }
   catch(e){ r={error:{message:(e&&e.message)||'network error'}}; }
+  if(r&&!r.error){
+    /* The photo goes now, through the Storage API (SQL can't delete Storage files). Best effort,
+       never blocks; the link is cleared only once the photo is really gone. */
+    var gone=false;
+    for(var i=0;i<2&&!gone;i++){ try{ var x=await sb.storage.from('avatars').remove([uid+'/avatar.jpg']); gone=!(x&&x.error); }catch(e){} }
+    if(gone){ try{ await sb.from('profiles').update({avatar_url:null}).eq('id',uid); }catch(e){} }
+    /* Every device, and BEFORE this device's storage is wiped below: with the session gone first,
+       supabase-js has nothing to sign out and never tells the server (the old order did that). */
+    try{ await sb.auth.signOut({scope:'global'}); }catch(e){}
+  }
   if(r&&r.error){
     if(go){go.disabled=false;go.textContent='Delete my account';}
     if(err)err.textContent=/function|does not exist|schema/i.test(r.error.message||'')
-      ? 'Account deletion isn’t switched on for this deploy yet — email us and we’ll do it by hand.'
+      ? 'Account deletion isn’t switched on for this deploy yet — email support@termchamp.com and we’ll do it by hand.'
       : dbFriendlyErr(r.error,'account');
     return;
   }
@@ -33957,10 +33978,70 @@ window.delRun=async function(){
     });
     if(keep['professify-theme'])localStorage.setItem('professify-theme',keep['professify-theme']);
   }catch(e){}
-  try{ await sb.auth.signOut(); }catch(e){}
+  try{ await sb.auth.signOut({scope:'local'}); }catch(e){}   /* (already signed out everywhere, above) */
   try{ sessionStorage.clear(); }catch(e){}
-  location.replace(location.pathname+'?deleted=1');
+  location.replace(location.pathname+'?deleted='+encodeURIComponent(String((r&&r.data)||'1')));
 };
+/* "Nov 3, 2026" — dates always show their year. */
+window.delDateText=function(iso){
+  var d=/^\d{4}-\d\d-\d\d/.test(String(iso||''))?new Date(iso):null;
+  return d&&!isNaN(d)?d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'the end of the 30 days';
+};
+/* Signed in while the account is being deleted: one question, over everything, before anything
+   else is used. Couldn't tell (offline, or the SQL isn't there): the site works as before. */
+window.checkPendingDeletion=async function(tries){
+  if(typeof sb==='undefined'||!sb||typeof sbUser==='undefined'||!sbUser)return;
+  tries=tries||0;
+  var r; try{ r=await sb.rpc('my_account_deletion'); }catch(e){ r={error:{message:'network'}}; }
+  if(!r||r.error){
+    /* couldn't tell: ask again a little later (a function that isn't there yet stops asking) */
+    if(r&&r.error&&/PGRST202|42883/.test(String(r.error.code||'')))return;
+    if(tries<5)setTimeout(function(){ try{ window.checkPendingDeletion(tries+1); }catch(e){} },Math.min(60000,5000*Math.pow(2,tries)));
+    return;
+  }
+  var row=Array.isArray(r.data)?r.data[0]:r.data;
+  if(row&&row.purge_after)showRecover(row.purge_after);
+};
+window.showRecover=function(at){
+  var b=document.getElementById('recBack');
+  if(!b){ b=document.createElement('div'); b.id='recBack'; b.className='pq-back'; b.style.zIndex='2147483000'; document.body.appendChild(b); }
+  /* over everything (onboarding, sign-in, settings, search), and nothing behind it can be reached */
+  Array.prototype.forEach.call(document.body.children,function(el){ if(el!==b&&el.id!=='frToast'&&!/toast/i.test(el.id||el.className||''))try{ el.inert=true; }catch(e){} });
+  b.innerHTML='<div class="pq-dlg del-dlg" role="dialog" aria-modal="true" aria-labelledby="recH">'
+    +'<h3 id="recH">Recover your account?</h3>'
+    +'<div class="d">Your account is set to be permanently deleted on <b>'+escapeHtml(delDateText(at))+'</b>. Until then other students can\u2019t see it.</div>'
+    +'<div class="d" style="margin-top:8px">Recover it and everything comes back \u2014 your classes, plans, friends and reviews \u2014 except your profile photo, which you can add again.</div>'
+    +'<div id="recErr" class="rate-err" style="min-height:0"></div>'
+    +'<div class="acts"><button class="no" id="recOut" onclick="recoverSignOut()">Sign out</button>'
+    +'<button class="go" id="recGo" onclick="recoverAccount()">Recover my account</button></div></div>';
+  b.classList.add('open');
+  setTimeout(function(){ var g=document.getElementById('recGo'); if(g)g.focus(); },60);
+};
+window.recoverAccount=async function(){
+  var g=document.getElementById('recGo'), err=document.getElementById('recErr');
+  if(!g||g.disabled)return;
+  g.disabled=true; g.textContent='Recovering…'; if(err)err.textContent='';
+  var r; try{ r=await sb.rpc('cancel_account_deletion'); }catch(e){ r={error:{message:(e&&e.message)||'network error'}}; }
+  if(r&&r.error){
+    g.disabled=false; g.textContent='Recover my account';
+    if(err)err.textContent=/fetch|network|load failed/i.test(r.error.message||'')
+      ? 'Couldn\u2019t reach TermChamp \u2014 your account is still set to be deleted. Check your connection and try again.'
+      : 'Couldn\u2019t recover your account \u2014 it\u2019s still set to be deleted. Try again.';
+    return;
+  }
+  try{ sessionStorage.setItem('tc_recovered','1'); }catch(e){}
+  location.reload();
+};
+window.recoverSignOut=async function(){
+  try{ await sb.auth.signOut({scope:'local'}); }catch(e){}   /* this browser only */
+  location.replace(location.pathname);
+};
+try{
+  if(sessionStorage.getItem('tc_recovered')){
+    sessionStorage.removeItem('tc_recovered');
+    setTimeout(function(){ try{ frToast('Welcome back \u2014 your account is recovered.',6000); }catch(e){} },900);
+  }
+}catch(e){}
 /* The danger section only exists for a signed-in account. */
 window.refreshDangerZone=function(){
   var el=document.getElementById('setDangerSec'); if(!el)return;
@@ -33969,12 +34050,11 @@ window.refreshDangerZone=function(){
 try{if(typeof A11Y_MODALS!=='undefined')A11Y_MODALS.push({id:'delBack',close:'closeDeleteAccount'});}catch(e){}
 /* Confirmation after the redirect — the account is gone, so there's nothing to show but this. */
 try{
-  if(/[?&]deleted=1/.test(location.search)){
+  if(/[?&]deleted=/.test(location.search)){
     setTimeout(function(){
-      /* Precise, because the previous wording ("everything on it") was no longer true once
-         reviews began surviving — and a farewell message that overstates what was deleted is
-         exactly the sentence someone screenshots later. */
-      try{ frToast('Your account has been deleted. Any reviews you wrote are still up, no longer linked to you.',8000); }catch(e){}
+      /* 30 days to recover (2026-10-04): say until when. */
+      var at=decodeURIComponent((location.search.match(/[?&]deleted=([^&]*)/)||[])[1]||'');
+      try{ frToast('Your account is scheduled for deletion. Sign in before '+delDateText(at)+' to recover it.',9000); }catch(e){}
       try{ history.replaceState(null,'',location.pathname); }catch(e){}
     },700);
   }
@@ -33984,7 +34064,7 @@ try{
    Specific to what Professify actually holds. A policy that doesn't name the data is worse
    than none: it reads as boilerplate nobody checked, which is exactly the impression a
    product handling other students' .edu addresses cannot afford. */
-var LEGAL_UPDATED='7 September 2026';
+var LEGAL_UPDATED='4 October 2026';
 /* PRIVACY HAS ITS OWN DATE. The analytics pseudonym stopped rotating nightly on 14 September
    and the Counting section was rewritten to say so -- a material change to what the site can
    observe about a returning student. Sharing one date across all four documents would have
@@ -33995,8 +34075,8 @@ var LEGAL_UPDATED='7 September 2026';
    third party that sets its own cookie is the most material change this document has carried —
    the sentence "that is the whole list" was true of the counting above and would have been a
    false statement the moment the tag loaded. */
-var LEGAL_UPDATED_PRIVACY='25 September 2026';
-var LEGAL_CONTACT='tdogtate@icloud.com';
+var LEGAL_UPDATED_PRIVACY='4 October 2026';
+var LEGAL_CONTACT='support@termchamp.com';
 var LEGAL_DOCS={
   terms:{title:'Terms of Service',html:
     '<div class="lg-date">Last updated '+LEGAL_UPDATED+'</div>'
@@ -34012,7 +34092,8 @@ var LEGAL_DOCS={
     +'<li>Someone else’s personal information, including contact details or schedules.</li>'
     +'<li>Reviews for a class you didn’t take, or written in exchange for anything.</li>'
     +'</ul>'
-    +'<p>You keep ownership of what you write. By posting, you give TermChamp permission to display it in the app. We can remove a review that breaks these rules, and repeated breaches can end your account. The same rules, written plainly and with the reporting routes, are in the <b>Guidelines</b> tab above.</p>'
+    +'<p>The same rules cover messages, group chat names, your profile and anything else you post. <b>There is no tolerance for objectionable content or abusive users:</b> content that breaks these rules is removed, and the account that posted it can be suspended or closed.</p>'
+    +'<p>You keep ownership of what you write. By posting, you give TermChamp permission to display it in the app. You can report anything that breaks these rules and block anyone, and <b>a person looks at every report within 24 hours</b>. The same rules, written plainly and with the reporting routes, are in the <b>Community Guidelines</b>.</p>'
     +'<h4>If you are the professor</h4>'
     +'<p>Reviews are students’ personal opinions, not statements of fact by TermChamp. If a review about you is abusive, names something private, or states something as fact that is false, email <b>'+LEGAL_CONTACT+'</b> and it will be looked at by a person. You don’t need an account to ask.</p>'
     +'<h4>The class data is not official</h4>'
@@ -34023,7 +34104,7 @@ var LEGAL_DOCS={
     +'<h4>Availability and liability</h4>'
     +'<p>This runs on a student budget. It may break, lose data, or go away. It is provided as-is, without warranty. To the extent the law allows, TermChamp and its author aren’t liable for losses arising from using it — including a class you didn’t get.</p>'
     +'<h4>Ending it</h4>'
-    +'<p>Delete your account any time from Settings and your data goes with it — except your reviews, which stay up permanently unlinked from you, because other students are relying on them. Delete individual reviews from <b>Your reviews</b> first if you don’t want them kept. Privacy explains this in full. We can suspend accounts that break these terms.</p>'
+    +'<p>Delete your account any time from Settings. It is hidden from other students straight away and <b>permanently deleted after 30 days</b>; sign in before then to recover it. When you delete it you choose what happens to your reviews: keep them up with no name on them (the default, because other students rely on them), or delete them with the account. We email you when you ask and again when the deletion is done. Privacy explains this in full. We can suspend or close accounts that break these terms.</p>'
     +'<h4>Changes and law</h4>'
     +'<p>These terms can change; the date at the top moves when they do, and significant changes will be announced in the app. Governed by the laws of the State of California.</p>'
     +'<p>Questions: <b>'+LEGAL_CONTACT+'</b></p>'},
@@ -34049,9 +34130,9 @@ var LEGAL_DOCS={
     +'<li>Reviews for a class you did not take, or written in exchange for anything.</li>'
     +'</ul>'
     +'<h4>What happens when you break them</h4>'
-    +'<p>A review that breaks these rules is removed. Repeatedly breaking them ends the account. Suspended accounts cannot post, message, or send friend requests \u2014 the database enforces that, not the interface.</p>'
+    +'<p><b>There is no tolerance for objectionable content or abusive users.</b> These rules cover messages, group chat names and profiles as well as reviews. Anything that breaks them is removed; a serious or repeated breach suspends or closes the account. Suspended accounts cannot post, message, or send friend requests \u2014 the database enforces that, not the interface.</p>'
     +'<h4>How to report something</h4>'
-    +'<p>Every review, message, post and profile has a <b>Report</b> control. It asks for one of nine reasons and goes to a moderator queue. You can also <b>Block</b> anyone from their profile or a message thread: they can no longer message you or send you a request, they are not told, and they cannot see that they have been blocked.</p>'
+    +'<p>Reviews, messages, profiles and group chat names can all be reported: pick a reason and it goes to a moderator. <b>A person looks at every report within 24 hours</b> and removes what breaks these rules. You can also <b>Block</b> anyone from their profile or a chat: you can no longer message each other or send each other requests, they are not told, and they cannot see that they have been blocked. Something urgent, or something the app won\u2019t let you report? Email <b>'+LEGAL_CONTACT+'</b>.</p>'
     +'<h4>If you are a professor</h4>'
     +'<p>Reviews here are students\u2019 personal opinions, not statements of fact by TermChamp. If a review about you is abusive, names something private, or states something as fact that is false, email <b>'+LEGAL_CONTACT+'</b> with the professor name and the course. You do not need an account to do that, and you will get an answer.</p>'
     +'<p>What TermChamp will not do is remove a review for being negative. A fair bad review is the point of the site.</p>'
@@ -34061,7 +34142,7 @@ var LEGAL_DOCS={
 
   privacy:{title:'Privacy',html:
     '<div class="lg-date">Last updated '+LEGAL_UPDATED_PRIVACY+'</div>'
-    +'<div class="lg-key">TermChamp does not sell your data and does not run ads. It counts which professor pages get opened without recording who opened them, uses <b>Google Analytics</b> to see how many people visit and come back, and sends the questions you ask Hawk to <b>Anthropic</b>\u2019s AI. None of them is given your name or your account. <b>Counting</b>, <b>Google Analytics</b> and <b>Hawk</b>, below, say exactly what and how.</div>'
+    +'<div class="lg-key">TermChamp does not sell your data and does not run ads. It counts which professor pages get opened without recording who opened them, uses <b>Google Analytics</b> to see how many people visit and come back, and sends the questions you ask Champ (Hawk on the website) to <b>Anthropic</b>\u2019s AI \u2014 in the phone app only once you allow it. None of them is given your name or your account. <b>Counting</b>, <b>Google Analytics</b> and <b>Champ</b>, below, say exactly what and how.</div>'
     +'<h4>What is collected</h4>'
     +'<ul>'
     +'<li><b>Your Cal Poly email</b> — to verify you’re a student and to sign you in. You can sign in with a one-time emailed code, or set a password. A password is stored only as a hash, by the authentication service, and is never readable by anyone including us.</li>'
@@ -34078,7 +34159,7 @@ var LEGAL_DOCS={
     +'<h4>Counting, and what it deliberately cannot do</h4>'
     +'<p>TermChamp counts which professor pages are opened and which are shown on screen, so it can '
     +'show a <b>Looked at most this week</b> strip and know which parts of the site are used. That is '
-    +'the whole list of what TermChamp itself records: not what you type (except the questions you ask Hawk, below), not what you read, not how '
+    +'the whole list of what TermChamp itself records: not what you type (except the questions you ask Champ, below), not what you read, not how '
     +'long you stay. Google Analytics, described further down, is a separate thing that records '
     +'different information \u2014 read that section too.</p>'
     +'<p><b>These counts are not attached to your account.</b> The obvious way to build this is to '
@@ -34116,30 +34197,32 @@ var LEGAL_DOCS={
     +'Global Privacy Control or Do Not Track, Google Analytics is not loaded at all on this site \u2014 '
     +'no cookie, nothing sent. You can also block it with any content blocker, and the site works '
     +'exactly the same.</p>'
-    +'<h4>Hawk, the assistant</h4>'
-    +'<p>Hawk answers the questions you type into the box in the corner. Many answers are worked out '
+    +'<h4>Champ, the assistant</h4>'
+    +'<p>Champ (called Hawk on the website) answers the questions you type to it. In the phone app it '
+    +'asks first: nothing is sent until you tap <b>Allow</b>, and you can turn it off again in Settings; after that, every question you ask '
+    +'Champ in the phone app goes to Anthropic. On the website, many answers are worked out '
     +'in your browser. When you are signed in, questions that need more than a simple lookup are sent, '
     +'through TermChamp\u2019s server, to <b>Anthropic</b>, the company that makes the Claude AI models, '
-    +'so a model can work out what you are asking for. When you are signed out, nothing you type into Hawk '
+    +'so a model can work out what you are asking for. When you are signed out, nothing you type into Champ '
     +'leaves your browser.</p>'
     +'<p><b>What is sent to Anthropic:</b> the words you typed and the current term \u2014 never your name, '
-    +'email or account. When Hawk writes a short explanation under a list of classes, the classes on screen '
+    +'email or account. When Champ writes a short explanation under a list of classes, the classes on screen '
     +'are sent too: course, title, meeting time, professor and rating, open seats, whether each one fits '
-    +'your week, and whether it is one of your GE areas or major requirements. The line that says how Hawk '
+    +'your week, and whether it is one of your GE areas or major requirements. The line that says how Champ '
     +'read your question goes with them, and it can name the GE areas you still need.</p>'
     +'<p><b>What TermChamp\u2019s own server sees:</b> that you are signed in, because only signed-in '
-    +'students can use the AI. It counts how many Hawk questions, and how many Not it? taps, each account '
+    +'students can use the AI. It counts how many Champ questions, and how many Not it? taps, each account '
     +'makes per hour and per day, so costs and misuse cannot run away; those counts are all it keeps against '
     +'your account. The questions themselves '
     +'are stored only under the browser pseudonym described under Counting, never next to your account.</p>'
     +'<p><b>What is never sent:</b> your saved classes and schedule, your friends, your past classes, and '
-    +'your degree record itself. Hawk works out anything about those in your browser. Words you type are sent '
+    +'your degree record itself. Champ works out anything about those in your browser. Words you type are sent '
     +'as typed, though \u2014 so a friend\u2019s name in a question goes with the question.</p>'
-    +'<p><b>What is kept:</b> each question sent to Anthropic (its first 300 characters), what Hawk did with '
-    +'it and what it cost, for about <b>30 days</b>. Old questions are cleared as Hawk is used, so in a quiet '
-    +'week one can stay a few days longer. If you tap <b>Not it?</b>, or pick one of Hawk\u2019s suggestions '
-    +'after it was unsure, that question and what Hawk did with it are kept the same way, so we can fix the '
-    +'mistake. Hawk\u2019s explanations are not kept. If your browser sends Global Privacy Control, Hawk still '
+    +'<p><b>What is kept:</b> each question sent to Anthropic (its first 300 characters), what Champ did with '
+    +'it and what it cost, for about <b>30 days</b>. Old questions are cleared as Champ is used, so in a quiet '
+    +'week one can stay a few days longer. If you tap <b>Not it?</b>, or pick one of Champ\u2019s suggestions '
+    +'after it was unsure, that question and what Champ did with it are kept the same way, so we can fix the '
+    +'mistake. Champ\u2019s explanations are not kept. If your browser sends Global Privacy Control, Champ still '
     +'answers \u2014 the question has to reach the model for that \u2014 but TermChamp keeps no record of what '
     +'you asked, only that a question was asked and what it cost. '
     +'Anthropic handles questions under its commercial terms, which do not let it train its models on them.</p>'
@@ -34167,28 +34250,28 @@ var LEGAL_DOCS={
     +'<h4>Who else is involved</h4>'
     +'<ul>'
     +'<li><b>Supabase</b> — database, sign-in and file storage.</li>'
-    +'<li><b>Resend</b> — sends your sign-in codes; sees your email address.</li>'
+    +'<li><b>Resend</b> — sends your sign-in codes and the emails about deleting your account; sees your email address.</li>'
     +'<li><b>PolyRatings</b> — their public API supplies professor ratings. Your data is never sent to them.</li>'
-    +'<li><b>Anthropic</b> \u2014 the AI model behind Hawk. It receives the questions you ask Hawk while signed in, as described under <b>Hawk</b> above.</li>'
+    +'<li><b>Anthropic</b> \u2014 the AI model behind Champ. It receives the questions you ask Champ while signed in, as described under <b>Champ</b> above.</li>'
     +'<li><b>jsDelivr and Google Fonts</b> — serve code and fonts to your browser, and therefore see your IP address, as any site’s CDN does.</li>'
     +'</ul>'
     +'<p>Nobody else receives your data. It is not sold, rented, or shared for advertising.</p>'
     +'<h4>How long it is kept</h4>'
-    +'<p>While your account exists. Delete your account and your profile, classes, sections, past classes, plans, watchlist, friend links, suggestions, posts, blocks and messages are deleted with it. Backups may keep copies for a short period before rolling off.</p>'
-    +'<p><b>Hawk questions:</b> about 30 days (see <b>Hawk</b>), under a pseudonym that is not attached to your account \u2014 so deleting your account cannot find them, and does not need to.</p>'
+    +'<p>While your account exists. Delete your account and it is hidden from other students straight away; <b>after 30 days</b> your profile, classes, sections, past classes, plans, watchlist, friend links, suggestions, posts, blocks and messages are deleted with it. Sign in during those 30 days to recover it. Your email address is used for two emails about it \u2014 one when you ask, one when it is done \u2014 and is then removed. Backups may keep copies for a short period before rolling off.</p>'
+    +'<p><b>Champ questions:</b> about 30 days (see <b>Champ</b>), under a pseudonym that is not attached to your account \u2014 so deleting your account cannot find them, and does not need to.</p>'
     +'<p><b>Messages specifically:</b> they are kept until you delete them or delete your account \u2014 they are not rolled off on a timer today. Closing your account deletes <b>the messages you sent</b>, everywhere they appear, including in other people\u2019s threads. It does not delete anyone else\u2019s messages: a thread you started stays open for the people still in it, minus your side of it. Leaving a group removes your access to it but does not delete what you already sent, the same way leaving a group text does not unsend your messages. Delete your own message and it is gone for everyone.</p>'
-    +'<h4>Reviews are the one exception</h4>'
-    +'<p><b>Your reviews stay up when you delete your account — but they stop being yours.</b> We set the author field to null, so afterwards no record anywhere links a review to you. It is not merely displayed anonymously; there is nothing left to look up, by us or by anyone asking us.</p>'
-    +'<p>Why: a review is what another student came here to read, and it is already part of a professor’s average. Removing it would silently change a number other people made decisions on, and would mean every professor’s rating shifted whenever an unrelated student graduated and closed their account.</p>'
+    +'<h4>Your reviews, when you delete your account</h4>'
+    +'<p><b>You choose.</b> The delete screen has a <b>Keep my reviews up anonymously</b> switch, on unless you turn it off. Off: your reviews are deleted with your account. On: they stay up, but they stop being yours \u2014 we set the author field to null, so afterwards no record anywhere links a review to you. It is not merely displayed anonymously; there is nothing left to look up, by us or by anyone asking us.</p>'
+    +'<p>Why keeping them is the default: a review is what another student came here to read, and it is already part of a professor’s average. Removing it would silently change a number other people made decisions on, and would mean every professor’s rating shifted whenever an unrelated student graduated and closed their account.</p>'
     +'<p>The trade is that an anonymised review can’t be edited or taken down afterwards, because nothing identifies who wrote it. So <b>if you want a review gone, delete it before you delete your account</b> — open <b>Your reviews</b> from Settings and remove any you don’t want kept. You can do that at any time, for any reason, without deleting your account. The delete screen says this too, before you confirm.</p>'
     +'<h4>Your choices</h4>'
     +'<ul>'
     +'<li>Edit or remove almost everything yourself — photo, name, classes, reviews, friends.</li>'
-    +'<li>Delete your account from Settings.</li>'
+    +'<li>Delete your account from Settings. You have 30 days to change your mind.</li>'
     +'<li>Want a copy of your data, or something corrected? Email <b>'+LEGAL_CONTACT+'</b>.</li>'
     +'</ul>'
     +'<h4>Students under 18</h4>'
-    +'<p>Some first-years are 17. TermChamp is not designed for children under 13 and does not knowingly collect their data. If you believe someone under 13 has an account, email us and it will be removed.</p>'
+    +'<p>Some first-years are 17. TermChamp is not designed for children under 13 and does not knowingly collect their data. If you believe someone under 13 has an account, email <b>'+LEGAL_CONTACT+'</b> and it will be removed.</p>'
     +'<h4>Changes</h4>'
     +'<p>If what is collected or who can see it changes, the date above changes and you’ll be told in the app. Questions: <b>'+LEGAL_CONTACT+'</b></p>'},
 
@@ -34196,7 +34279,7 @@ var LEGAL_DOCS={
     '<div class="lg-date">Last updated '+LEGAL_UPDATED+'</div>'
     +'<div class="lg-key">No system is secure, and nobody honest will tell you otherwise. What follows is what TermChamp actually does, so you can judge for yourself what to put in it.</div>'
     +'<h4>Signing in</h4>'
-    +'<p>There is no password to steal — sign-in is a one-time code emailed to your school address. Sessions are held in your browser and refresh in the background; signing out clears them.</p>'
+    +'<p>Sign in with a one-time code emailed to your school address, or with a password you set. A password is stored only as a hash by the authentication service; nobody can read it, us included. Sessions are held in your browser and refresh in the background; signing out clears them.</p>'
     +'<h4>How your data is separated</h4>'
     +'<p>Every table uses database-level row policies, so who can read a row is decided by the database rather than by the app asking nicely. Friend access is checked against an accepted friendship each time, not cached and trusted.</p>'
     +'<p>Messages work the same way and one step further: reading a conversation requires a membership row, and that check runs inside the database on every query. A conversation you are not in does not return a filtered version — it returns nothing.</p>'
@@ -34205,9 +34288,9 @@ var LEGAL_DOCS={
     +'<p>The per-review “show my friends I wrote this” switch was added at the same time and not before, because offering that choice on top of the old behaviour would have been offering a choice that had already been made for people.</p>'
     +'<h4>What we do not do</h4>'
     +'<ul>'
-    +'<li>No advertising or analytics trackers.</li>'
+    +'<li>No advertising trackers. Google Analytics counts visits, as Privacy explains; it is never told what you look at or type.</li>'
     +'<li>No selling or sharing of personal data.</li>'
-    +'<li>No storing of passwords or phone numbers.</li>'
+    +'<li>No phone numbers, and passwords only as a hash.</li>'
     +'<li>No reading of your Cal Poly account — the class data comes from Cal Poly’s public class search, not from your portal. TermChamp never asks for your Cal Poly password, and you should never give it to us or anyone else.</li>'
     +'</ul>'
     +'<h4>Honest limits</h4>'
@@ -34217,7 +34300,7 @@ var LEGAL_DOCS={
     +'<li>Anything you post as a review is public. Treat it as permanently public.</li>'
     +'<li>A profile photo you upload is reachable by anyone with its link.</li>'
     +'<li><b>Messages are not end-to-end encrypted</b> and can be read by whoever holds the database. They are private from other students, not from us.</li>'
-    +'<li>There is no automatic moderation of messages. You can leave a conversation, and only your accepted friends can start one with you, but nothing scans what is sent. If someone is using this to harass you, email the address below.</li>'
+    +'<li>There is no automatic moderation of messages. You can leave a conversation, and only your accepted friends can start one with you, but nothing scans what is sent. If someone is using this to harass you, report or block them in the app, or email the address below.</li>'
     +'</ul>'
     +'<h4>Found a problem?</h4>'
     +'<p>Please report it rather than testing how far it goes. Email <b>'+LEGAL_CONTACT+'</b> with what you found and how to reproduce it. Reports made in good faith are welcome, and you won’t be pursued for reporting one. Please don’t access, change or keep other students’ data while investigating.</p>'

@@ -1,4 +1,4 @@
-window.TERMCHAMP_PLANNER_BUILD = "2026-09-30 17:30";
+window.TERMCHAMP_PLANNER_BUILD = "2026-10-04 19:50";
 /* =================================================================================================
    TERMCHAMP PHONE APP — PLANNER DATA AND RULES (app/planner.js)
    -------------------------------------------------------------------------------------------------
@@ -1692,7 +1692,7 @@ function schExpandConc(m){
     return out;
   }
 function canon(c){ try{ return canonCode(c); }catch(e){ return String(c||'').toUpperCase(); } }
-function slotCodes(s){ if(!s.code)return []; try{ return (typeof window.schSlotCodes==='function')?window.schSlotCodes(s.code):[canon(s.code)]; }catch(e){ return [canon(s.code)]; } }
+function slotCodes(s){ if(s._opts)return s._opts.slice(); if(!s.code)return []; try{ return (typeof window.schSlotCodes==='function')?window.schSlotCodes(s.code):[canon(s.code)]; }catch(e){ return [canon(s.code)]; } }
 function geAreaOf(code){
   try{
     var out=[]; (typeof GE_COURSES!=='undefined'?GE_COURSES:[]).forEach(function(g){
@@ -1807,9 +1807,9 @@ function slotCheckable(sl){
   }catch(e){}
   return false;
 }
-var LEGAL_UPDATED='7 September 2026';
-var LEGAL_UPDATED_PRIVACY='25 September 2026';
-var LEGAL_CONTACT='tdogtate@icloud.com';
+var LEGAL_UPDATED='4 October 2026';
+var LEGAL_UPDATED_PRIVACY='4 October 2026';
+var LEGAL_CONTACT='support@termchamp.com';
 var LEGAL_DOCS={
   terms:{title:'Terms of Service',html:
     '<div class="lg-date">Last updated '+LEGAL_UPDATED+'</div>'
@@ -1825,7 +1825,8 @@ var LEGAL_DOCS={
     +'<li>Someone else’s personal information, including contact details or schedules.</li>'
     +'<li>Reviews for a class you didn’t take, or written in exchange for anything.</li>'
     +'</ul>'
-    +'<p>You keep ownership of what you write. By posting, you give TermChamp permission to display it in the app. We can remove a review that breaks these rules, and repeated breaches can end your account. The same rules, written plainly and with the reporting routes, are in the <b>Guidelines</b> tab above.</p>'
+    +'<p>The same rules cover messages, group chat names, your profile and anything else you post. <b>There is no tolerance for objectionable content or abusive users:</b> content that breaks these rules is removed, and the account that posted it can be suspended or closed.</p>'
+    +'<p>You keep ownership of what you write. By posting, you give TermChamp permission to display it in the app. You can report anything that breaks these rules and block anyone, and <b>a person looks at every report within 24 hours</b>. The same rules, written plainly and with the reporting routes, are in the <b>Community Guidelines</b>.</p>'
     +'<h4>If you are the professor</h4>'
     +'<p>Reviews are students’ personal opinions, not statements of fact by TermChamp. If a review about you is abusive, names something private, or states something as fact that is false, email <b>'+LEGAL_CONTACT+'</b> and it will be looked at by a person. You don’t need an account to ask.</p>'
     +'<h4>The class data is not official</h4>'
@@ -1836,7 +1837,7 @@ var LEGAL_DOCS={
     +'<h4>Availability and liability</h4>'
     +'<p>This runs on a student budget. It may break, lose data, or go away. It is provided as-is, without warranty. To the extent the law allows, TermChamp and its author aren’t liable for losses arising from using it — including a class you didn’t get.</p>'
     +'<h4>Ending it</h4>'
-    +'<p>Delete your account any time from Settings and your data goes with it — except your reviews, which stay up permanently unlinked from you, because other students are relying on them. Delete individual reviews from <b>Your reviews</b> first if you don’t want them kept. Privacy explains this in full. We can suspend accounts that break these terms.</p>'
+    +'<p>Delete your account any time from Settings. It is hidden from other students straight away and <b>permanently deleted after 30 days</b>; sign in before then to recover it. When you delete it you choose what happens to your reviews: keep them up with no name on them (the default, because other students rely on them), or delete them with the account. We email you when you ask and again when the deletion is done. Privacy explains this in full. We can suspend or close accounts that break these terms.</p>'
     +'<h4>Changes and law</h4>'
     +'<p>These terms can change; the date at the top moves when they do, and significant changes will be announced in the app. Governed by the laws of the State of California.</p>'
     +'<p>Questions: <b>'+LEGAL_CONTACT+'</b></p>'},
@@ -1862,9 +1863,9 @@ var LEGAL_DOCS={
     +'<li>Reviews for a class you did not take, or written in exchange for anything.</li>'
     +'</ul>'
     +'<h4>What happens when you break them</h4>'
-    +'<p>A review that breaks these rules is removed. Repeatedly breaking them ends the account. Suspended accounts cannot post, message, or send friend requests \u2014 the database enforces that, not the interface.</p>'
+    +'<p><b>There is no tolerance for objectionable content or abusive users.</b> These rules cover messages, group chat names and profiles as well as reviews. Anything that breaks them is removed; a serious or repeated breach suspends or closes the account. Suspended accounts cannot post, message, or send friend requests \u2014 the database enforces that, not the interface.</p>'
     +'<h4>How to report something</h4>'
-    +'<p>Every review, message, post and profile has a <b>Report</b> control. It asks for one of nine reasons and goes to a moderator queue. You can also <b>Block</b> anyone from their profile or a message thread: they can no longer message you or send you a request, they are not told, and they cannot see that they have been blocked.</p>'
+    +'<p>Reviews, messages, profiles and group chat names can all be reported: pick a reason and it goes to a moderator. <b>A person looks at every report within 24 hours</b> and removes what breaks these rules. You can also <b>Block</b> anyone from their profile or a chat: you can no longer message each other or send each other requests, they are not told, and they cannot see that they have been blocked. Something urgent, or something the app won\u2019t let you report? Email <b>'+LEGAL_CONTACT+'</b>.</p>'
     +'<h4>If you are a professor</h4>'
     +'<p>Reviews here are students\u2019 personal opinions, not statements of fact by TermChamp. If a review about you is abusive, names something private, or states something as fact that is false, email <b>'+LEGAL_CONTACT+'</b> with the professor name and the course. You do not need an account to do that, and you will get an answer.</p>'
     +'<p>What TermChamp will not do is remove a review for being negative. A fair bad review is the point of the site.</p>'
@@ -1874,7 +1875,7 @@ var LEGAL_DOCS={
 
   privacy:{title:'Privacy',html:
     '<div class="lg-date">Last updated '+LEGAL_UPDATED_PRIVACY+'</div>'
-    +'<div class="lg-key">TermChamp does not sell your data and does not run ads. It counts which professor pages get opened without recording who opened them, uses <b>Google Analytics</b> to see how many people visit and come back, and sends the questions you ask Hawk to <b>Anthropic</b>\u2019s AI. None of them is given your name or your account. <b>Counting</b>, <b>Google Analytics</b> and <b>Hawk</b>, below, say exactly what and how.</div>'
+    +'<div class="lg-key">TermChamp does not sell your data and does not run ads. It counts which professor pages get opened without recording who opened them, uses <b>Google Analytics</b> to see how many people visit and come back, and sends the questions you ask Champ (Hawk on the website) to <b>Anthropic</b>\u2019s AI \u2014 in the phone app only once you allow it. None of them is given your name or your account. <b>Counting</b>, <b>Google Analytics</b> and <b>Champ</b>, below, say exactly what and how.</div>'
     +'<h4>What is collected</h4>'
     +'<ul>'
     +'<li><b>Your Cal Poly email</b> — to verify you’re a student and to sign you in. You can sign in with a one-time emailed code, or set a password. A password is stored only as a hash, by the authentication service, and is never readable by anyone including us.</li>'
@@ -1891,7 +1892,7 @@ var LEGAL_DOCS={
     +'<h4>Counting, and what it deliberately cannot do</h4>'
     +'<p>TermChamp counts which professor pages are opened and which are shown on screen, so it can '
     +'show a <b>Looked at most this week</b> strip and know which parts of the site are used. That is '
-    +'the whole list of what TermChamp itself records: not what you type (except the questions you ask Hawk, below), not what you read, not how '
+    +'the whole list of what TermChamp itself records: not what you type (except the questions you ask Champ, below), not what you read, not how '
     +'long you stay. Google Analytics, described further down, is a separate thing that records '
     +'different information \u2014 read that section too.</p>'
     +'<p><b>These counts are not attached to your account.</b> The obvious way to build this is to '
@@ -1929,30 +1930,32 @@ var LEGAL_DOCS={
     +'Global Privacy Control or Do Not Track, Google Analytics is not loaded at all on this site \u2014 '
     +'no cookie, nothing sent. You can also block it with any content blocker, and the site works '
     +'exactly the same.</p>'
-    +'<h4>Hawk, the assistant</h4>'
-    +'<p>Hawk answers the questions you type into the box in the corner. Many answers are worked out '
+    +'<h4>Champ, the assistant</h4>'
+    +'<p>Champ (called Hawk on the website) answers the questions you type to it. In the phone app it '
+    +'asks first: nothing is sent until you tap <b>Allow</b>, and you can turn it off again in Settings; after that, every question you ask '
+    +'Champ in the phone app goes to Anthropic. On the website, many answers are worked out '
     +'in your browser. When you are signed in, questions that need more than a simple lookup are sent, '
     +'through TermChamp\u2019s server, to <b>Anthropic</b>, the company that makes the Claude AI models, '
-    +'so a model can work out what you are asking for. When you are signed out, nothing you type into Hawk '
+    +'so a model can work out what you are asking for. When you are signed out, nothing you type into Champ '
     +'leaves your browser.</p>'
     +'<p><b>What is sent to Anthropic:</b> the words you typed and the current term \u2014 never your name, '
-    +'email or account. When Hawk writes a short explanation under a list of classes, the classes on screen '
+    +'email or account. When Champ writes a short explanation under a list of classes, the classes on screen '
     +'are sent too: course, title, meeting time, professor and rating, open seats, whether each one fits '
-    +'your week, and whether it is one of your GE areas or major requirements. The line that says how Hawk '
+    +'your week, and whether it is one of your GE areas or major requirements. The line that says how Champ '
     +'read your question goes with them, and it can name the GE areas you still need.</p>'
     +'<p><b>What TermChamp\u2019s own server sees:</b> that you are signed in, because only signed-in '
-    +'students can use the AI. It counts how many Hawk questions, and how many Not it? taps, each account '
+    +'students can use the AI. It counts how many Champ questions, and how many Not it? taps, each account '
     +'makes per hour and per day, so costs and misuse cannot run away; those counts are all it keeps against '
     +'your account. The questions themselves '
     +'are stored only under the browser pseudonym described under Counting, never next to your account.</p>'
     +'<p><b>What is never sent:</b> your saved classes and schedule, your friends, your past classes, and '
-    +'your degree record itself. Hawk works out anything about those in your browser. Words you type are sent '
+    +'your degree record itself. Champ works out anything about those in your browser. Words you type are sent '
     +'as typed, though \u2014 so a friend\u2019s name in a question goes with the question.</p>'
-    +'<p><b>What is kept:</b> each question sent to Anthropic (its first 300 characters), what Hawk did with '
-    +'it and what it cost, for about <b>30 days</b>. Old questions are cleared as Hawk is used, so in a quiet '
-    +'week one can stay a few days longer. If you tap <b>Not it?</b>, or pick one of Hawk\u2019s suggestions '
-    +'after it was unsure, that question and what Hawk did with it are kept the same way, so we can fix the '
-    +'mistake. Hawk\u2019s explanations are not kept. If your browser sends Global Privacy Control, Hawk still '
+    +'<p><b>What is kept:</b> each question sent to Anthropic (its first 300 characters), what Champ did with '
+    +'it and what it cost, for about <b>30 days</b>. Old questions are cleared as Champ is used, so in a quiet '
+    +'week one can stay a few days longer. If you tap <b>Not it?</b>, or pick one of Champ\u2019s suggestions '
+    +'after it was unsure, that question and what Champ did with it are kept the same way, so we can fix the '
+    +'mistake. Champ\u2019s explanations are not kept. If your browser sends Global Privacy Control, Champ still '
     +'answers \u2014 the question has to reach the model for that \u2014 but TermChamp keeps no record of what '
     +'you asked, only that a question was asked and what it cost. '
     +'Anthropic handles questions under its commercial terms, which do not let it train its models on them.</p>'
@@ -1980,28 +1983,28 @@ var LEGAL_DOCS={
     +'<h4>Who else is involved</h4>'
     +'<ul>'
     +'<li><b>Supabase</b> — database, sign-in and file storage.</li>'
-    +'<li><b>Resend</b> — sends your sign-in codes; sees your email address.</li>'
+    +'<li><b>Resend</b> — sends your sign-in codes and the emails about deleting your account; sees your email address.</li>'
     +'<li><b>PolyRatings</b> — their public API supplies professor ratings. Your data is never sent to them.</li>'
-    +'<li><b>Anthropic</b> \u2014 the AI model behind Hawk. It receives the questions you ask Hawk while signed in, as described under <b>Hawk</b> above.</li>'
+    +'<li><b>Anthropic</b> \u2014 the AI model behind Champ. It receives the questions you ask Champ while signed in, as described under <b>Champ</b> above.</li>'
     +'<li><b>jsDelivr and Google Fonts</b> — serve code and fonts to your browser, and therefore see your IP address, as any site’s CDN does.</li>'
     +'</ul>'
     +'<p>Nobody else receives your data. It is not sold, rented, or shared for advertising.</p>'
     +'<h4>How long it is kept</h4>'
-    +'<p>While your account exists. Delete your account and your profile, classes, sections, past classes, plans, watchlist, friend links, suggestions, posts, blocks and messages are deleted with it. Backups may keep copies for a short period before rolling off.</p>'
-    +'<p><b>Hawk questions:</b> about 30 days (see <b>Hawk</b>), under a pseudonym that is not attached to your account \u2014 so deleting your account cannot find them, and does not need to.</p>'
+    +'<p>While your account exists. Delete your account and it is hidden from other students straight away; <b>after 30 days</b> your profile, classes, sections, past classes, plans, watchlist, friend links, suggestions, posts, blocks and messages are deleted with it. Sign in during those 30 days to recover it. Your email address is used for two emails about it \u2014 one when you ask, one when it is done \u2014 and is then removed. Backups may keep copies for a short period before rolling off.</p>'
+    +'<p><b>Champ questions:</b> about 30 days (see <b>Champ</b>), under a pseudonym that is not attached to your account \u2014 so deleting your account cannot find them, and does not need to.</p>'
     +'<p><b>Messages specifically:</b> they are kept until you delete them or delete your account \u2014 they are not rolled off on a timer today. Closing your account deletes <b>the messages you sent</b>, everywhere they appear, including in other people\u2019s threads. It does not delete anyone else\u2019s messages: a thread you started stays open for the people still in it, minus your side of it. Leaving a group removes your access to it but does not delete what you already sent, the same way leaving a group text does not unsend your messages. Delete your own message and it is gone for everyone.</p>'
-    +'<h4>Reviews are the one exception</h4>'
-    +'<p><b>Your reviews stay up when you delete your account — but they stop being yours.</b> We set the author field to null, so afterwards no record anywhere links a review to you. It is not merely displayed anonymously; there is nothing left to look up, by us or by anyone asking us.</p>'
-    +'<p>Why: a review is what another student came here to read, and it is already part of a professor’s average. Removing it would silently change a number other people made decisions on, and would mean every professor’s rating shifted whenever an unrelated student graduated and closed their account.</p>'
+    +'<h4>Your reviews, when you delete your account</h4>'
+    +'<p><b>You choose.</b> The delete screen has a <b>Keep my reviews up anonymously</b> switch, on unless you turn it off. Off: your reviews are deleted with your account. On: they stay up, but they stop being yours \u2014 we set the author field to null, so afterwards no record anywhere links a review to you. It is not merely displayed anonymously; there is nothing left to look up, by us or by anyone asking us.</p>'
+    +'<p>Why keeping them is the default: a review is what another student came here to read, and it is already part of a professor’s average. Removing it would silently change a number other people made decisions on, and would mean every professor’s rating shifted whenever an unrelated student graduated and closed their account.</p>'
     +'<p>The trade is that an anonymised review can’t be edited or taken down afterwards, because nothing identifies who wrote it. So <b>if you want a review gone, delete it before you delete your account</b> — open <b>Your reviews</b> from Settings and remove any you don’t want kept. You can do that at any time, for any reason, without deleting your account. The delete screen says this too, before you confirm.</p>'
     +'<h4>Your choices</h4>'
     +'<ul>'
     +'<li>Edit or remove almost everything yourself — photo, name, classes, reviews, friends.</li>'
-    +'<li>Delete your account from Settings.</li>'
+    +'<li>Delete your account from Settings. You have 30 days to change your mind.</li>'
     +'<li>Want a copy of your data, or something corrected? Email <b>'+LEGAL_CONTACT+'</b>.</li>'
     +'</ul>'
     +'<h4>Students under 18</h4>'
-    +'<p>Some first-years are 17. TermChamp is not designed for children under 13 and does not knowingly collect their data. If you believe someone under 13 has an account, email us and it will be removed.</p>'
+    +'<p>Some first-years are 17. TermChamp is not designed for children under 13 and does not knowingly collect their data. If you believe someone under 13 has an account, email <b>'+LEGAL_CONTACT+'</b> and it will be removed.</p>'
     +'<h4>Changes</h4>'
     +'<p>If what is collected or who can see it changes, the date above changes and you’ll be told in the app. Questions: <b>'+LEGAL_CONTACT+'</b></p>'},
 
@@ -2009,7 +2012,7 @@ var LEGAL_DOCS={
     '<div class="lg-date">Last updated '+LEGAL_UPDATED+'</div>'
     +'<div class="lg-key">No system is secure, and nobody honest will tell you otherwise. What follows is what TermChamp actually does, so you can judge for yourself what to put in it.</div>'
     +'<h4>Signing in</h4>'
-    +'<p>There is no password to steal — sign-in is a one-time code emailed to your school address. Sessions are held in your browser and refresh in the background; signing out clears them.</p>'
+    +'<p>Sign in with a one-time code emailed to your school address, or with a password you set. A password is stored only as a hash by the authentication service; nobody can read it, us included. Sessions are held in your browser and refresh in the background; signing out clears them.</p>'
     +'<h4>How your data is separated</h4>'
     +'<p>Every table uses database-level row policies, so who can read a row is decided by the database rather than by the app asking nicely. Friend access is checked against an accepted friendship each time, not cached and trusted.</p>'
     +'<p>Messages work the same way and one step further: reading a conversation requires a membership row, and that check runs inside the database on every query. A conversation you are not in does not return a filtered version — it returns nothing.</p>'
@@ -2018,9 +2021,9 @@ var LEGAL_DOCS={
     +'<p>The per-review “show my friends I wrote this” switch was added at the same time and not before, because offering that choice on top of the old behaviour would have been offering a choice that had already been made for people.</p>'
     +'<h4>What we do not do</h4>'
     +'<ul>'
-    +'<li>No advertising or analytics trackers.</li>'
+    +'<li>No advertising trackers. Google Analytics counts visits, as Privacy explains; it is never told what you look at or type.</li>'
     +'<li>No selling or sharing of personal data.</li>'
-    +'<li>No storing of passwords or phone numbers.</li>'
+    +'<li>No phone numbers, and passwords only as a hash.</li>'
     +'<li>No reading of your Cal Poly account — the class data comes from Cal Poly’s public class search, not from your portal. TermChamp never asks for your Cal Poly password, and you should never give it to us or anyone else.</li>'
     +'</ul>'
     +'<h4>Honest limits</h4>'
@@ -2030,7 +2033,7 @@ var LEGAL_DOCS={
     +'<li>Anything you post as a review is public. Treat it as permanently public.</li>'
     +'<li>A profile photo you upload is reachable by anyone with its link.</li>'
     +'<li><b>Messages are not end-to-end encrypted</b> and can be read by whoever holds the database. They are private from other students, not from us.</li>'
-    +'<li>There is no automatic moderation of messages. You can leave a conversation, and only your accepted friends can start one with you, but nothing scans what is sent. If someone is using this to harass you, email the address below.</li>'
+    +'<li>There is no automatic moderation of messages. You can leave a conversation, and only your accepted friends can start one with you, but nothing scans what is sent. If someone is using this to harass you, report or block them in the app, or email the address below.</li>'
     +'</ul>'
     +'<h4>Found a problem?</h4>'
     +'<p>Please report it rather than testing how far it goes. Email <b>'+LEGAL_CONTACT+'</b> with what you found and how to reproduce it. Reports made in good faith are welcome, and you won’t be pursued for reporting one. Please don’t access, change or keep other students’ data while investigating.</p>'
@@ -2171,9 +2174,21 @@ var PDFJS_BASE='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/';
     var key = Object.keys(window.SCHED_MAJORS).find(function (k) { return norm(window.SCHED_MAJORS[k].name) === norm(name); });
     return key ? window.SCHED_MAJORS[key] : null;
   }
+  /* A choice slot ("Calculus for Data Science I or Business Calculus") lists its options. Checked against
+     them like a coded slot (Tate, 2026-10-02) instead of "can't check": its first option stands in as
+     the code, and _opts carries them all to slotCodes() and the ledger below. */
+  function withChoiceCodes(m) {
+    var CODE = /^[A-Z&]{2,5} \d{3,4}[A-Z]?$/;
+    return Object.assign({}, m, { terms: (m.terms || []).map(function (t) { return Object.assign({}, t, { slots: (t.slots || []).map(function (sl) {
+      if (!sl || sl.code || sl.type !== 'choice' || !Array.isArray(sl.options) || sl.options.length < 2) return sl;
+      var o = sl.options.map(function (c) { var raw = String(c || '').trim().toUpperCase(); return canonCode(raw) || raw; });
+      if (!o.every(function (c) { return CODE.test(c); })) return sl;
+      return Object.assign({}, sl, { code: o[0], _opts: o });
+    }) }); }) });
+  }
   function ledger() {
     var base = majorFor(student.major); if (!base) return null;
-    var mm = schExpandConc(base);
+    var mm = withChoiceCodes(schExpandConc(base));
     var have = {};
     myHistory.forEach(function (h) { if (h && h.code) { var k = canonCode(h.code); have[k] = (have[k] || 0) + 1; } });
     completedCodes().forEach(function (c) { if (!have[c]) have[c] = 1; });
@@ -2201,14 +2216,15 @@ var PDFJS_BASE='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/';
         if (sl.code) {
           if (isConc) { if (!rows.conc) { var cn = String(sl.note || '').replace(/\s*concentration\s*$/i, ''); rows.conc = { label: (cn ? cn + ' concentration' : 'Concentration'), f: 0, t: 0, n: 0 }; } row = rows.conc; }
           else row = rows.major;
-          var cs = window.schSlotCodes(sl.code);
+          var cs = sl._opts ? sl._opts.slice() : window.schSlotCodes(sl.code);
+          if (sl._opts) cell.choice = sl._opts.slice();
           row.n++;
           var hit = cs.find(function (c) { return have[c] > 0; });
           if (hit) { have[hit]--; row.f++; done.push({ title: sl.title || '', code: hit }); cell.state = 'done'; cell.by = hit; }
           else {
             var th = cs.find(function (c) { return takingM[c] > 0; });
             if (th) { takingM[th]--; row.t++; cell.state = 'taking'; cell.by = th; }
-            else { cell.state = 'need'; cell.codes = cs; } if (!th) need.push({ title: sl.title || '', codes: cs, group: isConc ? 'conc' : 'major', ti: ti, year: t.year, term: t.term, units: sl.units });
+            else { cell.state = 'need'; cell.codes = cs; } if (!th) need.push({ title: sl.title || '', codes: cs, choice: !!sl._opts, group: isConc ? 'conc' : 'major', ti: ti, year: t.year, term: t.term, units: sl.units });
           }
         } else {
           row = (sl.type === 'ge') ? rows.ge : rows.el;

@@ -83,12 +83,19 @@
      validates the shape itself; this only has to avoid mangling it. Rebuilding the query from
      a whitelist — rather than forwarding location.search wholesale — means a crafted link
      cannot use this page to inject arbitrary parameters into the app. */
-  var out='/';
+  /* WHICH APP (2026-10-04): an invite sent from the phone app (to=app), or any invite opened on a
+     phone, goes to the phone app at /app/ — that is TermChamp on a phone, with sign-up built in.
+     On a computer it goes to the website, as before. */
+  var out='/', app=false;
   try{
     var q=new URLSearchParams(location.search);
+    var ua=navigator.userAgent||'';
+    app=q.get('to')==='app'||/iPhone|iPod|Android.+Mobile|Mobile.+Android/i.test(ua)
+      ||(/iPad|Macintosh/.test(ua)&&navigator.maxTouchPoints>1&&Math.min(screen.width,screen.height)<700);
+    out=app?'/app/':'/';
     var id=q.get('add')||q.get('ref')||q.get('invite');
     if(id&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))
-      out='/?add='+encodeURIComponent(id);
+      out=(app?'/app/?add=':'/?add=')+encodeURIComponent(id);
   }catch(e){}
   var a=document.getElementById('go');
   if(a)a.setAttribute('href',out);

@@ -162,14 +162,14 @@ begin
   select string_agg(quote_ident(c), ', ')
     into cols
   from unnest(array['id','display_name','username','avatar_url','major','class_standing',
-                    'pinned_friends','instagram_handle']) as c
+                    'pinned_friends','instagram_handle','concentration']) as c
   where exists (select 1 from information_schema.columns
                 where table_schema='public' and table_name='profiles' and column_name=c);
 
   select string_agg(c, ', ')
     into missing
   from unnest(array['id','display_name','username','avatar_url','major','class_standing',
-                    'pinned_friends','instagram_handle']) as c
+                    'pinned_friends','instagram_handle','concentration']) as c
   where not exists (select 1 from information_schema.columns
                     where table_schema='public' and table_name='profiles' and column_name=c);
 

@@ -37,6 +37,14 @@ export default async (request: Request): Promise<Response> => {
   const id  = url.searchParams.get("i") ?? "";
   const who = (url.searchParams.get("nm") ?? "").slice(0, 40);
   const term= (url.searchParams.get("tm") ?? "").slice(0, 24);
+  /* A shared PLAN (the phone app, 2026-09-30) carries pl=A|B|C. Anything else is ignored. */
+  const plan = /^[ABC]$/.test(url.searchParams.get("pl") ?? "") ? (url.searchParams.get("pl") as string) : "";
+  /* A shared PROFESSOR or CLASS (the phone app, 2026-10-04) carries k=p|c and p=<name slug> or c=<code>.
+     Both are matched against a shape: they only ever become ?p= / ?c= for the app, never markup. */
+  const kind = url.searchParams.get("k") === "p" ? "p" : url.searchParams.get("k") === "c" ? "c" : "";
+  const prof = (url.searchParams.get("p") ?? "").toLowerCase();
+  const cls  = (url.searchParams.get("c") ?? "").toUpperCase().replace(/\s+/g, " ").trim();
+  const thing = kind === "p" && /^[a-z0-9-]{2,80}$/.test(prof) ? "p" : kind === "c" && /^[A-Z]{2,5} \d{3,4}[A-Z]?$/.test(cls) ? "c" : "";
 
   const image = (ID_RE.test(id) && SUPABASE_URL)
     ? `${SUPABASE_URL.replace(/\/+$/, "")}/storage/v1/object/public/${BUCKET}/${id}`
@@ -45,8 +53,18 @@ export default async (request: Request): Promise<Response> => {
   /* iMessage renders the card as: image, then og:title in bold, then the domain. It does not show
      og:description at all, so the title has to carry the whole message by itself. */
   const first = who.trim().split(/\s+/)[0] ?? "";
-  const title = first ? `Look at ${first}'s schedule this semester` : "Look at my schedule this semester";
-  const desc  = term
+  const title = thing
+    ? `${first || "Someone"} shared ${thing === "p" ? "a professor" : "a class"}`
+    : plan
+    ? (first ? `Look at ${first}'s Plan ${plan}` : `Look at my Plan ${plan}`)
+    : (first ? `Look at ${first}'s schedule this semester` : "Look at my schedule this semester");
+  const desc  = thing === "p"
+    ? "Their rating and the classes they teach, on TermChamp."
+    : thing === "c"
+    ? "Its sections, professors and seats, on TermChamp."
+    : plan
+    ? (term ? `Their ${term} Plan ${plan}, and whether yours line up.` : `Their Plan ${plan}, and whether yours line up.`)
+    : term
     ? `Their ${term} classes, and whether yours line up.`
     : "See their classes, and whether yours line up.";
 
@@ -63,7 +81,12 @@ export default async (request: Request): Promise<Response> => {
     const v = url.searchParams.get(k);
     if (v) onward.set(k, v);
   }
-  const go = "/" + (onward.toString() ? "?" + onward.toString() : "");
+  /* a professor or class goes to that page: the phone app on a phone, the website's own ?p= / ?c= elsewhere */
+  const thingQ = thing === "p" ? "p=" + encodeURIComponent(prof) : thing === "c" ? "c=" + encodeURIComponent(cls) : "";
+  const go = thing ? "/?" + thingQ : "/" + (onward.toString() ? "?" + onward.toString() : "");
+  const goApp = thing ? "/app/?" + thingQ : "";
+  const imgH = thing ? 630 : 1200;
+  const imgAlt = thing === "p" ? "A professor and their rating." : thing === "c" ? "A class and who teaches it." : "A week of classes with times and professors.";
 
   const html = `<!doctype html>
 <html lang="en"><head>
@@ -80,9 +103,9 @@ export default async (request: Request): Promise<Response> => {
 <meta property="og:description"  content="${esc(desc)}">
 <meta property="og:image"        content="${esc(image)}">
 <meta property="og:image:width"  content="1200">
-<meta property="og:image:height" content="1200">
+<meta property="og:image:height" content="${imgH}">
 <meta property="og:image:type"   content="image/png">
-<meta property="og:image:alt"    content="A week of classes with times and professors.">
+<meta property="og:image:alt"    content="${esc(imgAlt)}">
 <meta name="twitter:card"        content="summary_large_image">
 <meta name="twitter:title"       content="${esc(title)}">
 <meta name="twitter:description" content="${esc(desc)}">
@@ -108,7 +131,7 @@ export default async (request: Request): Promise<Response> => {
     <div class="logo" aria-hidden="true">P</div>
     <h1>${esc(title)}</h1>
     <p>${esc(desc)}</p>
-    <a id="go" href="${esc(go)}">Open in TermChamp</a>
+    <a id="go" href="${esc(go)}"${goApp ? ` data-app="${esc(goApp)}"` : ""}>Open in TermChamp</a>
   </div>
 <script>
 (function(){
@@ -119,6 +142,9 @@ export default async (request: Request): Promise<Response> => {
   try{ framed=(window.top!==window.self); }catch(e){ framed=true; }
   var a=document.getElementById('go');
   if(framed){ if(a)a.setAttribute('target','_top'); return; }
+  /* a phone opens a shared professor or class in the phone app */
+  var app=a&&a.getAttribute('data-app');
+  if(app&&/iPhone|iPod|Android.+Mobile|Mobile.+Safari/i.test(navigator.userAgent||'')) a.setAttribute('href',app);
   /* replace(), not assign(): Back should return to the message, not bounce forward again. */
   try{ location.replace(a.getAttribute('href')); }catch(e){ location.href=a.getAttribute('href'); }
 })();
