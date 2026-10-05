@@ -622,6 +622,12 @@ async function run() {
         console.warn(`    !! ${subj}: could not clear "Show Open Classes Only" after 4 attempts — this lane's data is open-classes-only and INCOMPLETE.`);
       }
 
+      /* STAMP EVERY ROW WITH ITS TERM, STATUS AND TIME. This line was lost in the 2026-09-17
+         refactor (6b344b8) when the band merge moved; only the salvage path below kept it. From
+         then on every lane sent term = null, course_seats.term is NOT NULL, and every upsert was
+         refused (23502) — so the table froze at 2026-09-16 while the runs kept going red.
+         rows.mjs now refuses a row with no term before it reaches Supabase. */
+      list.forEach(x => { x.status = statusBadge(x.status_raw); x.term = CFG.TERM; x.updated_at = new Date().toISOString(); });
       all.push(...list);
     } catch (e) {
       console.error(`  ${subj}: ERROR — ${e.message.split('\n')[0]}`);
