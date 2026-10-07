@@ -2115,8 +2115,8 @@
   /* -- set_theme ------------------------------------------------------------------------------- */
   function renderTheme(turn, result) {
     var t = String((result.args || {}).theme || '');
-    if (['dark', 'light', 'cream'].indexOf(t) < 0 || !has('setTheme')) { notFound(turn, 'I can switch between dark, light and cream.'); return; }
-    var prev = document.documentElement.getAttribute('data-theme') || 'dark';
+    if (['dark', 'light'].indexOf(t) < 0 || !has('setTheme')) { notFound(turn, 'I can switch between light and dark.'); return; }   /* cream retired 2026-10-04 */
+    var prev = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
     if (prev === t) { turn.appendChild(make('div', 'hawk-note', 'You’re already on ' + t + '.')); return; }
     global.setTheme(t);
     undoNote(turn, 'Switched to ' + t + '.', function () { global.setTheme(prev); });

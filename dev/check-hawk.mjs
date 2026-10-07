@@ -443,11 +443,14 @@ for (const [w,h,label] of [[1280,900,'desktop'],[390,780,'phone']]) {
   }
 
   const themeBefore = await p.evaluate(()=>document.documentElement.getAttribute('data-theme'));
-  const other = themeBefore === 'light' ? 'cream' : 'light';
+  const other = themeBefore === 'dark' ? 'light' : 'dark';
+  /* cream is retired (2026-10-04): asking for it says what there is, and changes nothing */
+  t = await askQ('cream mode');
+  ok(`${label}: "cream mode" says light and dark, and leaves the theme`, /light and dark/.test(t) && await p.evaluate((b)=>document.documentElement.getAttribute('data-theme')===b, themeBefore), t.slice(0,60));
   t = await askQ(other + ' mode');
   ok(`${label}: "${other} mode" switches the theme, with an Undo`, await p.evaluate((o)=>document.documentElement.getAttribute('data-theme')===o, other) && /Undo/.test(t), t.slice(0,60));
   await p.evaluate(()=>{ const b=[...document.querySelectorAll('.hawk-done button')][0]; if(b) b.click(); });
-  ok(`${label}: Undo puts the theme back`, await p.evaluate((b)=>document.documentElement.getAttribute('data-theme')===b, themeBefore || 'dark'));
+  ok(`${label}: Undo puts the theme back`, await p.evaluate((b)=>document.documentElement.getAttribute('data-theme')===b, themeBefore || 'light'));
 
   await p.evaluate(()=>{ if (typeof isWatchedClass==='function' && isWatchedClass('CSC 1001')) toggleWatchClass('CSC 1001'); });
   t = await askQ('watch csc 1001');

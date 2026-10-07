@@ -152,6 +152,8 @@ for d in ['const GE_COURSES=', 'const MAJOR_CATALOG=', 'var CONC_CATALOG=', 'var
     L.append(X.declaration(_ix, d))
 L.append(X.function(_ix, 'function concInfo('))
 _a = _ix.index('window.SCHED_MAJORS={"'); L.append(_ix[_a:_ix.index('\n', _a)])
+# 2026-10-06: majors written as their own lines after it (ITP, Physics BA) come along too
+_a = _ix.index("window.SCHED_MAJORS['ocob-itp']="); L.append(_ix[_a:_ix.index('\n', _ix.index("window.SCHED_MAJORS['m-physicsba']="))])
 _a = _ix.index('window.schSlotCodes=function(raw){'); L.append(_ix[_a:X._match(_ix, _ix.index('{', _a)) + 1] + ';')
 L.append(X.function(_ix, 'function schConcClasses('))
 L.append(X.function(_ix, 'function schExpandConc('))
