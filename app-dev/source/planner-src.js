@@ -38,9 +38,21 @@
     var key = Object.keys(window.SCHED_MAJORS).find(function (k) { return norm(window.SCHED_MAJORS[k].name) === norm(name); });
     return key ? window.SCHED_MAJORS[key] : null;
   }
+  /* A choice slot ("Calculus for Data Science I or Business Calculus") lists its options. Checked against
+     them like a coded slot (Tate, 2026-10-02) instead of "can't check": its first option stands in as
+     the code, and _opts carries them all to slotCodes() and the ledger below. */
+  function withChoiceCodes(m) {
+    var CODE = /^[A-Z&]{2,5} \d{3,4}[A-Z]?$/;
+    return Object.assign({}, m, { terms: (m.terms || []).map(function (t) { return Object.assign({}, t, { slots: (t.slots || []).map(function (sl) {
+      if (!sl || sl.code || sl.type !== 'choice' || !Array.isArray(sl.options) || sl.options.length < 2) return sl;
+      var o = sl.options.map(function (c) { var raw = String(c || '').trim().toUpperCase(); return canonCode(raw) || raw; });
+      if (!o.every(function (c) { return CODE.test(c); })) return sl;
+      return Object.assign({}, sl, { code: o[0], _opts: o });
+    }) }); }) });
+  }
   function ledger() {
     var base = majorFor(student.major); if (!base) return null;
-    var mm = schExpandConc(base);
+    var mm = withChoiceCodes(schExpandConc(base));
     var have = {};
     myHistory.forEach(function (h) { if (h && h.code) { var k = canonCode(h.code); have[k] = (have[k] || 0) + 1; } });
     completedCodes().forEach(function (c) { if (!have[c]) have[c] = 1; });
@@ -68,14 +80,15 @@
         if (sl.code) {
           if (isConc) { if (!rows.conc) { var cn = String(sl.note || '').replace(/\s*concentration\s*$/i, ''); rows.conc = { label: (cn ? cn + ' concentration' : 'Concentration'), f: 0, t: 0, n: 0 }; } row = rows.conc; }
           else row = rows.major;
-          var cs = window.schSlotCodes(sl.code);
+          var cs = sl._opts ? sl._opts.slice() : window.schSlotCodes(sl.code);
+          if (sl._opts) cell.choice = sl._opts.slice();
           row.n++;
           var hit = cs.find(function (c) { return have[c] > 0; });
           if (hit) { have[hit]--; row.f++; done.push({ title: sl.title || '', code: hit }); cell.state = 'done'; cell.by = hit; }
           else {
             var th = cs.find(function (c) { return takingM[c] > 0; });
             if (th) { takingM[th]--; row.t++; cell.state = 'taking'; cell.by = th; }
-            else { cell.state = 'need'; cell.codes = cs; } if (!th) need.push({ title: sl.title || '', codes: cs, group: isConc ? 'conc' : 'major', ti: ti, year: t.year, term: t.term, units: sl.units });
+            else { cell.state = 'need'; cell.codes = cs; } if (!th) need.push({ title: sl.title || '', codes: cs, choice: !!sl._opts, group: isConc ? 'conc' : 'major', ti: ti, year: t.year, term: t.term, units: sl.units });
           }
         } else {
           row = (sl.type === 'ge') ? rows.ge : rows.el;

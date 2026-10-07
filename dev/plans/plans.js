@@ -1031,7 +1031,7 @@
     document.body.appendChild(box);
     var r = btn.getBoundingClientRect();
     var w = 210, left = Math.min(window.innerWidth - w - 8, Math.max(8, r.right - w));
-    var top = r.bottom + 6; if (top + 200 > window.innerHeight) top = Math.max(8, r.top - 190);
+    var bh = box.offsetHeight || 200, top = r.bottom + 6; if (top + bh > window.innerHeight - 8) top = Math.max(8, r.top - bh - 6);
     box.style.left = left + 'px'; box.style.top = top + 'px';
     askInterest([crn]);
     setTimeout(function () { document.addEventListener('click', outside, true); }, 0);

@@ -34,12 +34,12 @@ export const SUGGESTED = { id: '33333333-3333-4333-8333-333333333332', display_n
 export const FRIEND_REQUESTS = B.FRIEND_REQUESTS.concat([{ id: 990, from_user: STRANGER.id, to_user: ME.id, status: 'pending', created_at: '2026-09-27T00:00:00Z' }]);
 
 export const REVIEWS = [
-  { professor_key: 'ada examplewood|bus', professor_name: 'Ada Examplewood', course: 'BUS 3431', score: 5, would_again: true, tags: ['Fixture tag one'], note: 'Fixture review text, clear lectures.', created_at: '2026-09-20T00:00:00Z', difficulty: 3, grade: 'A', format: 'In person' },
-  { professor_key: 'ada examplewood|bus', professor_name: 'Ada Examplewood', course: 'BUS 4442', score: 4, would_again: false, tags: [], note: null, created_at: '2026-09-18T00:00:00Z', difficulty: 4, grade: null, format: null },
-  { professor_key: 'ada examplewood|bus', professor_name: 'Ada Examplewood', course: 'BUS 3431', score: 5, would_again: true, tags: [], note: null, created_at: '2026-09-17T00:00:00Z', difficulty: 2, grade: null, format: null },
+  { id: 501, professor_key: 'ada examplewood|bus', professor_name: 'Ada Examplewood', course: 'BUS 3431', score: 5, would_again: true, tags: ['Fixture tag one'], note: 'Fixture review text, clear lectures.', created_at: '2026-09-20T00:00:00Z', difficulty: 3, grade: 'A', format: 'In person' },
+  { id: 502, professor_key: 'ada examplewood|bus', professor_name: 'Ada Examplewood', course: 'BUS 4442', score: 4, would_again: false, tags: [], note: null, created_at: '2026-09-18T00:00:00Z', difficulty: 4, grade: null, format: null },
+  { id: 503, professor_key: 'ada examplewood|bus', professor_name: 'Ada Examplewood', course: 'BUS 3431', score: 5, would_again: true, tags: [], note: null, created_at: '2026-09-17T00:00:00Z', difficulty: 2, grade: null, format: null },
   /* Two reviews only: below the desktop's floor of 3, so no percentage or average may show. */
-  { professor_key: 'bram fixturesen|bus', professor_name: 'Bram Fixturesen', course: 'BUS 3438', score: 2, would_again: false, tags: [], note: 'Fixture note about Bram.', created_at: '2026-09-16T00:00:00Z', difficulty: 5, grade: null, format: null },
-  { professor_key: 'bram fixturesen|bus', professor_name: 'Bram Fixturesen', course: 'BUS 3431', score: 3, would_again: false, tags: [], note: null, created_at: '2026-09-15T00:00:00Z', difficulty: 4, grade: null, format: null },
+  { id: 504, professor_key: 'bram fixturesen|bus', professor_name: 'Bram Fixturesen', course: 'BUS 3438', score: 2, would_again: false, tags: [], note: 'Fixture note about Bram.', created_at: '2026-09-16T00:00:00Z', difficulty: 5, grade: null, format: null },
+  { id: 505, professor_key: 'bram fixturesen|bus', professor_name: 'Bram Fixturesen', course: 'BUS 3431', score: 3, would_again: false, tags: [], note: null, created_at: '2026-09-15T00:00:00Z', difficulty: 4, grade: null, format: null },
 ];
 export const HISTORY = [
   { user_id: FRIENDS[0].id, code: 'BUS 3346', term: 'Spring', year: 2026, professor: 'Faro Dummelow' },

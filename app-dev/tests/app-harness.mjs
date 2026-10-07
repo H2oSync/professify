@@ -26,8 +26,9 @@ const COL_GRANTS = {
   profiles: ['id', 'display_name', 'username', 'avatar_url', 'major', 'class_standing', 'pinned_friends', 'instagram_handle', 'school'],
   reviews: { not: ['user_id'] },
 };
-function colDenied(table, select) {
-  const g = COL_GRANTS[table]; if (!g) return null;
+function colDenied(table, select, extra) {
+  let g = COL_GRANTS[table]; if (!g) return null;
+  if (extra && extra[table] && Array.isArray(g)) g = g.concat(extra[table]);   /* a grant a newer SQL file adds */
   const cols = String(select || '*').split(',').map(c => c.trim().split(':').pop().split('(')[0]).filter(Boolean);
   for (const c of cols) {
     if (c === '*') return { code: '42501', message: 'permission denied for table ' + table };
@@ -54,9 +55,9 @@ function applyFilters(rows, params) {
 }
 
 export async function openApp({ signedIn = true, width = 390, height = 844, tables = FX.TABLES, rpc = FX.RPC, poly = FX.POLY,
-  ask = null, hook = null, port = 8190, time = '2026-09-29T10:30:00-07:00', init = null, wait = 2500, tz = 'America/Los_Angeles' } = {}) {
+  ask = null, hook = null, champ = true, path: pagePath = '/app/', port = +(process.env.APP_PORT || 8190), grants = null, time = '2026-09-29T10:30:00-07:00', init = null, wait = 2500, tz = 'America/Los_Angeles', search = '', screen = null, touch = null } = {}) {
   const dir = process.env.APP_DIR || path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', 'out');
-  const log = { reads: [], writes: [], asks: [], errors: [], console: [] };
+  const log = { reads: [], writes: [], asks: [], errors: [], console: [], rpcs: [] };
   const T = JSON.parse(JSON.stringify(tables));
   const srv = http.createServer((q, r) => {
     let u = decodeURIComponent(q.url.split('?')[0]); if (u.endsWith('/')) u += 'index.html';
@@ -68,7 +69,7 @@ export async function openApp({ signedIn = true, width = 390, height = 844, tabl
   await new Promise(res => srv.listen(port, res));
   const origin = `http://localhost:${port}`;
   const browser = await chromium.launch();
-  const ctx = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1, timezoneId: tz, isMobile: width < 700, hasTouch: width < 700 });
+  const ctx = await browser.newContext(Object.assign({ viewport: { width, height }, deviceScaleFactor: 1, timezoneId: tz, isMobile: touch === null ? width < 700 : touch, hasTouch: touch === null ? width < 700 : touch }, screen ? { screen } : {}));
   const sess = session(FX.ME);
   let nextId = 5000;
   let authed = signedIn;                 // flips on a successful code or password sign-in
@@ -91,21 +92,23 @@ export async function openApp({ signedIn = true, width = 390, height = 844, tabl
       if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
       const p = url.pathname, m = req.method();
       let body = null; try { body = req.postData() ? JSON.parse(req.postData()) : null; } catch (e) { body = req.postData(); }
-      if (hook) { const o = hook(url, m, body); if (o) return route.fulfill({ headers: cors, contentType: 'application/json', ...o }); }
+      if (hook) { let o = hook(url, m, body); if (o && typeof o.then === 'function') o = await o;   /* a hook may answer late */
+        if (o) return route.fulfill({ headers: cors, contentType: 'application/json', ...o }); }
       if (p.startsWith('/functions/v1/ask')) {
         log.asks.push(body);
         const a = ask ? ask(body) : null;
         return route.fulfill({ status: 200, headers: cors, contentType: 'application/json', body: JSON.stringify(a || { fallback: 'search', reason: 'fixture' }) });
       }
       if (p.startsWith('/storage/v1/object/')) {
-        log.writes.push({ m, table: 'storage:' + p.slice(19), body: null, bytes: (req.postDataBuffer() || Buffer.alloc(0)).length, ctype: req.headers()['content-type'] || '' });
+        const buf = req.postDataBuffer() || Buffer.alloc(0);
+        log.writes.push({ m, table: 'storage:' + p.slice(19), body: null, bytes: buf.length, ctype: req.headers()['content-type'] || '', upsert: req.headers()['x-upsert'] || '', text: p.endsWith('.json') ? buf.toString('utf8') : '' });
         return route.fulfill({ status: 200, headers: cors, contentType: 'application/json', body: JSON.stringify({ Key: p.slice(19) }) });
       }
       if (p.startsWith('/auth/v1/user') && m !== 'GET') { log.writes.push({ m, table: 'auth:user', body }); return route.fulfill({ status: 200, headers: cors, contentType: 'application/json', body: JSON.stringify(sess.user) }); }
       if (p.startsWith('/auth/v1/user')) return route.fulfill({ status: authed ? 200 : 401, headers: cors, contentType: 'application/json', body: JSON.stringify(authed ? sess.user : { msg: 'no' }) });
-      if (p.startsWith('/auth/v1/')) { log.writes.push({ m, table: 'auth:' + p.slice(9), body }); const ok = p.includes('token') || p.includes('verify'); if (ok) authed = true; return route.fulfill({ status: 200, headers: cors, contentType: 'application/json', body: ok ? JSON.stringify(sess) : '{}' }); }
+      if (p.startsWith('/auth/v1/')) { log.writes.push({ m, table: 'auth:' + p.slice(9), body, query: url.search }); const ok = p.includes('token') || p.includes('verify'); if (ok) authed = true; return route.fulfill({ status: 200, headers: cors, contentType: 'application/json', body: ok ? JSON.stringify(sess) : '{}' }); }
       if (p.startsWith('/rest/v1/rpc/')) {
-        const fn = p.slice(13); log.reads.push('rpc:' + fn);
+        const fn = p.slice(13); log.reads.push('rpc:' + fn); log.rpcs.push({ fn, body });
         const v = fn in rpc ? rpc[fn] : [];
         if (v && v.__error) return route.fulfill({ status: 400, headers: cors, contentType: 'application/json', body: JSON.stringify(v.__error) });
         return route.fulfill({ status: 200, headers: cors, contentType: 'application/json', body: JSON.stringify(v) });
@@ -114,7 +117,7 @@ export async function openApp({ signedIn = true, width = 390, height = 844, tabl
         const table = p.slice(9);
         if (m !== 'GET' && m !== 'HEAD') {
           log.writes.push({ m, table, body, query: url.search });
-          if (url.searchParams.get('select')) { const d = colDenied(table, url.searchParams.get('select')); if (d) return route.fulfill({ status: 403, headers: cors, contentType: 'application/json', body: JSON.stringify(Object.assign({ details: null, hint: null }, d)) }); }
+          if (url.searchParams.get('select')) { const d = colDenied(table, url.searchParams.get('select'), grants); if (d) return route.fulfill({ status: 403, headers: cors, contentType: 'application/json', body: JSON.stringify(Object.assign({ details: null, hint: null }, d)) }); }
           const prefer = req.headers()['prefer'] || '';
           let rows = [];
           if (m === 'PATCH' || m === 'DELETE') {
@@ -134,7 +137,7 @@ export async function openApp({ signedIn = true, width = 390, height = 844, tabl
           return route.fulfill({ status: m === 'DELETE' ? 204 : 201, headers: cors, body: '' });
         }
         log.reads.push(table + url.search);
-        { const d = colDenied(table, url.searchParams.get('select')); if (d) return route.fulfill({ status: 403, headers: cors, contentType: 'application/json', body: JSON.stringify(Object.assign({ details: null, hint: null }, d)) }); }
+        { const d = colDenied(table, url.searchParams.get('select'), grants); if (d) return route.fulfill({ status: 403, headers: cors, contentType: 'application/json', body: JSON.stringify(Object.assign({ details: null, hint: null }, d)) }); }
         const rows = applyFilters(authed || table === 'course_seats' || table === 'course_catalog' ? (T[table] || []) : [], url.searchParams);
         const h = { ...cors, 'content-range': `0-${Math.max(0, rows.length - 1)}/${rows.length}` };
         const accept = req.headers()['accept'] || '';
@@ -152,12 +155,14 @@ export async function openApp({ signedIn = true, width = 390, height = 844, tabl
      dials Supabase. The socket stays open and silent; tests push nothing through it. */
   await ctx.routeWebSocket(/.*/, ws => { log.reads.push('ws:' + new URL(ws.url()).pathname); });
   await ctx.addInitScript(({ key, sess, signedIn }) => { try { if (signedIn) localStorage.setItem(key, JSON.stringify(sess)); } catch (e) {} }, { key: STORAGE_KEY, sess, signedIn });
+  /* Champ asks before sending to Anthropic (2026-10-04); tests that aren't about that start allowed. */
+  if (champ) await ctx.addInitScript(id => { try { localStorage.setItem('tc_champ_ai:' + id, '1'); } catch (e) {} }, FX.ME.id);
   if (init) await ctx.addInitScript(init);
   const page = await ctx.newPage();
   if (time) await page.clock.install({ time: new Date(time) });
   page.on('pageerror', e => log.errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error') log.console.push(m.text()); });
-  await page.goto(origin + '/app/', { waitUntil: 'domcontentloaded' });
+  await page.goto(origin + pagePath + search, { waitUntil: 'domcontentloaded' });   /* '/' is the website (index.html) */
   if (time) await page.clock.runFor(wait); else await page.waitForTimeout(wait);
   await page.waitForTimeout(400);
   const close = async () => { await browser.close(); try { srv.closeAllConnections(); } catch (e) {} await new Promise(res => srv.close(() => res())); };
