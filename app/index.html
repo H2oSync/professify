@@ -35,6 +35,25 @@
   var C = window.Capacitor, n = !!(C && typeof C.isNativePlatform === 'function' && C.isNativePlatform());
   window.TC_NATIVE = n;
   if (n) document.documentElement.classList.add('native', 'pm');
+  if (!n) return;
+  try {
+  /* The clock and battery follow the strip behind them. Every screen already says what colour that
+     strip is, for Safari, in meta[name=theme-color] (sign-in and onboarding stay light even on a dark
+     phone, a chat is navy). iOS ignores that tag inside an app, so read it here and set the status
+     bar's text dark or light to match — otherwise a dark-mode iPhone shows white text on the light
+     sign-in screen. */
+  var SB = (C.Plugins && C.Plugins.StatusBar) || (C.registerPlugin ? C.registerPlugin('StatusBar') : null), last = '';
+  var sync = function () {
+    var m = document.querySelector('meta[name=theme-color]'), hex = String((m && m.content) || '#F4F6FB').replace('#', '');
+    if (hex.length === 3) hex = hex.replace(/./g, '$&$&');
+    var r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
+    var style = (0.299 * r + 0.587 * g + 0.114 * b) < 140 ? 'DARK' : 'LIGHT';   // DARK = light text, for a dark strip
+    if (style === last || !SB) return; last = style;
+    try { SB.setStyle({ style: style }); } catch (e) {}
+  };
+  sync();
+  new MutationObserver(sync).observe(document.head, { subtree: true, attributes: true, attributeFilter: ['content'] });
+  } catch (e) {}
 } catch (e) { window.TC_NATIVE = false; } })();</script>
 <script>/* phone mode by device (2026-10-06): a touch screen whose short side is a phone's always gets the
    full-screen app, even when the page is wider than 520 CSS px (page zoom, Request Desktop Website);

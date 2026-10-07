@@ -14,6 +14,7 @@ Decided at runtime by `window.TC_NATIVE` (set at the top of `app/index.html`):
 - No service worker (the app has its own copy of everything).
 - Seat alerts are native iOS notifications (APNs) instead of Web Push. Settings gets a **Notifications** section; the first time a student watches a section, iOS asks for permission.
 - Google Analytics never loads (it only runs on termchamp.com), so the App Store privacy label has no analytics.
+- The status bar's clock follows each screen's top color (dark text on light screens, light on dark), using `@capacitor/status-bar`.
 - iPhone only, portrait only (no iPad build).
 
 ## Build it (on a Mac)
@@ -55,7 +56,7 @@ Until then the app works normally — "Turn on" in Settings asks iOS for permiss
 ## Test checklist before submitting
 
 - [ ] Fresh install, sign in with the demo account, every tab loads.
-- [ ] Explore shows PolyRatings scores. (If they're blank in the app but fine on the website, PolyRatings is blocking the app's origin — tell Claude, the fix is one config line.)
+- [ ] Explore shows PolyRatings scores. (PolyRatings' API allows any origin, so the app can read it — checked in their open-source backend.)
 - [ ] Airplane mode on, open the app: it says you're offline instead of a blank screen.
 - [ ] Settings → Notifications → Turn on → iOS permission prompt appears.
 - [ ] Profile → Edit → photo: the photo picker opens (and the camera, if offered, asks permission first).
