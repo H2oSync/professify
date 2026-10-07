@@ -1,13 +1,14 @@
 # Submitting TermChamp to the App Store
 
-Everything in the code is done on the `app-store-readiness` branch. This is the list of things only
+Everything in the code is done and on `main`. This is the list of things only
 a person with the accounts can do, in order. Roughly 1–2 hours total, plus Apple's review (usually 1–3 days).
 
 ## 1. Before you build
 
-- [ ] **Merge the PR**, so termchamp.com/privacy, /terms, /guidelines and /support go live. App Store Connect won't accept the listing without the privacy and support URLs. Check both open in a private browser window.
+- [ ] **Public pages are live**: termchamp.com/privacy, /terms, /guidelines and /support open in a private browser window. App Store Connect won't accept the listing without the privacy and support URLs.
 - [ ] **Apple Developer Program** is active ($99/yr). Add Tate and Sean as team members if they'll upload builds.
 - [ ] **PolyRatings permission.** Send the email below, so you have a written OK if Apple asks about rights to the ratings.
+- [ ] **Notifications switched on** (before you submit, so the reviewer can see them work): Apple push key + secrets, deploy `send-push`, run `sql/termchamp-push.sql` and its `push_config` insert. Click-by-click: `supabase/functions/send-push/README.md`. **Do not run the copy of termchamp-push.sql from Downloads** — that version stops with an error on the live database; run the one in the repo.
 - [ ] **Reports get handled.** Apple requires acting on reported content within 24 hours, and `/support` promises it. Agree who checks `reports` (admin dashboard) daily, and that `support@termchamp.com` reaches a real inbox.
 
 ## 2. Demo account for Apple
@@ -27,7 +28,7 @@ Everyone in it is made up; the classes are real Fall 2026 sections. It writes no
 
 | Field | What to enter |
 |---|---|
-| Subtitle | Classes, professors & seat alerts |
+| Subtitle | Classes, professors & open seats |
 | Category | Education (secondary: Social Networking) |
 | Privacy Policy URL | https://termchamp.com/privacy |
 | Support URL | https://termchamp.com/support |
@@ -88,7 +89,7 @@ App Store Connect → the version → **App Review Information**. Sign-in requir
 >
 > WHAT IT DOES: professor ratings (from PolyRatings' public API, used with permission, plus reviews by verified Cal Poly students), live seat counts from Cal Poly's public class search, schedule planning against degree requirements, sharing schedules with friends, and messaging between friends.
 >
-> NATIVE FEATURES: push notifications when a seat opens in a class the student is watching (turn on in Settings → Notifications, or by watching any section of a class). The app is bundled on the device rather than loaded from a website.
+> NATIVE FEATURES: push notifications for open seats in watched or planned sections, registration reminders, friend requests and messages (Settings → Notifications, with a switch per kind and a mute bell on each chat). The app is bundled on the device rather than loaded from a website.
 >
 > SAFETY (Guideline 1.2): reviews and profile names are filtered for objectionable words before posting. Messaging is only possible between students who have both accepted a friend request. Users must agree to the Terms and Community Guidelines at sign-up. Any review can be reported ("Report this review"); any user can be reported or blocked from ⋯ on their profile or in a chat. Reports are reviewed within 24 hours, and offending content and accounts are removed. Contact: support@termchamp.com.
 >

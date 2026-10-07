@@ -1,7 +1,7 @@
 # ios-app — TermChamp for iPhone
 
 The App Store app. It is the phone app (`app/index.html` + `app/planner.js`) bundled inside a
-native shell ([Capacitor 8](https://capacitorjs.com)), plus real push notifications for seat alerts.
+native shell ([Capacitor 8](https://capacitorjs.com)), plus real push notifications.
 
 **There is still one app.** Edit `app/index.html` like always. This folder only packages it.
 `www/` and `ios/App/App/public/` are generated copies — never edit them.
@@ -12,7 +12,7 @@ Decided at runtime by `window.TC_NATIVE` (set at the top of `app/index.html`):
 
 - Always full-screen phone layout; the desk panel ("Phone app · beta", "add it to your home screen") never shows.
 - No service worker (the app has its own copy of everything).
-- Seat alerts are native iOS notifications (APNs) instead of Web Push. Settings gets a **Notifications** section; the first time a student watches a section, iOS asks for permission.
+- Push notifications (APNs): open seats, plan sections filling, registration, friend requests, friends in your class, messages, likes, group adds. Settings › Notifications has a switch per kind and each chat has a mute bell. The app asks at a sensible moment (watching a seat, first message, end of onboarding), never at launch.
 - Google Analytics never loads (it only runs on termchamp.com), so the App Store privacy label has no analytics.
 - The status bar's clock follows each screen's top color (dark text on light screens, light on dark), using `@capacitor/status-bar`.
 - iPhone only, portrait only (no iPad build).
@@ -45,20 +45,21 @@ Every time `app/index.html` changes: `npm run sync`, then Run again.
 
 ## Turning on seat-alert pushes
 
-Code is done; three switches are left (details in `supabase/functions/push-send/README.md`):
+Code is done; three switches are left (click-by-click in `supabase/functions/send-push/README.md`):
 
-1. Run `sql/professify-push-ios.sql` in Supabase.
-2. Create an APNs key in the Apple Developer account and add the four `APNS_*` secrets.
-3. Deploy `push-send` and schedule it every 5 minutes.
+1. Create an Apple push key (APNs) and add it, with a `PUSH_SECRET`, to the Supabase function secrets.
+2. Deploy the `send-push` function.
+3. Run `sql/termchamp-push.sql` in Supabase, then the `push_config` insert at its bottom.
 
-Until then the app works normally — "Turn on" in Settings asks iOS for permission, but no alert is delivered.
+Until then the app works normally — "Turn on notifications" asks iOS for permission, but nothing is delivered.
 
 ## Test checklist before submitting
 
 - [ ] Fresh install, sign in with the demo account, every tab loads.
 - [ ] Explore shows PolyRatings scores. (PolyRatings' API allows any origin, so the app can read it — checked in their open-source backend.)
 - [ ] Airplane mode on, open the app: it says you're offline instead of a blank screen.
-- [ ] Settings → Notifications → Turn on → iOS permission prompt appears.
+- [ ] Settings › Notifications › Turn on notifications → iOS permission prompt appears.
+- [ ] Have a friend message you with the app closed: a notification arrives, and tapping it opens the chat.
 - [ ] Profile → Edit → photo: the photo picker opens (and the camera, if offered, asks permission first).
 - [ ] Settings → Privacy Policy, Terms, Community Guidelines open; the support link opens Safari.
 - [ ] Friend profile → ⋯ shows Remove / Report / Block.

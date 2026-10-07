@@ -32,9 +32,9 @@ console.log('# web (no Capacitor): unchanged');
   ok(await page.locator('.side').isVisible(), 'web, wide window: the desk panel still shows');
   await settings(page);
   const body = await page.locator('#scroll').innerText();
-  ok(!/Seat alerts/.test(body), 'web: no Notifications section');
   ok(/not affiliated with or endorsed by Cal Poly/.test(body), 'web: About says not affiliated');
   ok(/phone app · build/.test(body), 'web: About still says "phone app"');
+  ok(await page.locator('[data-a="pushAllow"]').count() === 0, 'web: no "Turn on notifications" button (nothing to turn on in a browser)');
   ok(!log.errors.length, 'web: no page errors', log.errors.slice(0, 3));
   await close();
 }
@@ -42,42 +42,41 @@ console.log('# web (no Capacitor): unchanged');
 console.log('# iPhone app, notifications never asked');
 {
   const { page, close, log } = await openApp({ width: 390, height: 844, port: 8191, init: nativeShim('prompt') });
+  await tick(page, 500);
   ok(await page.evaluate(() => window.TC_NATIVE === true && document.documentElement.classList.contains('native') && document.documentElement.classList.contains('pm')), 'native: html.native + phone mode');
   ok(!(await page.locator('.side').isVisible()), 'native: the desk panel is hidden');
-  ok(await page.evaluate(() => !(window.__push.calls.includes('request'))), 'native: no permission prompt at launch');
+  ok(await page.evaluate(() => !window.__push.calls.includes('request')), 'native: iOS is not asked at launch');
   ok(await page.evaluate(() => navigator.serviceWorker ? navigator.serviceWorker.getRegistrations().then(r => r.length === 0) : true), 'native: no service worker registered');
   await settings(page);
   let body = await page.locator('#scroll').innerText();
-  ok(/Seat alerts/.test(body) && await page.locator('[data-a="pushOn"]').count() === 1, 'native: Settings → Notifications with a Turn on button');
   ok(/for iPhone · build/.test(body), 'native: About says "for iPhone"');
-  await click(page, '[data-a="pushOn"]'); await tick(page, 400);
+  ok(/Notifications/.test(body) && await page.locator('#scroll [data-a="pushAllow"]').count() === 1, 'native: Settings › Notifications offers Turn on');
+  await click(page, '#scroll [data-a="pushAllow"]'); await tick(page, 600);
   const calls = await page.evaluate(() => window.__push.calls);
   ok(calls.includes('request') && calls.includes('register'), 'native: Turn on asks iOS, then registers', calls);
-  const reg = log.rpcs.filter(r => r.fn === 'register_push_device');
-  ok(reg.length === 1 && reg[0].body.p_token === 'AB'.repeat(32) && reg[0].body.p_platform === 'ios', 'native: the token is filed with register_push_device', reg);
-  body = await page.locator('#scroll').innerText();
-  ok(/Seat alerts/.test(body) && /Anything overnight waits until 8am/.test(body) && await page.locator('[data-a="pushOn"]').count() === 0, 'native: Settings now says alerts are on');
+  const reg = log.rpcs.filter(r => r.fn === 'register_push_token');
+  ok(reg.length >= 1 && String(reg[0].body.p_token).toUpperCase() === 'AB'.repeat(32) && reg[0].body.p_platform === 'ios', 'native: the token is filed with register_push_token', reg);
+  ok(await page.locator('#scroll [data-a="pushAllow"]').count() === 0 && await page.locator('#scroll [data-a="pushPref"]').count() >= 8, 'native: after allowing, the per-kind switches show and Turn on is gone');
   ok(!log.errors.length, 'native: no page errors', log.errors.slice(0, 3));
   await close();
 }
 
-console.log('# iPhone app, already allowed: re-registers quietly on launch');
+console.log('# iPhone app, already allowed');
 {
   const { page, close, log } = await openApp({ width: 390, height: 844, port: 8191, init: nativeShim('granted') });
-  await tick(page, 600);
+  await tick(page, 800);
   const calls = await page.evaluate(() => window.__push.calls);
-  ok(!calls.includes('request') && calls.includes('register'), 'native: no prompt, token refreshed', calls);
-  ok(log.rpcs.some(r => r.fn === 'register_push_device'), 'native: refreshed token filed');
-  await page.evaluate(() => (window.__push.listeners.pushNotificationActionPerformed || []).forEach(f => f({ notification: { data: { url: '/?tab=sched' } } })));
-  await tick(page, 400);
-  ok(await page.locator('.tabbar .tab.on[data-x="schedule"]').count() === 1, 'native: tapping a seat alert opens Schedule');
-  await page.evaluate(() => (window.__push.listeners.pushNotificationActionPerformed || []).forEach(f => f({ notification: { data: { url: '/?tab=friends' } } })));
-  await tick(page, 400);
-  ok(await page.locator('.tabbar .tab.on[data-x="friends"]').count() === 1, 'native: a friend alert opens Friends');
+  ok(!calls.includes('request') && calls.includes('register'), 'native: no prompt, token refreshed on launch', calls);
+  ok(log.rpcs.some(r => r.fn === 'register_push_token'), 'native: refreshed token filed');
+  const tap = async tc => { await page.evaluate(tc => (window.__push.listeners.pushNotificationActionPerformed || []).forEach(f => f({ notification: { data: { tc } } })), tc); await tick(page, 600); };
+  await tap({ t: 'plans' });
+  ok(await page.locator('.tabbar .tab.on[data-x="schedule"]').count() === 1, 'native: tapping a registration reminder opens Schedule');
+  await tap({ t: 'requests' });
+  ok(await page.locator('.tabbar .tab.on[data-x="friends"]').count() === 1, 'native: tapping a friend request opens Friends');
   await click(page, '.tabbar .tab[data-x="home"]');
   await settings(page);
-  await click(page, '[data-a="signOut"]'); await tick(page, 800);
-  ok(log.rpcs.some(r => r.fn === 'unregister_push_device' && r.body.p_token === 'AB'.repeat(32)), 'native: signing out unregisters this phone');
+  await click(page, '[data-a="signOut"]'); await tick(page, 900);
+  ok(log.rpcs.some(r => r.fn === 'unregister_push_token'), 'native: signing out removes this phone');
   await close();
 }
 
@@ -110,9 +109,9 @@ console.log('# iPhone app: status bar text follows the strip behind it');
 console.log('# iPhone app, said no before');
 {
   const { page, close } = await openApp({ width: 390, height: 844, port: 8191, init: nativeShim('denied') });
-  await settings(page);
+  await settings(page); await tick(page, 300);
   const body = await page.locator('#scroll').innerText();
-  ok(/iPhone Settings app → TermChamp → Notifications/.test(body) && await page.locator('[data-a="pushOn"]').count() === 0, 'native: denied → points to iPhone Settings, no dead button');
+  ok(/Settings › TermChamp › Notifications/.test(body) && await page.locator('#scroll [data-a="pushAllow"]').count() === 0, 'native: denied → points to iPhone Settings, no dead button');
   await close();
 }
 
