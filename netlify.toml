@@ -65,10 +65,18 @@ if [ -f app/index.html ]; then
 else
   echo "MISSING    app/index.html  (the phone app at /app/ will 404)"
 fi
+# Public legal + support pages (2026-10-06): /privacy /terms /guidelines /security /support, built
+# from the legal text in app/planner.js so they always match the app. The App Store links to
+# /privacy and /support, so a failure here is loud but does not take the rest of the site down.
+if [ -f pages/build-pages.mjs ] && command -v node >/dev/null 2>&1; then
+  node pages/build-pages.mjs public || echo "BUILD WARNING: legal/support pages failed to build — /privacy and /support will 404 and the App Store listing links to them"
+else
+  echo "MISSING    pages/build-pages.mjs or node  (/privacy and /support will 404)"
+fi
 echo "--- not published (present in the repo root, deliberately not served) ---"
 for f in * .*; do
   case "$f" in .|..|.git|.gitignore|.DS_Store|.netlify) continue ;; esac
-  case " $REQUIRED $OPTIONAL public netlify netlify.toml app " in
+  case " $REQUIRED $OPTIONAL public netlify netlify.toml app pages ios-app " in
     *" $f "*) ;;
     *) echo "  withheld  $f" ;;
   esac

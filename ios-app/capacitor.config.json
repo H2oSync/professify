@@ -1,0 +1,22 @@
+{
+  "appId": "com.termchamp.app",
+  "appName": "TermChamp",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#F4F6FB",
+    "preferredContentMode": "mobile",
+    "allowsLinkPreview": false
+  },
+  "plugins": {
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    },
+    "SplashScreen": {
+      "launchShowDuration": 800,
+      "launchAutoHide": true,
+      "backgroundColor": "#F4F6FB",
+      "showSpinner": false
+    }
+  }
+}

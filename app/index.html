@@ -27,6 +27,15 @@
   var d = t === 'dark' || (t !== 'light' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
   document.documentElement.setAttribute('data-theme', d ? 'dark' : 'light');
   if (d) document.querySelectorAll('meta[name=theme-color]').forEach(function (m) { m.content = '#0A0F1C'; }); })();</script>
+<script>/* THE IPHONE APP (2026-10-06). The same file ships inside the App Store app (ios-app/), where
+   Capacitor injects window.Capacitor before this runs. There it is always the full-screen phone app:
+   html.native turns off everything that only makes sense in a browser (the desk panel, "add it to your
+   home screen", the service worker) and turns on native push. On the web nothing changes. */
+(function () { try {
+  var C = window.Capacitor, n = !!(C && typeof C.isNativePlatform === 'function' && C.isNativePlatform());
+  window.TC_NATIVE = n;
+  if (n) document.documentElement.classList.add('native', 'pm');
+} catch (e) { window.TC_NATIVE = false; } })();</script>
 <script>/* phone mode by device (2026-10-06): a touch screen whose short side is a phone's always gets the
    full-screen app, even when the page is wider than 520 CSS px (page zoom, Request Desktop Website);
    then --pz scales it back to the screen's own size */
@@ -73,6 +82,7 @@ svg{display:block;flex:none}
 .stage{height:100vh;height:100dvh;display:flex;align-items:center;justify-content:center;gap:56px;padding:16px}
 .side{width:270px;flex:none;display:none}
 @media (min-width:1000px){.side{display:block}}
+html.native .side{display:none!important}
 .side .brand{display:flex;align-items:center;gap:12px;margin-bottom:18px}
 .side .brand img{width:44px;height:44px;border-radius:13px;box-shadow:0 6px 16px rgba(22,51,107,.18)}
 .side .brand b{font-size:24px;font-weight:900;color:var(--navy);letter-spacing:-.01em;display:block;line-height:1.1}
@@ -1894,7 +1904,7 @@ TC.createProfile = async function (f) {
   gaEvent('sign_up', { method: 'email_code' });              // a new profile, not every code sign-in
   return null;
 };
-TC.signOut = async function () { try { await TC.client().auth.signOut(); } catch (e) {} location.replace(location.pathname); };
+TC.signOut = async function () { try { await TC.push.forget(); } catch (e) {} try { await TC.client().auth.signOut(); } catch (e) {} location.replace(location.pathname); };
 
 /* ---------------------------------------------------------------------------------------------
    The load. Public data (seats, PolyRatings) and the student's own data run side by side.
@@ -1904,7 +1914,7 @@ TC.boot = async function () {
   if (!sb) { TC.phase = 'offline'; render(); return; }
   hydrateSeatsFromCache();
   loadSeats(); loadPolyRatings();
-  try { if ('serviceWorker' in navigator && window.isSecureContext && location.protocol !== 'file:') navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {}); } catch (e) {}
+  try { if (!window.TC_NATIVE && 'serviceWorker' in navigator && window.isSecureContext && location.protocol !== 'file:') navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {}); } catch (e) {}
   const { data } = await sb.auth.getSession();
   TC.user = data && data.session ? data.session.user : null;
   if (!TC.user) { TC.phase = 'signin'; render(); return; }
@@ -1913,7 +1923,7 @@ TC.boot = async function () {
 TC.load = function () {
   /* The session can arrive twice at start-up (the auth event and getSession). One load. */
   if (TC._loading) return TC._loading;
-  TC._loading = loadAll().finally(() => { TC._loading = null; });
+  TC._loading = loadAll().finally(() => { TC._loading = null; try { TC.push.init(); } catch (e) {} });
   return TC._loading;
 };
 /* The concentration lives on the device, like the desktop's. termchamp.com/app shares the desktop's
@@ -2406,8 +2416,75 @@ TC.watch = async function (id, on) {
     : await sb.from('watch_sections').delete().eq('user_id', TC.user.id).eq('term', CFG.TERM).eq('class_nbr', id);
   if (r.error) { toast('Couldn’t update your seat alert'); return false; }
   if (on) TC.watches[id] = true; else delete TC.watches[id];
+  if (on) { try { TC.push.offer(); } catch (e) {} }
   return true;
 };
+
+/* ---- Native push (the iPhone app only), 2026-10-06 --------------------------------------------
+   A watched section already queues a row in push_outbox when a seat opens (sql/professify-push.sql);
+   push-send delivers it. On the web that is Web Push. In the App Store app it is APNs: this asks
+   iOS for permission, takes the device token iOS hands back, and files it with
+   register_push_device (sql/professify-push-ios.sql). push-send sends to both kinds.
+
+   WHEN IT ASKS. Never at launch. The first time a student watches a section — the moment the toast
+   says "We'll alert you when a seat opens" — and from Settings → Notifications. A student who says
+   no is not asked again; iOS would not show the dialog a second time anyway.
+
+   Everything here is a no-op on the web (TC_NATIVE is false) and when the plugin is missing. */
+TC.push = (function () {
+  let P = null, token = '', wired = false, asked = false;
+  const plugin = () => {
+    if (P || !window.TC_NATIVE) return P;
+    try { const C = window.Capacitor; P = (C.Plugins && C.Plugins.PushNotifications) || (C.registerPlugin ? C.registerPlugin('PushNotifications') : null); } catch (e) { P = null; }
+    return P;
+  };
+  const file = async () => {
+    if (!token || !TC.user) return;
+    try { const r = await TC.client().rpc('register_push_device', { p_token: token, p_platform: 'ios' }); if (r.error) console.warn('[push] register', r.error.message); } catch (e) {}
+  };
+  const open = url => {
+    const u = String(url || '');
+    if (/tab=friends/.test(u)) setTab('friends');
+    else if (/tab=sched/.test(u)) setTab('schedule');
+    else setTab('home');
+  };
+  const wire = () => {
+    const p = plugin(); if (!p || wired) return; wired = true;
+    p.addListener('registration', t => { token = String((t && t.value) || ''); file(); });
+    p.addListener('registrationError', e => { console.warn('[push] registration failed', e && e.error); });
+    p.addListener('pushNotificationActionPerformed', a => { try { open(a && a.notification && a.notification.data && a.notification.data.url); } catch (e) {} });
+  };
+  const state = async () => {
+    const p = plugin(); if (!p) return 'unavailable';
+    try { const s = await p.checkPermissions(); return s.receive === 'granted' ? 'granted' : s.receive === 'denied' ? 'denied' : 'prompt'; } catch (e) { return 'unavailable'; }
+  };
+  const refresh = async () => { const s = await state(); if (UI.pushState !== s) { UI.pushState = s; render(true); } return s; };
+  return {
+    available: () => !!plugin(),
+    get token() { return token; },
+    /* signed in, app open: if they said yes before, re-register (iOS can rotate the token) */
+    init: async () => {
+      if (!plugin()) return; wire();
+      const s = await refresh();
+      if (s === 'granted') { try { await P.register(); } catch (e) {} }
+    },
+    /* ask, if it has never been asked */
+    enable: async () => {
+      const p = plugin(); if (!p) return 'unavailable'; wire(); asked = true;
+      let s = await state();
+      if (s === 'prompt') { try { const r = await p.requestPermissions(); s = r.receive === 'granted' ? 'granted' : 'denied'; } catch (e) { s = 'denied'; } }
+      if (s === 'granted') { try { await p.register(); } catch (e) {} }
+      UI.pushState = s; render(true);
+      return s;
+    },
+    offer: async () => { if (asked || !plugin()) return; if (await state() === 'prompt') TC.push.enable(); else asked = true; },
+    /* signing out: this phone stops getting that account's alerts */
+    forget: async () => {
+      if (!token) return;
+      try { await TC.client().rpc('unregister_push_device', { p_token: token }); } catch (e) {}
+    }
+  };
+})();
 
 /* ---- Reviews: TermChamp's own (reviews_public), and mine. ------------------------------------- */
 async function loadReviews() {
@@ -3067,7 +3144,11 @@ const delDate = (iso => { const d = /^\d{4}-\d\d-\d\d/.test(String(iso || '')) ?
 function signinView() {
   const si = UI.signin;
   if (TC.phase === 'boot') return `<div class="tc-signin"><img class="tc-logo" src="${LOGO}" alt="Term Champ"><div class="tc-spin big"></div></div>`;
-  if (TC.phase === 'offline') return `<div class="tc-signin"><img class="tc-logo" src="${LOGO}" alt="Term Champ"><h1>Can’t reach TermChamp</h1><p>Check your connection, then try again.</p><button class="btn" data-a="reload">Try again</button></div>`;
+  /* No signal at all is not a profile problem (2026-10-06). The iPhone app carries supabase-js with it,
+     so a cold start in airplane mode gets as far as the profile read and fails there — say "no
+     connection", not "couldn't load your profile". */
+  const noNet = TC.phase === 'profileerr' && (navigator.onLine === false || /network|failed to fetch|load failed|networkerror/i.test(String(TC.err.profile || '')));
+  if (TC.phase === 'offline' || noNet) return `<div class="tc-signin"><img class="tc-logo" src="${LOGO}" alt="Term Champ"><h1>Can’t reach TermChamp</h1><p>Check your connection, then try again.</p><button class="btn" data-a="reload">Try again</button></div>`;
   if (TC.phase === 'profileerr') return `<div class="tc-signin"><img class="tc-logo" src="${LOGO}" alt="Term Champ"><h1>Couldn’t load your profile</h1>
     <p>You’re signed in as <b>${esc((TC.user && TC.user.email) || '')}</b>, but TermChamp couldn’t read your profile just now. Your account is still there — try again in a moment.</p>
     <p class="muted" style="font-size:12.5px">Error ${esc(TC.err.profile || '')}</p>
@@ -4963,6 +5044,7 @@ const A = {
   siMode: m => { UI.signin.mode = m; UI.signin.err = ''; render(); },
   signOut: () => { UI.sheet = null; TC.signOut(); },
   web: p => { window.open(WEB + (p || '/'), '_blank', 'noopener'); },
+  pushOn: async () => { const s = await TC.push.enable(); toast(s === 'granted' ? 'Seat alerts are on' : s === 'denied' ? 'Notifications are off in iPhone Settings' : 'Couldn’t turn on notifications'); },
   /* A story jumps to that friend's week in the feed (every friend has a card there). */
   togglePin: id => togglePin(id),
   story: id => { if (id && TC.friends.indexOf(id) >= 0) { UI.sheet = { type: 'story', id }; render(true); const b = document.querySelector('#sheet .sbody'); if (b) b.scrollTop = 0; } },
@@ -5882,6 +5964,16 @@ function applyTheme(redraw) {
 if (themeMQ) { const fn = () => { if (themePref() === 'system') applyTheme(true); }; themeMQ.addEventListener ? themeMQ.addEventListener('change', fn) : themeMQ.addListener && themeMQ.addListener(fn); }
 const themeRow = () => { const p = themePref();
   return `<div class="thm" role="radiogroup" aria-label="Appearance">${[['system', 'System'], ['light', 'Light'], ['dark', 'Dark']].map(([k, l]) => `<button role="radio" aria-checked="${p === k}" class="${p === k ? 'on' : ''}" data-a="setTheme" data-x="${k}">${l}</button>`).join('')}</div><div class="muted b" style="font-size:12.5px;margin-top:8px">${p === 'system' ? 'Follows your phone’s setting.' : 'Kept on this phone.'}</div>`; };
+/* Settings → Notifications, iPhone app only. iOS asks once; after a "no" only iOS Settings can undo it,
+   so that is what this says instead of offering a button that would do nothing. */
+function pushRow() {
+  const s = UI.pushState || 'prompt';
+  const head = `<div class="b" style="font-size:15px">Seat alerts</div>`;
+  const sub = t => `<div class="muted b" style="font-size:12.5px;line-height:1.4">${t}</div>`;
+  if (s === 'granted') return `<div class="row sb tc-row" style="gap:12px"><div>${head}${sub('On. You’ll hear when a seat opens in a class you watch or put in a plan. Anything overnight waits until 8am.')}</div></div>`;
+  if (s === 'denied') return `<div class="tc-row">${head}${sub('Off. To turn them on, open the iPhone Settings app → TermChamp → Notifications.')}</div>`;
+  return `<div class="row sb tc-row" style="gap:12px"><div>${head}${sub('Get a notification when a seat opens in a class you watch or put in a plan.')}</div><button class="pbtn" data-a="pushOn">Turn on</button></div>`;
+}
 SCREENS.settings = () => {
   const blocks = TC.blocks;
   /* An empty plan has no row to hold the choice, so it isn't offered until the plan has a class —
@@ -5896,11 +5988,12 @@ SCREENS.settings = () => {
  ${sectionCard('Account', `<div class="tc-row"><div class="muted b" style="font-size:13px">Signed in as</div><div class="b" style="font-size:15px;word-break:break-all">${esc(TC.email())}</div></div>
   <form class="tc-form" data-submit="setPw" style="margin-top:6px"><label>New password<input id="setpw" type="password" autocomplete="new-password" placeholder="At least 8 characters"></label>${UI.pwMsg ? `<div class="${UI.pwMsg.ok ? 'tc-ok' : 'tc-err'}">${esc(UI.pwMsg.t)}</div>` : ''}<button class="btn soft" ${UI.busy.pw ? 'disabled' : ''}>${UI.busy.pw ? 'Saving…' : 'Change password'}</button></form>`)}
  ${sectionCard('Appearance', themeRow())}
+ ${window.TC_NATIVE && TC.push.available() ? sectionCard('Notifications', pushRow()) : ''}
  ${sectionCard('Who sees your plans', `<div class="muted b" style="font-size:13px;margin-bottom:4px">Friends can see a plan unless you turn it off.</div>${['A', 'B', 'C'].map(shareRow).join('')}`)}
  ${sectionCard('Blocked people', blocks === undefined ? loadingCard('Loading…') : TC.blocksErr ? '<div class="muted b">Couldn’t load that list.</div>' : blocks.length ? blocks.map(b => `<div class="row sb tc-row"><span class="b">${esc(b.display_name || b.username || 'Someone')}</span><button class="pbtn" data-a="unblock" data-x="${esc(b.id)}">Unblock</button></div>`).join('') : '<div class="muted b" style="padding:2px 0 10px;line-height:1.45">Nobody. To block someone, tap ⋯ on their page or in your chat with them. They aren’t told.</div>')}
  ${sectionCard('Champ', `<div class="row sb tc-row" style="gap:12px"><div><div class="b" style="font-size:15px">Answers from Anthropic’s AI</div><div class="muted b" style="font-size:12.5px;line-height:1.4">Questions you type to Champ are sent to Anthropic to work out what you’re asking. Off: Champ asks again before sending anything.</div></div><button class="toggle ${champOk() ? 'on' : 'off'}" data-a="toggleChampAi" role="switch" aria-checked="${champOk()}" aria-label="Champ answers from Anthropic’s AI"><i></i></button></div>`)}
  ${sectionCard('Legal', legal)}
- ${sectionCard('About', `<div class="muted b" style="font-size:13.5px;line-height:1.5">TermChamp phone app · build ${esc(window.TERMCHAMP_APP_BUILD || '')}<br>Ratings from PolyRatings and TermChamp students. Seats from Cal Poly’s public class search.</div>
+ ${sectionCard('About', `<div class="muted b" style="font-size:13.5px;line-height:1.5">TermChamp ${window.TC_NATIVE ? 'for iPhone' : 'phone app'} · build ${esc(window.TERMCHAMP_APP_BUILD || '')}<br>Ratings from PolyRatings and TermChamp students. Seats from Cal Poly’s public class search.<br>TermChamp is an independent app built by Cal Poly students. It is not affiliated with or endorsed by Cal Poly.<br>Help: <a class="tc-a" href="${WEB}/support" target="_blank" rel="noopener">${esc(String(WEB).replace(/^https?:\/\//, ''))}/support</a></div>
   <a class="btn soft tc-a" style="margin-top:12px" href="${WEB}/" target="_blank" rel="noopener">Open TermChamp on the web</a>`)}
  <div class="pad" style="margin-top:16px;display:grid;gap:8px"><button class="btn soft" style="color:var(--red-ink)" data-a="signOut">Sign out</button>
   <button class="tc-dellink" data-a="openDeleteAccount">Delete account</button></div>

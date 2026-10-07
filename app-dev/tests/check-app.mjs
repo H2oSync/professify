@@ -5318,7 +5318,8 @@ tests.legalText = async () => {
   const doc = async w => { await page.evaluate(w => A.openLegal(w), w); await tick(page, 800); return text(page); };
   const terms = await doc('terms'), guide = await doc('guidelines'), priv = await doc('privacy'), sec = await doc('security');
   const all = terms + guide + priv + sec;
-  ok(/Last updated 4 October 2026/.test(terms) && /Last updated 4 October 2026/.test(priv) && /support@termchamp\.com/.test(all) && !/tdogtate/.test(all), 'legal: dated 4 October 2026, contact support@termchamp.com');
+  ok(/Last updated 4 October 2026/.test(terms) && /Last updated 6 October 2026/.test(priv) && /support@termchamp\.com/.test(all) && !/tdogtate/.test(all), 'legal: terms dated 4 October, privacy 6 October 2026 (notifications), contact support@termchamp.com');
+  ok(/<?Notifications/.test(priv) && /device token/.test(priv) && /does not load Google Analytics/.test(priv), 'legal: privacy says what push stores, and that the iPhone app has no Google Analytics');
   ok(/There is no tolerance for objectionable content or abusive users/.test(terms) && /There is no tolerance for objectionable content or abusive users/.test(guide), 'legal: zero tolerance in the Terms and the Guidelines');
   ok(/a person looks at every report within 24 hours/i.test(terms) && /A person looks at every report within 24 hours/.test(guide) && !/nine reasons/.test(guide) && /group chat names/.test(guide), 'legal: reports looked at within 24 hours; what can be reported is what the app offers');
   ok(/permanently deleted after 30 days/.test(terms) && /sign in before then to recover it/.test(terms) && /after 30 days/.test(priv) && /Keep my reviews up anonymously/.test(priv) && /deleted with your account/.test(priv) && !/Your reviews stay up when you delete your account/.test(priv), 'legal: 30 days to recover, and reviews kept only if you choose');

@@ -143,17 +143,23 @@ self.addEventListener('fetch', (e) => {
      phone app and the other way round, so going offline showed whichever was opened last. Each
      now keeps its own copy; everything else still shares '/' (so ?tab=… is still one copy). */
   if (req.mode === 'navigate') {
-    const docKey = (url.pathname === '/app' || url.pathname.indexOf('/app/') === 0) ? '/app/' : '/';
+    /* THE PUBLIC PAGES — 2026-10-06. /privacy, /terms, /guidelines, /security and /support are
+       their own documents. Keying them under '/' would replace the app's offline copy with a
+       privacy policy the first time somebody opened one, so they get no key: fetched fresh,
+       never stored, and offline they fall through to the sentence below. */
+    const p = url.pathname;
+    const docKey = (p === '/app' || p.indexOf('/app/') === 0) ? '/app/'
+      : (p === '/' || p === '/index.html') ? '/' : null;
     e.respondWith((async () => {
       try {
         const fresh = await timed(req, 4500);
-        if (fresh && fresh.ok) {
+        if (docKey && fresh && fresh.ok) {
           const c = await caches.open(SHELL);
           c.put(docKey, fresh.clone()).catch(() => {});
         }
         return fresh;
       } catch (_) {
-        const hit = await caches.match(docKey, { ignoreSearch: true });
+        const hit = docKey ? await caches.match(docKey, { ignoreSearch: true }) : null;
         if (hit) return hit;
         /* Nothing cached and no network: say so in a sentence, rather than handing the browser
            its own dinosaur. This is the only HTML this worker ever authors. */

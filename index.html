@@ -34108,7 +34108,7 @@ var LEGAL_UPDATED='4 October 2026';
    third party that sets its own cookie is the most material change this document has carried —
    the sentence "that is the whole list" was true of the counting above and would have been a
    false statement the moment the tag loaded. */
-var LEGAL_UPDATED_PRIVACY='4 October 2026';
+var LEGAL_UPDATED_PRIVACY='6 October 2026';
 var LEGAL_CONTACT='support@termchamp.com';
 var LEGAL_DOCS={
   terms:{title:'Terms of Service',html:
@@ -34230,6 +34230,7 @@ var LEGAL_DOCS={
     +'Global Privacy Control or Do Not Track, Google Analytics is not loaded at all on this site \u2014 '
     +'no cookie, nothing sent. You can also block it with any content blocker, and the site works '
     +'exactly the same.</p>'
+    +'<p>The iPhone app does not load Google Analytics at all.</p>'
     +'<h4>Champ, the assistant</h4>'
     +'<p>Champ (called Hawk on the website) answers the questions you type to it. In the phone app it '
     +'asks first: nothing is sent until you tap <b>Allow</b>, and you can turn it off again in Settings; after that, every question you ask '
@@ -34280,6 +34281,8 @@ var LEGAL_DOCS={
     +'<p>Messages are not end-to-end encrypted. They are encrypted in transit and stored in the database like everything else, which means whoever holds the database keys could read them — today that is one student maintaining this project. Do not put anything in TermChamp you would not put in a group text. If that changes, this page changes with it.</p>'
     +'<h4>Where it lives</h4>'
     +'<p>In a Supabase-hosted Postgres database on servers in the United States. Traffic is encrypted in transit. Photos are stored in Supabase Storage; a photo you upload is publicly reachable by its URL, so treat it as public.</p>'
+    +'<h4>Notifications</h4>'
+    +'<p>If you turn on alerts, TermChamp stores what is needed to deliver them to you: in the iPhone app, the device token Apple gives your phone; in a browser, the push address and keys your browser gives it. They are linked to your account so an alert reaches you and are used for nothing else. The iPhone app removes its token when you sign out, and all of them are deleted with your account. Alerts are about sections you chose to watch, and one that would arrive between 10pm and 8am waits until 8am.</p>'
     +'<h4>Who else is involved</h4>'
     +'<ul>'
     +'<li><b>Supabase</b> — database, sign-in and file storage.</li>'
@@ -34287,6 +34290,7 @@ var LEGAL_DOCS={
     +'<li><b>PolyRatings</b> — their public API supplies professor ratings. Your data is never sent to them.</li>'
     +'<li><b>Anthropic</b> \u2014 the AI model behind Champ. It receives the questions you ask Champ while signed in, as described under <b>Champ</b> above.</li>'
     +'<li><b>jsDelivr and Google Fonts</b> — serve code and fonts to your browser, and therefore see your IP address, as any site’s CDN does.</li>'
+    +'<li><b>Apple</b> \u2014 delivers notifications to the iPhone app, so it receives the device token and the text of each alert.</li>'
     +'</ul>'
     +'<p>Nobody else receives your data. It is not sold, rented, or shared for advertising.</p>'
     +'<h4>How long it is kept</h4>'
