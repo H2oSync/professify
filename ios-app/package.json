@@ -1,0 +1,22 @@
+{
+  "name": "termchamp-ios",
+  "private": true,
+  "version": "1.0.0",
+  "description": "TermChamp for iPhone: the phone app (../app/index.html) inside a native shell, with APNs seat alerts.",
+  "type": "module",
+  "scripts": {
+    "web": "node scripts/copy-web.mjs",
+    "sync": "node scripts/copy-web.mjs && npx cap sync ios",
+    "open": "npx cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/core": "8.5.2",
+    "@capacitor/ios": "8.5.2",
+    "@capacitor/push-notifications": "8.1.3",
+    "@capacitor/splash-screen": "8.0.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.2",
+    "@supabase/supabase-js": "2.112.4"
+  }
+}
