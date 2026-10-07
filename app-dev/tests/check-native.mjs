@@ -18,7 +18,9 @@ const nativeShim = (perm) => `
     register: async () => { __push.calls.push('register'); setTimeout(() => (__push.listeners.registration || []).forEach(f => f({ value: 'AB'.repeat(32) })), 20); },
     addListener: (ev, f) => { (__push.listeners[ev] = __push.listeners[ev] || []).push(f); return Promise.resolve({ remove() {} }); },
   };
-  window.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'ios', Plugins: { PushNotifications: P } };
+  window.__sb = [];
+  const SB = { setStyle: o => { __sb.push(o.style); return Promise.resolve(); } };
+  window.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'ios', Plugins: { PushNotifications: P, StatusBar: SB } };
 `;
 
 async function settings(page) { await click(page, '.homehdr .me-btn'); await click(page, '[data-a="openSettings"]'); await tick(page, 500); }
@@ -76,6 +78,32 @@ console.log('# iPhone app, already allowed: re-registers quietly on launch');
   await settings(page);
   await click(page, '[data-a="signOut"]'); await tick(page, 800);
   ok(log.rpcs.some(r => r.fn === 'unregister_push_device' && r.body.p_token === 'AB'.repeat(32)), 'native: signing out unregisters this phone');
+  await close();
+}
+
+console.log('# iPhone app: status bar text follows the strip behind it');
+{
+  // signed out on a dark-mode phone: sign-in stays light, so the clock must be dark text
+  const { page, close } = await openApp({ width: 390, height: 844, port: 8191, signedIn: false,
+    init: nativeShim('prompt') + "try{localStorage.setItem('tc-theme','dark')}catch(e){}" });
+  await tick(page, 600);
+  let sb = await page.evaluate(() => window.__sb);
+  ok(sb.length >= 1 && sb[sb.length - 1] === 'LIGHT', 'native, dark phone, sign-in screen: dark status-bar text on the light strip', sb);
+  await close();
+}
+{
+  // signed in, app theme dark: the strip is dark, so light text
+  const { page, close } = await openApp({ width: 390, height: 844, port: 8191, init: nativeShim('prompt') + "try{localStorage.setItem('tc-theme','dark')}catch(e){}" });
+  await tick(page, 600);
+  const sb = await page.evaluate(() => window.__sb);
+  ok(sb[sb.length - 1] === 'DARK', 'native, dark theme, Home: light status-bar text on the dark strip', sb);
+  await close();
+}
+{
+  const { page, close } = await openApp({ width: 390, height: 844, port: 8191, init: nativeShim('prompt') + "try{localStorage.setItem('tc-theme','light')}catch(e){}" });
+  await tick(page, 600);
+  const sb = await page.evaluate(() => window.__sb);
+  ok(sb[sb.length - 1] === 'LIGHT', 'native, light theme, Home: dark status-bar text', sb);
   await close();
 }
 
