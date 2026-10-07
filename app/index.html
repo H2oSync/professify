@@ -35,6 +35,25 @@
   var C = window.Capacitor, n = !!(C && typeof C.isNativePlatform === 'function' && C.isNativePlatform());
   window.TC_NATIVE = n;
   if (n) document.documentElement.classList.add('native', 'pm');
+  if (!n) return;
+  try {
+  /* The clock and battery follow the strip behind them. Every screen already says what colour that
+     strip is, for Safari, in meta[name=theme-color] (sign-in and onboarding stay light even on a dark
+     phone, a chat is navy). iOS ignores that tag inside an app, so read it here and set the status
+     bar's text dark or light to match — otherwise a dark-mode iPhone shows white text on the light
+     sign-in screen. */
+  var SB = (C.Plugins && C.Plugins.StatusBar) || (C.registerPlugin ? C.registerPlugin('StatusBar') : null), last = '';
+  var sync = function () {
+    var m = document.querySelector('meta[name=theme-color]'), hex = String((m && m.content) || '#F4F6FB').replace('#', '');
+    if (hex.length === 3) hex = hex.replace(/./g, '$&$&');
+    var r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
+    var style = (0.299 * r + 0.587 * g + 0.114 * b) < 140 ? 'DARK' : 'LIGHT';   // DARK = light text, for a dark strip
+    if (style === last || !SB) return; last = style;
+    try { SB.setStyle({ style: style }); } catch (e) {}
+  };
+  sync();
+  new MutationObserver(sync).observe(document.head, { subtree: true, attributes: true, attributeFilter: ['content'] });
+  } catch (e) {}
 } catch (e) { window.TC_NATIVE = false; } })();</script>
 <script>/* phone mode by device (2026-10-06): a touch screen whose short side is a phone's always gets the
    full-screen app, even when the page is wider than 520 CSS px (page zoom, Request Desktop Website);
@@ -1175,6 +1194,16 @@ button.mrname{min-height:44px}
 .thm button{height:40px;border-radius:11px;font-weight:900;font-size:14px;color:var(--muted);display:flex;align-items:center;justify-content:center;gap:6px}
 .thm button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(15,23,42,.14)}
 
+/* push notifications (2026-10-06): the mute ringer at the top of a chat */
+.mutebtn{flex:none;display:inline-flex;align-items:center;gap:5px;min-height:40px;padding:0 12px 0 10px;border-radius:999px;background:var(--card);color:var(--ink3);font-weight:900;font-size:13px;box-shadow:0 1px 2px rgba(15,23,42,.06),0 4px 12px rgba(22,51,107,.08);transition:background .2s,color .2s}
+.mutebtn span{min-width:44px;text-align:left}
+.mutebtn.on{background:var(--red-soft);color:var(--red-ink)}
+.mutebtn.fx:not(.on) svg{animation:tcRing .6s ease-in-out}
+.mutebtn.fx.on svg{animation:tcHush .3s ease-out}
+@keyframes tcRing{0%,100%{transform:rotate(0)}20%{transform:rotate(18deg)}40%{transform:rotate(-14deg)}60%{transform:rotate(9deg)}80%{transform:rotate(-5deg)}}
+@keyframes tcHush{from{transform:scale(.7)}}
+@media (prefers-reduced-motion:reduce){.mutebtn svg{animation:none!important}}
+
 }
 @layer onbreset{.onb *:not(svg):not(svg *){all:revert}}
 /* Sean's onboarding styles (2026-09-29), scoped under .onb by build/sean/scope_css.py. Do not edit by hand. */
@@ -1438,7 +1467,7 @@ if(typeof qrcode==="function")window.qrcode=qrcode;
 
 <script>
 
-window.TERMCHAMP_APP_BUILD = '2026-10-06 07:15';
+window.TERMCHAMP_APP_BUILD = '2026-10-06 20:30';
 /* ================================================================================================
    TERMCHAMP — THE PHONE APP (termchamp.com/app)
    ------------------------------------------------------------------------------------------------
@@ -1904,7 +1933,7 @@ TC.createProfile = async function (f) {
   gaEvent('sign_up', { method: 'email_code' });              // a new profile, not every code sign-in
   return null;
 };
-TC.signOut = async function () { try { await TC.push.forget(); } catch (e) {} try { await TC.client().auth.signOut(); } catch (e) {} location.replace(location.pathname); };
+TC.signOut = async function () { await TC.pushForget(false); try { await TC.client().auth.signOut(); } catch (e) {} location.replace(location.pathname); };
 
 /* ---------------------------------------------------------------------------------------------
    The load. Public data (seats, PolyRatings) and the student's own data run side by side.
@@ -1923,7 +1952,7 @@ TC.boot = async function () {
 TC.load = function () {
   /* The session can arrive twice at start-up (the auth event and getSession). One load. */
   if (TC._loading) return TC._loading;
-  TC._loading = loadAll().finally(() => { TC._loading = null; try { TC.push.init(); } catch (e) {} });
+  TC._loading = loadAll().finally(() => { TC._loading = null; });
   return TC._loading;
 };
 /* The concentration lives on the device, like the desktop's. termchamp.com/app shares the desktop's
@@ -1982,6 +2011,7 @@ async function loadAll() {
   dlTry();
   if (pendingInvite()) TC.processInvite().catch(() => {});
   startRealtime();
+  TC.pushAfterLoad().catch(() => {});
 }
 TC.refresh = function () { if (TC.user) TC.load(); };
 
@@ -2416,75 +2446,8 @@ TC.watch = async function (id, on) {
     : await sb.from('watch_sections').delete().eq('user_id', TC.user.id).eq('term', CFG.TERM).eq('class_nbr', id);
   if (r.error) { toast('Couldn’t update your seat alert'); return false; }
   if (on) TC.watches[id] = true; else delete TC.watches[id];
-  if (on) { try { TC.push.offer(); } catch (e) {} }
   return true;
 };
-
-/* ---- Native push (the iPhone app only), 2026-10-06 --------------------------------------------
-   A watched section already queues a row in push_outbox when a seat opens (sql/professify-push.sql);
-   push-send delivers it. On the web that is Web Push. In the App Store app it is APNs: this asks
-   iOS for permission, takes the device token iOS hands back, and files it with
-   register_push_device (sql/professify-push-ios.sql). push-send sends to both kinds.
-
-   WHEN IT ASKS. Never at launch. The first time a student watches a section — the moment the toast
-   says "We'll alert you when a seat opens" — and from Settings → Notifications. A student who says
-   no is not asked again; iOS would not show the dialog a second time anyway.
-
-   Everything here is a no-op on the web (TC_NATIVE is false) and when the plugin is missing. */
-TC.push = (function () {
-  let P = null, token = '', wired = false, asked = false;
-  const plugin = () => {
-    if (P || !window.TC_NATIVE) return P;
-    try { const C = window.Capacitor; P = (C.Plugins && C.Plugins.PushNotifications) || (C.registerPlugin ? C.registerPlugin('PushNotifications') : null); } catch (e) { P = null; }
-    return P;
-  };
-  const file = async () => {
-    if (!token || !TC.user) return;
-    try { const r = await TC.client().rpc('register_push_device', { p_token: token, p_platform: 'ios' }); if (r.error) console.warn('[push] register', r.error.message); } catch (e) {}
-  };
-  const open = url => {
-    const u = String(url || '');
-    if (/tab=friends/.test(u)) setTab('friends');
-    else if (/tab=sched/.test(u)) setTab('schedule');
-    else setTab('home');
-  };
-  const wire = () => {
-    const p = plugin(); if (!p || wired) return; wired = true;
-    p.addListener('registration', t => { token = String((t && t.value) || ''); file(); });
-    p.addListener('registrationError', e => { console.warn('[push] registration failed', e && e.error); });
-    p.addListener('pushNotificationActionPerformed', a => { try { open(a && a.notification && a.notification.data && a.notification.data.url); } catch (e) {} });
-  };
-  const state = async () => {
-    const p = plugin(); if (!p) return 'unavailable';
-    try { const s = await p.checkPermissions(); return s.receive === 'granted' ? 'granted' : s.receive === 'denied' ? 'denied' : 'prompt'; } catch (e) { return 'unavailable'; }
-  };
-  const refresh = async () => { const s = await state(); if (UI.pushState !== s) { UI.pushState = s; render(true); } return s; };
-  return {
-    available: () => !!plugin(),
-    get token() { return token; },
-    /* signed in, app open: if they said yes before, re-register (iOS can rotate the token) */
-    init: async () => {
-      if (!plugin()) return; wire();
-      const s = await refresh();
-      if (s === 'granted') { try { await P.register(); } catch (e) {} }
-    },
-    /* ask, if it has never been asked */
-    enable: async () => {
-      const p = plugin(); if (!p) return 'unavailable'; wire(); asked = true;
-      let s = await state();
-      if (s === 'prompt') { try { const r = await p.requestPermissions(); s = r.receive === 'granted' ? 'granted' : 'denied'; } catch (e) { s = 'denied'; } }
-      if (s === 'granted') { try { await p.register(); } catch (e) {} }
-      UI.pushState = s; render(true);
-      return s;
-    },
-    offer: async () => { if (asked || !plugin()) return; if (await state() === 'prompt') TC.push.enable(); else asked = true; },
-    /* signing out: this phone stops getting that account's alerts */
-    forget: async () => {
-      if (!token) return;
-      try { await TC.client().rpc('unregister_push_device', { p_token: token }); } catch (e) {}
-    }
-  };
-})();
 
 /* ---- Reviews: TermChamp's own (reviews_public), and mine. ------------------------------------- */
 async function loadReviews() {
@@ -2752,14 +2715,17 @@ async function loadThreads() {
   const ids = (mine.data || []).map(r => r.conversation_id);
   const readAt = Object.fromEntries((mine.data || []).map(r => [r.conversation_id, r.last_read_at]));
   if (!ids.length) { TC.threads = []; return; }
-  const [convs, memb, last, clr, hid] = await Promise.all([
+  const [convs, memb, last, clr, hid, mut] = await Promise.all([
     sb.from('conversations').select('id,kind,title,created_by,last_at').in('id', ids),
     sb.from('conversation_members').select('conversation_id,user_id').in('conversation_id', ids),
     sb.from('messages').select('id,conversation_id,sender,kind,body,payload,created_at').in('conversation_id', ids).order('created_at', { ascending: false }).limit(300),
     sb.from('conversation_clears').select('conversation_id,cleared_at'),
-    sb.from('message_hides').select('message_id').limit(5000)
+    sb.from('message_hides').select('message_id').limit(5000),
+    sb.from('conversation_mutes').select('conversation_id')
   ]);
   chatXRead(clr, hid);
+  if (mut && mut.error) { if (missingTable(mut.error)) TC.mutesOn = false; }
+  else if (mut) { TC.mutesOn = true; TC.mutes = new Set((mut.data || []).map(r => String(r.conversation_id))); }
   if (convs.error) { TC.err.threads = convs.error.message; return; }
   const members = {}; ((memb && memb.data) || []).forEach(r => { (members[r.conversation_id] = members[r.conversation_id] || []).push(r.user_id); });
   const lastOf = {}, spoke = {};
@@ -3628,7 +3594,7 @@ function threadRow(t) {
   else if (t.kind === 'group') avh = `<span class="ringav">${groupAv(t, 48)}</span>`;
   else { const nm = threadName(t); avh = `<span class="ringav"><span class="sq" style="width:48px;height:48px;background:${t.kind === 'class' ? 'var(--blue-soft2)' : colorFor(t.id)};color:${t.kind === 'class' ? 'var(--blue-ink)' : 'var(--ink2)'};font-size:${t.kind === 'class' ? 13 : 16}px">${esc(t.kind === 'class' ? (nm.split(' ')[1] || nm).slice(0, 5) : initialsOf(nm))}</span></span>`; }
   const who = last ? (last.sender === TC.user.id ? 'You: ' : (t.kind !== 'direct' ? nameOf(last.sender).split(' ')[0] + ': ' : '')) : '';
-  return `<button class="thread" data-a="openChat" data-x="${t.id}">${avh}<div class="grow"><div class="nm">${esc(threadName(t))}</div><div class="pv ${unread ? '' : 'read'}">${esc(last ? who + msgText(last) : 'No messages yet')}</div></div><div class="tm"><span class="tmt">${chatPinned(t.id) ? `<span class="pinm" role="img" aria-label="Pinned">${ic('pin', 12, 2.4)}</span>` : ''}${last ? agoText(last.created_at) : ''}</span>${unread ? '<span class="udot"></span>' : '<span style="height:10px"></span>'}</div></button>`;
+  return `<button class="thread" data-a="openChat" data-x="${t.id}">${avh}<div class="grow"><div class="nm">${esc(threadName(t))}</div><div class="pv ${unread ? '' : 'read'}">${esc(last ? who + msgText(last) : 'No messages yet')}</div></div><div class="tm"><span class="tmt">${chatMuted(t.id) ? `<span class="pinm" role="img" aria-label="Muted">${ic('bellOff', 12, 2.4)}</span>` : ''}${chatPinned(t.id) ? `<span class="pinm" role="img" aria-label="Pinned">${ic('pin', 12, 2.4)}</span>` : ''}${last ? agoText(last.created_at) : ''}</span>${unread ? '<span class="udot"></span>' : '<span style="height:10px"></span>'}</div></button>`;
 }
 /* Friends (Tate, 2026-10-03): ONE list. Requests first; then your chats, newest first (1:1s and group
    chats); then the friends you haven't chatted with, A–Z. No filter chips; nobody twice. */
@@ -3726,7 +3692,7 @@ SCREENS.chat = ({ id }) => {
     return `${sep}<div class="msg ${mine ? 'me' : ''}${card ? ' mcard' : ''}" data-mid="${esc(String(m.id))}">${showWho ? `<span class="who">${esc(nameOf(m.sender).split(' ')[0])}</span>` : ''}${card ? card + (m.body ? `<span class="mcc-note">${esc(m.body)}</span>` : '') : esc(msgText(m))}</div>${msgLikes(id, m)}`;
   }).join('');
   return {
-    top: `<div class="chathdr"><button class="iconbtn" style="width:38px;height:38px" data-a="back" aria-label="Back">${ic('chevL', 20, 2.4)}</button>${head}</div>`, padTop: 64,
+    top: `<div class="chathdr"><button class="iconbtn" style="width:38px;height:38px" data-a="back" aria-label="Back">${ic('chevL', 20, 2.4)}</button>${head}${muteBtn(id)}</div>`, padTop: 64,
     body: `<div class="msgs">${rows ? blockedNote(rows) + (msgs || (chatBlockedBar(t) ? '' : '<div class="muted b" style="text-align:center;font-size:13px;margin-top:20px">Say hi 👋</div>')) : (TC.rowsErr && TC.rowsErr[id]) ? errCard('Couldn’t load these messages.', 'retryChat') : loadingCard('Loading messages…')}</div><div style="height:${chatBlockedBar(t) ? 160 : 100}px"></div>`,
     bot: chatBlockedBar(t) || `<form class="composer" data-submit="send" data-x="${id}"><input id="chatin" placeholder="Message…" autocomplete="off" maxlength="2000" value="${esc(UI.prefill && UI.prefill.id === id ? UI.prefill.text : '')}"><button class="sendbtn pink" aria-label="Send">${ic('arrow', 20, 2.6)}</button></form>`, tabbar: false, fab: false, scrollEnd: true
   };
@@ -3878,6 +3844,7 @@ SHEETS.chatAct = ({ cid }) => {
   return `<div class="row sb"><h3>${esc(threadName(t))}</h3><button class="xbtn" data-a="closeSheet" aria-label="Close">${ic('x', 16, 2.4)}</button></div>
  ${people}<div class="card list mact">${o && TC.friends.includes(o) ? `<button class="li" data-a="openFriend" data-x="${esc(o)}">${pav(o, 28, 10)}<span class="grow b">See ${of}’s page</span>${ic('chevR', 18)}</button>` : ''}
  <button class="li" data-a="pinChat" data-x="${esc(cid)}">${ic('pin', 20, 2.2)}<span class="grow b">${chatPinned(cid) ? 'Unpin chat' : 'Pin chat'}</span></button>
+ ${TC.mutesOn !== false ? `<button class="li" data-a="toggleMute" data-x="${esc(cid)}">${ic(chatMuted(cid) ? 'bell' : 'bellOff', 20, 2.2)}<span class="grow b">${chatMuted(cid) ? 'Unmute chat' : 'Mute chat'}</span></button>` : ''}
  ${TC.chatX.on !== false ? `<button class="li danger" data-a="chatDelAsk" data-x="${esc(cid)}">${ic('trash', 20, 2.2)}<span class="grow b">Delete chat</span></button>` : '<div class="muted b" style="font-size:13.5px;padding:12px 14px">Deleting chats isn’t switched on yet.</div>'}
  ${t.kind === 'group' ? `<button class="li danger" data-a="leaveAsk" data-x="${esc(cid)}">${ic('leave', 20, 2.2)}<span class="grow b">Leave group</span></button>` : ''}
  ${t.kind === 'group' && t.title && t.created_by && t.created_by !== me ? `<button class="li danger" data-a="reportAsk" data-x="group" data-y="${esc(cid)}">${ic('flag', 20, 2.2)}<span class="grow b">Report this group’s name</span></button>` : ''}
@@ -5044,7 +5011,6 @@ const A = {
   siMode: m => { UI.signin.mode = m; UI.signin.err = ''; render(); },
   signOut: () => { UI.sheet = null; TC.signOut(); },
   web: p => { window.open(WEB + (p || '/'), '_blank', 'noopener'); },
-  pushOn: async () => { const s = await TC.push.enable(); toast(s === 'granted' ? 'Seat alerts are on' : s === 'denied' ? 'Notifications are off in iPhone Settings' : 'Couldn’t turn on notifications'); },
   /* A story jumps to that friend's week in the feed (every friend has a card there). */
   togglePin: id => togglePin(id),
   story: id => { if (id && TC.friends.indexOf(id) >= 0) { UI.sheet = { type: 'story', id }; render(true); const b = document.querySelector('#sheet .sbody'); if (b) b.scrollTop = 0; } },
@@ -5134,7 +5100,7 @@ const A = {
     render(true); setBars(false); toastUndo(`Removed ${s.code} from ${o.where}`, undo);
   },
   toastUndo: () => { const f = UI.undo; UI.undo = null; const t = document.getElementById('toast'); if (t) t.classList.remove('on', 'act'); clearTimeout(toastT); if (f) f(); },
-  watch: async id => { if (UI.busy['w' + id]) return; UI.busy['w' + id] = 1; const on = !TC.watches[id]; const ok = await TC.watch(id, on); UI.busy['w' + id] = 0; if (ok) { if (!on) delete TC.autoWatch[id]; toast(on ? 'We’ll alert you when a seat opens' : 'Seat alerts off'); } render(true); },
+  watch: async id => { if (UI.busy['w' + id]) return; UI.busy['w' + id] = 1; const on = !TC.watches[id]; const ok = await TC.watch(id, on); UI.busy['w' + id] = 0; if (ok) { if (!on) delete TC.autoWatch[id]; toast(on ? 'We’ll alert you when a seat opens' : 'Seat alerts off'); } render(true); if (ok && on) TC.pushAsk('seat'); },
   secSheet: (code, id) => { UI.sheet = { type: 'sec', code, id }; render(true); },
   removeSec: id => { TC.setPlan(S.plan, TC.plans[S.plan].filter(x => x !== id)); UI.sheet = null; toast(`Removed ${(SEC[id] || {}).code || 'it'} from Plan ${S.plan}`); render(true); },
   schedTab: t => { if (t !== 'planner') UI.plFor = null; S.schedTab = t; save(); render(); },
@@ -5336,6 +5302,7 @@ const SUBMIT = {
     const ok = await TC.send(id, v); UI.busy.send = 0;
     if (!ok) inp.value = v;
     render(true); scrollEnd();
+    if (ok) TC.pushAsk('chat');
   },
   champ: form => { const inp = form.querySelector('input'); const v = inp.value; inp.value = ''; ask(v); },
   people: form => runPeople(form.querySelector('input').value),
@@ -5649,6 +5616,7 @@ TC.deleteAccount = async function (deleteReviews) {
 /* After asking: sign this phone out and say until when it can be recovered. What only lives on the
    phone and a recovered account needs (concentration, local plans) stays; the rest is dropped. */
 TC.afterDelete = async function () {
+  await TC.pushForget(true);
   try { [KEY, RECENT_KEY, DRAFT_KEY, ONB_KEY, 'professify_rev_times'].forEach(k => localStorage.removeItem(k)); } catch (e) {}
   try { sessionStorage.setItem('tc_deleted', String(TC.purgeAt || '1')); } catch (e) {}
   try { await TC.client().auth.signOut({ scope: 'global' }); } catch (e) {}
@@ -5964,16 +5932,6 @@ function applyTheme(redraw) {
 if (themeMQ) { const fn = () => { if (themePref() === 'system') applyTheme(true); }; themeMQ.addEventListener ? themeMQ.addEventListener('change', fn) : themeMQ.addListener && themeMQ.addListener(fn); }
 const themeRow = () => { const p = themePref();
   return `<div class="thm" role="radiogroup" aria-label="Appearance">${[['system', 'System'], ['light', 'Light'], ['dark', 'Dark']].map(([k, l]) => `<button role="radio" aria-checked="${p === k}" class="${p === k ? 'on' : ''}" data-a="setTheme" data-x="${k}">${l}</button>`).join('')}</div><div class="muted b" style="font-size:12.5px;margin-top:8px">${p === 'system' ? 'Follows your phone’s setting.' : 'Kept on this phone.'}</div>`; };
-/* Settings → Notifications, iPhone app only. iOS asks once; after a "no" only iOS Settings can undo it,
-   so that is what this says instead of offering a button that would do nothing. */
-function pushRow() {
-  const s = UI.pushState || 'prompt';
-  const head = `<div class="b" style="font-size:15px">Seat alerts</div>`;
-  const sub = t => `<div class="muted b" style="font-size:12.5px;line-height:1.4">${t}</div>`;
-  if (s === 'granted') return `<div class="row sb tc-row" style="gap:12px"><div>${head}${sub('On. You’ll hear when a seat opens in a class you watch or put in a plan. Anything overnight waits until 8am.')}</div></div>`;
-  if (s === 'denied') return `<div class="tc-row">${head}${sub('Off. To turn them on, open the iPhone Settings app → TermChamp → Notifications.')}</div>`;
-  return `<div class="row sb tc-row" style="gap:12px"><div>${head}${sub('Get a notification when a seat opens in a class you watch or put in a plan.')}</div><button class="pbtn" data-a="pushOn">Turn on</button></div>`;
-}
 SCREENS.settings = () => {
   const blocks = TC.blocks;
   /* An empty plan has no row to hold the choice, so it isn't offered until the plan has a class —
@@ -5988,7 +5946,7 @@ SCREENS.settings = () => {
  ${sectionCard('Account', `<div class="tc-row"><div class="muted b" style="font-size:13px">Signed in as</div><div class="b" style="font-size:15px;word-break:break-all">${esc(TC.email())}</div></div>
   <form class="tc-form" data-submit="setPw" style="margin-top:6px"><label>New password<input id="setpw" type="password" autocomplete="new-password" placeholder="At least 8 characters"></label>${UI.pwMsg ? `<div class="${UI.pwMsg.ok ? 'tc-ok' : 'tc-err'}">${esc(UI.pwMsg.t)}</div>` : ''}<button class="btn soft" ${UI.busy.pw ? 'disabled' : ''}>${UI.busy.pw ? 'Saving…' : 'Change password'}</button></form>`)}
  ${sectionCard('Appearance', themeRow())}
- ${window.TC_NATIVE && TC.push.available() ? sectionCard('Notifications', pushRow()) : ''}
+ ${sectionCard('Notifications', pushSettings())}
  ${sectionCard('Who sees your plans', `<div class="muted b" style="font-size:13px;margin-bottom:4px">Friends can see a plan unless you turn it off.</div>${['A', 'B', 'C'].map(shareRow).join('')}`)}
  ${sectionCard('Blocked people', blocks === undefined ? loadingCard('Loading…') : TC.blocksErr ? '<div class="muted b">Couldn’t load that list.</div>' : blocks.length ? blocks.map(b => `<div class="row sb tc-row"><span class="b">${esc(b.display_name || b.username || 'Someone')}</span><button class="pbtn" data-a="unblock" data-x="${esc(b.id)}">Unblock</button></div>`).join('') : '<div class="muted b" style="padding:2px 0 10px;line-height:1.45">Nobody. To block someone, tap ⋯ on their page or in your chat with them. They aren’t told.</div>')}
  ${sectionCard('Champ', `<div class="row sb tc-row" style="gap:12px"><div><div class="b" style="font-size:15px">Answers from Anthropic’s AI</div><div class="muted b" style="font-size:12.5px;line-height:1.4">Questions you type to Champ are sent to Anthropic to work out what you’re asking. Off: Champ asks again before sending anything.</div></div><button class="toggle ${champOk() ? 'on' : 'off'}" data-a="toggleChampAi" role="switch" aria-checked="${champOk()}" aria-label="Champ answers from Anthropic’s AI"><i></i></button></div>`)}
@@ -7151,7 +7109,7 @@ Object.assign(A, {
   onbFinish: where => {
     onbRemember(null); S.stack.home = [{ s: 'home' }]; UI.onbPre = null; UI.onbProgram = null;
     if (where === 'planner') { S.tab = 'schedule'; S.schedTab = 'planner'; } else S.tab = 'home';
-    save(); render();
+    save(); render(); setTimeout(() => TC.pushAsk('onboarding'), 600);
   }
 });
 /* The report's sheet is the app's own; when it's saved during onboarding, carry on to "confirm". */
@@ -7272,6 +7230,194 @@ document.addEventListener('paste', ev => {
 /* The resend countdown ticks without re-rendering the code boxes. */
 setInterval(() => { const r = document.getElementById('resend'); if (r && (UI.signin.mode === 'suVerify' || UI.signin.mode === 'verify')) r.innerHTML = onbResendHtml(); }, 1000);
 
+
+
+/* ================================================================================================
+   PUSH NOTIFICATIONS (2026-10-06)
+   ------------------------------------------------------------------------------------------------
+   iPhone app only (Capacitor + @capacitor/push-notifications). The server decides what to send
+   (sql/termchamp-push.sql → supabase/functions/send-push). This side:
+     · asks permission at a moment it makes sense (watching a seat, first message, end of
+       onboarding, or Settings), never at launch, and backs off 7 days after "Not now";
+     · saves this phone's token (register_push_token) and forgets it on sign-out / delete;
+     · keeps the student's choices (push_prefs) and the per-chat mute ringer (conversation_mutes);
+     · opens the right screen when a notification is tapped, and shows a toast in the foreground.
+   On the web none of the native parts run; mutes and choices still save and carry over.
+   ================================================================================================ */
+I.bellOff = '<path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/><path d="M3.5 3.5l17 17"/>';
+const PUSH_KINDS = [
+  ['Classes', [
+    ['seat_open', 'A seat opens', 'In a section you’re watching or have in a plan'],
+    ['plan_full', 'A plan section fills up', 'So you can pick a backup'],
+    ['registration', 'Registration reminders', 'The evening before and the morning it opens']]],
+  ['Friends', [
+    ['friend_request', 'Friend requests', ''],
+    ['friend_in_class', 'A friend joins your class', 'When a friend adds a class or section you’re in']]],
+  ['Messages', [
+    ['dm', 'Direct messages', ''],
+    ['group', 'Group messages', ''],
+    ['group_added', 'Added to a group', ''],
+    ['like', 'Message likes', 'Someone likes a message you sent']]]
+];
+const PUSH = {
+  prefs: null, prefsErr: false, state: 'unknown', pending: null, pendingToken: null,
+  native() { try { return !!(window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform()); } catch (e) { return false; } },
+  plug() { return this.native() && window.Capacitor.Plugins ? window.Capacitor.Plugins.PushNotifications || null : null; }
+};
+TC.push = PUSH;
+if (!TC.mutes) TC.mutes = new Set();
+const PUSH_TOKEN_KEY = 'tc_push_token', PUSH_SNOOZE_KEY = 'tc_push_snooze';
+function pushPrefOn(k) { return !(PUSH.prefs && PUSH.prefs[k] === false); }
+function chatMuted(cid) { return !!(TC.mutes && TC.mutes.has(String(cid))); }
+function muteBtn(cid) {
+  if (TC.mutesOn === false) return '';
+  const m = chatMuted(cid), fx = UI.muteFx === String(cid); if (fx) UI.muteFx = null;
+  return `<button class="mutebtn ${m ? 'on' : ''} ${fx ? 'fx' : ''}" data-a="toggleMute" data-x="${esc(String(cid))}" aria-pressed="${m}" aria-label="Mute this chat">${ic(m ? 'bellOff' : 'bell', 18, 2.2)}<span>${m ? 'Muted' : 'Mute'}</span></button>`;
+}
+async function pushPerm() {
+  const p = PUSH.plug(); if (!p) return 'web';
+  try { const r = await p.checkPermissions(); PUSH.state = r.receive; } catch (e) { PUSH.state = 'unknown'; }
+  return PUSH.state;
+}
+async function pushRegister() { const p = PUSH.plug(); if (!p) return; try { await p.register(); } catch (e) {} }
+async function pushSaveToken(tok) {
+  if (!tok) return;
+  if (!TC.user || TC.phase !== 'ok') { PUSH.pendingToken = tok; return; }
+  let r; try { r = await TC.client().rpc('register_push_token', { p_token: String(tok), p_platform: 'ios' }); } catch (e) { r = { error: e }; }
+  if (r && !r.error) { try { localStorage.setItem(PUSH_TOKEN_KEY, String(tok)); } catch (e) {} PUSH.pendingToken = null; }
+  else PUSH.pendingToken = tok;
+}
+/* sign-out forgets this phone; deleting the account forgets every phone */
+TC.pushForget = async function (all) {
+  let tok = ''; try { tok = localStorage.getItem(PUSH_TOKEN_KEY) || ''; localStorage.removeItem(PUSH_TOKEN_KEY); } catch (e) {}
+  try { if (all) await TC.client().rpc('forget_my_push_tokens'); else if (tok) await TC.client().rpc('unregister_push_token', { p_token: tok }); } catch (e) {}
+};
+async function pushLoadPrefs() {
+  let r; try { r = await TC.client().from('push_prefs').select('prefs').eq('user_id', TC.user.id).maybeSingle(); } catch (e) { r = { error: e }; }
+  if (r.error) { PUSH.prefsErr = true; if (!PUSH.prefs) PUSH.prefs = {}; return; }
+  PUSH.prefsErr = false;
+  PUSH.prefs = r.data && r.data.prefs && typeof r.data.prefs === 'object' ? r.data.prefs : {};
+}
+TC.pushAfterLoad = async function () {
+  pushLoadPrefs().then(() => render(true), () => {});
+  if (PUSH.native()) {
+    if (await pushPerm() === 'granted') pushRegister();   // Apple: register every launch, the token can change
+    if (PUSH.pendingToken) pushSaveToken(PUSH.pendingToken);
+  }
+  if (PUSH.pending) { const d = PUSH.pending; PUSH.pending = null; pushRoute(d); }
+};
+/* The soft ask, before iOS's own dialog — only while iOS hasn't asked yet, and never twice a week. */
+const PUSH_ASK = {
+  seat: ['Get a push when a seat opens?', 'We’ll tell you the moment a seat opens in a section you’re watching, so you can grab it first.'],
+  chat: ['Know when they reply?', 'Get a notification when friends message you. You can mute any chat with its bell.'],
+  onboarding: ['Turn on notifications?', 'Open seats, friend requests and messages. You choose exactly which in Settings.']
+};
+TC.pushAsk = async function (reason) {
+  if (!PUSH.native() || !TC.ready) return;
+  const st = await pushPerm(); if (st !== 'prompt' && st !== 'prompt-with-rationale') return;
+  let until = 0; try { until = +localStorage.getItem(PUSH_SNOOZE_KEY) || 0; } catch (e) {}
+  if (Date.now() < until || UI.sheet || UI.champ) return;
+  UI.sheet = { type: 'pushAsk', reason }; render(true);
+};
+SHEETS.pushAsk = ({ reason }) => {
+  const c = PUSH_ASK[reason] || PUSH_ASK.onboarding;
+  return `<div style="text-align:center"><div class="okcircle" style="background:var(--blue-soft);color:var(--blue-t,var(--blue))">${ic('bell', 30, 2.2)}</div><h3>${c[0]}</h3><p class="muted b" style="font-size:14.5px;line-height:1.45;margin:6px 4px 16px">${c[1]}</p></div>
+ <div style="display:grid;gap:8px"><button class="btn" data-a="pushAllow">Turn on notifications</button><button class="btn ghost" data-a="pushLater">Not now</button></div>`;
+};
+function pushSettings() {
+  const nat = PUSH.native(), st = PUSH.state;
+  let top = '';
+  if (!nat) top = '<div class="muted b" style="font-size:13px;line-height:1.45;margin-bottom:4px">Notifications come with the TermChamp iPhone app. Your choices here carry over to it.</div>';
+  else if (st === 'denied') top = '<div class="tc-err" style="margin-bottom:6px">Notifications are off for TermChamp. Turn them on in your iPhone’s Settings › TermChamp › Notifications.</div>';
+  else if (st === 'prompt' || st === 'prompt-with-rationale') top = '<button class="btn soft" style="margin:2px 0 8px" data-a="pushAllow">Turn on notifications</button>';
+  const rows = PUSH_KINDS.map(([g, list]) => `<div class="tc-hterm">${g}</div>` + list.map(([k, l, d]) => { const on = pushPrefOn(k);
+    return `<div class="row sb tc-row" style="gap:12px"><div><div class="b" style="font-size:15px">${l}</div>${d ? `<div class="muted b" style="font-size:12.5px;line-height:1.4">${d}</div>` : ''}</div><button class="toggle ${on ? 'on' : 'off'}" data-a="pushPref" data-x="${k}" role="switch" aria-checked="${on}" aria-label="${l}"><i></i></button></div>`; }).join('')).join('');
+  return top + (PUSH.prefs === null ? loadingCard('Loading…') : rows)
+    + (PUSH.prefsErr ? '<div class="muted b" style="font-size:12.5px;margin-top:6px">Couldn’t load your choices, so these may be out of date.</div>' : '')
+    + '<div class="muted b" style="font-size:12.5px;line-height:1.45;margin-top:8px">Mute one chat with the bell at the top of it.</div>';
+}
+/* Tapped notification → the screen it's about. Before the app has loaded, it waits. */
+async function pushRoute(d) {
+  if (typeof d === 'string') { try { d = JSON.parse(d); } catch (e) { return; } }
+  if (!d || typeof d !== 'object') return;
+  if (!TC.ready) { PUSH.pending = d; return; }
+  UI.sheet = null; UI.champ = false;
+  const id = d.id == null ? '' : String(d.id);
+  if (d.t === 'chat' && id) {
+    if (!TC.threads.some(t => String(t.id) === id)) { try { await loadThreads(); } catch (e) {} }
+    if (TC.threads.some(t => String(t.id) === id)) A.openChatTab(id); else setTab('friends');
+  } else if (d.t === 'class' && d.code) {
+    S.tab = 'explore'; S.stack.explore = [{ s: 'explore' }]; A.openClass(String(d.code));
+  } else if (d.t === 'friend' && id) {
+    if (!PEOPLE[id]) { try { const r = await TC.client().from('profiles').select('id,display_name,username,avatar_url').eq('id', id).maybeSingle(); if (r.data) PEOPLE[id] = personFrom(r.data); } catch (e) {} }
+    S.tab = 'friends'; S.stack.friends = [{ s: 'friends' }]; A.openFriend(id);
+  } else if (d.t === 'requests') {
+    S.tab = 'home'; setTab('friends');
+  } else if (d.t === 'plans') {
+    S.schedTab = 'plans'; save(); S.tab = 'home'; setTab('schedule');
+  }
+}
+function pushForeground(n) {
+  let d = n && n.data && n.data.tc; if (typeof d === 'string') { try { d = JSON.parse(d); } catch (e) { d = null; } }
+  const e = cur();
+  if (d && d.t === 'chat' && e && e.s === 'chat' && e.p && String(e.p.id) === String(d.id)) return;   // already reading it
+  const text = [n && n.title, n && n.body].filter(Boolean).join(': '); if (!text) return;
+  const t = document.getElementById('toast'); if (!t) return;
+  t.innerHTML = `<span>${esc(text)}</span>${d ? '<button class="tundo" data-a="pushView">View</button>' : ''}`;
+  t.classList.add('on', 'act'); UI.undo = null; UI.pushView = d ? () => pushRoute(d) : null;
+  clearTimeout(toastT); toastT = setTimeout(() => { t.classList.remove('on', 'act'); UI.pushView = null; }, 5000);
+}
+(function pushInit() {
+  const p = PUSH.plug(); if (!p) return;
+  try {
+    p.addListener('registration', t => pushSaveToken(t && t.value));
+    p.addListener('registrationError', e => { try { console.warn('[push] registration failed', e); } catch (x) {} });
+    p.addListener('pushNotificationReceived', pushForeground);
+    p.addListener('pushNotificationActionPerformed', a => pushRoute(a && a.notification && a.notification.data && a.notification.data.tc));
+  } catch (e) {}
+  /* back from iPhone Settings: pick up a permission they just turned on */
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState !== 'visible' || TC.phase !== 'ok') return;
+    const was = PUSH.state; pushPerm().then(st => { if (st === 'granted') pushRegister(); if (st !== was) render(true); }); });
+})();
+function refocusBtn(a, x) { const b = [...document.querySelectorAll(`[data-a="${a}"]`)].find(el => el.dataset.x === x && el.offsetParent); if (b) b.focus(); }
+Object.assign(A, {
+  pushAllow: async () => {
+    if (UI.sheet && UI.sheet.type === 'pushAsk') UI.sheet = null;
+    render(true);
+    const p = PUSH.plug(); if (!p) return;
+    try { const r = await p.requestPermissions(); PUSH.state = r.receive; if (r.receive === 'granted') { await pushRegister(); toast('Notifications on. Choose which in Settings.'); } } catch (e) {}
+    render(true);
+  },
+  pushLater: () => { try { localStorage.setItem(PUSH_SNOOZE_KEY, String(Date.now() + 7 * 864e5)); } catch (e) {} A.closeSheet(); },
+  pushView: () => { const f = UI.pushView; UI.pushView = null; const t = document.getElementById('toast'); if (t) t.classList.remove('on', 'act'); clearTimeout(toastT); if (f) f(); },
+  pushPref: async k => {
+    if (UI.busy.pp || !TC.user) return;
+    const prev = Object.assign({}, PUSH.prefs || {}), next = Object.assign({}, prev);
+    if (pushPrefOn(k)) next[k] = false; else delete next[k];
+    PUSH.prefs = next; render(true); refocusBtn('pushPref', k); UI.busy.pp = 1;
+    let r; try { r = await TC.client().from('push_prefs').upsert({ user_id: TC.user.id, prefs: next, updated_at: new Date().toISOString() }); } catch (e) { r = { error: e }; }
+    UI.busy.pp = 0;
+    if (r.error) { PUSH.prefs = prev; toast(missingTable(r.error) ? 'Notification settings aren’t switched on yet' : 'Couldn’t save that — try again'); render(true); refocusBtn('pushPref', k); }
+  },
+  toggleMute: async cid => {
+    cid = String(cid); if (!TC.user || UI.busy['mu' + cid]) return;
+    const was = chatMuted(cid);
+    if (was) TC.mutes.delete(cid); else TC.mutes.add(cid);
+    UI.muteFx = cid; render(true); refocusBtn('toggleMute', cid); UI.busy['mu' + cid] = 1;
+    const sb = TC.client(); let r;
+    try { r = was ? await sb.from('conversation_mutes').delete().eq('user_id', TC.user.id).eq('conversation_id', cid)
+      : await sb.from('conversation_mutes').insert({ user_id: TC.user.id, conversation_id: cid }); } catch (e) { r = { error: e }; }
+    UI.busy['mu' + cid] = 0;
+    if (r.error && !(!was && /23505|duplicate/.test(String(r.error.code || '') + String(r.error.message || '')))) {
+      if (was) TC.mutes.add(cid); else TC.mutes.delete(cid);
+      if (missingTable(r.error)) TC.mutesOn = false;
+      toast(TC.mutesOn === false ? 'Muting isn’t switched on yet' : 'Couldn’t change that — try again'); render(true); return;
+    }
+    toast(was ? 'Unmuted. You’ll get notifications from this chat.' : 'Muted. No notifications from this chat.');
+  }
+});
+const pushOpenSettings = A.openSettings;
+A.openSettings = () => { pushOpenSettings(); if (PUSH.native()) pushPerm().then(() => render(true)); };
 
 </script>
 </body>

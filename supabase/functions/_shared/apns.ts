@@ -1,11 +1,11 @@
 // ================================================================================================
-// APNs — the iPhone app's half of push-send (6 October 2026)
+// APNs — used by send-push, the iPhone app's notifications (6 October 2026)
 // ================================================================================================
 // The App Store app gets an APNs device token instead of a Web Push subscription
-// (sql/professify-push-ios.sql). This sends to it with Apple's token-based auth: one .p8 key from
+// (push_tokens, sql/termchamp-push.sql). This sends to it with Apple's token-based auth: one .p8 key from
 // the Apple Developer account signs a short-lived JWT, and every request carries it.
 //
-// SECRETS (Supabase → Edge Functions → Secrets). All four, or iOS sends are skipped and said so:
+// SECRETS (Supabase → Edge Functions → Secrets). All four, or send-push refuses to run and says so:
 //   APNS_KEY_ID       the 10-character Key ID shown next to the key in developer.apple.com
 //   APNS_TEAM_ID      the 10-character Team ID (Membership details)
 //   APNS_PRIVATE_KEY  the whole contents of AuthKey_XXXXXXXXXX.p8, BEGIN/END lines included
@@ -14,11 +14,14 @@
 // SANDBOX VS PRODUCTION. A build run straight from Xcode gets a sandbox token; TestFlight and the
 // App Store get production ones. The app cannot tell which it is, so it does not try: the first
 // send goes to production, and a BadDeviceToken there is retried once on sandbox. Whichever works
-// is written to push_devices.apns_env and used from then on.
+// is written to push_tokens.env and used from then on.
 // ================================================================================================
 
 export type ApnsConfig = { keyId: string; teamId: string; privateKey: string; bundleId: string };
-export type ApnsMessage = { title: string; body: string; url: string; tag: string; kind: string };
+// `extra` keys go at the top level of the payload, next to `aps` — the app reads `tc` from there
+// (notification.data.tc) to know which screen a tap opens. `thread` groups banners in Notification
+// Center; `collapseId`, when set, makes a newer banner replace an older one with the same id.
+export type ApnsMessage = { title: string; body: string; kind: string; thread?: string; collapseId?: string; extra?: Record<string, unknown> };
 export type ApnsResult =
   | { ok: true; env: 'production' | 'sandbox' }
   | { ok: false; dead: boolean; fatal: boolean; error: string };
@@ -65,8 +68,8 @@ export async function apnsJwt(cfg: ApnsConfig, now = Date.now()): Promise<string
 // ---- one send ------------------------------------------------------------------------------------
 export function apnsPayload(m: ApnsMessage) {
   return {
-    aps: { alert: { title: m.title, body: m.body }, sound: 'default', 'thread-id': m.kind },
-    url: m.url || '/',   // the app reads this on tap: /?tab=sched → Schedule, /?tab=friends → Friends
+    ...(m.extra ?? {}),
+    aps: { alert: { title: m.title, body: m.body }, sound: 'default', 'thread-id': m.thread || m.kind },
   };
 }
 
@@ -78,8 +81,7 @@ async function sendOnce(cfg: ApnsConfig, env: 'production' | 'sandbox', token: s
       'apns-topic': cfg.bundleId,
       'apns-push-type': 'alert',
       'apns-priority': '10',
-      // same tag replaces the earlier banner instead of stacking a second one (64-byte limit)
-      'apns-collapse-id': (m.tag || m.kind).slice(0, 64),
+      ...(m.collapseId ? { 'apns-collapse-id': m.collapseId.slice(0, 64) } : {}),
       'content-type': 'application/json',
     },
     body: JSON.stringify(apnsPayload(m)),

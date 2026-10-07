@@ -1,4 +1,4 @@
-// deno test supabase/functions/push-send/apns_test.ts
+// deno test supabase/functions/_shared/apns_test.ts
 // No network: APNs is a fake fetch, the key is generated here. Proves the JWT verifies against the
 // key's public half, and that each APNs answer leads to the right action.
 import { apnsJwt, apnsSend, apnsPayload, type ApnsConfig } from './apns.ts';
@@ -14,7 +14,7 @@ async function makeCfg(): Promise<{ cfg: ApnsConfig; pub: CryptoKey }> {
   return { cfg: { keyId: 'ABC123DEFG', teamId: 'TEAM123456', privateKey: pem, bundleId: 'com.termchamp.app' }, pub: kp.publicKey };
 }
 const unb64 = (s: string) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
-const msg = { title: 'A seat opened', body: 'BUS 3431-01 has 1 seat', url: '/?tab=sched', tag: 'seat-4411', kind: 'seat_open' };
+const msg = { title: 'Seat open: BUS 3431 Sec 01', body: 'A seat just opened.', kind: 'seat_open', thread: 'seats', extra: { tc: { t: 'class', code: 'BUS 3431' } } };
 const TOKEN = 'ab'.repeat(32);
 
 function fakeFetch(answers: Record<string, { status: number; reason?: string }>) {
@@ -48,6 +48,9 @@ Deno.test('a working production token: one request, right headers and body', asy
   eq(calls[0].headers['apns-topic'], 'com.termchamp.app', 'topic');
   eq(calls[0].headers['apns-push-type'], 'alert', 'push type');
   eq(calls[0].body, apnsPayload(msg), 'payload');
+  eq((calls[0].body as { tc: unknown }).tc, { t: 'class', code: 'BUS 3431' }, 'tap target rides at the top level as tc');
+  eq((calls[0].body as { aps: { 'thread-id': string } }).aps['thread-id'], 'seats', 'thread id');
+  assert(!('apns-collapse-id' in calls[0].headers), 'no collapse id unless asked');
 });
 
 Deno.test('an Xcode build token: production says BadDeviceToken, sandbox works, env learned', async () => {

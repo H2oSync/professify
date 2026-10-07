@@ -1,13 +1,14 @@
 # Submitting TermChamp to the App Store
 
-Everything in the code is done on the `app-store-readiness` branch. This is the list of things only
+Everything in the code is done and on `main`. This is the list of things only
 a person with the accounts can do, in order. Roughly 1–2 hours total, plus Apple's review (usually 1–3 days).
 
 ## 1. Before you build
 
-- [ ] **Merge the PR**, so termchamp.com/privacy, /terms, /guidelines and /support go live. App Store Connect won't accept the listing without the privacy and support URLs. Check both open in a private browser window.
+- [ ] **Public pages are live**: termchamp.com/privacy, /terms, /guidelines and /support open in a private browser window. App Store Connect won't accept the listing without the privacy and support URLs.
 - [ ] **Apple Developer Program** is active ($99/yr). Add Tate and Sean as team members if they'll upload builds.
 - [ ] **PolyRatings permission.** Send the email below, so you have a written OK if Apple asks about rights to the ratings.
+- [ ] **Notifications switched on** (before you submit, so the reviewer can see them work): Apple push key + secrets, deploy `send-push`, run `sql/termchamp-push.sql` and its `push_config` insert. Click-by-click: `supabase/functions/send-push/README.md`. **Do not run the copy of termchamp-push.sql from Downloads** — that version stops with an error on the live database; run the one in the repo.
 - [ ] **Reports get handled.** Apple requires acting on reported content within 24 hours, and `/support` promises it. Agree who checks `reports` (admin dashboard) daily, and that `support@termchamp.com` reaches a real inbox.
 
 ## 2. Demo account for Apple
@@ -27,7 +28,7 @@ Everyone in it is made up; the classes are real Fall 2026 sections. It writes no
 
 | Field | What to enter |
 |---|---|
-| Subtitle | Cal Poly classes & professors |
+| Subtitle | Classes, professors & open seats |
 | Category | Education (secondary: Social Networking) |
 | Privacy Policy URL | https://termchamp.com/privacy |
 | Support URL | https://termchamp.com/support |
@@ -49,7 +50,11 @@ Everyone in it is made up; the classes are real Fall 2026 sections. It writes no
 >
 > TermChamp is an independent app built by Cal Poly students. It is not affiliated with or endorsed by Cal Poly.
 
-**Keywords:** `cal poly,class schedule,professor ratings,polyratings,registration,college,seats,slo`
+**Keywords:** `class schedule,professor ratings,course planner,registration,college,seats,slo,student,friends`
+
+Keep other brands out of the subtitle and keywords (Apple guideline 2.3.7): no "Cal Poly" or "PolyRatings" there. Naming the school in the description is fine, because it says what the app is for and carries the not-affiliated line.
+
+If the name **TermChamp** is already taken in App Store Connect, use **TermChamp: Class Planner**.
 
 **Screenshots:** 6.9" iPhone (1320 × 2868) — at least 3, from the **demo account** only (Home, Explore with a professor, Schedule, Friends). No real students' names or photos. Easiest: the iPhone 17 Pro Max simulator in Xcode, ⌘S to save a screenshot.
 
@@ -64,9 +69,9 @@ App Store Connect → App Privacy → Get Started. Answer **Yes, we collect data
 | User Content → Photos | Yes (optional profile photo) | Yes | No | App Functionality |
 | User Content → Other User Content (reviews, messages, class schedule) | Yes | Yes | No | App Functionality |
 | Identifiers → User ID | Yes | Yes | No | App Functionality |
-| Usage Data → Product Interaction (anonymous professor-page counts) | Yes | **No** | No | Analytics |
+| Search History (questions typed to Champ, kept about 30 days) | Yes | **No** | No | App Functionality |
 
-No tracking, no ads, no location, no contacts, no health, no payments. Google Analytics only runs on the website, not in the app. Champ questions sent to Anthropic are covered under Other User Content (App Functionality), and the app asks before sending any.
+No tracking, no ads, no analytics, no location, no contacts, no health, no payments. Google Analytics and the professor-page counting only run on the website; the iPhone app loads neither. Champ questions sent to Anthropic are covered under Other User Content (App Functionality), and the app asks before sending any.
 
 Double-check this against `/privacy` before submitting — the label and the policy must agree.
 
@@ -84,9 +89,9 @@ App Store Connect → the version → **App Review Information**. Sign-in requir
 >
 > WHAT IT DOES: professor ratings (from PolyRatings' public API, used with permission, plus reviews by verified Cal Poly students), live seat counts from Cal Poly's public class search, schedule planning against degree requirements, sharing schedules with friends, and messaging between friends.
 >
-> NATIVE FEATURES: push notifications when a seat opens in a class the student is watching (turn on in Settings → Notifications, or by watching any section of a class). The app is bundled on the device rather than loaded from a website.
+> NATIVE FEATURES: push notifications for open seats in watched or planned sections, registration reminders, friend requests and messages (Settings → Notifications, with a switch per kind and a mute bell on each chat). The app is bundled on the device rather than loaded from a website.
 >
-> SAFETY (Guideline 1.2): reviews, names and group names are filtered for objectionable words before posting. Users must agree to the Terms and Community Guidelines at sign-up. Any review can be reported ("Report this review"); any user can be reported or blocked from ⋯ on their profile or in a chat. Reports are reviewed within 24 hours, and offending content and accounts are removed. Contact: support@termchamp.com.
+> SAFETY (Guideline 1.2): reviews and profile names are filtered for objectionable words before posting. Messaging is only possible between students who have both accepted a friend request. Users must agree to the Terms and Community Guidelines at sign-up. Any review can be reported ("Report this review"); any user can be reported or blocked from ⋯ on their profile or in a chat. Reports are reviewed within 24 hours, and offending content and accounts are removed. Contact: support@termchamp.com.
 >
 > ACCOUNT DELETION: Profile → Settings → Delete account.
 >
@@ -95,6 +100,16 @@ App Store Connect → the version → **App Review Information**. Sign-in requir
 Then **Submit for Review**.
 
 ## 7. If it's rejected
+
+Nobody can promise approval — it's a person at Apple making a judgment call. These are the three objections most likely for an app like this, and the answer to each:
+
+| If Apple says | Answer / fix |
+|---|---|
+| **4.2 — "repackaged website"** | Reply that the app is bundled on the device, has native push alerts, and is built around accounts, friends and messaging, not web browsing. If they insist, the next native feature is a home-screen widget showing today's classes. |
+| **5.1.1(v) — "requires sign-in for features that don't need an account"** (e.g. browsing ratings) | Reply that the core of the app is your own schedule, friends and messages, which need an account. If they insist, add a "Browse without an account" button that opens Explore read-only. |
+| **1.2 — "no filter on messages"** | Messages are only between accepted friends, who can block and report each other. If they insist, extend the existing word filter (`sql/professify-word-filter.sql`) to `messages.body` — it's a one-trigger change. |
+| **"App is for a single organization"** | Reply that it's open to any of Cal Poly's ~22,000 students, built and run by students, not a university tool. |
+
 
 Apple says which guideline in **Resolution Center**. Reply there, or fix and resubmit. Paste the message to Claude with the branch name and it can make the change.
 
