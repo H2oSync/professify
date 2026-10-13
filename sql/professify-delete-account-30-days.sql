@@ -23,7 +23,7 @@
 --   · delete_my_account_v2(p_delete_reviews), now for the purge job only (not callable by students).
 --
 -- People functions are SECURITY DEFINER (they bypass row security), so the thirteen that hand out
--- people are wrapped: the original is renamed <name>__incl_pending, students lose direct access
+-- people (fifteen with RUN 17's friend_registration_days and RUN 18's friend_busy_blocks, added 2026-10-11) are wrapped: the original is renamed <name>__incl_pending, students lose direct access
 -- to it, and <name> becomes a filter over it. If you ever re-create one of these functions from an
 -- older file, edit <name>__incl_pending instead — re-running THIS file then re-checks the wrap and
 -- stops if the two have drifted.
@@ -204,7 +204,7 @@ declare
   ga boolean; gu boolean; nm text;
   names text[] := array['search_people','find_people','find_profile_by_handle','suggest_friends','suggest_friends_unscoped',
                         'suggest_classmates','suggest_classmates_unscoped','suggest_classmates_v2','friends_of','get_inviter','friend_emails',
-                        'friends_reviewed','professor_suggested_by'];
+                        'friends_reviewed','professor_suggested_by','friend_registration_days','friend_busy_blocks'];
 begin
   foreach nm in array names loop
     cur := null; b := null;
@@ -234,6 +234,8 @@ begin
     filt := case nm
       when 'get_inviter' then 'where not public.is_pending_deletion(ref)'
       when 'friends_of'  then 'where not public.is_pending_deletion(x.id) and not public.is_pending_deletion(p_user)'
+      when 'friend_registration_days' then 'where not public.is_pending_deletion(x.user_id)'   -- RUN 17 (2026-10-11)
+      when 'friend_busy_blocks' then 'where not public.is_pending_deletion(x.user_id)'         -- RUN 18 (2026-10-11)
       else 'where not public.is_pending_deletion(x.id)' end;
     execute format('create or replace function public.%I(%s) returns %s language sql %s security definer set search_path = public as %L',
                    nm, args, res, vol,
@@ -275,7 +277,7 @@ begin
   end if;
   foreach nm in array array['search_people','find_people','find_profile_by_handle','suggest_friends','suggest_friends_unscoped',
                             'suggest_classmates','suggest_classmates_unscoped','suggest_classmates_v2','friends_of','get_inviter','friend_emails',
-                        'friends_reviewed','professor_suggested_by'] loop
+                        'friends_reviewed','professor_suggested_by','friend_registration_days','friend_busy_blocks'] loop
     if to_regproc('public.' || nm || '__incl_pending') is not null then
       if (select prosrc from pg_proc p join pg_namespace s on s.oid = p.pronamespace where s.nspname = 'public' and p.proname = nm) not like '%is_pending_deletion%' then
         raise exception '% is not filtered', nm;

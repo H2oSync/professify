@@ -1,0 +1,64 @@
+{
+  "_about": "Tate's curated list of fun classes (2026-10-08) for the Planner's 'Something fun' row, shown only when a student's report has no open requirements. The app shows ONLY the ones with real sections this term, with their real seats and real PolyRatings; it never invents a section. Every code, title and unit count below was checked against the 2026-28 catalog (catalog.calpoly.edu/courses/<subj>/) on 2026-10-08. 'needs' quotes the catalog's own requisite; the app shows it and never calls such a class open to everyone.",
+  "groups": [
+    {"name": "Activity classes", "classes": [
+      {"code": "KINE 1109", "title": "Bowling", "units": 1},
+      {"code": "KINE 1112", "title": "Intermediate Bowling", "units": 1},
+      {"code": "KINE 1121", "title": "Golf", "units": 1},
+      {"code": "KINE 1152", "title": "Beach Volleyball", "units": 1},
+      {"code": "KINE 1134", "title": "Pickleball", "units": 1},
+      {"code": "KINE 1140", "title": "Ultimate Disc", "units": 1},
+      {"code": "KINE 1141", "title": "Flag Football", "units": 1},
+      {"code": "KINE 1128", "title": "Yoga", "units": 1},
+      {"code": "KINE 1130", "title": "Pilates", "units": 1},
+      {"code": "KINE 1148", "title": "Tennis", "units": 1},
+      {"code": "KINE 1132", "title": "Racquetball", "units": 1},
+      {"code": "KINE 1110", "title": "Cycling", "units": 1},
+      {"code": "KINE 1144", "title": "Beginning Swimming", "units": 1},
+      {"code": "KINE 1181", "title": "Responding to Emergencies: Comprehensive First Aid, CPR, AED", "units": 2}
+    ]},
+    {"name": "Dance", "classes": [
+      {"code": "DANC 1134", "title": "Beginning Ballroom Dance", "units": 2, "blurb": "includes swing"},
+      {"code": "DANC 1133", "title": "Beginning Jazz Dance", "units": 2},
+      {"code": "DANC 1135", "title": "International Folk Dance", "units": 2},
+      {"code": "DANC 1131", "title": "Beginning Ballet", "units": 2}
+    ]},
+    {"name": "Music", "classes": [
+      {"code": "MU 1155", "title": "Beginning Guitar", "units": 1},
+      {"code": "MU 1151", "title": "Beginning Class Piano", "units": 2},
+      {"code": "MU 1154", "title": "Beginning Voice", "units": 1},
+      {"code": "MU 1175", "title": "New / Electronic Music Ensemble", "units": 1},
+      {"code": "MU 1120", "title": "Music Appreciation", "units": 3},
+      {"code": "MU 2221", "title": "Jazz Styles", "units": 3}
+    ]},
+    {"name": "Farm and animals", "classes": [
+      {"code": "PLSC 1175", "title": "Beekeeping", "units": 3, "blurb": "one term had 98 students on the waitlist (Tate)"},
+      {"code": "PLSC 2225", "title": "Floral Design", "units": 3},
+      {"code": "ASCI 1121", "title": "Introductory Equitation", "units": 2, "needs": "Consent of instructor."},
+      {"code": "ASCI 1120", "title": "Equine Handling and Training", "units": 2, "needs": "Consent of instructor."},
+      {"code": "ASCI 2013", "title": "Sausage Production Enterprise", "units": 2},
+      {"code": "ASCI 2210", "title": "Meat Science", "units": 2},
+      {"code": "ASCI 2016", "title": "Veterinary Clinic Operations Enterprise", "units": 1},
+      {"code": "ASCI 2005", "title": "Dairy Fit and Show Enterprise", "units": 1},
+      {"code": "DSCI 3388", "title": "Dairy Farmstead Operations: Cow to Cheddar", "units": 3, "needs": "Junior standing; completion of GE Area 1 with grades of C- or better; completion of GE Area 2 with a grade of C- or better; and completion of GE Area 5B with a grade of C- or better."}
+    ]},
+    {"name": "Food and wine", "classes": [
+      {"code": "FSN 1121", "title": "Fundamentals of Food", "units": 3, "blurb": "cooking lab"},
+      {"code": "FSN 1111", "title": "Elements of Food Processing", "units": 3, "blurb": "not open to Food Science majors"},
+      {"code": "FSN 3316", "title": "Fermented Foods", "units": 3, "needs": "Junior standing; completion of GE Area 1 with grades of C- or better; completion of GE Area 2 with a grade of C- or better; and completion of GE Area 5."},
+      {"code": "WVIT 1102", "title": "Global Wine and Viticulture", "units": 3},
+      {"code": "WVIT 3300", "title": "Survey of Grape Growing and Winemaking", "units": 3, "needs": "Junior standing; completion of GE Area 1 with grades of C- or better; completion of GE Area 5A; completion of GE Area 5B; and completion of GE Area 2 with a grade of C- or better."}
+    ]},
+    {"name": "Art", "classes": [
+      {"code": "ART 1187", "title": "Ceramics I", "units": 3},
+      {"code": "ART 1184", "title": "Beginning Sculpture", "units": 3},
+      {"code": "ART 1160", "title": "Introduction to Digital Photography", "units": 3},
+      {"code": "ART 2263", "title": "Black and White Photography", "units": 3},
+      {"code": "ART 1101", "title": "Fundamentals of Drawing", "units": 3}
+    ]},
+    {"name": "Other", "classes": [
+      {"code": "ASTR 1102", "title": "Introduction to Stars and Galaxies", "units": 3},
+      {"code": "ENGL 3371", "title": "Film Styles and Genres", "units": 3, "needs": "Junior standing or English major; completion of GE Area 1 with grades of C- or better; completion of GE Area 2 with a grade of C- or better; and completion of one lower-division course in GE Area 3."}
+    ]}
+  ]
+}

@@ -20,7 +20,7 @@ Apple's reviewer can't make a Cal Poly account, and your own account shows real 
 2. Supabase → **SQL editor** → paste and run `sql/professify-app-review-demo.sql`. It should end with *Demo ready*. If it errors, nothing was written; the message says what to fix.
 3. In the app, sign in as `reviewer@appreview.calpoly.edu` with the password (not "Email me a code" — that address has no inbox) and click through every tab.
 
-Everyone in it is made up; the classes are real Fall 2026 sections. It writes no reviews. To remove it later, delete the five users.
+Everyone in it is made up; the classes are real Fall 2026 sections. It adds a 1:1 chat, a group chat and Plans A and B, and writes no reviews. To remove it later, delete the five users.
 
 ## 3. App Store Connect listing
 

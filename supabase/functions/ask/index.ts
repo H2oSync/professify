@@ -28,8 +28,8 @@
    ============================================================================================== */
 
 import {
-  MAX_Q, TIMEOUT_MS, CORS, TOOLS, SYSTEM, EXPLAIN_SYSTEM, EXPLAIN_TOOLS, cleanRows, groundedText,
-  splitModel, callVendor, estimateUsd, validate, type Spec,
+  MAX_Q, TIMEOUT_MS, CORS, EXPLAIN_SYSTEM, EXPLAIN_TOOLS, cleanRows, groundedText,
+  splitModel, callVendor, estimateUsd, validate, routeSpec, type Spec,
 } from './shared.ts';
 
 const ALLOWED_VENDORS = ['anthropic'];
@@ -47,8 +47,16 @@ Deno.serve(async (req: Request) => {
   let body: any = {};
   try { body = await req.json(); } catch (_) { return json({ error: 'body' }, 400); }
   const q = String(body?.q ?? '').trim().slice(0, MAX_Q);
-  const term = String(body?.term ?? '').slice(0, 20) || 'the current term';
+  /* The browser sends the PeopleSoft term code ("2268"). A model told "the current term is 2268" has
+     to guess what that means, so name it: 2 + two-digit year + season digit (2 Winter, 4 Spring,
+     6 Summer, 8 Fall) — 2268 is Fall 2026, the app's own TERM_LABEL for it. Anything else passes through. */
+  const termRaw = String(body?.term ?? '').slice(0, 20);
+  const termM = /^2(\d\d)([2468])$/.exec(termRaw);
+  const term = termM ? `${({ '2': 'Winter', '4': 'Spring', '6': 'Summer', '8': 'Fall' } as Record<string, string>)[termM[2]]} 20${termM[1]}`
+                     : (termRaw || 'the current term');
   const who = String(body?.who ?? '').slice(0, 32);
+  /* The phone app says so (2026-10-08) and gets its own menu; anything else gets the website's. */
+  const client = body?.client === 'app' ? 'app' : 'web';
   const mode = body?.mode === 'explain' ? 'explain' : 'route';
   /* Global Privacy Control, sent by the browser as nolog: the question is still answered, but the
      run is logged without its words OR its arguments (which can repeat them — a name, a subject).
@@ -75,7 +83,7 @@ Deno.serve(async (req: Request) => {
       const p = validate('search_sections', body.prev);
       if (p?.tool === 'search_sections' && Object.keys(p.args || {}).length) prev = JSON.stringify(p.args).slice(0, 400);
     }
-    spec = { system: SYSTEM(term), tools: TOOLS, user: prev ? `EARLIER: ${prev}\nQUESTION: ${q}` : q };
+    spec = routeSpec(client, term, q, prev);
   }
 
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
