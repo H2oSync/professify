@@ -35,8 +35,12 @@ name: Update Cal Poly seats
 #   · The group name is constant only for `schedule`. A human's discover_term dispatch used to
 #     join the same group, go pending behind a sweep, and get superseded by the next cron firing —
 #     and that dispatch is the documented fix for a blocked run.
+#
+# `auto` (2026-10-13): Supabase pg_cron starts this workflow every 10 minutes through the API
+# (sql/professify-seats-dispatch.sql), because GitHub fired the */10 cron only every 5-6 hours.
+# Those runs are the same thing as a cron firing, so they join the same one-sweep group.
 concurrency:
-  group: ${{ github.event_name == 'schedule' && 'seats-sweep' || github.run_id }}
+  group: ${{ (github.event_name == 'schedule' || github.event.inputs.auto == 'true') && 'seats-sweep' || github.run_id }}
   cancel-in-progress: false
 
 on:
@@ -64,6 +68,11 @@ on:
         options: ['1', '0']
       ignore_calendar:
         description: 'Bypass the calendar gate. REQUIRES both term_code and term_label — a code with no label cannot be confirmed against anything.'
+        default: 'false'
+        type: choice
+        options: ['false', 'true']
+      auto:
+        description: 'true = started by the Supabase clock (behaves like the cron). Leave false by hand.'
         default: 'false'
         type: choice
         options: ['false', 'true']
@@ -95,6 +104,9 @@ jobs:
           CP_FORCE_TERM:    ${{ github.event.inputs.ignore_calendar == 'true' && github.event.inputs.term_code || '' }}
           CP_FORCE_LABEL:   ${{ github.event.inputs.ignore_calendar == 'true' && github.event.inputs.term_label || '' }}
           CP_FORCE_DETAILS: ${{ github.event.inputs.details || '1' }}
+          # catch-up (2026-10-13): the gate reads how old each term's newest row is
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         # --at the time the RUN was created, not the time this step reached a runner. A run held
         # by the concurrency group above can be released many minutes after its cron fired, and
         # the gate's slot tolerance is five minutes — asking "is NOW a slot?" at release time
