@@ -67,6 +67,17 @@ const M = [
   ['layout: Settings edge bar back', '#view-settings .st-tab.on::before{display:none}', '', 'layoutScreens'],
   ['layout: Rate rows grey', '#rlLists > div:not(.rl-term):not(:first-child){background:#F3EEFF!important;', '#rlLists > div:not(.rl-term):not(:first-child){background:var(--panel-2)!important;', 'layoutScreens'],
   ['layout: hero tiles lighten the blue', '#view-class .cp-st,#view-class .cp-seat-st{background:rgba(15,23,42,.16);', '#view-class .cp-st,#view-class .cp-seat-st{background:rgba(255,255,255,.14);', 'rendered'],
+  /* the website's report import reads transfer students' reports (2026-10-11; edit-tests-transfer-desktop-2026-10-11.py) */
+  ["website: the transfer icon never marks a row", "const mk = icons.map(c => ({ y: c.y, t: c.sig === xsig, c: csig.has(c.sig) }));", "const mk = icons.map(c => ({ y: c.y, t: false, c: csig.has(c.sig) }));", "deskTransferIcons"],
+  ["website: a report's icons never read", "    if(dprLooksLikeOne(pages.map(function(pg){ return pdfItemsToText(pg.items); }).join('\\n\\n')))", "    if(false)", "deskTransferIcons"],
+  ["website: pictures read as bitmaps", "{data:new Uint8Array(buf),isOffscreenCanvasSupported:false}", "{data:new Uint8Array(buf)}", "deskTransferIcons"],
+  ["website: posted credit with no grade is this term's class", "  out.forEach(function(r){ if(r._xfer)r._now=false; });\n  return {ok:true, rows:out,", "  return {ok:true, rows:out,", "deskTransferIcons"],
+  ["website: a grade in a running term isn't posted credit", "  out.forEach(function(r){ if(r._post&&!r._xfer&&!r._cp&&dprTermRunning(r.term,r.year,printed))r._xfer=true; });\n  /* posted credit with no grade (a study-abroad placeholder, \"AP 300\") is not a class being taken */\n  out.forEach(function(r){ if(r._xfer)r._now=false; });\n  return {ok:true, rows:out,", "  out.forEach(function(r){ if(r._xfer)r._now=false; });\n  return {ok:true, rows:out,", "deskTransferNoIcons"],
+  ["website: 300 read as a word of the title", "var DPR_GRADE=/^(?:[A-D][+-]?|F|CR|NC|W|IC|RP|333|[1-7]00)$/;", "var DPR_GRADE=/^(?:[A-D][+-]?|F|CR|NC|W|IC|RP|333)$/;", "deskTransferNoIcons"],
+  ["website: an articulation number is a Cal Poly class", "\n      ||!/^\\d{3,4}[A-Z]{0,2}$/.test(nbr);", ";", "deskTransferNoIcons"],
+  ["website: a transfer row isn't tagged", "      +(r._dpr&&r._xfer?'<span class=\"fr-shared\">transfer</span>':'')\n", "", "deskTransferIcons"],
+  ["website: the transfer count folded into the catalog note", "  if(isDpr&&nXfer)notes.push(", "  if(false)notes.push(", "deskTransferIcons"],
+  ["website: the row's marks left on its end", "    if(xmark||bmark||cmark)ln=ln.split(DPR_XMARK).join('').split(DPR_BMARK).join('').split(DPR_CMARK).join('').trim();\n", "", "deskTransferFirst"],
 ];
 const html = fs.readFileSync(path.join(SRC, 'index.html'), 'utf8');
 const TOKEN_TWICE = a => { const h = html.indexOf('<style id="app-look-tokens">'), he = html.indexOf('</style>', h), e = html.indexOf('<style id="app-look">');

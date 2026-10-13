@@ -1,0 +1,2267 @@
+{
+ "at": "2026-09-26T22:34:46.333Z",
+ "cases": 204,
+ "runs": {
+  "claude-haiku-4-5-20251001 · live": {
+   "pass": 0.755,
+   "strict": 0.73,
+   "right_tool": 0.936,
+   "usd": 0.894,
+   "p50_ms": 893,
+   "p90_ms": 1215,
+   "bycat": {
+    "ge": [
+     7,
+     24
+    ],
+    "ge_letters": [
+     0,
+     10
+    ],
+    "ge_combo": [
+     1,
+     8
+    ],
+    "time": [
+     9,
+     12
+    ],
+    "days": [
+     7,
+     7
+    ],
+    "codes": [
+     8,
+     10
+    ],
+    "prof": [
+     14,
+     14
+    ],
+    "mine": [
+     21,
+     21
+    ],
+    "friends": [
+     14,
+     15
+    ],
+    "actions": [
+     11,
+     11
+    ],
+    "build": [
+     9,
+     10
+    ],
+    "game": [
+     5,
+     5
+    ],
+    "goto": [
+     19,
+     20
+    ],
+    "refuse": [
+     12,
+     15
+    ],
+    "messy": [
+     8,
+     10
+    ],
+    "topic": [
+     5,
+     7
+    ],
+    "followup": [
+     4,
+     5
+    ]
+   },
+   "misses": [
+    {
+     "cat": "ge",
+     "q": "an arts ge",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "3A"
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "ge_area": "5A",
+       "scope": "ge_unmet"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "ge_area": "5A",
+       "scope": "ge_unmet"
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge",
+     "q": "i need a humanities ge",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "3B"
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "open_only": true,
+       "ge_area": "1A",
+       "scope": "ge_unmet"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "scope": "ge_unmet",
+       "ge_area": "1A",
+       "open_only": true
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge",
+     "q": "critical thinking ge options",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "1B"
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "ge_area": "3B"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "ge_area": "3B"
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge",
+     "q": "oral communication ge",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "1C"
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "ge_area": "1B"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "ge_area": "1B"
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge",
+     "q": "social science ge",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "4B"
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "ge_area": "4A",
+       "scope": "ge_unmet"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "ge_area": "4A",
+       "scope": "ge_unmet"
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge",
+     "q": "physical science ge",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "5A"
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "ge_area": "1B",
+       "scope": "ge_unmet"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "ge_area": "1B",
+       "scope": "ge_unmet"
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge",
+     "q": "lab science ge",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "5C"
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "component": "LAB",
+       "ge_area": "5B"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "ge_area": "5B",
+       "component": "LAB"
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge",
+     "q": "ethnic studies class for ge",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "6"
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "subject": "ETHN",
+       "scope": "ge_unmet"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "subject": "ETHN",
+       "scope": "ge_unmet"
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge",
+     "q": "upper div social science ge",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "UD4"
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "ge_area": "UD3"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "ge_area": "UD3"
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge",
+     "q": "upper division science ge",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "U25"
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "ge_area": "UD3"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "ge_area": "UD3"
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge",
+     "q": "a GE in music or theatre",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "3A"
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "subject": "MUS",
+       "scope": "ge_unmet"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "scope": "ge_unmet",
+       "subject": "MUS"
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge",
+     "q": "philosophy or literature ge",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "3B"
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "open_only": true,
+       "ge_area": "5C",
+       "scope": "ge_unmet"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "scope": "ge_unmet",
+       "ge_area": "5C",
+       "open_only": true
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge",
+     "q": "public speaking ge",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "1C"
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "ge_area": "1B",
+       "scope": "ge_unmet"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "ge_area": "1B",
+       "scope": "ge_unmet"
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge",
+     "q": "stats ge",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "2"
+       }
+      }
+     ],
+     "got": {
+      "tool": "my_requirements",
+      "args": {}
+     },
+     "raw": {
+      "name": "my_requirements",
+      "args": {}
+     },
+     "wrong": null
+    },
+    {
+     "cat": "ge",
+     "q": "psych or sociology ge",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "4B"
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "subject": "PSY",
+       "scope": "ge_unmet"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "subject": "PSY",
+       "scope": "ge_unmet"
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge",
+     "q": "chemistry or physics ge",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "5A"
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "subject": "CHEM",
+       "scope": "ge_unmet"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "scope": "ge_unmet",
+       "subject": "CHEM"
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge",
+     "q": "biology ge",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "5B"
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "subject": "BIO",
+       "ge_area": "4B"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "ge_area": "4B",
+       "subject": "BIO"
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge_letters",
+     "q": "c1 ge",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "3A"
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "ge_area": "1C",
+       "scope": "ge_unmet"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "ge_area": "1C",
+       "scope": "ge_unmet"
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge_letters",
+     "q": "area c2 classes",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "3B"
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "ge_area": "2"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "ge_area": "2"
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge_letters",
+     "q": "b1 ge",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "5A"
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "ge_area": "1B",
+       "scope": "ge_unmet"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "ge_area": "1B",
+       "scope": "ge_unmet"
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge_letters",
+     "q": "d2 ge options",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "4B"
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "ge_area": "2"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "ge_area": "2"
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge_letters",
+     "q": "a2 ge",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "1A"
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "ge_area": "2",
+       "scope": "ge_unmet"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "ge_area": "2",
+       "scope": "ge_unmet"
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge_letters",
+     "q": "b4 ge",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "2"
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "open_only": true,
+       "ge_area": "4B",
+       "scope": "ge_unmet"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "ge_area": "4B",
+       "scope": "ge_unmet",
+       "open_only": true
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge_letters",
+     "q": "ge area f",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "6"
+       }
+      }
+     ],
+     "got": {
+      "tool": "cant_answer",
+      "args": {
+       "reason": "ambiguous"
+      }
+     },
+     "raw": {
+      "name": "cant_answer",
+      "args": {
+       "reason": "ambiguous"
+      }
+     },
+     "wrong": null
+    },
+    {
+     "cat": "ge_letters",
+     "q": "upper division c ge",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "UD3"
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "ge_area": "5C",
+       "scope": "ge_unmet"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "ge_area": "5C",
+       "scope": "ge_unmet"
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge_letters",
+     "q": "udb ge",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "U25"
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "ge_area": "UD3",
+       "scope": "ge_unmet"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "ge_area": "UD3",
+       "scope": "ge_unmet"
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge_letters",
+     "q": "area d1",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "4A"
+       }
+      }
+     ],
+     "got": {
+      "tool": "cant_answer",
+      "args": {
+       "reason": "ambiguous"
+      }
+     },
+     "raw": {
+      "name": "cant_answer",
+      "args": {
+       "reason": "ambiguous"
+      }
+     },
+     "wrong": null
+    },
+    {
+     "cat": "ge_combo",
+     "q": "an arts ge on tuesdays and thursdays",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "3A",
+        "days": [
+         "Tu",
+         "Th"
+        ]
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "days": [
+        "Tu",
+        "Th"
+       ],
+       "ge_area": "5A",
+       "scope": "ge_unmet"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "ge_area": "5A",
+       "days": [
+        "Tu",
+        "Th"
+       ],
+       "scope": "ge_unmet"
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge_combo",
+     "q": "humanities ge with open seats",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "3B",
+        "open_only": true
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "open_only": true,
+       "ge_area": "1A"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "ge_area": "1A",
+       "open_only": true
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge_combo",
+     "q": "a social science ge that fits my schedule",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "4B",
+        "fits_my_schedule": true
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "fits_my_schedule": true,
+       "ge_area": "4A"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "ge_area": "4A",
+       "fits_my_schedule": true
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge_combo",
+     "q": "arts ge after 2pm with a good professor",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "3A",
+        "start_after": {
+         "$in": [
+          "14:00"
+         ]
+        }
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "start_after": "14:00",
+       "min_rating": 4,
+       "sort": "rating",
+       "ge_area": "5A"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "ge_area": "5A",
+       "start_after": "14:00",
+       "min_rating": 4,
+       "sort": "rating"
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge_combo",
+     "q": "online humanities ge",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "3B",
+        "instruction_mode": {
+         "$in": [
+          "async",
+          "sync_online"
+         ]
+        }
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "instruction_mode": "sync_online",
+       "ge_area": "3A"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "ge_area": "3A",
+       "instruction_mode": "sync_online"
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge_combo",
+     "q": "any ge i still need that fits my week",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "scope": "ge_unmet",
+        "fits_my_schedule": true
+       }
+      }
+     ],
+     "got": {
+      "tool": "my_free",
+      "args": {
+       "days": [
+        "Mo",
+        "Tu",
+        "We",
+        "Th",
+        "Fr"
+       ]
+      }
+     },
+     "raw": {
+      "name": "my_free",
+      "args": {
+       "days": [
+        "Mo",
+        "Tu",
+        "We",
+        "Th",
+        "Fr"
+       ]
+      }
+     },
+     "wrong": null
+    },
+    {
+     "cat": "ge_combo",
+     "q": "ethnic studies ge not on fridays",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "6",
+        "days": [
+         "Mo",
+         "Tu",
+         "We",
+         "Th"
+        ]
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "days": [
+        "Mo",
+        "Tu",
+        "We",
+        "Th"
+       ],
+       "ge_area": "UD3"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "ge_area": "UD3",
+       "days": [
+        "Mo",
+        "Tu",
+        "We",
+        "Th"
+       ]
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "time",
+     "q": "no 8ams, open bus sections",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "subject": "BUS",
+        "start_after": {
+         "$in": [
+          "09:00"
+         ]
+        },
+        "open_only": true
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "subject": "BUS",
+       "end_before": "08:00",
+       "open_only": true
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "subject": "BUS",
+       "open_only": true,
+       "end_before": "08:00"
+      }
+     },
+     "wrong": [
+      "start_after"
+     ]
+    },
+    {
+     "cat": "time",
+     "q": "evening econ classes",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "subject": "ECON",
+        "start_after": {
+         "$in": [
+          "17:00"
+         ]
+        }
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "subject": "ECON",
+       "start_after": "18:00"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "subject": "ECON",
+       "start_after": "18:00"
+      }
+     },
+     "wrong": [
+      "start_after"
+     ]
+    },
+    {
+     "cat": "time",
+     "q": "late afternoon math classes",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "subject": "MATH",
+        "start_after": {
+         "$in": [
+          "15:00",
+          "16:00",
+          "14:00"
+         ]
+        }
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "subject": "MATH",
+       "start_after": "12:00"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "subject": "MATH",
+       "start_after": "12:00"
+      }
+     },
+     "wrong": [
+      "start_after"
+     ]
+    },
+    {
+     "cat": "codes",
+     "q": "csc 1001l lab sections",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "course": "CSC1001L"
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "component": "LAB"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "course": "CSC1001L",
+       "component": "LAB"
+      }
+     },
+     "wrong": [
+      "course"
+     ]
+    },
+    {
+     "cat": "codes",
+     "q": "open bus 3393a",
+     "want": [
+      {
+       "tool": "open_class",
+       "args": {
+        "course": "BUS3393A"
+       }
+      }
+     ],
+     "got": {
+      "tool": "cant_answer",
+      "args": {
+       "reason": "ambiguous"
+      }
+     },
+     "raw": {
+      "name": "open_class",
+      "args": {
+       "course": "BUS3393A"
+      }
+     },
+     "wrong": null
+    },
+    {
+     "cat": "friends",
+     "q": "who are garretts friends",
+     "want": [
+      {
+       "tool": "friend_profile",
+       "args": {
+        "friend": "Garrett",
+        "tab": "friends"
+       }
+      }
+     ],
+     "got": {
+      "tool": "add_friend",
+      "args": {
+       "person": "garrett"
+      }
+     },
+     "raw": {
+      "name": "add_friend",
+      "args": {
+       "person": "garrett"
+      }
+     },
+     "wrong": null
+    },
+    {
+     "cat": "build",
+     "q": "build around econ 2303, no 8am",
+     "want": [
+      {
+       "tool": "build_term",
+       "args": {
+        "include": [
+         "ECON2303"
+        ],
+        "start_after": {
+         "$in": [
+          "09:00"
+         ]
+        }
+       }
+      }
+     ],
+     "got": {
+      "tool": "build_term",
+      "args": {
+       "include": [
+        "ECON2303"
+       ],
+       "start_after": "08:00"
+      }
+     },
+     "raw": {
+      "name": "build_term",
+      "args": {
+       "include": [
+        "ECON2303"
+       ],
+       "start_after": "08:00"
+      }
+     },
+     "wrong": [
+      "start_after"
+     ]
+    },
+    {
+     "cat": "goto",
+     "q": "degree progress",
+     "want": [
+      {
+       "tool": "go_to",
+       "args": {
+        "where": "ledger"
+       }
+      }
+     ],
+     "got": {
+      "tool": "my_requirements",
+      "args": {}
+     },
+     "raw": {
+      "name": "my_requirements",
+      "args": {}
+     },
+     "wrong": null
+    },
+    {
+     "cat": "refuse",
+     "q": "is bus 4442 worth taking",
+     "want": [
+      {
+       "tool": "cant_answer",
+       "args": {
+        "reason": "needs_judgment"
+       }
+      }
+     ],
+     "got": {
+      "tool": "open_class",
+      "args": {
+       "course": "BUS4442"
+      }
+     },
+     "raw": {
+      "name": "open_class",
+      "args": {
+       "course": "BUS4442"
+      }
+     },
+     "wrong": null
+    },
+    {
+     "cat": "refuse",
+     "q": "asdfghjkl",
+     "want": [
+      {
+       "tool": "cant_answer",
+       "args": {
+        "reason": "ambiguous"
+       }
+      }
+     ],
+     "got": {
+      "tool": "help",
+      "args": {}
+     },
+     "raw": {
+      "name": "help",
+      "args": {}
+     },
+     "wrong": null
+    },
+    {
+     "cat": "refuse",
+     "q": "find me a class",
+     "want": [
+      {
+       "tool": "cant_answer",
+       "args": {
+        "reason": "ambiguous"
+       }
+      },
+      {
+       "tool": "search_sections",
+       "args": {
+        "scope": {
+         "$in": [
+          "required",
+          "ge_unmet"
+         ]
+        }
+       }
+      },
+      {
+       "tool": "go_to",
+       "args": {
+        "where": "explore"
+       }
+      }
+     ],
+     "got": {
+      "tool": "help",
+      "args": {}
+     },
+     "raw": {
+      "name": "help",
+      "args": {}
+     },
+     "wrong": null
+    },
+    {
+     "cat": "messy",
+     "q": "yo any open bus classes tmrw",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "subject": "BUS",
+        "open_only": true
+       }
+      }
+     ],
+     "got": {
+      "tool": "my_day",
+      "args": {
+       "rel": "tomorrow"
+      }
+     },
+     "raw": {
+      "name": "my_day",
+      "args": {
+       "rel": "tomorrow"
+      }
+     },
+     "wrong": null
+    },
+    {
+     "cat": "messy",
+     "q": "BUS 4442!!!! OPEN??",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "course": "BUS4442",
+        "open_only": true
+       }
+      }
+     ],
+     "got": {
+      "tool": "open_class",
+      "args": {
+       "course": "BUS4442"
+      }
+     },
+     "raw": {
+      "name": "open_class",
+      "args": {
+       "course": "BUS4442"
+      }
+     },
+     "wrong": null
+    },
+    {
+     "cat": "topic",
+     "q": "any marketing classes",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "subject": "BUS"
+       }
+      },
+      {
+       "tool": "cant_answer",
+       "args": {}
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "subject": "MKT"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "subject": "MKT"
+      }
+     },
+     "wrong": [
+      "subject"
+     ]
+    },
+    {
+     "cat": "topic",
+     "q": "a class on wine",
+     "want": [
+      {
+       "tool": "cant_answer",
+       "args": {}
+      },
+      {
+       "tool": "search_sections",
+       "args": {
+        "subject": {
+         "$in": [
+          "WVIT",
+          "AG",
+          "FSN"
+         ]
+        }
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "subject": "WINE"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "subject": "WINE"
+      }
+     },
+     "wrong": null
+    },
+    {
+     "cat": "followup",
+     "q": "never mind, show stat instead",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "subject": "STAT"
+       }
+      }
+     ],
+     "got": {
+      "tool": "cant_answer",
+      "args": {
+       "reason": "ambiguous"
+      }
+     },
+     "raw": {
+      "name": "cant_answer",
+      "args": {
+       "reason": "ambiguous"
+      }
+     },
+     "wrong": null
+    }
+   ]
+  },
+  "claude-haiku-4-5-20251001 · fixed": {
+   "pass": 0.897,
+   "strict": 0.877,
+   "right_tool": 0.926,
+   "usd": 0.156,
+   "p50_ms": 860,
+   "p90_ms": 1099,
+   "bycat": {
+    "ge": [
+     23,
+     24
+    ],
+    "ge_letters": [
+     8,
+     10
+    ],
+    "ge_combo": [
+     7,
+     8
+    ],
+    "time": [
+     11,
+     12
+    ],
+    "days": [
+     6,
+     7
+    ],
+    "codes": [
+     10,
+     10
+    ],
+    "prof": [
+     13,
+     14
+    ],
+    "mine": [
+     21,
+     21
+    ],
+    "friends": [
+     14,
+     15
+    ],
+    "actions": [
+     10,
+     11
+    ],
+    "build": [
+     9,
+     10
+    ],
+    "game": [
+     5,
+     5
+    ],
+    "goto": [
+     19,
+     20
+    ],
+    "refuse": [
+     13,
+     15
+    ],
+    "messy": [
+     6,
+     10
+    ],
+    "topic": [
+     4,
+     7
+    ],
+    "followup": [
+     4,
+     5
+    ]
+   },
+   "misses": [
+    {
+     "cat": "ge",
+     "q": "stats ge",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "2"
+       }
+      }
+     ],
+     "got": {
+      "tool": "my_requirements",
+      "args": {}
+     },
+     "raw": {
+      "name": "my_requirements",
+      "args": {}
+     },
+     "wrong": null
+    },
+    {
+     "cat": "ge_letters",
+     "q": "b4 ge",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "2"
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "ge_area": "4B"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "ge_area": "4B"
+      }
+     },
+     "wrong": [
+      "ge_area"
+     ]
+    },
+    {
+     "cat": "ge_letters",
+     "q": "udb ge",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "ge_area": "U25"
+       }
+      }
+     ],
+     "got": {
+      "tool": "cant_answer",
+      "args": {
+       "reason": "ambiguous"
+      }
+     },
+     "raw": {
+      "name": "go_to",
+      "args": {
+       "where": "ge_browser"
+      }
+     },
+     "wrong": null
+    },
+    {
+     "cat": "ge_combo",
+     "q": "any ge i still need that fits my week",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "scope": "ge_unmet",
+        "fits_my_schedule": true
+       }
+      }
+     ],
+     "got": {
+      "tool": "my_free",
+      "args": {
+       "days": [
+        "Mo",
+        "Tu",
+        "We",
+        "Th",
+        "Fr"
+       ]
+      }
+     },
+     "raw": {
+      "name": "my_free",
+      "args": {
+       "days": [
+        "Mo",
+        "Tu",
+        "We",
+        "Th",
+        "Fr"
+       ]
+      }
+     },
+     "wrong": null
+    },
+    {
+     "cat": "time",
+     "q": "late afternoon math classes",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "subject": "MATH",
+        "start_after": {
+         "$in": [
+          "15:00",
+          "16:00",
+          "14:00"
+         ]
+        }
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "subject": "MTH",
+       "start_after": "12:00",
+       "end_before": "18:00"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "subject": "MTH",
+       "start_after": "12:00",
+       "end_before": "18:00"
+      }
+     },
+     "wrong": [
+      "subject",
+      "start_after"
+     ]
+    },
+    {
+     "cat": "days",
+     "q": "math on wednesdays",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "subject": "MATH",
+        "days": [
+         "We"
+        ]
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "days": [
+        "We"
+       ],
+       "ge_area": "2"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "ge_area": "2",
+       "days": [
+        "We"
+       ]
+      }
+     },
+     "wrong": [
+      "subject"
+     ]
+    },
+    {
+     "cat": "prof",
+     "q": "who is kurt voelker",
+     "want": [
+      {
+       "tool": "open_professor",
+       "args": {
+        "name": "Kurt Voelker"
+       }
+      }
+     ],
+     "got": {
+      "tool": "cant_answer",
+      "args": {
+       "reason": "not_about_classes"
+      }
+     },
+     "raw": {
+      "name": "cant_answer",
+      "args": {
+       "reason": "not_about_classes"
+      }
+     },
+     "wrong": null
+    },
+    {
+     "cat": "friends",
+     "q": "who are garretts friends",
+     "want": [
+      {
+       "tool": "friend_profile",
+       "args": {
+        "friend": "Garrett",
+        "tab": "friends"
+       }
+      }
+     ],
+     "got": {
+      "tool": "cant_answer",
+      "args": {
+       "reason": "needs_private_data"
+      }
+     },
+     "raw": {
+      "name": "cant_answer",
+      "args": {
+       "reason": "needs_private_data"
+      }
+     },
+     "wrong": null
+    },
+    {
+     "cat": "actions",
+     "q": "drop stat 2170",
+     "want": [
+      {
+       "tool": "cant_answer",
+       "args": {}
+      },
+      {
+       "tool": "go_to",
+       "args": {
+        "where": {
+         "$in": [
+          "my classes",
+          "schedule"
+         ]
+        }
+       }
+      }
+     ],
+     "got": {
+      "tool": "open_class",
+      "args": {
+       "course": "STAT2170"
+      }
+     },
+     "raw": {
+      "name": "open_class",
+      "args": {
+       "course": "STAT2170"
+      }
+     },
+     "wrong": null
+    },
+    {
+     "cat": "build",
+     "q": "help me build a schedule",
+     "want": [
+      {
+       "tool": "build_term",
+       "args": {}
+      },
+      {
+       "tool": "go_to",
+       "args": {
+        "where": "planner"
+       }
+      }
+     ],
+     "got": {
+      "tool": "help",
+      "args": {}
+     },
+     "raw": {
+      "name": "help",
+      "args": {}
+     },
+     "wrong": null
+    },
+    {
+     "cat": "goto",
+     "q": "degree progress",
+     "want": [
+      {
+       "tool": "go_to",
+       "args": {
+        "where": "ledger"
+       }
+      }
+     ],
+     "got": {
+      "tool": "my_requirements",
+      "args": {}
+     },
+     "raw": {
+      "name": "my_requirements",
+      "args": {}
+     },
+     "wrong": null
+    },
+    {
+     "cat": "refuse",
+     "q": "asdfghjkl",
+     "want": [
+      {
+       "tool": "cant_answer",
+       "args": {
+        "reason": "ambiguous"
+       }
+      }
+     ],
+     "got": {
+      "tool": "help",
+      "args": {}
+     },
+     "raw": {
+      "name": "help",
+      "args": {}
+     },
+     "wrong": null
+    },
+    {
+     "cat": "refuse",
+     "q": "find me a class",
+     "want": [
+      {
+       "tool": "cant_answer",
+       "args": {
+        "reason": "ambiguous"
+       }
+      },
+      {
+       "tool": "search_sections",
+       "args": {
+        "scope": {
+         "$in": [
+          "required",
+          "ge_unmet"
+         ]
+        }
+       }
+      },
+      {
+       "tool": "go_to",
+       "args": {
+        "where": "explore"
+       }
+      }
+     ],
+     "got": {
+      "tool": "help",
+      "args": {}
+     },
+     "raw": {
+      "name": "help",
+      "args": {}
+     },
+     "wrong": null
+    },
+    {
+     "cat": "messy",
+     "q": "yo any open bus classes tmrw",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "subject": "BUS",
+        "open_only": true
+       }
+      }
+     ],
+     "got": {
+      "tool": "my_day",
+      "args": {
+       "rel": "tomorrow"
+      }
+     },
+     "raw": {
+      "name": "my_day",
+      "args": {
+       "rel": "tomorrow"
+      }
+     },
+     "wrong": null
+    },
+    {
+     "cat": "messy",
+     "q": "BUS 4442!!!! OPEN??",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "course": "BUS4442",
+        "open_only": true
+       }
+      }
+     ],
+     "got": {
+      "tool": "open_class",
+      "args": {
+       "course": "BUS4442"
+      }
+     },
+     "raw": {
+      "name": "open_class",
+      "args": {
+       "course": "BUS4442"
+      }
+     },
+     "wrong": null
+    },
+    {
+     "cat": "messy",
+     "q": "lowkey need a chill ge",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "scope": {
+         "$in": [
+          "ge_unmet"
+         ]
+        },
+        "sort": {
+         "$in": [
+          "easiest",
+          "rating"
+         ]
+        }
+       }
+      },
+      {
+       "tool": "cant_answer",
+       "args": {}
+      }
+     ],
+     "got": {
+      "tool": "my_requirements",
+      "args": {}
+     },
+     "raw": {
+      "name": "my_requirements",
+      "args": {}
+     },
+     "wrong": null
+    },
+    {
+     "cat": "messy",
+     "q": "csc   1001   open",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "course": "CSC1001",
+        "open_only": true
+       }
+      }
+     ],
+     "got": {
+      "tool": "open_class",
+      "args": {
+       "course": "CSC1001"
+      }
+     },
+     "raw": {
+      "name": "open_class",
+      "args": {
+       "course": "CSC1001"
+      }
+     },
+     "wrong": null
+    },
+    {
+     "cat": "topic",
+     "q": "intro to python class",
+     "want": [
+      {
+       "tool": "cant_answer",
+       "args": {}
+      },
+      {
+       "tool": "search_sections",
+       "args": {
+        "subject": "CSC"
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "course": "CSC1001"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "course": "CSC1001"
+      }
+     },
+     "wrong": null
+    },
+    {
+     "cat": "topic",
+     "q": "any marketing classes",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "subject": "BUS"
+       }
+      },
+      {
+       "tool": "cant_answer",
+       "args": {}
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "subject": "MKT"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "subject": "MKT"
+      }
+     },
+     "wrong": [
+      "subject"
+     ]
+    },
+    {
+     "cat": "topic",
+     "q": "a class on wine",
+     "want": [
+      {
+       "tool": "cant_answer",
+       "args": {}
+      },
+      {
+       "tool": "search_sections",
+       "args": {
+        "subject": {
+         "$in": [
+          "WVIT",
+          "AG",
+          "FSN"
+         ]
+        }
+       }
+      }
+     ],
+     "got": {
+      "tool": "search_sections",
+      "args": {
+       "subject": "WINE"
+      }
+     },
+     "raw": {
+      "name": "search_sections",
+      "args": {
+       "subject": "WINE"
+      }
+     },
+     "wrong": null
+    },
+    {
+     "cat": "followup",
+     "q": "never mind, show stat instead",
+     "want": [
+      {
+       "tool": "search_sections",
+       "args": {
+        "subject": "STAT"
+       }
+      }
+     ],
+     "got": {
+      "tool": "cant_answer",
+      "args": {
+       "reason": "ambiguous"
+      }
+     },
+     "raw": {
+      "name": "cant_answer",
+      "args": {
+       "reason": "ambiguous"
+      }
+     },
+     "wrong": null
+    }
+   ]
+  }
+ }
+}

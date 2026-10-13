@@ -169,7 +169,10 @@ L.append(X.declaration(_ix, 'var LEGAL_DOCS='))
 # The Degree Progress Report reader and the PDF text join, exactly as the desktop runs them.
 for f in ['function pdfItemsToText(', 'function fileBytes(']:
     L.append(X.function(_ix, f))
-for v in ['var DPR_GRADE=', 'var DPR_TERM=', 'var DPR_NOISE=', 'var DPR_ROW=', "const ABROAD_MARK="]:
+# 2026-10-11: DPR_GRADE opens a block (DPR_TEST, DPR_CREDIT, the row marks, dprPrinted, dprTermRunning) that ends where
+# pdfItemsToText begins — lifted whole, or the phone's dprParse would read names that aren't there
+_a = _ix.index('var DPR_GRADE='); L.append(_ix[_a:_ix.index('function pdfItemsToText(', _a)].rstrip('\n'))
+for v in ['var DPR_TERM=', 'var DPR_NOISE=', 'var DPR_ROW=', "const ABROAD_MARK="]:
     _a = _ix.index(v); L.append(_ix[_a:_ix.index('\n', _a)])
 for f in ['function dprLooksLikeOne(', 'function dprScrub(', 'function dprCrosswalk(', 'function dprProgram(', 'function dprParse(']:
     L.append(X.function(_ix, f))

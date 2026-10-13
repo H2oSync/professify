@@ -1,10 +1,12 @@
 -- ================================================================================================
--- APP STORE REVIEW DEMO ACCOUNT — 6 October 2026
+-- APP STORE REVIEW DEMO ACCOUNT — 6 October 2026 (plans moved to Spring 2027 on 13 October 2026)
 -- ================================================================================================
 -- Apple's reviewer is not a Cal Poly student, and the app is only useful once you have friends and
 -- classes. This gives the reviewer an account that shows every screen working — WITHOUT showing a
--- single real student. Every person in it is made up; every class is a real Fall 2026 section read
--- from course_seats (real data only, per CONTRIBUTING.md).
+-- single real student. Every person in it is made up; every class is a real section read from
+-- course_seats (real data only, per CONTRIBUTING.md): their weeks are Fall 2026 (the term they're in,
+-- CFG.NOW_TERM) and their plans are Spring 2027 (the term the app plans for, CFG.TERM = 2274). Before
+-- 2026-10-13 the plans were Fall sections, which the Spring app never reads — Plans looked empty.
 --
 -- WHAT IT DOES NOT DO: write any review. A made-up review of a real professor would be a fabricated
 -- rating on the public site. The reviewer sees the real public reviews like anyone else.
@@ -32,7 +34,8 @@
 -- ================================================================================================
 do $$
 declare
-  v_term constant text := '2268';                     -- CFG.TERM, Fall 2026
+  v_term constant text := '2268';                     -- CFG.NOW_TERM, Fall 2026: the week people are sitting in
+  v_plan_term constant text := '2274';                -- CFG.TERM, Spring 2027: what Plans read since 2026-10-08
   people jsonb := '[
     {"email":"reviewer@appreview.calpoly.edu","name":"Riley Demo","username":"riley_demo","major":"Business Administration","standing":"Junior",
      "classes":["BUS 3431","BUS 3438","ENGL 3310","BUS 4401"]},
@@ -70,9 +73,18 @@ begin
   delete from public.conversations c
    where exists (select 1 from public.conversation_members m where m.conversation_id = c.id and m.user_id = any(ids))
      and not exists (select 1 from public.conversation_members m where m.conversation_id = c.id and not (m.user_id = any(ids)));
+  -- Blocking someone (as the review video does) ends the friendship, and unblocking doesn't bring it
+  -- back. Clear blocks and hidden suggestions between these five so a re-run restores everything.
+  if to_regclass('public.blocks') is not null then
+    execute 'delete from public.blocks where blocker = any($1) and blocked = any($1)' using ids;
+  end if;
+  if to_regclass('public.friend_suggestion_dismissals') is not null then
+    execute 'delete from public.friend_suggestion_dismissals where user_id = any($1) and dismissed_id = any($1)' using ids;
+  end if;
   delete from public.friend_requests where from_user = any(ids) or to_user = any(ids);
   delete from public.my_sections   where user_id = any(ids);
   delete from public.saved_classes where user_id = any(ids);
+  delete from public.plans         where user_id = any(ids);
 
   -- ---- 2. profiles, classes -----------------------------------------------------------------------
   for i in 1..jsonb_array_length(people) loop
@@ -133,16 +145,68 @@ begin
   perform set_config('request.jwt.claim.sub', ids[2]::text, true);
   insert into public.conversations (kind, created_by) values ('direct', ids[2]) returning id into cid;
   insert into public.conversation_members (conversation_id, user_id) values (cid, ids[2]), (cid, me);
-  insert into public.messages (conversation_id, sender, kind, body)
-  values (cid, ids[2], 'text', 'Are you taking BUS 3431 this term? Want to study for the first midterm together?');
+  insert into public.messages (conversation_id, sender, kind, body, created_at)
+  values (cid, ids[2], 'text', 'Are you taking BUS 3431 this term? Want to study for the first midterm together?', now() - interval '3 hours');
   perform set_config('request.jwt.claims', json_build_object('sub', me, 'role', 'authenticated',
     'email', people->0->>'email')::text, true);
   perform set_config('request.jwt.claim.sub', me::text, true);
-  insert into public.messages (conversation_id, sender, kind, body)
-  values (cid, me, 'text', 'Yes! Library after class on Thursday?');
+  insert into public.messages (conversation_id, sender, kind, body, created_at)
+  values (cid, me, 'text', 'Yes! Library after class on Thursday?', now() - interval '2 hours 50 minutes');
 
-  raise notice 'Demo ready: reviewer@appreview.calpoly.edu has 4 friends, % sections, and 1 chat.',
-    (select count(*) from public.my_sections where user_id = me);
+  -- ---- 5. a group chat Alex made (so a group's people, Leave group and "Report the name" show) ------
+  --         (added 2026-10-07 for App Review: the reviewer's Friends tab had one chat and no group)
+  perform set_config('request.jwt.claims', json_build_object('sub', ids[2], 'role', 'authenticated',
+    'email', people->1->>'email')::text, true);
+  perform set_config('request.jwt.claim.sub', ids[2]::text, true);
+  insert into public.conversations (kind, title, created_by) values ('group', 'BUS 3431 study group', ids[2]) returning id into cid;
+  insert into public.conversation_members (conversation_id, user_id) values (cid, ids[2]), (cid, me), (cid, ids[5]);
+  insert into public.messages (conversation_id, sender, kind, body, created_at)
+  values (cid, ids[2], 'text', 'Made a group for the midterm. Thursday 4pm at the library?', now() - interval '40 minutes');
+  perform set_config('request.jwt.claims', json_build_object('sub', ids[5], 'role', 'authenticated',
+    'email', people->4->>'email')::text, true);
+  perform set_config('request.jwt.claim.sub', ids[5]::text, true);
+  insert into public.messages (conversation_id, sender, kind, body, created_at)
+  values (cid, ids[5], 'text', 'Works for me. I''ll bring the practice exam.', now() - interval '25 minutes');
+
+  -- ---- 6. plans, so Schedule › Plans isn't empty: the reviewer's Plan A and B, and Jordan's shared
+  --         Plan A (a friend's plan shows on his page). SPRING 2027 sections (CFG.TERM): the phone reads
+  --         plans only for that term. Each entry names a real section checked on 2026-10-13 so a plan
+  --         has no clashes (A: MoWe 9:00 · 2:00 · 4:30, TuTh 10:00; B: TuTh 9:00 · 12:00, Th 10:30,
+  --         MoWe 12:00); if that class number is gone, the class's first timed section stands in. ---
+  for i in 1..3 loop
+    declare
+      who   uuid := case i when 3 then ids[4] else me end;
+      slot_ text := case i when 2 then 'B' else 'A' end;
+      picks text[] := case i when 1 then array['BUS 3431:4023','BUS 3438:4010','BUS 4401:4165','PHIL 3331:6785']
+                             when 2 then array['BUS 4442:9285','ENGL 3310:6414','BUS 3431:8534','BUS 3438:4009']
+                             else array['ME 2240:7110','PHYS 4405:1589'] end;
+      pick  text;
+      v_nbr text;
+      secs  jsonb := '[]'::jsonb;
+    begin
+      foreach pick in array picks loop
+        v_code := split_part(pick, ':', 1); v_nbr := split_part(pick, ':', 2);
+        select cs.class_nbr into s from public.course_seats cs
+         where cs.term = v_plan_term and upper(cs.course_code) = upper(v_code) and cs.class_nbr::text = v_nbr;
+        if not found then
+          select cs.class_nbr into s from public.course_seats cs
+           where cs.term = v_plan_term and upper(cs.course_code) = upper(v_code) and coalesce(cs.days,'') <> ''
+             and cs.days !~* 'TBA'
+           order by cs.section nulls last, cs.class_nbr limit 1;
+        end if;
+        if found then secs := secs || jsonb_build_array(jsonb_build_object('code', v_code, 'class_nbr', s.class_nbr::text)); end if;
+      end loop;
+      if jsonb_array_length(secs) < 2 then
+        raise exception 'Only % Spring 2027 sections found for Plan % — is term % in course_seats?', jsonb_array_length(secs), slot_, v_plan_term;
+      end if;
+      insert into public.plans (user_id, term, slot, sections, shared) values (who, v_plan_term, slot_, secs, true)
+      on conflict (user_id, term, slot) do update set sections = excluded.sections, shared = true;
+    end;
+  end loop;
+
+  raise notice 'Demo ready: reviewer@appreview.calpoly.edu has 4 friends, % Fall 2026 sections, % Spring 2027 plans, a 1:1 chat and a group chat.',
+    (select count(*) from public.my_sections where user_id = me and term = v_term),
+    (select count(*) from public.plans where user_id = me and term = v_plan_term);
 end $$;
 
 -- Check (read-only): five profiles, the reviewer's friends and classes.

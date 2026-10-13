@@ -1,4 +1,4 @@
-window.TERMCHAMP_PLANNER_BUILD = "2026-10-06 07:15";
+window.TERMCHAMP_PLANNER_BUILD = "2026-10-13 07:45";
 /* =================================================================================================
    TERMCHAMP PHONE APP — PLANNER DATA AND RULES (app/planner.js)
    -------------------------------------------------------------------------------------------------
@@ -17,6 +17,7 @@ window.TERMCHAMP_PLANNER_BUILD = "2026-10-06 07:15";
   var myHistory = [];          // class_history rows: {code, term, year, professor}
   var myClasses = [];          // this term's class codes
   var myWaived = {};           // class_waivers: code -> reason
+  var myMarks = {};            // flowchart rows checked off by the student: slot id -> the row's words (flowchart-mark-done (2026-10-09))
   var myClassMeta = {};
   function completedLocal() { return []; }                 // the desktop's device mirror; the phone reads the account only
   function waivedMap() { var o = {}; Object.keys(myWaived).forEach(function (c) { o[canonCode(c)] = myWaived[c]; }); return o; }
@@ -1559,21 +1560,38 @@ var CONC_REQS={
     'Supply Chain Management':['BUS 2208','BUS 3308','BUS 4416','BUS 4417','ITP 3303','ITP 3371','ITP 4410','BUS 3304','BUS 4489','BUS 4497','ITP 4403']
   }
 };
+/* (2026-10-11) CONC_REQS lists required classes, one-of pairs and electives in one run; its notes above say which is
+   which. The rest of each list is the concentration's electives. */
+var CONC_SHAPE={
+  'Business Administration':{
+    'Accounting':{req:['BUS 3319','BUS 3320','BUS 3321','BUS 3322','BUS 3323'],note:'Plus electives from BUS 4424\u20134428.'},
+    'Consumer Packaging':{req:['BUS 3396','BUS 4418','ITP 2234','ITP 3330','ITP 3334','ITP 4475'],note:'Plus one ITP elective.'},
+    'Entrepreneurship':{req:['BUS 3310','BUS 3330','ITP 4406'],one:[['BUS 4447','BUS 4488']],note:'Plus approved electives.'},
+    'Financial Management':{req:['BUS 3411','BUS 3431','BUS 3438'],one:[['BUS 3440','BUS 3441']],note:'Plus 9\u201311 units from one of three tracks.'},
+    'Information Systems and Analytics':{req:['BUS 3392','BUS 3393','BUS 3394','BUS 3399','BUS 4497'],note:'Plus a project course and one approved elective.'},
+    'Management and Human Resources':{req:['BUS 3384','BUS 3388','BUS 4477','BUS 4489'],note:'Plus a project course and approved electives.'},
+    'Marketing Management':{req:['BUS 3396','BUS 4418'],note:'Plus 12 units of approved marketing electives.'},
+    'Real Estate Finance':{req:['BUS 3431','BUS 3440','BUS 4434'],note:'Plus 9 units of approved electives.'},
+    'Supply Chain Management':{req:['BUS 2208','BUS 3308','BUS 4416','BUS 4417','ITP 3303','ITP 3371','ITP 4410'],note:'Plus one approved elective.'}
+  }
+};
 function concInfo(majorName){
   var none={known:false,list:[],kind:'concentration',src:null};
   if(!majorName)return none;
   try{
     if(typeof CONC_CATALOG!=='undefined'&&CONC_CATALOG[majorName]){
       var c=CONC_CATALOG[majorName];
-      return {known:true,list:c.list||[],kind:c.kind||'concentration',src:c.src||null};
+      return {known:true,list:(c.list||[]).map(function(x){ return Object.assign({reqKnown:true},x); }),kind:c.kind||'concentration',src:c.src||null};
     }
     /* Business Administration and anything else that only lives in CONC_REQS. */
     if(typeof CONC_REQS!=='undefined'&&CONC_REQS[majorName]){
       var ks=Object.keys(CONC_REQS[majorName]).filter(function(k){return k!=='General / Open';});
       if(ks.length)return {known:true,kind:'concentration',src:null,list:ks.map(function(k){
-        return {name:k,units:0,note:'',classes:CONC_REQS[majorName][k].map(function(code){
-          return [code,(typeof COURSE_NAME!=='undefined'&&COURSE_NAME[code])||'',3];
-        })};
+        var all=CONC_REQS[majorName][k], sh=(CONC_SHAPE[majorName]||{})[k], nm=function(code){ return [code,(typeof COURSE_NAME!=='undefined'&&COURSE_NAME[code])||'',3]; };
+        if(!sh)return {name:k,units:0,note:'',classes:all.map(nm)};
+        var taken={}; sh.req.concat.apply(sh.req,sh.one||[]).forEach(function(c){ taken[c]=1; });
+        return {name:k,units:0,note:sh.note||'',reqKnown:true,classes:sh.req.map(nm),one:(sh.one||[]).map(function(g){return g.slice();}),
+          electives:all.filter(function(c){ return !taken[c]; })};
       })};
     }
     /* Last resort: the older MAJOR_CATALOG shape, minus the 'General / Open' placeholder. */
@@ -1630,7 +1648,7 @@ function schConcClasses(mname){
         /* units 0 means the catalog printed a concentration total but no per-course split.
            Passing 0 through is deliberate: the caller keeps the flowchart slot's own unit
            count rather than letting us invent one. */
-        return {conc:cc,known:true,note:hit.note||'',list:(hit.classes||[]).map(function(a){
+        return {conc:cc,known:true,note:hit.note||'',reqKnown:!!hit.reqKnown,one:hit.one||[],electives:hit.electives||[],list:(hit.classes||[]).map(function(a){
           return {code:a[0],name:a[1]||((typeof COURSE_NAME!=='undefined'&&COURSE_NAME[a[0]])||''),units:a[2]||0};
         })};
       }
@@ -1660,16 +1678,24 @@ function schExpandConc(m){
       if(c&&c.code&&_req[c.code]){ _skipped.push(c.code); return false; }
       return true;
     });
+    /* (2026-10-11) after the required classes: each pick-one is one spot, then the electives — every one of them */
+    var oneG=(info.one||[]).map(function(g){ return g.filter(function(c){ return !_req[c]; }); }).filter(function(g){ return g.length; }), oi=0;
+    var elec=(info.electives||[]).filter(function(c){ return !_req[c]; });
+    var cname=function(c){ return (typeof COURSE_NAME!=='undefined'&&COURSE_NAME[c])||c; };
     var out={}; for(var kk in m)out[kk]=m[kk];
     out.terms=m.terms.map(function(t){
       var tt={}; for(var kk in t)tt[kk]=t[kk];
       tt.slots=t.slots.map(function(s){
         if(s.type!=='concentration')return s;
         var ns={}; for(var kk in s)ns[kk]=s[kk];
-        if(info.conc&&(list.length||_skipped.length)){
+        if(info.conc&&(list.length||_skipped.length||oneG.length||elec.length)){
           /* pk.units===0 -> the catalog gave no per-course unit value. Keep the flowchart's,
              which is real, instead of substituting a guess. */
-          if(ci<list.length){ var pk=list[ci++]; ns.code=pk.code; ns.title=pk.name||pk.code; if(pk.units)ns.units=pk.units; ns.type='course'; ns.note=info.conc+' concentration'; }
+          if(ci<list.length){ var pk=list[ci++]; ns.code=pk.code; ns.title=pk.name||pk.code; if(pk.units)ns.units=pk.units; ns.type='course'; ns.note=info.conc+' concentration'; ns.concKind=info.reqKnown?'req':'conc'; }
+          else if(oi<oneG.length){ var g=oneG[oi++]; ns.note=info.conc+' concentration'; ns.concKind='one';
+            if(g.length===1){ ns.code=g[0]; ns.title=cname(g[0]); ns.type='course'; } else { ns.type='choice'; ns.options=g.slice(); ns.title=g.join(' or '); } }
+          else if(elec.length){ ns.note=info.conc+' concentration'; ns.concKind='el'; ns.hint=info.note||''; ns.title=info.conc+' elective';
+            if(elec.length===1){ ns.code=elec[0]; ns.type='course'; } else { ns.type='choice'; ns.options=elec.slice(); } }
           else if(_skipped.length&&!list.length){
             /* Everything recorded for this concentration is already required by the major, so
                there is nothing for this slot to hold. Name the reason — a bare "Concentration
@@ -1678,7 +1704,7 @@ function schExpandConc(m){
             ns.note='Every class recorded for '+info.conc+' is already required by this major ('
                     +_skipped.join(', ')+'). Pick this one with your advisor.';
           }
-          else { ns.title=info.conc+' — additional concentration course'; ns.note=info.note||(list.length+' courses to choose from'); ns.options=list.map(function(x){return x.code;}); }
+          else { ns.title=info.conc+' elective'; ns.note=info.conc+' concentration'; ns.concKind='el'; ns.hint=info.note||'Pick it with your advisor'; }
         } else if(info.conc){
           ns.title=info.conc+' concentration course'; ns.note=info.note||'Pick this course with your advisor';
         } else if(_concKnown){
@@ -1745,7 +1771,7 @@ function electiveRule(title){
   };
 }
 function uncodedSatisfied(m,haveList,takingList){
-  var res={done:{},taking:{}};
+  var res={done:{},taking:{},with:{}};
   try{
     var spent={};
     /* 1. anything a coded slot already accounts for is spoken for */
@@ -1764,8 +1790,8 @@ function uncodedSatisfied(m,haveList,takingList){
     function fill(slots,pred){
       slots.forEach(function(s){
         if(res.done[s.id]||res.taking[s.id])return;
-        if(claim('done',pred)){ res.done[s.id]=1; return; }
-        if(claim('taking',pred)){ res.taking[s.id]=1; }
+        var c=claim('done',pred); if(c){ res.done[s.id]=1; res.with[s.id]=c; return; }
+        c=claim('taking',pred); if(c){ res.taking[s.id]=1; res.with[s.id]=c; }
       });
     }
     var ge=[], el=[];
@@ -2048,7 +2074,7 @@ var LEGAL_DOCS={
     +'<h4>If something goes wrong</h4>'
     +'<p>If student data is exposed, affected people will be emailed at the address on their account, with what happened and what to do, as soon as the facts are established.</p>'}
 };
-function pdfItemsToText(items){
+function pdfItemsToText(items, marks){
   var lines=[],cur=null;
   (items||[]).forEach(function(it){
     var s=(it&&typeof it.str==='string')?it.str:'';
@@ -2059,6 +2085,30 @@ function pdfItemsToText(items){
     cur.text+=s; cur.end=x+w;
     if(it&&it.hasEOL)cur=null;
   });
+  /* (2026-10-11) the report's own icons, found by the app (dprDocText): `marks` are the pictures' centres, `t` when
+     it's the one the legend calls "Transfer/Test/Other Credit", `c` when it's one the legend calls Cal Poly's ("Cal Poly
+     Graded Course", "Course In Progress", "Planned"). A class row ("2026 Fall …") whose baseline sits just under one
+     (measured on real reports: centre = baseline + 1.8; rows are 11.4 apart) wears it:
+       the transfer icon            → the row ends in DPR_XMARK;
+       one of Cal Poly's            → DPR_CMARK: a Cal Poly class, whatever its words say;
+       a picture the legend doesn't → nothing (the words decide, as with no pictures at all);
+       name
+       none — on a page whose       → DPR_BMARK: exam credit prints that way ("CR" and no icon, read on a real report).
+       pictures were all read         Only on a page where some row wore a Cal Poly icon, and never with a picture
+       (marks.bare)                   within 7pt (one that sits a little off its row is still that row's).        */
+  if(marks){
+    var rowRe=/^\s*\d{4}\s+(Fall|Wtr|Win|Winter|Spr|Spring|Sum|Summer)\b/, hit=[], cp=false, RANK={T:3,C:2,P:2,O:1};
+    marks.forEach(function(mk){
+      var best=-1,bd=4;
+      lines.forEach(function(l,i){ var d=Math.abs(+mk.y-(l.y+1.8)); if(d<bd&&rowRe.test(l.text)){ bd=d; best=i; } });
+      if(best<0)return;
+      var k=mk.t?'T':mk.c?(mk.p?'P':'C'):'O'; if(k==='C'||k==='P')cp=true;
+      if(!hit[best]||RANK[k]>RANK[hit[best]])hit[best]=k;
+    });
+    var near=function(l){ return marks.some(function(mk){ return Math.abs(+mk.y-(l.y+1.8))<7; }); };
+    lines.forEach(function(l,i){ if(!rowRe.test(l.text))return;
+      if(hit[i]==='T')l.text+=' '+DPR_XMARK; else if(hit[i]==='C')l.text+=' '+DPR_CMARK; else if(hit[i]==='P')l.text+=' '+DPR_CMARK+DPR_PMARK; else if(!hit[i]&&marks.bare&&cp&&!near(l))l.text+=' '+DPR_BMARK; });
+  }
   return lines.map(function(l){return String(l.text||'').replace(/\s+/g,' ').trim();})
               .filter(function(t){return t;}).join('\n');
 }
@@ -2070,7 +2120,35 @@ function fileBytes(file){
          r.readAsArrayBuffer(file); }catch(e){ rej(e); }
   });
 }
-var DPR_GRADE=/^(?:[A-D][+-]?|F|CR|NC|W|IC|RP|333)$/;
+var DPR_GRADE=/^(?:[A-D][+-]?|F|CR|NC|W|WU|P|NP|AU|IC|RP|333|[1-7]00)$/;   /* P, WU, NP, AU (2026-10-12): read as grades */
+/* (2026-10-11) transfer and exam credit can print a number where a grade goes ("300", "400", read on real reports):
+   it's credit earned — never a word of the title, never a class still being taken (unless the row wears Cal Poly's own
+   icon: there "… 400" is the end of a title) */
+var DPR_TEST=/^[1-7]00$/;
+/* the grades exam and transfer credit print: what a row with NO icon must show to be called credit */
+var DPR_CREDIT=/^(?:CR|333|[1-7]00)$/;
+/* what the app puts on the end of a class row (never in a real report's text): the transfer icon, no icon (on a page
+   whose icons were all read), Cal Poly's own icon */
+var DPR_XMARK='\uE000', DPR_BMARK='\uE001', DPR_CMARK='\uE002', DPR_PMARK='\uE003';   /* PMARK (2026-10-12): Cal Poly's "Course In Progress" picture */
+/* when the report was printed: "Date Printed: October 10, 2026 18:05" (the date only) — the LAST one: a report prints
+   its date on every page, and when several files are read together (the website takes up to four) the Course History
+   read is the last file's (review 2026-10-11) */
+function dprPrinted(text){
+  var re=/Date Printed\s*:\s*([A-Za-z]+)\.?\s+(\d{1,2}),?\s+(\d{4})/g, t=String(text||''), m=null, x;
+  while((x=re.exec(t)))m=x;
+  if(!m)return null;
+  var mo=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(m[1].slice(0,3).toLowerCase());
+  return mo<0?null:new Date(+m[3],mo,+m[2]);
+}
+/* A term still short of its last weeks on that date: no Cal Poly grade can exist in it yet, so a grade on one of its
+   classes is credit the registrar posted (transfer, AP/IB, exam) — the day is before any of its finals (Fall: Dec 1,
+   Spring: May 1, Winter: Mar 1, Summer: Jun 1, before its first session ends), so a real grade is never taken for posted
+   credit. A withdrawal or incomplete (W, IC, RP) can post mid-term, so it never counts. */
+function dprTermRunning(term, year, d){
+  if(!d)return false;
+  var end={Fall:[11,1],Winter:[2,1],Spring:[4,1],Summer:[5,1]}[term];
+  return !!end&&d<new Date(+year,end[0],end[1]);
+}
 var DPR_TERM={Fall:'Fall',Wtr:'Winter',Spr:'Spring',Sum:'Summer'};
 var DPR_NOISE=/^(Page \d+ of \d+|Name:|EMPLID:|Date Printed:|Term Subject Catalog|Course History)/i;
 var DPR_ROW=/^(\d{4})\s+(Fall|Wtr|Spr|Sum)\s+([A-Z]{2,5})\s+([0-9][0-9A-Z]{1,5})\s+(.+?)(?:\s+(\S+))?\s+(\d*\.\d{2})$/;
@@ -2112,6 +2190,8 @@ function dprParse(rawText){
 
   for(var k=start+1;k<lines.length;k++){
     var ln=String(lines[k]||'').trim();
+    var xmark=ln.indexOf(DPR_XMARK)>=0, bmark=ln.indexOf(DPR_BMARK)>=0, cmark=ln.indexOf(DPR_CMARK)>=0, pmark=ln.indexOf(DPR_PMARK)>=0;
+    if(xmark||bmark||cmark||pmark)ln=ln.split(DPR_XMARK).join('').split(DPR_BMARK).join('').split(DPR_CMARK).join('').split(DPR_PMARK).join('').trim();
     if(!ln||DPR_NOISE.test(ln))continue;
     var m=DPR_ROW.exec(ln);
     if(!m){ if(/^\d{4}\s+(Fall|Wtr|Spr|Sum)\s/.test(ln))skipped++; continue; }
@@ -2119,7 +2199,10 @@ function dprParse(rawText){
     var year=+m[1], term=DPR_TERM[m[2]]||'Fall', subj=m[3], nbr=m[4];
     var title=(m[5]||'').trim(), gradeTok=(m[6]||'').trim(), units=parseFloat(m[7]);
     /* If the token before the units is not a grade, it was the last word of the title. */
-    if(gradeTok&&!DPR_GRADE.test(gradeTok)){ title=(title+' '+gradeTok).trim(); gradeTok=''; }
+    if(gradeTok==='IP')gradeTok='';   /* (2026-10-12) "IP" in the grade column: in progress */
+    /* (2026-10-12) "I" may be an Incomplete or the end of a title ("… I"): decided below, once the newest term is known */
+    var rawI=gradeTok==='I';
+    if(gradeTok&&(!DPR_GRADE.test(gradeTok)||(cmark&&DPR_TEST.test(gradeTok))||pmark)){ title=(title+' '+gradeTok).trim(); gradeTok=''; }
 
     var code=subj+' '+nbr;
     /* THE ONLY THING TAKEN FROM THE GRADE. The letter itself goes no further than this line. */
@@ -2127,7 +2210,16 @@ function dprParse(rawText){
     /* Transfer, AP, study abroad and test credit: the report marks them itself, with a "333"
        in place of a grade or a non-Cal-Poly subject. Professify already has to know, because
        these have no PolyRatings professor and must never be matched to one. */
-    var xfer=(gradeTok==='333')||/^(TRAN|AP|DUD|PORT)$/.test(subj)||/(TC|TR)\d*$/.test(nbr);
+    var xfer=xmark||(bmark&&DPR_CREDIT.test(gradeTok))||DPR_TEST.test(gradeTok)||(gradeTok==='333')||/^(TRAN|AP|DUD|PORT)$/.test(subj)||/(TC|TR)\d*$/.test(nbr)
+      /* (2026-10-11) a catalog number that isn't Cal Poly's shape is an articulation placeholder: 1TR, 1T13, 4A1, 4AA */
+      ||!/^\d{3,4}[A-Z]{0,2}$/.test(nbr);
+    /* never transfer or exam credit (an "AP … Calculus I" placeholder), never a class marked in progress, never a row whose
+       icon was lost (exam credit wears none) */
+    var iTok=rawI&&!xfer&&!pmark&&!bmark;
+    /* for the date rule below: a credit grade (not a mid-term W / IC / RP), and Cal Poly's own icon — facts, never the grade */
+    var postable=!!gradeTok&&!/^(?:W|WU|AU|IC|RP)$/.test(gradeTok);
+    /* (2026-10-12) graded but not passed — F, W, NC, IC, RP: not a class taken (never saved, never the grade itself) */
+    var fail=!!gradeTok&&!/^(?:[A-D][+-]?|CR|P|333|[1-7]00)$/.test(gradeTok);
 
     var key=code+'|'+term+'|'+year;
     if(seen[key])continue; seen[key]=1;
@@ -2137,8 +2229,12 @@ function dprParse(rawText){
     var cur=code;
     try{
       var n=(typeof normCourse==='function')?normCourse(code):code;
-      cur=((typeof COURSE_EQUIV!=='undefined')&&COURSE_EQUIV[n])||cross[code]
-          ||((typeof canonCode==='function')?canonCode(code):code)||code;
+      /* (2026-10-12) the report's own pair decides the NUMBER; the crosswalk is kept when it agrees on the number (it
+         knows a subject that changed: CPE 101 (1001) is CSC 1001), and used alone for a number printed bare */
+      var eq=(typeof COURSE_EQUIV!=='undefined')&&COURSE_EQUIV[n], pr=cross[code];
+      cur=(eq&&(!pr||String(eq).split(' ')[1]===String(pr).split(' ')[1]))?eq
+          :pr?(((typeof canonCode==='function')&&canonCode(pr))||pr)
+          :((typeof canonCode==='function')?canonCode(code):code)||code;
     }catch(e){}
 
     var known=false, catName='';
@@ -2151,9 +2247,9 @@ function dprParse(rawText){
     out.push({
       code:code, cur:cur, name:catName||title, term:term, year:year,
       prof:'', known:known, already:already,
-      pick:!already,
+      pick:!already&&!fail, _fail:fail, _prov:gradeTok==='RP', _iTok:iTok,
       _sawTerm:true,          // the term is ON the row in this format, never inferred
-      _dpr:true, _open:stillOpen, _xfer:xfer, _units:units,
+      _dpr:true, _open:stillOpen, _xfer:xfer, _units:units, _post:postable, _cp:cmark, _pass:!!gradeTok&&/^(?:[A-D][+-]?|CR|P|333|[1-7]00)$/.test(gradeTok),
       _title:title            // what the report called it, for rows the catalog doesn't know
     });
   }
@@ -2164,10 +2260,328 @@ function dprParse(rawText){
   var ORD={Winter:1,Spring:2,Summer:3,Fall:4};
   var latest=0;
   out.forEach(function(r){ var v=r.year*10+(ORD[r.term]||0); if(v>latest)latest=v; });
+  /* (2026-10-12) "I" on a row in a term that's over is an Incomplete: graded, not passed, its grade still pending */
+  var incomplete=function(r){ r._open=false; r._now=false; r._fail=true; r._prov=true; r.pick=false; r._title=String(r._title||'').replace(/\s+I$/,''); if(!r.known)r.name=r._title; };
+  /* a term is over when the report's date is past its last weeks (dprTermRunning) — not merely older than the newest
+     term listed: in October the report also lists Spring, registered ahead, while Fall's classes are still being taken */
+  var pd=dprPrinted(text);
+  out.forEach(function(r){ if(r._iTok&&(pd?!dprTermRunning(r.term,r.year,pd):(r.year*10+(ORD[r.term]||0))<latest))incomplete(r); });
   out.forEach(function(r){ r._now=r._open&&((r.year*10+(ORD[r.term]||0))===latest); });
-  return {ok:true, rows:out, program:prog, skipped:skipped,
+  /* reader v2: the report's own verdicts (never a grade; an unplaceable verdict is 'unknown'). The classes
+     being taken: ungraded rows in a term after the last graded one (this term, or one registered ahead). */
+  /* (2026-10-11) a grade on a class in a term that was still running when the report was printed is posted credit:
+     a transfer's community-college and AP classes all print in their first Cal Poly term, graded */
+  var printed=dprPrinted(text);
+  out.forEach(function(r){ if(r._post&&!r._xfer&&!r._cp&&dprTermRunning(r.term,r.year,printed))r._xfer=true; });
+  /* posted credit with no grade (a study-abroad placeholder, "AP 300") is not a class being taken */
+  out.forEach(function(r){ if(r._xfer)r._now=false; });
+  /* (2026-10-12) …and whenever a Cal Poly class in its term or a later one is graded (a report with no date, say) */
+  out.forEach(function(r){ if(!r._iTok||!r._open)return; var k=r.year*10+(ORD[r.term]||0); if(out.some(function(o){ return o!==r&&!o._xfer&&!o._open&&!o._fail&&(o.year*10+(ORD[o.term]||0))>=k; }))incomplete(r); });
+  out.forEach(function(r){ delete r._iTok; });
+  /* …and posted credit says nothing about which terms are over: it's left out of "the last graded term" */
+  var lastGraded=0; out.forEach(function(r){ if(!r._open&&!r._xfer){ var v=r.year*10+(ORD[r.term]||0); if(v>lastGraded)lastGraded=v; } });
+  var taking=[]; out.forEach(function(r){ if(r._open&&!r._xfer&&(r.year*10+(ORD[r.term]||0))>lastGraded){ var w='|'+r.term+' '+r.year; if(r.code)taking.push(r.code+w); if(r.cur)taking.push(r.cur+w); } });
+  /* (2026-10-11, the report as the source of truth) what each Course History row is — today's number, transfer
+     credit, no grade yet, a credit grade — for the "Courses Used" rows under each requirement. Never the grade. */
+  var hist={}; out.forEach(function(r){ hist[r.code+'|'+r.term+' '+r.year]={cur:r.cur,x:!!r._xfer,o:!!r._open,g:!!r._pass}; });
+
+  var audit=null; try{ audit=dprAudit(text, cross, taking, hist); }catch(e){ audit={ok:false,blocks:[],reqs:[],counts:{satisfied:0,not:0,in_progress:0,unknown:0},err:String(e&&e.message||e)}; }
+  /* the report's catalog rides on the audit, so every count of it (Report read, Check, the diff) knows quarter from semester */
+  try{ if(audit&&prog&&prog.catalog)audit.catalog=prog.catalog; }catch(e){}
+  try{ if(audit&&printed)audit.printed=printed.getFullYear()+'-'+String(printed.getMonth()+1).padStart(2,'0')+'-'+String(printed.getDate()).padStart(2,'0'); }catch(e){}
+  return {ok:true, rows:out, program:prog, skipped:skipped, audit:audit,
           latestTerm:out.filter(function(r){return r._now;}).map(function(r){return r.term+' '+r.year;})[0]||null,
           crosswalkPairs:Object.keys(cross).length};
+}
+/* ---- Reader v2 (2026-10-08): the report's OWN verdicts, requirement by requirement ---------------------
+   Cal Poly's Degree Progress Report (PeopleSoft advisement, "Oracle Analytics Publisher") prints, above its
+   Course History table, every requirement with the registrar's verdict. Read on a real report (2026-10-08),
+   as pdf.js gives it, one line each:
+       GE AREA A                                                  ← a short heading (ignored: the verdict line has the words)
+       Satisfied: GE AREA A: ENGLISH LANGUAGE … - 12 Units Required (R-0070)
+       A1
+       Satisfied: A1: ORAL COMMUNICATION COURSE (Note: …) - 4 Units Required (R70-10)
+       · Units: 4.00 required, 4.00 used                         ("…, 22.00 needed" when open; sometimes only "8.00 used")
+       · Courses: 2.00 required, 1.00 used, 1.00 needed
+       Courses Used / Term Subject Catalog Nbr … / 2024 Wtr COMS 101 Public Speaking <grade> 4.00 A1   ← NEVER read
+       Not Satisfied: BUS 416 (4412), 463 (4414), 464 (4464), or ECON 464 (4460) - 4 Units Required (Option 2 of 2) (R37-20)
+   The code at the end says the level: (RG-0006) a group, (R-0070) a requirement, (R70-10) a line inside R-0070; a
+   verdict with no code is a line of the requirement above it. A verdict's words can wrap onto the next lines
+   (sometimes the code itself: "(R73-" / "45)"). "Overall Requirement Not Satisfied:" is the same verdict.
+   COUNTED: every line, and a requirement with no lines; a group never. A requirement met by "1 of N Options"
+   counts once, with every option's classes as its options, and its option lines don't count.
+   NEVER READ: a "Courses Used" or Course History row (term, course, GRADE, units), a repeat-code note, a
+   "directed to this line" note, the name, the EMPLID. Only a verdict line's own words become a label, and a
+   label that still looks like it carries an ID or a grade beside a units value is dropped. Options are course
+   CODES only, written in a verdict ("BUS 401 (4401)/411 (4411)", "ITP 303 (3303), 326 (3326)" — a bare number
+   takes the subject before it), translated through the report's own (NNNN) pair, then the crosswalk.
+   THE 2026 CATALOG'S REPORT (semester catalog, read on a real one 2026-10-09) prints the same verdicts another way:
+       1A: WRITTEN COMMUNICATION COURSE                         ← the heading IS the requirement's name
+       Satisfied: NOTE: Minimum grade of C- required            ← the verdict's words are notes and counts
+       3 units
+       (R70-10)                                                 ← the code on its own line, no dash for a group
+       · Courses: 1.00 required, 1.00 used                        or requirement: (RG6), (R70), (R70-10)
+   so there the label is the heading line just above the verdict, its classes come from the heading ("ITP 3390",
+   "STAT 1110 or 1210", "4A: Select from ES 1112, GOV 2200, …"), and the verdict runs on until its code. A report
+   is read one way or the other as a whole: any code without a dash ("(RG6)", "(R70)") means the 2026 layout. */
+var DPR_VERDICT=/^(?:Overall\s+Requirement\s+)?(Not\s+Satisfied|Satisfied|In\s+Progress)\s*:\s*(.*)$/i;
+/* (RG-0006) / (RG6) a group · (R70-10) a line · (R-0070) / (R70) a requirement */
+var DPR_RCODE=/\((?:(RG)-?\s*(\d+)|R(\d+)-\s*(\d+)|R-?\s*(\d+))\)\**/i;
+function dprCode(w){ var m=DPR_RCODE.exec(w); if(!m)return null; return m[1]?{level:'RG',code:'RG-'+m[2]}:m[3]?{level:'LN',code:'R'+m[3]+'-'+m[4]}:{level:'RQ',code:'R-'+m[5]}; }
+/* the page furniture repeated at every page break — never a label, never part of one */
+var DPR_FURN=/^(Page \d+ of \d+|Name\s*:|EMPLID\s*:|Date Printed\s*:|Degree Progress Report\s*$|For\s)/i;
+/* every grade the report can print (the same set dprParse knows), beside a units value: a course row's tail */
+var DPR_GRADEUNITS=/(?:^|\s)(?:[A-DF][+-]?|CR|NC|W|WU|IC|I|RP|AU|P|NP|IP|RD|NG)\s+\d+\.\d{2}\b/;
+var DPR_UNITLINE=/^\s*[·•]?\s*(Units|Courses)\s*:\s*(.*)$/i;
+var DPR_SKIP=/^(Page \d+ of \d+|Name\s*:|EMPLID\s*:|Date Printed\s*:|For\s|Degree Progress Report|\**DEGREE PROGRESS REPORT|Current Academic Objective|Degree Audit Icons|Requirement Satisfied|Requirement Not Satisfied|In Progress\s+Planned|Planned\b|Exception Made|Courses Used|Course History|Term\s+Subject|Designation|Status\s*$|Repeat Code|.*has been directed to this line|\(?\s*\d{5,}\s*\)?\s*$|<mark>|NOTE\s*:)/i;
+var DPR_ROWISH=/^\d{4}\s+(Fall|Wtr|Win|Winter|Spr|Spring|Sum|Summer)\b/;
+var DPR_TERMOF={Fall:'Fall',Wtr:'Winter',Win:'Winter',Winter:'Winter',Spr:'Spring',Spring:'Spring',Sum:'Summer',Summer:'Summer'};
+function dprNum(s){ var v=parseFloat(s); return isFinite(v)?v:null; }
+function dprCounts3(s){
+  var o={req:null,used:null,need:null},m;
+  if((m=/(\d+(?:\.\d+)?)\s*required/i.exec(s)))o.req=dprNum(m[1]);
+  if((m=/(\d+(?:\.\d+)?)\s*used/i.exec(s)))o.used=dprNum(m[1]);
+  if((m=/(\d+(?:\.\d+)?)\s*needed/i.exec(s)))o.need=dprNum(m[1]);
+  if(o.need==null&&o.req!=null&&o.used!=null)o.need=Math.max(0,o.req-o.used);
+  return o;
+}
+/* course codes in a verdict's words: "SUBJ NNN (NNNN)", and a bare "NNN (NNNN)" after "," "/" "or" "and" takes the subject before it */
+var DPR_NOTSUBJ={GE:1,UD:1,LD:1,OPT:1,AND:1,THE:1,FOR:1,MAJ:1,SPEC:1,AREA:1,UNITS:1,CAL:1,BS:1,BA:1,UG:1,OR:1,OF:1,IN:1,TO:1,ALL:1,ONE:1,TWO:1,NOTE:1,UNIT:1,ELECT:1};
+function dprCodesIn(s, cross){
+  var out=[], subj='', m, re=/(?:\b([A-Z]{2,5})\s+|(?:,|\/|\bor\b|\band\b)\s*)(\d{3,4}[A-Z]?)\b(?:\s*\((\d{4}[A-Z]?)\))?/g;
+  var t=String(s||'').replace(DPR_RCODE,' ').replace(/\b(19|20)\d\d-(19|20)\d\d\b/g,' ');
+  while((m=re.exec(t))){
+    if(m[1]){ if(DPR_NOTSUBJ[m[1]])continue; subj=m[1]; }
+    else if(!subj) continue;
+    var old=subj+' '+m[2], now=m[3]?(subj+' '+m[3]):((cross&&cross[old])||null);
+    var eq=(typeof COURSE_EQUIV!=='undefined')&&COURSE_EQUIV[old]; if(m[3]&&eq&&String(eq).split(' ')[1]===m[3])now=eq;   /* (2026-10-12) a renamed subject */
+    var canon=null; try{ canon=(typeof canonCode==='function')?canonCode(now||old):null; }catch(e){}
+    var c=canon||now||old;
+    if(out.indexOf(c)<0)out.push(c);
+  }
+  return out;
+}
+function dprTidyLabel(s){
+  var t=String(s||'').replace(DPR_RCODE,'').replace(/\*+/g,'').replace(/\((?:W|\d{4}-Current Catalog)\)/gi,'').replace(/^\s*\(R\d+\)\s*/,'').replace(/\s+/g,' ').trim();
+  /* the report's old number with its new one in brackets reads as today's number */
+  t=t.replace(/\b([A-Z]{2,5})\s+\d{3}\s*\((\d{4}[A-Z]?)\)/g,'$1 $2').replace(/([,\/]\s*|\bor\s+)\d{3}\s*\((\d{4}[A-Z]?)\)/g,'$1$2');
+  /* (2026 layout) the catalog year after a heading's words: "SUPPORT COURSES (2026)" is "Support Courses" */
+  t=t.replace(/\b([A-Za-z]{3,})\s*\((?:19|20)\d\d\)(?=\s*$|\s*[-:,])/g,'$1');
+  /* the words before " - N Units Required" (or "- Select …") are the requirement; the count is printed again below */
+  var cut=t.search(/\s+-\s+(?:\d+(?:\.\d+)?(?:\s*to\s*\d+)?\s*(?:\(\*?\d+\))?\s*(?:Minimum\s+)?(?:Units?|Courses?)\b|Satisfactory Completion|\d+(?:\.\d+)?\s+(?:Minimum\s+)?Required|Select\b)|:\s+Select\b/i);
+  if(cut>=3)t=t.slice(0,cut);
+  t=t.replace(/\s*\((?:Note|Because|Relevant|'Taken'|`Taken'|Excess|Minimum|See|Option\s+\d)[^)]*\)?/gi,'').replace(/\s*[:.-]\s*$/,'').trim();
+  var up=(t.match(/[A-Z]/g)||[]).length, low=(t.match(/[a-z]/g)||[]).length;
+  if(up>3&&low<up/4){
+    /* SHOUTED → Title case, keeping course codes, area codes and a few initialisms */
+    t=t.split(' ').map(function(w,i,a){
+      if(/^[A-Z]{2,5}(?:\/[A-Z]{2,5})*$/.test(w)&&/^\d{3,4}/.test(a[i+1]||''))return w;   // a subject before its number (cross-listed: NR/AGB 3326)
+      if(/^([A-F][1-5]?|[1-6][A-F]?|[1-6]?[A-F]?UD|GE|UD|LD|GWR|GPA|USCP|ITP|II|III|IV|U\.S\.|B\.S\.|B\.A\.)$/.test(w.replace(/^[("]+|[)":,]+$/g,'')))return w;
+      if(/\d/.test(w))return w;
+      var l=w.toLowerCase(); if(i>0&&/^(of|and|or|the|for|in|to|a|an|from|through|with)$/.test(l))return l;
+      return l.replace(/^([("'`]?)([a-z])/,function(_,p,c){return p+c.toUpperCase();});
+    }).join(' ');
+  }
+  /* an ID, a name line or a grade next to a units value never becomes a label */
+  if(/\d{7,}|EMPLID|Name\s*:/i.test(t)||DPR_GRADEUNITS.test(t)) return '';
+  return t.slice(0,140);
+}
+/* `taking`: the classes the student is in now (dprParse's ungraded rows after the last graded term) — a
+   "Not Satisfied" line whose own "Courses Used" table lists one of them is in progress, not left (the
+   registrar's note on the writing requirement: "allow a week after grades are finalized"). Only a row's
+   SUBJECT and NUMBER are looked at for this; never its grade. */
+/* (2026-10-11) a row of a requirement's "Courses Used" table: term, subject (a transfer GE placeholder's can lead
+   with a digit: "5A5C 1TR", "A1GE 1TR"), number. Only these three are read; the title, grade and units after them
+   never are. */
+var DPR_USEDROW=/^(\d{4})\s+(Fall|Wtr|Win|Spr|Sum)\s+([A-Z0-9]{2,6}(?:\/[A-Z]{2,5})?)\s+([0-9][0-9A-Z]{0,5})(?=\s|$)/;
+function dprAudit(text, cross, taking, hist){
+  var lines=String(text||'').split('\n'), end=lines.length;
+  for(var i=lines.length-1;i>=0;i--){ if(/^Course History\s*$/i.test(String(lines[i]||'').trim())){ end=i; break; } }
+  var blocks=[], cur=null, group=null, req=null, lastEnd=-1;
+  /* `taking` entries are "SUBJ NNNN|Term Year": a row counts only in the term it's being taken (a graded
+     earlier attempt of the same class is not "taking") */
+  var now={}; (taking||[]).forEach(function(c){ now[c]=1; });
+  var isNow=function(c,term){ var k=null; try{ k=(typeof canonCode==='function')?canonCode(c):null; }catch(e){} return !!(now[c+'|'+term]||(k&&now[k+'|'+term])); };
+  /* (2026-10-11) one "Courses Used" row → { c: as printed, t: "Winter 2024", n: today's number when it differs,
+     x: transfer / test / other credit, p: being taken now } — at most 40 a line, each class+term once */
+  var CPSUBJ=/^[A-Z]{2,5}(?:\/[A-Z]{2,5})?$/;
+  var usedAdd=function(b,m){
+    var t=(DPR_TERMOF[m[2]]||m[2])+' '+m[1], c=m[3]+' '+m[4], u=b.used||(b.used=[]);
+    if(u.length>=40||u.some(function(x){ return x.c===c&&x.t===t; }))return;
+    var h=(hist&&hist[c+'|'+t])||null, n=null;
+    if(CPSUBJ.test(m[3])){ n=(h&&h.cur)||(cross&&cross[c])||null; if(!n){ try{ n=(typeof canonCode==='function')?canonCode(c):null; }catch(e){} } }
+    var e={c:c,t:t}; if(n&&n!==c)e.n=n;
+    /* a subject that isn't Cal Poly's (a GE placeholder), a number that isn't (1TR, 1T13), or the Course History's word */
+    if((h&&h.x)||!CPSUBJ.test(m[3])||!/^\d{3,4}[A-Z]{0,2}$/.test(m[4]))e.x=true;
+    else if(isNow(c,t)||(n&&isNow(n,t)))e.p=true;
+    u.push(e);
+  };
+  var usedMerge=function(to,from){ (from.used||[]).forEach(function(e){ var u=to.used||(to.used=[]); if(u.length<40&&!u.some(function(x){ return x.c===e.c&&x.t===e.t; }))u.push(e); }); };
+  /* the student's name as the report prints it — "Name: …" in the page header, and "For …" on the line after the
+     report's title (2–4 words, letters only): any label with it, or a word of it, is dropped — kept in memory
+     only while reading */
+  var who=[], addWho=function(n){ n=String(n||'').trim(); if(!n)return; who.push(n); n.split(/[\s,]+/).forEach(function(w){ if(/^[\p{L}'.-]{3,}$/u.test(w))who.push(w); }); };
+  for(var wi=0, lastTitle=-9; wi<end; wi++){
+    var wl=String(lines[wi]||'').trim(); if(!wl)continue;
+    var nm=/^Name\s*:\s*(.+?)(?:\s+EMPLID\b.*)?$/i.exec(wl); if(nm){ addWho(nm[1]); continue; }
+    if(/^Degree Progress Report\s*$/i.test(wl)){ lastTitle=wi; continue; }
+    var fm=/^For\s+((?:[\p{L}'.-]+\s+){1,3}[\p{L}'.-]+)$/u.exec(wl); if(fm&&wi-lastTitle<=2)addWho(fm[1]);
+  }
+  who=who.filter(function(w,i){ return w&&who.indexOf(w)===i&&!/^(the|and|for|degree|progress|report)$/i.test(w); });
+  var hasWho=function(t){ t=String(t||''); return who.some(function(w){ return new RegExp('(^|[^\\p{L}])'+w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'($|[^\\p{L}])','iu').test(t); }); };
+  /* the 2026 catalog's layout: a group or requirement code with no dash anywhere */
+  var NEW=/\((?:RG\d+|R\d+)\)/i.test(lines.slice(0,end).join('\n'));
+  /* (2026 layout) the heading just above a verdict — past page furniture and notes, never back past the
+     previous block, a course table or a code line */
+  var headingBefore=function(k){
+    for(var i=k-1,n=0;i>lastEnd&&n<10;i--,n++){
+      var s=String(lines[i]||'').trim();
+      if(!s||DPR_FURN.test(s)||/^NOTE\s*:/i.test(s))continue;
+      if(DPR_VERDICT.test(s)||DPR_UNITLINE.test(s)||DPR_ROWISH.test(s)||/^\(R/i.test(s)||DPR_SKIP.test(s)||DPR_GRADEUNITS.test(s)||hasWho(s))return '';
+      return s;
+    }
+    return '';
+  };
+  for(var k=0;k<end;k++){
+    var ln=String(lines[k]||'').trim();
+    if(!ln)continue;
+    var v=DPR_VERDICT.exec(ln);
+    if(v&&!/^In\s+Progress\s+Planned/i.test(ln)){
+      var k0=k, head=NEW?headingBefore(k):'';
+      /* the verdict's words, with any wrapped continuation, up to its code (2026 layout: the code always
+         closes the block — "3 units required" doesn't) */
+      var words=v[2], j=k, extra=0;
+      var done=NEW?function(w){ return DPR_RCODE.test(w); }:function(w){ return DPR_RCODE.test(w)||/(Required\)?\.?|\*{3})\s*$/i.test(w); };
+      while(!done(words)&&j+1<end&&extra<(NEW?6:3)){
+        var nx=String(lines[j+1]||'').trim();
+        if(NEW&&(!nx||DPR_FURN.test(nx))){ j++; continue; }
+        if(NEW&&DPR_SKIP.test(nx)&&!/^NOTE\s*:/i.test(nx))break;
+        if(!nx||DPR_VERDICT.test(nx)||DPR_UNITLINE.test(nx)||DPR_ROWISH.test(nx))break;
+        if(NEW?/^(Courses Used|Course History|Term\s+Subject)\b/i.test(nx):(DPR_SKIP.test(nx)||/\b\d+\.\d{2}\b/.test(nx)))break;
+        words+=' '+nx; j++; extra++;
+      }
+      if(NEW&&!done(words)){ words=v[2]; j=k; }   /* no code within reach: the next lines aren't this verdict's */
+      /* (older layout) the words can end on "… Required" with the code a line or two further on, after a
+         sentence of advice: "If enrolled in a GWR eligible course, … in this" / "section. (R11-10)" */
+      if(!NEW&&!DPR_RCODE.test(words)){
+        for(var pk=j+1,seen=0;seen<2&&pk<end;pk++){
+          var pl=String(lines[pk]||'').trim();
+          if(DPR_FURN.test(pl)||(!pl&&DPR_FURN.test(String(lines[pk+1]||'').trim())))continue;
+          seen++;
+          if(!pl||DPR_VERDICT.test(pl)||DPR_UNITLINE.test(pl)||DPR_ROWISH.test(pl)||DPR_SKIP.test(pl))break;
+          if(DPR_RCODE.test(pl)){ for(var q=j+1;q<=pk;q++){ var ql=String(lines[q]||'').trim(); if(ql&&!DPR_FURN.test(ql))words+=' '+ql; } j=pk; break; }
+        }
+      }
+      k=j; lastEnd=j;
+      var w=v[1].toLowerCase().replace(/\s+/g,' '), cd=dprCode(words);
+      var level=cd?cd.level:'LN';
+      var src=head||words;
+      var b={ label:dprTidyLabel(src), status:w==='not satisfied'?'not':w==='in progress'?'in_progress':'satisfied', level:level,
+              code:cd?cd.code:null, units:null, courses:null, options:dprCodesIn(head?head:words,cross),
+              ge:null, kind:'major', option:/\(Option\s+\d+\s+of\s+\d+\)/i.test(src+' '+words)||(NEW&&/^\s*Option\s+\d+\s+of\s+\d+\b/i.test(v[2])),
+              /* (2026 layout, 2026-10-11) "Not Satisfied: Choose one" over "Option 1 of 2" / "Option 2 of 2" lines */
+              oneOf:/\bin\s+1\s+of\s+\d+\s+Options\b/i.test(src+' '+words)||(NEW&&/^\s*Choose\s+one\b/i.test(v[2])) };
+      if(hasWho(b.label)||hasWho(src))b.label='';
+      if(!b.label){ b.status='unknown'; b.label='A requirement the app couldn’t read'; }
+      if(level==='RG'){ group=b; req=null; }
+      else if(level==='RQ'){ req=b; }
+      /* the requirement above owns a line only when it's its own: R11-10 under R-0011 / R11 — a line whose number
+         differs (a new section the reader saw no heading code for) is neither its line nor an option of it
+         (2026-10-12, the synthetic reports: a major's R40-170 … after "1 of 3 Options" (R-0041) were read as more options) */
+      var own=!(cd&&cd.level==='LN'&&req&&req.code)||(+String(req.code).replace(/^R-?/,''))===(+String(cd.code).replace(/^R(\d+)-.*$/,'$1'));
+      b.parent=level==='LN'&&own?req:null;
+      var gl=((group&&group.label)||'')+' '+b.label, ctx=own?((req&&req.label)||''):'';
+      var gm=/(?:^|\bGE\s+(?:AREA\s+)?)([A-F](?:[1-5]|\s?UD)?|[1-6][A-F]?)\s*(?:\((?:Qtr|Sem)\)\s*)?:/i.exec(b.label) || /\bGE\s+(?:AREA\s+)?([A-F][1-5]?|[1-6][A-F]?)\b/i.exec(b.label);
+      var courseLine=/^[A-Z]{2,5} \d{3,4}/.test(b.label);
+      if(/general education/i.test(courseLine?((group&&group.label)||''):gl)||(!courseLine&&/\bGE\b/.test(b.label))||/^GE\b/i.test(ctx)){ b.kind='ge';
+        /* (2026-10-11) a short heading over a verdict that names the area ("B2" over "B2: LIFE SCIENCE COURSE - …"): the verdict's name */
+        if(head&&words&&!courseLine){ var wl=dprTidyLabel(words);
+          if(wl&&wl!==b.label&&/^(?:(?:[A-F](?:[1-5]|\s?UD)?|[1-6][A-F]?)\s*(?:\((?:Qtr|Sem)\)\s*)?:|Lower[- ]division C Elective\b|GE Electives?\b)/i.test(wl)){ b.label=wl;
+            gm=/^([A-F](?:[1-5]|\s?UD)?|[1-6][A-F]?)\s*(?:\((?:Qtr|Sem)\)\s*)?:/i.exec(wl)||gm; } }
+        if(gm)b.ge=gm[1].toUpperCase().replace(/\s+/g,''); }
+      else if(/concentration/i.test(gl)) b.kind='conc';
+      else if(/upper[- ]division units|units for the degree|units in residence|residence units|total units/i.test(b.label+' '+ctx)||(/\bunits\b/i.test(b.label)&&!/^[A-Z]{2,5} \d{3,4}/.test(b.label))) b.kind='units';
+      else if(/writing requirement|\bGWR\b/i.test(b.label+' '+ctx)) b.kind='gwr';
+      else if(/cultural pluralism|\bUSCP\b/i.test(b.label+' '+ctx)) b.kind='uscp';
+      else if(/\bGPA\b/i.test(b.label+' '+ctx)) b.kind='gpa';
+      else if(/elective/i.test(b.label)) b.kind='elective';
+      blocks.push(b); cur=b; continue;
+    }
+    /* (2026-10-11) a group or requirement code on a line no verdict owns — "(RG8)", "(R30)", "… (R-0030)", a heading
+       that prints no verdict — starts something else: the rows under it aren't the line above's. The report's
+       closing "FREE ELECTIVES" table (classes it used for nothing) sat under the last GE units line. */
+    if(cur&&cur.code&&/\(R[^)]*\)\**\s*$/.test(ln)&&!/^NOTE\s*:/i.test(ln)&&!DPR_UNITLINE.test(ln)){ var oc=dprCode(ln); if(oc&&oc.code!==cur.code){ cur=null; continue; } }
+    if(cur){
+      var u=DPR_UNITLINE.exec(ln);
+      if(u){ var c3=dprCounts3(u[2]); if(/^units/i.test(u[1]))cur.units=c3; else cur.courses=c3; lastEnd=k; continue; }
+      /* a row of the line's "Courses Used" table: only whether it's a class you're taking now — and for that
+         row, which has no grade yet, its units (the first "N.NN" after the class) */
+      /* (2026-10-11) the class the report used for this line, and its term */
+      var ru=DPR_USEDROW.exec(ln.replace(/[\uE000-\uE003]/g,'').trim());
+      if(ru&&/[A-Z]/.test(ru[3]))usedAdd(cur,ru);
+      var rw=/^\d{4}\s+(?:Fall|Wtr|Spr|Sum)\s+([A-Z]{2,5})\s+(\d{3,4}[A-Z]?)\b/.exec(ln);
+      if(ru&&!rw)continue;
+      if(rw){ var rt=/^(\d{4})\s+(\w+)/.exec(ln); if(rt&&isNow(rw[1]+' '+rw[2], (DPR_TERMOF[rt[2]]||rt[2])+' '+rt[1])&&(cur.nowc=cur.nowc||[]).indexOf(rw[1]+' '+rw[2])<0){ (cur.nowc=cur.nowc||[]).push(rw[1]+' '+rw[2]); var um=/\b(\d+\.\d{2})\b/.exec(ln.slice(rw[0].length)); (cur.now=cur.now||[]).push(um?+um[1]:null); } continue; }
+    }
+    /* anything else — a heading, a Courses Used row, a note — is not read */
+  }
+  /* what counts: lines, and requirements with no lines; "1 of N Options" counts once with all its options */
+  blocks.forEach(function(b){ b.atomic=false; });
+  blocks.forEach(function(b,i){
+    if(b.level==='RG')return;
+    if(b.level==='RQ'){
+      var kids=blocks.filter(function(x){ return x.parent===b; });
+      if(!kids.length){ b.atomic=true; return; }
+      /* the requirement says Not Satisfied but none of its lines does (a minimum across them, say): it counts,
+         as itself — never dropped, or the Planner could say everything's filled */
+      if(b.status==='not'&&!b.oneOf&&!kids.some(function(x){ return x.status!=='satisfied'; })){ b.atomic=true; kids.forEach(function(x){ x.inOption=true; usedMerge(b,x); }); return; }
+      var opt=kids.filter(function(x){ return x.option; });
+      if(b.oneOf||(opt.length&&opt.length===kids.length)){
+        b.atomic=true; kids.forEach(function(x){ x.inOption=true; usedMerge(b,x); x.options.forEach(function(c){ if(b.options.indexOf(c)<0)b.options.push(c); }); });
+        if(b.status!=='satisfied'&&kids.some(function(x){ return x.status==='satisfied'; }))b.status='satisfied';
+        return;
+      }
+      /* (2026 layout) "MATH 1261 (Option 1 of 2)" / "MATH 1221 (Option 2 of 2)" among a requirement's other lines:
+         the options count once, as one pick-1 line; the other lines count as themselves */
+      if(opt.length){
+        var rep=opt[0]; opt.forEach(function(x){ if(x!==rep){ x.inOption=true; usedMerge(rep,x); } x.options.forEach(function(c){ if(rep.options.indexOf(c)<0)rep.options.push(c); }); });
+        rep.oneOf=true; rep.label=rep.options.length>1?rep.options.join(' or '):rep.label;
+        rep.status=opt.some(function(x){ return x.status==='satisfied'; })?'satisfied':opt.some(function(x){ return x.status==='in_progress'; })?'in_progress':rep.status;
+      }
+      return;
+    }
+    if(b.level==='LN'&&!b.inOption) b.atomic=true;
+  });
+  /* units for the degree, from the report (never computed) */
+  var tot=blocks.filter(function(b){ return b.kind==='units'&&/total units/i.test(b.label)&&b.units&&b.units.req!=null; })[0];
+  /* in progress: a Not Satisfied line (or an option of one) whose table lists classes you're taking now that
+     cover what it still needs — enough classes for "· Courses: … needed", enough units for "· Units: … needed" */
+  var inNow=function(b){ var n=b.now||[]; if(!n.length)return false;
+    /* a line that prints no counts: only one that a single class settles (the writing requirement, USCP,
+       a one-class line) — "Not Satisfied: 8 units" with no counts printed could need two */
+    if(!b.courses&&!b.units&&!(b.kind==='gwr'||b.kind==='uscp'||b.options.length===1))return false;
+    if(b.courses&&b.courses.need!=null&&n.length<b.courses.need)return false;
+    if(b.units&&b.units.need!=null&&b.units.need>0){ var u=0; for(var i=0;i<n.length;i++){ if(n[i]==null)return false; u+=n[i]; } if(u<b.units.need)return false; }
+    return true; };
+  blocks.forEach(function(b){ if(b.status==='not'&&inNow(b))b.status='in_progress'; });
+  blocks.forEach(function(b){ if(b.atomic&&b.level==='RQ'&&b.status==='not'&&blocks.some(function(x){ return x.parent===b&&x.inOption&&x.status==='in_progress'; }))b.status='in_progress'; });
+  /* (2026-10-11) a Not Satisfied line that lists a class the Course History holds, finished with a PASSING grade (`g`:
+     A–D, CR, P, credit — never an F / NC / W, never one still being taken), which the report used for no line at all:
+     the report decides; the app says so */
+  var done={}; Object.keys(hist||{}).forEach(function(k){ var h=hist[k]; if(!h.g||h.o)return; var c=k.split('|')[0]; done[c]=1; if(h.cur)done[h.cur]=1; });
+  var canon=function(c){ try{ return (typeof canonCode==='function'&&canonCode(c))||c; }catch(e){ return c; } };
+  var anyUsed={}; blocks.forEach(function(b){ (b.used||[]).forEach(function(e){ anyUsed[canon(e.c)]=1; if(e.n)anyUsed[canon(e.n)]=1; }); });
+  blocks.forEach(function(b){ if(!b.atomic||b.status!=='not')return;
+    var mine=anyUsed;   /* used by this line or another: the report placed it, so it's no conflict */
+    b.listed=b.options.filter(function(c){ return (done[c]||done[canon(c)])&&!mine[canon(c)]; }).slice(0,10); });
+  var reqs=blocks.filter(function(b){ return b.atomic; }).map(function(b){
+    return { label:b.label, status:b.status, kind:b.kind, ge:b.ge, level:b.level, code:b.code, units:b.units, courses:b.courses, options:b.options.slice(0,60),
+             group:b.parent?b.parent.label:null, oneOf:!!b.oneOf, used:(b.used||[]).slice(0,40), listed:(b.listed||[]).slice() };
+  });
+  var n={satisfied:0,not:0,in_progress:0,unknown:0};
+  reqs.forEach(function(b){ n[b.status]=(n[b.status]||0)+1; });
+  return { ok:reqs.length>0, reqs:reqs, counts:n, blocks:blocks.length,
+           units_used:tot&&tot.units?tot.units.used:null, units_needed:tot&&tot.units?tot.units.need:null, units_required:tot&&tot.units?tot.units.req:null };
 }
 var PDFJS_BASE='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/';
   /* @@LIFTED:END */
@@ -2201,7 +2615,16 @@ var PDFJS_BASE='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/';
     myHistory.forEach(function (h) { if (h && h.code) { var k = canonCode(h.code); have[k] = (have[k] || 0) + 1; } });
     completedCodes().forEach(function (c) { if (!have[c]) have[c] = 1; });
     var takingM = {}; myClasses.forEach(function (c) { var k = canonCode(c); takingM[k] = (takingM[k] || 0) + 1; });
-    var uc = uncodedSatisfied(mm, completedCodes(), myClasses.slice());
+    /* A row the student checked off (no class to log, or one we can't check) is done before anything else.
+       Only on the row it was made on: its words must still match. GE and elective classes on the record
+       are shared out among the other rows, so none is spent on a row already checked. */
+    var marked = function (sl) {
+      if (!sl || sl.id == null || !Object.prototype.hasOwnProperty.call(myMarks, String(sl.id))) return false;
+      if (sl.code && slotCheckable(sl)) return false;
+      return myMarks[String(sl.id)] === String(sl.title || '');
+    };
+    var mmU = Object.assign({}, mm, { terms: (mm.terms || []).map(function (t) { return Object.assign({}, t, { slots: (t.slots || []).filter(function (sl) { return !(marked(sl) && !sl.code); }) }); }) });
+    var uc = uncodedSatisfied(mmU, completedCodes(), myClasses.slice());
     var rows = { major: { label: 'Major courses', f: 0, t: 0, n: 0 }, conc: null, ge: { label: 'General education', f: 0, t: 0, n: 0 }, el: { label: 'Electives', f: 0, t: 0, n: 0 } };
     var cant = [], concUnchosen = 0, concNote = '', concLabel = '', need = [], needU = [], done = [];
     /* The same walk, remembered per slot, is the year-by-year grid: every slot of the flowchart
@@ -2210,8 +2633,16 @@ var PDFJS_BASE='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/';
     (mm.terms || []).forEach(function (t, ti) {
       (t.slots || []).forEach(function (sl) {
         var isConc = (sl.type === 'concentration') || /concentration/i.test(sl.note || '');
-        var cell = { id: sl.id, title: sl.title || '', code: sl.code || '', units: sl.units, type: sl.type, note: sl.note || '', area: sl.code ? null : slotAreaKey(sl.title), state: 'cant' };
+        var cell = { id: sl.id, title: sl.title || '', code: sl.code || '', units: sl.units, type: sl.type, note: sl.note || '', area: sl.code ? null : slotAreaKey(sl.title), state: 'cant', ck: sl.concKind || null, hint: sl.hint || '' };
         grid[ti].slots.push(cell);
+        if (marked(sl)) {
+          var rowM;
+          /* an unchosen concentration's row has no name of its own ("Choose a concentration above…" is its note) */
+          if (isConc) { if (!rows.conc) { var cnM = sl.code ? String(sl.note || '').replace(/\s*concentration\s*$/i, '') : ''; rows.conc = { label: (cnM ? cnM + ' concentration' : 'Concentration'), f: 0, t: 0, n: 0 }; } rowM = rows.conc; }
+          else rowM = sl.code || sl.type === 'course' ? rows.major : (sl.type === 'ge' ? rows.ge : rows.el);
+          rowM.n++; rowM.f++; cell.state = 'done'; cell.mine = true; done.push({ title: sl.title || '', code: '' });
+          return;
+        }
         if (!slotCheckable(sl)) {
           if (isConc) {
             concUnchosen++;
@@ -2222,7 +2653,7 @@ var PDFJS_BASE='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/';
         }
         var row;
         if (sl.code) {
-          if (isConc) { if (!rows.conc) { var cn = String(sl.note || '').replace(/\s*concentration\s*$/i, ''); rows.conc = { label: (cn ? cn + ' concentration' : 'Concentration'), f: 0, t: 0, n: 0 }; } row = rows.conc; }
+          if (isConc) { var cn = String(sl.note || '').replace(/\s*concentration\s*$/i, ''); if (!rows.conc) { rows.conc = { label: (cn ? cn + ' concentration' : 'Concentration'), f: 0, t: 0, n: 0 }; } else if (rows.conc.label === 'Concentration' && cn) rows.conc.label = cn + ' concentration'; row = rows.conc; }
           else row = rows.major;
           var cs = sl._opts ? sl._opts.slice() : window.schSlotCodes(sl.code);
           if (sl._opts) cell.choice = sl._opts.slice();
@@ -2237,8 +2668,8 @@ var PDFJS_BASE='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/';
         } else {
           row = (sl.type === 'ge') ? rows.ge : rows.el;
           row.n++;
-          if (uc.done[sl.id]) { row.f++; cell.state = 'done'; }
-          else if (uc.taking[sl.id]) { row.t++; cell.state = 'taking'; }
+          if (uc.done[sl.id]) { row.f++; cell.state = 'done'; if (uc.with && uc.with[sl.id]) cell.fill = uc.with[sl.id]; }
+          else if (uc.taking[sl.id]) { row.t++; cell.state = 'taking'; if (uc.with && uc.with[sl.id]) cell.fill = uc.with[sl.id]; }
           else { cell.state = 'need'; } if (!uc.done[sl.id] && !uc.taking[sl.id]) needU.push({ title: sl.title || '', type: sl.type, id: sl.id, ti: ti, area: slotAreaKey(sl.title), units: sl.units });
         }
       });
@@ -2276,12 +2707,13 @@ var PDFJS_BASE='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/';
       if (o.history) myHistory = o.history.slice();
       if (o.classes) myClasses = o.classes.slice();
       if (o.waived) myWaived = Object.assign({}, o.waived);
+      if (o.marks) { myMarks = {}; o.marks.forEach(function (m) { if (m && m.slot != null) myMarks[String(m.slot)] = String(m.label || ''); }); }
       if (o.index) { CLASS_INDEX = o.index; _subjCache = null; }
       if (o.names) Object.keys(o.names).forEach(function (k) { if (!COURSE_NAME[k]) COURSE_NAME[k] = o.names[k]; });
     },
     ledger: ledger, majorFor: majorFor, majors: MAJOR_NAMES, concInfo: concInfo, prereqStatus: prereqStatus,
     coursePrereqs: coursePrereqs, canon: canonCode, completed: completedCodes, geAreaOf: geAreaOf,
-    geCourses: GE_COURSES, waiveLabel: waiveReasonLabel, dprLooksLikeOne: dprLooksLikeOne, dprParse: dprParse, pdfItemsToText: pdfItemsToText, fileBytes: fileBytes, abroadMark: ABROAD_MARK, pdfBase: PDFJS_BASE, loadCatalogTables: loadCatalogTables, legal: LEGAL_DOCS
+    geCourses: GE_COURSES, waiveLabel: waiveReasonLabel, dprLooksLikeOne: dprLooksLikeOne, dprParse: dprParse, dprAudit: dprAudit, dprPrinted: dprPrinted, dprTermRunning: dprTermRunning, dprXMark: DPR_XMARK, dprBMark: DPR_BMARK, dprCMark: DPR_CMARK, pdfItemsToText: pdfItemsToText, fileBytes: fileBytes, abroadMark: ABROAD_MARK, pdfBase: PDFJS_BASE, loadCatalogTables: loadCatalogTables, legal: LEGAL_DOCS
   };
   try { window.dispatchEvent(new Event('tcpl-ready')); } catch (e) {}
 })();

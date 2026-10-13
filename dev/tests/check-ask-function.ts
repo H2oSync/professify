@@ -66,6 +66,20 @@ vendorReply = tool('explain', { text: 'COMM 2204 with Dana Ruiz (4.7★) fits yo
 r = await call({ mode: 'explain', q: 'best GE for me', reading: 'GE you still need · fits your week', rows });
 t('grounded explanation kept', r.tool === 'explain' && /COMM 2204/.test(r.args.text), r);
 t('explain forces the explain tool on haiku', lastVendorBody.tool_choice.name === 'explain');
+{ /* Haiku 5.5 (2026-10-11): thinking off, tool forced, no temperature; priced at its own rate */
+  const SH: any = await import('../../supabase/functions/ask/shared.ts');
+  const b = SH.anthropicBody('claude-haiku-5-5', { system: 's', tools: [{ name: 'x', description: 'd', parameters: { type: 'object', properties: {} } }], user: 'u' });
+  t('haiku 5.5: thinking off, tool forced, no temperature, no effort', b.thinking?.type === 'disabled' && b.tool_choice?.type === 'any' && !('temperature' in b) && !b.output_config);
+  const e = SH.anthropicBody('claude-haiku-5-5', { system: 's', tools: [], user: 'u', force: 'explain' });
+  t('haiku 5.5: explain is forced by name', e.tool_choice?.type === 'tool' && e.tool_choice?.name === 'explain' && e.thinking?.type === 'disabled');
+  const h45 = SH.anthropicBody('claude-haiku-4-5-20251001', { system: 's', tools: [], user: 'u' });
+  t('haiku 4.5 unchanged: temperature 0, forced, no thinking field', h45.temperature === 0 && h45.tool_choice?.type === 'any' && !('thinking' in h45));
+  const f = SH.anthropicBody('claude-sonnet-5-5', { system: 's', tools: [], user: 'u' });
+  t('sonnet 5.5 stays adaptive (not the haiku-5 shape)', f.thinking?.type === 'adaptive' && f.tool_choice?.type === 'auto');
+  const usd = SH.estimateUsd('claude-haiku-5-5', { in: 1_000_000, cached: 0, out: 1_000_000 });
+  t('haiku 5.5 is priced at $0.10 in / $0.50 out per million', Math.abs(usd - 0.60) < 1e-9, usd);
+  t('haiku 5.5 cache reads at $0.01 per million', Math.abs(SH.estimateUsd('claude-haiku-5-5', { in: 1_000_000, cached: 1_000_000, out: 0 }) - 0.01) < 1e-9);
+}
 t('rows are cleaned before the model sees them', !/secret/.test(lastVendorBody.messages[0].content));
 t('explain logged by shape, not words', logs.at(-1).p_tool === 'explain' && logs.at(-1).p_args.kept === true && !('text' in logs.at(-1).p_args));
 
@@ -118,6 +132,62 @@ for (const [name, input, check] of cases) {
   t(`validate ${name} ${JSON.stringify(input).slice(0, 40)}`, check(rr), rr);
 }
 
+// ---- the phone's own menu (2026-10-08): client 'app' gets APP_TOOLS + APP_SYSTEM; everyone else is unchanged
+const shared = await import('../../supabase/functions/ask/shared.ts');
+vendorReply = tool('friends_free_now', { junk: 1 });
+r = await call({ q: 'who is free right now', client: 'app' });
+const appTools = lastVendorBody.tools.map((x: any) => x.name);
+t('app: the phone menu is sent — the phone\'s own five tools, then every website tool, cant_answer last',
+  JSON.stringify(appTools) === JSON.stringify(['friends_free_now', 'free_with_friends', 'best_professor', 'fits_plan', 'app_help', ...shared.TOOLS.map((x: any) => x.name).filter((n: string) => n !== 'cant_answer'), 'cant_answer']), appTools);
+t('app: its prompt says who-is-free means friends', /"who's free" is friends_free_now/i.test(lastVendorBody.system[0].text) && /never make up a subject code/i.test(lastVendorBody.system[0].text) && /\bbiz\b/.test(lastVendorBody.system[0].text), lastVendorBody.system[0].text.slice(0, 120));
+t('app: friends_free_now validated (junk dropped) and logged', r.tool === 'friends_free_now' && JSON.stringify(r.args) === '{}' && logs.at(-1).p_tool === 'friends_free_now', r);
+t('app: every phone tool keeps the website tool\'s parameters, apart from go_to and set_theme',
+  shared.TOOLS.every((w: any) => ['go_to', 'set_theme'].includes(w.name) || JSON.stringify(shared.APP_TOOLS.find((x: any) => x.name === w.name).parameters) === JSON.stringify(w.parameters)));
+t('app: every phone tool has its own description with an example', shared.APP_TOOLS.every((x: any) => x.name === 'cant_answer' || /E\.g\. "/.test(x.description)), shared.APP_TOOLS.filter((x: any) => x.name !== 'cant_answer' && !/E\.g\. "/.test(x.description)).map((x: any) => x.name));
+const goApp = shared.APP_TOOLS.find((x: any) => x.name === 'go_to').parameters.properties.where.enum;
+const srcApp = await Deno.readTextFile(new URL('../../supabase/functions/ask/shared.ts', import.meta.url));
+const serverPl = [...(srcApp.match(/const PLACES = \[([^\]]*)\]/) || ['', ''])[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+t('app: every phone place is one the function allows', goApp.every((p: string) => serverPl.includes(p)), goApp.filter((p: string) => !serverPl.includes(p)));
+await call({ q: 'who is free', client: 'app', term: '2268' });
+t('app: the term is named for the phone too (2268 → Fall 2026)', /The current term is Fall 2026\./.test(lastVendorBody.system[0].text));
+vendorReply = tool('search_sections', { subject: 'BUS' });
+await call({ q: 'bus', client: 'web' });
+t('web: an unknown or missing client gets the website menu and prompt, unchanged',
+  JSON.stringify(lastVendorBody.tools.map((x: any) => x.name)) === JSON.stringify(shared.TOOLS.map((x: any) => x.name))
+  && lastVendorBody.tools.every((x: any, i: number) => x.description === shared.TOOLS[i].description) && lastVendorBody.system[0].text === shared.SYSTEM('the current term'));
+const { fingerprint } = await import('../golden/score.ts');
+t('web: the website prompt and tools are exactly the 2026-09-26 ones (pinned fingerprint, not compared with themselves)',
+  await fingerprint(shared.SYSTEM('Fall 2026'), shared.TOOLS) === '93863fadfa725c29', await fingerprint(shared.SYSTEM('Fall 2026'), shared.TOOLS));
+await call({ q: 'bus' });
+t('…and with no client at all (the live phone build)', JSON.stringify(lastVendorBody.tools.map((x: any) => x.name)) === JSON.stringify(shared.TOOLS.map((x: any) => x.name)));
+const appCases: [string, any, (r: any) => boolean][] = [
+  ['free_with_friends', { friend: 'Maya<b>', days: ['Tu', 'Sa', 'x'], junk: 1 }, (r) => r.args.friend === 'Mayab' && JSON.stringify(r.args.days) === '["Tu"]' && !('junk' in r.args)],
+  ['free_with_friends', { rel: 'tomorrow', days: ['Mo'] }, (r) => r.args.rel === 'tomorrow' && !('days' in r.args)],
+  ['free_with_friends', {}, (r) => r.tool === 'free_with_friends' && JSON.stringify(r.args) === '{}'],
+  ['best_professor', { course: 'bus 3431' }, (r) => r.tool === 'best_professor' && r.args.course === 'BUS3431'],
+  ['best_professor', { course: 'biz' }, (r) => r.tool === 'cant_answer'],
+  ['fits_plan', { course: 'bus 4401', plan: 'a' }, (r) => r.args.course === 'BUS4401' && r.args.plan === 'A'],
+  ['fits_plan', { course: 'bus4401', plan: 'Mine' }, (r) => r.args.plan === 'mine'],
+  ['fits_plan', { course: 'bus4401', plan: 'D' }, (r) => r.args.course === 'BUS4401' && !('plan' in r.args)],
+  ['fits_plan', { course: 'bus4401', plan: 'Plan b' }, (r) => r.args.plan === 'B'],
+  ['fits_plan', { plan: 'A' }, (r) => r.tool === 'cant_answer'],
+  ['app_help', { topic: 'champ', junk: 1 }, (r) => r.tool === 'app_help' && JSON.stringify(r.args) === '{"topic":"champ"}'],
+  ['app_help', { topic: 'delete_account' }, (r) => r.tool === 'app_help' && r.args.topic === 'delete_account'],
+  ['app_help', { topic: 'refund' }, (r) => r.tool === 'cant_answer'],
+  ['app_help', { topic: 'Champ' }, (r) => r.tool === 'cant_answer'],
+  ['app_help', {}, (r) => r.tool === 'cant_answer'],
+];
+t('app: app_help offers exactly the 16 topics the phone answers',
+  JSON.stringify(shared.APP_TOOLS.find((x: any) => x.name === 'app_help').parameters.properties.topic.enum) === JSON.stringify(shared.HELP_TOPICS) && shared.HELP_TOPICS.length === 16);
+t('app: the phone prompt sends questions about TermChamp to app_help, never answered in words',
+  /ABOUT TermChamp or Champ[^.]*is app_help with the closest topic, however it is worded; never answer it in words/.test(shared.APP_SYSTEM('Fall 2026')));
+t('web: app_help is not on the website menu', !shared.TOOLS.some((x: any) => x.name === 'app_help'));
+for (const [name, input, check] of appCases) {
+  vendorReply = tool(name, input);
+  const rr = await call({ q: 'x ' + name, client: 'app' });
+  t(`validate ${name} ${JSON.stringify(input).slice(0, 44)}`, check(rr), rr);
+}
+
 // ---- privacy guards (review, 2026-09-24)
 vendorReply = tool('help', {});
 logs.length = 0;
@@ -136,8 +206,11 @@ gateModel = 'anthropic:claude-haiku-4-5-20251001';
 // ---- the four lists that must agree: function tools, SQL whitelist, and the places
 const src = await Deno.readTextFile(new URL('../../supabase/functions/ask/shared.ts', import.meta.url));
 const toolsBlock = src.slice(src.indexOf('const TOOLS'), src.indexOf('const SYSTEM'));
-const toolNames = [...toolsBlock.matchAll(/\{\s*name: '([a-z_]+)'/g)].map((m) => m[1]).concat(['explain']).sort();
-const sql = await Deno.readTextFile(new URL('../../sql/professify-assistant-v6.sql', import.meta.url));
+const appBlock = src.slice(src.indexOf('const APP_NEW'), src.indexOf('export const APP_NEW_NAMES'));
+const appNew = [...appBlock.matchAll(/\{\s*name: '([a-z_]+)'/g)].map((m) => m[1]);
+const toolNames = [...toolsBlock.matchAll(/\{\s*name: '([a-z_]+)'/g)].map((m) => m[1]).concat(['explain'], appNew).sort();
+t('the phone menu adds exactly five tools', appNew.join() === 'friends_free_now,free_with_friends,best_professor,fits_plan,app_help', appNew);
+const sql = await Deno.readTextFile(new URL('../../sql/professify-assistant-v8.sql', import.meta.url));
 const wl = sql.slice(sql.indexOf("p_tool not in"), sql.indexOf('then\n    return false'));
 const sqlNames = [...wl.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort();
 t('SQL whitelist names every tool the function can emit', JSON.stringify(sqlNames) === JSON.stringify(toolNames), { onlyTools: toolNames.filter((x) => !sqlNames.includes(x)), onlySql: sqlNames.filter((x) => !toolNames.includes(x)) });
