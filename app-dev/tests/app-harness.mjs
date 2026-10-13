@@ -46,6 +46,7 @@ function applyFilters(rows, params) {
       out = out.filter(r => parts.some(p => String(r[p[1]]) === p[2]));
     } else if ((m = /^eq\.(.*)$/.exec(v))) out = out.filter(r => String(r[k]) === m[1]);
     else if ((m = /^neq\.(.*)$/.exec(v))) out = out.filter(r => String(r[k]) !== m[1]);
+    else if (v === 'is.null') out = out.filter(r => r[k] == null);
     else if ((m = /^ilike\.(.*)$/.exec(v))) { const re = new RegExp('^' + m[1].replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/[%*]/g, '.*') + '$', 'i'); out = out.filter(r => re.test(String(r[k] ?? ''))); }
     else if ((m = /^in\.\((.*)\)$/.exec(v))) { const set = m[1].split(',').map(s => s.replace(/^"|"$/g, '')); out = out.filter(r => set.includes(String(r[k]))); }
   }
@@ -55,7 +56,7 @@ function applyFilters(rows, params) {
 }
 
 export async function openApp({ signedIn = true, width = 390, height = 844, tables = FX.TABLES, rpc = FX.RPC, poly = FX.POLY,
-  ask = null, hook = null, champ = true, path: pagePath = '/app/', port = +(process.env.APP_PORT || 8190), grants = null, time = '2026-09-29T10:30:00-07:00', init = null, wait = 2500, tz = 'America/Los_Angeles', search = '', screen = null, touch = null } = {}) {
+  ask = null, hook = null, champ = true, cmAsked = true, path: pagePath = '/app/', port = +(process.env.APP_PORT || 8190), grants = null, time = '2026-09-29T10:30:00-07:00', init = null, terms = 'single', wait = 2500, tz = 'America/Los_Angeles', search = '', screen = null, touch = null } = {}) {
   const dir = process.env.APP_DIR || path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', 'out');
   const log = { reads: [], writes: [], asks: [], errors: [], console: [], rpcs: [] };
   const T = JSON.parse(JSON.stringify(tables));
@@ -156,7 +157,13 @@ export async function openApp({ signedIn = true, width = 390, height = 844, tabl
   await ctx.routeWebSocket(/.*/, ws => { log.reads.push('ws:' + new URL(ws.url()).pathname); });
   await ctx.addInitScript(({ key, sess, signedIn }) => { try { if (signedIn) localStorage.setItem(key, JSON.stringify(sess)); } catch (e) {} }, { key: STORAGE_KEY, sess, signedIn });
   /* Champ asks before sending to Anthropic (2026-10-04); tests that aren't about that start allowed. */
+  if (cmAsked) await ctx.addInitScript(id => { try { localStorage.setItem('tc-commits-asked:' + id, '1'); } catch (e) {} }, FX.ME.id);
   if (champ) await ctx.addInitScript(id => { try { localStorage.setItem('tc_champ_ai:' + id, '1'); } catch (e) {} }, FX.ME.id);
+  /* The app ships with two terms (spring-wall, 2026-10-08: choose in Spring 2027, now = Fall 2026). The
+     fixtures are one term (2268), so by default the page runs the single-term app on it — exactly the
+     app before the wall. terms: 'live' keeps the shipped config; tests of the wall pass their own. */
+  if (terms === 'single') await ctx.addInitScript(() => { window.PROFESSIFY_CONFIG = { TERM: '2268', TERM_LABEL: 'Fall 2026', NOW_TERM: '2268', NOW_LABEL: 'Fall 2026', MY_TERMS: [{ code: '2268', label: 'Fall 2026' }, { code: '', label: 'Spring 2027' }] }; });
+  else if (terms && typeof terms === 'object') await ctx.addInitScript(t => { window.PROFESSIFY_CONFIG = t; }, terms);
   if (init) await ctx.addInitScript(init);
   const page = await ctx.newPage();
   if (time) await page.clock.install({ time: new Date(time) });

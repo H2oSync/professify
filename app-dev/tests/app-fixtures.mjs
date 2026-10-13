@@ -75,6 +75,8 @@ export const TABLES = {
   reviews_public: REVIEWS, class_history: HISTORY, plans: PLANS.concat(FRIEND_PLANS),
   conversations: CONVS, conversation_members: MEMBERS, messages: MESSAGES,
   course_prereqs: [{ course_code: 'STAT 1210', prereq_json: { req: [['MATH 1000']] } }], class_waivers: [{ user_id: ME.id, code: 'ENGL 1134', reason: 'ap' }], course_equiv: [],
+  /* the Planner's two preferences (2026-10-08): answered, so the Planner opens on the plan; tests of the first open pass an empty list */
+  planner_prefs: [{ user_id: ME.id, priority: 'degree', units: 16 }], degree_audit: [], dpr_flags: [],
 };
 export const RPC = {
   my_reviews: [], suggest_friends: [{ id: SUGGESTED.id, display_name: SUGGESTED.display_name, username: SUGGESTED.username, avatar_url: null, reason: 'Taking one of your classes', mutuals: 0, score: 10 }],

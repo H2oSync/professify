@@ -8,7 +8,7 @@ import nodeFs from 'node:fs'; import nodePath from 'node:path'; import nodeVm fr
 const only = process.argv.includes('--only') ? process.argv[process.argv.indexOf('--only') + 1] : null;
 const quiet = process.argv.includes('--quiet');
 let pass = 0, fail = 0; const fails = [];
-function ok(cond, name, info) { if (cond) { pass++; if (!quiet) console.log('  ok  ', name); } else { fail++; fails.push(name); console.log('  FAIL', name, info !== undefined ? '→ ' + JSON.stringify(info).slice(0, 300) : ''); } }
+function ok(cond, name, info) { if (cond) { pass++; if (!quiet) console.log('  ok  ', name); } else { fail++; fails.push(name); console.log('  FAIL', name, info !== undefined ? '→ ' + JSON.stringify(info).slice(0, +process.env.FULL || 300) : ''); } }
 const text = p => p.locator('#scroll').innerText();
 const settle = async (p, ms = 400) => { await p.clock.runFor(ms); await p.waitForTimeout(250); await p.clock.runFor(50); await p.waitForTimeout(100); };
 const click = async (p, sel) => { await p.locator(sel).first().click(); await settle(p); };
@@ -53,6 +53,7 @@ tests.home = async () => {
   ok(!/Your week/.test(t), 'home: my own week is not in the friends feed', t.slice(0, 300));
   const heads = await page.locator('.hfeed .fcard .top').allInnerTexts();
   ok(heads.some(h => /Avery Quill/.test(h)) && heads.every(h => !/with you/.test(h)) && await page.locator('.hfeed .fcard .pillchip').count() === 0, 'home: each card is a friend, with no “N classes with you” pill (Tate, 2026-09-30)', heads);
+  ok(heads.every(h => !/●|Done for the day|In class|Free (till|now|all day)|Busy/.test(h)), 'home: no “Done for the day” / “In class till …” under a friend’s name (Tate, 2026-10-13)', heads);
   const av = '#hf-' + FX.FRIENDS[0].id;
   const sh = [...new Set((await page.locator(av + ' .g-b.shared').allInnerTexts()).map(b => b.replace(/\s+/g, ' ')))];
   const notSh = (await page.locator(av + ' .g-b:not(.shared)').allInnerTexts()).map(b => b.replace(/\s+/g, ' '));
@@ -527,12 +528,12 @@ tests.storyOrder = async () => {
   /* 0 Avery in class till 11:40 · 1 Harper no classes added · 2 Quinn in class till 11 · 3 Rowan free till 12 · 4 Sky no classes today */
   await STORY_SET(page, [[0, [['BUS 1', 600, 700, 'TR']]], [1, []], [2, [['BUS 2', 600, 660, 'TR']]], [3, [['BUS 3', 720, 800, 'TR']]], [4, [['BUS 4', 600, 700, 'MW']]]]);
   let n = await storyNames(page);
-  ok(n.join(',') === 'Sky,Rowan,Quinn,Avery,Harper', 'stories: free now (longest stretch first), then in class (out soonest first), then no classes added', n);
+  ok(n.join(',') === 'Sky,Rowan,Quinn,Avery,Harper', 'stories: no classes today, then a class later (furthest off first), then in class (out soonest first), then no classes added', n);
   /* Busy people by when they're next free: Harper starts a class at 10:40 and another straight after
      (free at 12:40), so she comes after Quinn (out at 11) and Avery (out at 11:40). */
   await STORY_SET(page, [[1, [['BUS 5', 640, 680, 'TR'], ['BUS 6', 685, 760, 'TR']]]]);
   n = await storyNames(page);
-  ok(n.join(',') === 'Sky,Rowan,Quinn,Avery,Harper', 'stories: busy friends — in class or about to start one — by when they’re next free (back-to-back classes count as one stretch)', n);
+  ok(n.join(',') === 'Sky,Rowan,Harper,Quinn,Avery', 'stories: not in class yet counts with the free (Harper’s class at 10:40 is the nearest, so last of them); in class, out soonest first (2026-10-11)', n);
   /* A new friend joins the row; a removed one leaves it — without re-sorting everyone else. */
   const gone = await page.evaluate(() => { const g = TC.friends.pop(); render(true); return g; });
   n = await storyNames(page);
@@ -545,12 +546,75 @@ tests.storyOrder = async () => {
   ok(n[0] === 'Sky', 'stories: the row holds its order while you’re looking (rings update, circles don’t jump)', n);
   await click(page, '[data-a="tab"][data-x="explore"]'); await click(page, '[data-a="tab"][data-x="home"]');
   n = await storyNames(page);
-  ok(n.join(',') === 'Rowan,Quinn,Avery,Sky,Harper', 'stories: opening Home again re-sorts (Sky, now in class till noon, moves in among the busy)', n);
+  ok(n.join(',') === 'Rowan,Harper,Quinn,Avery,Sky', 'stories: opening Home again re-sorts (Sky, now in class till noon, moves in among the busy)', n);
   /* Ties keep one fixed order, whatever order the friends list arrives in. */
   await page.evaluate(() => { TC.friends.reverse(); TC.friends.forEach(f => { PEOPLE[f].secs = []; PEOPLE[f].unplaced = []; }); UI.storyOrder = null; render(true); });
   n = await storyNames(page);
   ok(n.join(',') === 'Avery,Harper,Quinn,Rowan,Sky', 'stories: a tie keeps one fixed order (by name), not the order the list arrived in', n);
   ok(log.errors.length === 0, 'stories: no page errors', log.errors);
+  await close();
+};
+
+/* ============ Stories, most free furthest left (Tate, 2026-10-11) ============
+   No classes today → done for the day → a class later today, the furthest-off first → in class, out soonest first →
+   schedule not set up (no class with a set time), always last. Pinned friends stay first. */
+tests.storyFreeness = async () => {
+  for (const split of [false, true]) {
+    const { page, close, log } = await openApp(split ? { terms: SPRING_CFG } : {});   /* Tuesday 10:30a */
+    await page.waitForFunction(() => TC.ready && document.querySelectorAll('.story').length === 5, null, { timeout: 8000 });
+    const tag = split ? ' (Fall classes while picking Spring)' : '';
+    /* secs: [code, start, end, days] or { async } / { tba }; null = nothing added; 'unplaced' = a class with no section */
+    const set = plan => page.evaluate(plan => {
+      const F = TC.friends.slice().sort((a, b) => PEOPLE[a].name.localeCompare(PEOPLE[b].name));   /* Avery, Harper, Quinn, Rowan, Sky */
+      const mk = (i, x, j) => x.async ? { id: 'sf' + i + j, code: 'ONL ' + i, async: true, s: null, e: null, days: '' } : x.tba ? { id: 'sf' + i + j, code: 'TBA ' + i, async: false, s: null, e: null, days: 'TR' }
+        : { id: 'sf' + i + j, code: x[0], s: x[1], e: x[2], days: x[3], async: false, sec: '01', prof: null };
+      plan.forEach((secs, i) => { const id = F[i], list = secs === 'unplaced' ? [] : (secs || []).map((x, j) => mk(i, x, j)), un = secs === 'unplaced' ? ['UNIV 1101'] : [];
+        PEOPLE[id].secs = list; PEOPLE[id].unplaced = un; PEOPLE[id].nowSecs = list; PEOPLE[id].nowUnplaced = un; });
+      UI.storyOrder = null; render(true);
+    }, plan);
+    const names = () => page.locator('.story .nm').allInnerTexts();
+    const ranks = () => page.evaluate(() => TC.friends.slice().sort((a, b) => PEOPLE[a].name.localeCompare(PEOPLE[b].name)).map(id => storyRank(id)[0]));
+    /* Avery: Mon/Wed only · Harper: done at 9 · Quinn: class at 2 · Rowan: class at 10:40 (not in it yet) · Sky: in class till 10:35 */
+    await set([[['BUS 1', 600, 700, 'MW']], [['BUS 2', 480, 540, 'TR']], [['BUS 3', 840, 900, 'TR']], [['BUS 4', 640, 720, 'TR']], [['BUS 5', 600, 635, 'TR']]]);
+    let n = await names();
+    ok(n.join(',') === 'Avery,Harper,Quinn,Rowan,Sky' && (await ranks()).join() === '0,1,2,2,3', 'freeness: no classes today, then done for the day, then the furthest-off class (even one 10 minutes off), then in class (even out in 5)' + tag, n);
+    /* reversed: the furthest-off class first, whoever's name comes first */
+    await set([[['BUS 1', 660, 720, 'TR']], [['BUS 2', 840, 900, 'TR']], [['BUS 3', 900, 960, 'TR']], [['BUS 4', 480, 540, 'TR'], ['BUS 6', 560, 600, 'TR']], [['BUS 5', 600, 700, 'MWF']]]);
+    n = await names();
+    ok(n.join(',') === 'Sky,Rowan,Quinn,Harper,Avery', 'freeness: among friends with a class later, the furthest-off class is furthest left (3p, 2p, 11a)' + tag, n);
+    /* in class: out soonest first; a class straight after counts as the same stretch */
+    await set([[['BUS 1', 600, 680, 'TR']], [['BUS 2', 600, 650, 'TR'], ['BUS 6', 655, 760, 'TR']], [['BUS 3', 620, 640, 'TR']], [['BUS 4', 600, 700, 'TR']], [['BUS 5', 615, 645, 'TR'], ['BUS 7', 700, 760, 'TR']]]);
+    n = await names();
+    ok(n.join(',') === 'Quinn,Sky,Avery,Rowan,Harper', 'freeness: in class, out soonest first (10:40, 10:45, 11:20, 11:40, then back-to-back till 12:40)' + tag, n);
+    /* not set up: only online, only no-time, a class with no section, nothing — always right, grey, never free; even on a day with no classes */
+    await set([[{ async: 1 }], [{ tba: 1 }], 'unplaced', null, [['BUS 5', 600, 660, 'TR']]]);
+    n = await names();
+    const st = await page.evaluate(() => TC.friends.slice().sort((a, b) => PEOPLE[a].name.localeCompare(PEOPLE[b].name)).map(id => { const s = status(id), el = document.querySelector(`.story[data-x="${id}"] .ring`); return [s.free, s.t, (el.getAttribute('style').match(/--rc:([^;"]+)/) || [])[1]]; }));
+    ok(n.join(',') === 'Sky,Avery,Harper,Quinn,Rowan' && (await ranks()).join() === '4,4,4,4,3', 'freeness: no class with a set time (online only, no time, no section, nothing) — always furthest right, even behind someone in class' + tag, n);
+    ok(st.slice(0, 4).every(x => x[0] === null && x[2] === '#CBD5E1') && st[0][1] === 'Class times not added' && st[1][1] === 'Class times not added' && st[2][1] === 'Class times not added' && st[3][1] === 'No classes added', 'freeness: …with the grey ring and “Class times not added” / “No classes added”, never called free' + tag, st);
+    const champFree = await page.evaluate(() => TC.friends.filter(f => status(f).free === true).map(f => PEOPLE[f].short));
+    ok(champFree.length === 0, 'freeness: Champ’s “who’s free” doesn’t count them either' + tag, champFree);
+    /* one timed class among online ones is enough to know their day */
+    await set([[{ tba: 1 }], null, null, null, [{ async: 1 }, ['BUS 1', 480, 540, 'TR']]]);
+    n = await names();
+    ok(n[0] === 'Sky' && (await ranks()).join() === '4,4,4,4,1' && await page.evaluate(() => status(TC.friends.find(f => PEOPLE[f].short === 'Sky')).free) === true, 'freeness: an online class plus one with a set time counts as set up (done for the day here)' + tag, n);
+    /* pinned friends stay first, whatever their freeness */
+    await set([[['BUS 1', 600, 700, 'MW']], [['BUS 2', 480, 540, 'TR']], [['BUS 3', 840, 900, 'TR']], null, [['BUS 5', 600, 660, 'TR']]]);
+    await page.evaluate(() => { const r = TC.friends.find(f => PEOPLE[f].short === 'Rowan'); pinsSet([r]); UI.storyOrder = null; render(true); });
+    n = await names();
+    ok(n.join(',') === 'Rowan,Avery,Harper,Quinn,Sky', 'freeness: a pinned friend stays first (even with no schedule); the rest follow the order' + tag, n);
+    await page.evaluate(() => { pinsSet([]); render(true); });
+    ok(log.errors.length === 0, 'freeness: no page errors' + tag, log.errors);
+    await close();
+  }
+  /* the weekend: everyone with a set-up schedule has no classes today, by name; not set up still last */
+  const { page, close } = await openApp({ time: '2026-10-03T12:00:00-07:00' });
+  await page.waitForFunction(() => TC.ready && document.querySelectorAll('.story').length === 5, null, { timeout: 8000 });
+  const w = await page.evaluate(() => { const F = TC.friends.slice().sort((a, b) => PEOPLE[a].name.localeCompare(PEOPLE[b].name));
+    PEOPLE[F[0]].secs = [{ id: 'w1', code: 'ONL 1', async: true, s: null, e: null, days: '' }]; PEOPLE[F[0]].unplaced = [];
+    [1, 2, 3, 4].forEach(i => { PEOPLE[F[i]].secs = [{ id: 'w' + i, code: 'BUS ' + i, async: false, s: 600 + i, e: 660, days: 'TR' }]; PEOPLE[F[i]].unplaced = []; }); UI.storyOrder = null; render(true);
+    return { n: [...document.querySelectorAll('.story .nm')].map(e => e.innerText), r: F.map(id => storyRank(id)[0]) }; });
+  ok(w.n.join(',') === 'Harper,Quinn,Rowan,Sky,Avery' && w.r.join() === '4,0,0,0,0', 'freeness: on a Saturday everyone set up has no classes today (by name); the online-only friend is still furthest right', w);
   await close();
 };
 
@@ -740,8 +804,9 @@ tests.newMajors = async () => {
   ok(plan.eem && plan.eem.units.join() === '15,13,16,16,15,15,16,12' /* 13: its 1–3 unit free elective counts as 1 */ && plan.eem.conc.join('|') === 'Event Planning and Management|Sport and Recreation Management|Tourism, Hospitality, and Destination Management', 'majors: EEM keeps its flowchart (Year 2 Spring now has its third GE) and its three concentrations under the new name', plan.eem);
   /* the Planner works for an EEM student saved under the old name */
   await click(page, '[data-a="tab"][data-x="schedule"]'); await click(page, '[data-a="schedTab"][data-x="past"]'); await tick(page, 2500);
-  const t = await text(page);
-  ok(/Experience & Event Management/.test(t) && /requirements filled/.test(t) && !/Recreation, Parks/.test(t), 'majors: the old-name student’s Planner opens on Experience & Event Management with its ledger', t.slice(0, 300));
+  const t = await withLeft(page);
+  const eemL = await page.evaluate(() => { const L = TCPL.ledger(); return L && { major: L.major, N: L.N }; });
+  ok(eemL && eemL.major === 'Experience & Event Management' && new RegExp('\\d+ of ' + eemL.N + '\\s*filled').test(t) && !/Recreation, Parks/.test(t), 'majors: the old-name student’s Planner opens on Experience & Event Management with its ledger', { eemL, t: t.slice(0, 200) });
   /* the Edit profile picker offers the new majors */
   await page.evaluate(() => A.openEditProfile && A.openEditProfile()); await tick(page, 600);
   const opts = await page.evaluate(() => { const sel = document.querySelector('select[data-k="major"]'); return sel && { all: [...sel.options].map(o => o.value), cur: sel.value }; });
@@ -752,8 +817,9 @@ tests.newMajors = async () => {
   const T2 = Object.assign({}, FX.TABLES, { profiles: FX.TABLES.profiles.map(p => p.id === FX.ME.id ? Object.assign({}, p, { major: 'Industrial Technology & Packaging', concentration: 'Packaging' }) : p) });
   const o = await openApp({ tables: T2 });
   await click(o.page, '[data-a="tab"][data-x="schedule"]'); await click(o.page, '[data-a="schedTab"][data-x="past"]'); await tick(o.page, 2500);
-  const t2 = await text(o.page);
-  ok(/Industrial Technology & Packaging/.test(t2) && /requirements filled/.test(t2) && /ITP 1100/.test(t2), 'majors: an ITP student’s Planner shows the ITP ledger and flowchart', t2.slice(0, 300));
+  const t2 = await withLeft(o.page);
+  const itpL = await o.page.evaluate(() => { const L = TCPL.ledger(); return L && { major: L.major, N: L.N }; });
+  ok(itpL && itpL.major === 'Industrial Technology & Packaging' && new RegExp('\\d+ of ' + itpL.N + '\\s*filled').test(t2) && /ITP 1100/.test(t2), 'majors: an ITP student’s Planner shows the ITP ledger and flowchart', { itpL, t: t2.slice(0, 200) });
   ok(o.log.errors.length === 0, 'majors: no page errors (ITP)', o.log.errors);
   await o.close();
 };
@@ -827,6 +893,7 @@ tests.agendaNames = async () => {
   const { page, close, log } = await openApp({});
   await page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 });
   await click(page, '[data-a="tab"][data-x="schedule"]'); await click(page, '[data-a="schedTab"][data-x="plans"]'); await click(page, '[data-a="pickPlan"][data-x="B"]');
+  await tick(page, 300); await page.evaluate(() => { UI.agOpen = UI.agOpen || {}; document.querySelectorAll('.ag-fold .ag-h').forEach(b => { UI.agOpen[b.dataset.x] = true; }); render(true); }); await tick(page, 200);
   await page.waitForFunction(() => document.querySelectorAll('#scroll .agenda .arow').length > 0, null, { timeout: 8000 });
   const rows = () => page.evaluate(() => [...document.querySelectorAll('#scroll .agenda .arow')].map(r => { const cn = r.querySelector('.cn');
     return { code: r.dataset.x, want: courseName(r.dataset.x), cn: cn ? cn.textContent : null, h: cn ? cn.getBoundingClientRect().height : 0, fs: cn ? parseFloat(getComputedStyle(cn).fontSize) : 0,
@@ -924,8 +991,10 @@ tests.refreshShuffle = async () => {
     return bad.slice(0, 3); });
   ok(prop.length === 0, 'refresh: a reshuffle is always a full reshuffle of everyone, never with the old top on top, and anyone can come first', prop);
   /* the cards rise in, then the class is gone */
-  await pullOn(page, 120); await page.clock.runFor(700); await page.waitForTimeout(150); await page.clock.runFor(50); await page.waitForTimeout(100);
-  ok(await page.evaluate(() => !!document.querySelector('.hfeed.fin')), 'refresh: the new cards animate in');
+  /* watch for the rise-in, 100ms at a time (a fixed wait missed it once the merged build's reload grew) */
+  await pullOn(page, 120); let finSeen = false;
+  for (let i = 0; i < 40 && !finSeen; i++) { await page.clock.runFor(100); await page.waitForTimeout(40); finSeen = await page.evaluate(() => !!document.querySelector('.hfeed.fin')); }
+  ok(finSeen, 'refresh: the new cards animate in');
   await settle(page, 1200);
   ok(log.errors.length === 0, 'refresh: no page errors', log.errors);
   await close();
@@ -977,7 +1046,7 @@ tests.shareTop = async () => {
   ok(pl.btn && pl.btn.x === 'A' && pl.btn.label === 'Share Plan A' && pl.btn.right === 16, 'share top: on Plans it shares the open plan', pl);
   const ca = await col();
   ok(ca.bg === 'rgb(15, 118, 110)' && ca.fg === 'rgb(255, 255, 255)', 'share top: on Plan A it turns Plan A’s teal', ca);
-  ok(pl.bars === 1 && pl.barAfter && pl.barL === 14 && pl.gap >= 6 && pl.gap <= 14 && /^(Friends can see|Only you)$/.test(pl.barText) && pl.oldShare === 0, 'share top: a plan keeps “Friends can see” under its week, alone', pl);
+  ok(pl.bars === 0 && pl.oldShare === 0, 'share top: a plan has no “Friends can see” row under its week (Tate, 2026-10-11: “dont need this take away”)', pl);
   await click(page, '[data-a="pickPlan"][data-x="C"]');
   ok((await where()).btn.x === 'C', 'share top: switching plan switches what it shares');
   const cc = await col();
@@ -1289,8 +1358,9 @@ tests.storyPins = async () => {
   ok(await page.evaluate(() => UI.sheet && UI.sheet.type === 'story'), 'pins: a hold with no click after it doesn’t swallow the next tap');
   await click(page, '#sheet .xbtn');
   await page.evaluate(id => A.openFriend(id), o0[4]); await settle(page);
-  await click(page, '.fpin'); await settle(page);
-  ok(await page.locator('.fpin').getAttribute('aria-pressed') === 'true' && await page.evaluate(() => pinsGet().length) === 3, 'pins: a friend’s page has a pin beside Message');
+  ok(await page.locator('#scroll .fpg [data-a="togglePin"]').count() === 0 && await page.locator('#scroll .fpg .mehead [data-a="openChatWith"]').count() === 1, 'pins: a friend’s page has no pin; Message sits where it was (Tate 2026-10-08)');
+  await page.evaluate(id => A.togglePin(id), o0[4]); await settle(page);
+  ok(await page.evaluate(() => pinsGet().length) === 3, 'pins: a third pin (from a story) still counts');
   await page.evaluate(id => A.togglePin(id), o0[0]); await settle(page, 100);
   st = await page.evaluate(() => ({ n: pinsGet().length, toast: document.getElementById('toast').textContent }));
   ok(st.n === 3 && /^3 pinned already — unpin \S+, \S+ or \S+ first$/.test(st.toast), 'pins: a fourth is refused, naming the three', st);
@@ -1308,6 +1378,73 @@ tests.storyPins = async () => {
 };
 
 /* ============ A friend's major, concentration and year (Tate, 2026-10-04) ============ */
+tests.friendStrip = async () => {
+  /* Tate 2026-10-10, option C: one neutral strip (Major | Concentration | Year); the year only as wide as its word,
+     words never break mid-word, no green/blue, light and dark; your own profile has the same strip since 2026-10-11. */
+  const T = JSON.parse(JSON.stringify(FX.TABLES));
+  Object.assign(T.profiles[1], { major: 'Business Administration', class_standing: 'Sophomore', concentration: 'Marketing Management' });
+  Object.assign(T.profiles[2], { major: 'Computer Science', class_standing: 'Senior', concentration: 'General / Open' });
+  Object.assign(T.profiles[3], { major: 'Architecture', class_standing: null, concentration: null });
+  Object.assign(T.profiles[4], { major: 'Entrepreneurship', class_standing: 'Freshman', concentration: 'Communications' });
+  const ids = T.profiles.slice(1, 4).map(p => p.id);
+  for (const theme of ['light', 'dark']) {
+    const init = theme === 'dark' ? () => { try { localStorage.setItem('tc-theme', 'dark'); } catch (e) {} } : null;
+    const o = await openApp({ tables: T, grants: { profiles: ['concentration'] }, init });
+    await o.page.waitForFunction(() => TC.ready && document.querySelectorAll('.hfeed .fcard').length === 5, null, { timeout: 8000 });
+    await o.page.evaluate(id => A.openFriend(id), ids[0]); await settle(o.page);
+    const a = await o.page.evaluate(() => { const st = document.querySelector('.fstrip'); if (!st) return null; const cs = [...st.querySelectorAll('.fs-c')], r = e => e.getBoundingClientRect(), y = cs.find(c => c.classList.contains('y')), card = r(document.querySelector('.fpg .mecard')), sr = r(st);
+      const mid = cs.every(c => { const v = c.querySelector('.fs-v'); const rg = document.createRange(); const words = v.textContent.split(' '); const tn = v.firstChild; let pos = 0; const tops = []; for (const w of words) { rg.setStart(tn, pos); rg.setEnd(tn, pos + w.length); const rs = [...rg.getClientRects()]; tops.push(new Set(rs.map(x => Math.round(x.top))).size); pos += w.length + 1; } return tops.every(n => n === 1); });
+      const col = e => getComputedStyle(e).color, bg = getComputedStyle(st).backgroundColor;
+      return { n: cs.length, labels: cs.map(c => c.querySelector('.fs-l').textContent), midWord: mid, yearW: Math.round(r(y).width), majW: Math.round(r(cs[0]).width), conW: Math.round(r(cs[1]).width), fits: sr.left >= card.left && sr.right <= card.right + 0.5, bg, cols: cs.map(c => col(c.querySelector('.fs-v'))), mut: col(cs[0].querySelector('.fs-l')), mebub: document.querySelectorAll('.fpg .mebub').length, ink: col(document.querySelector('.fpg .mename')) }; });
+    ok(a && a.n === 3 && a.labels.join() === 'Major,Concentration,Year', `friend strip (${theme}): Major, Concentration, Year in one strip`, a);
+    ok(a && a.midWord, `friend strip (${theme}): no word breaks in the middle`, a);
+    ok(a && a.yearW < a.majW && a.yearW < a.conW && a.yearW <= 100 && Math.abs(a.majW - a.conW) <= 2, `friend strip (${theme}): the year is only as wide as its word; major and concentration split the rest`, a);
+    ok(a && a.fits && a.bg === (theme === 'dark' ? 'rgb(27, 36, 56)' : 'rgb(241, 245, 249)'), `friend strip (${theme}): inside the card, neutral ${theme} fill`, a);
+    ok(a && a.cols.every(c => c === a.ink) && a.mebub === 0, `friend strip (${theme}): values are plain ink (no green or blue), the old coloured bubbles are gone`, a);
+    /* only a major + a year (General / Open), and only a major */
+    await click(o.page, '[data-a="back"]'); await settle(o.page);
+    for (const [i, want] of [[1, 'Major,Year'], [2, 'Major']]) {
+      await o.page.evaluate(id => A.openFriend(id), ids[i]); await settle(o.page);
+      const l = await o.page.evaluate(() => [...document.querySelectorAll('.fstrip .fs-l')].map(e => e.textContent).join());
+      ok(l === want, `friend strip (${theme}): ${want.replace(',', ' + ').toLowerCase()} only when that is all they set`, l);
+      await click(o.page, '[data-a="back"]'); await settle(o.page);
+    }
+    await o.page.evaluate(id => A.openFriend(id), T.profiles[4].id); await settle(o.page);
+    const lw = await o.page.evaluate(() => [...document.querySelectorAll('.fstrip .fs-c')].map(c => [...c.children].every(e => e.scrollWidth <= e.clientWidth + 0.5) && c.scrollWidth <= c.clientWidth + 0.5));
+    ok(lw.length === 3 && lw.every(Boolean), `friend strip (${theme}): long single words (Entrepreneurship, Communications) fit their cells, nothing clipped`, lw);
+    await o.page.screenshot({ path: process.env.SHOT_DIR ? process.env.SHOT_DIR + `/strip-${theme}.png` : '/dev/null' }).catch(() => {});
+    await click(o.page, '[data-a="back"]'); await settle(o.page);
+    ok(o.log.errors.length === 0, `friend strip (${theme}): no page errors`, o.log.errors);
+    await o.close();
+  }
+  /* a 360px phone: the longest single words still fit next to a Sophomore year cell */
+  Object.assign(T.profiles[4], { major: 'Entrepreneurship', class_standing: 'Sophomore', concentration: 'Communications' });
+  { const o = await openApp({ tables: T, grants: { profiles: ['concentration'] }, width: 360 });
+    await o.page.waitForFunction(() => TC.ready && document.querySelectorAll('.hfeed .fcard').length === 5, null, { timeout: 8000 });
+    await o.page.evaluate(id => A.openFriend(id), T.profiles[4].id); await settle(o.page);
+    const lw = await o.page.evaluate(() => [...document.querySelectorAll('.fstrip .fs-c')].map(c => { const v = c.querySelector('.fs-v'); return v.scrollWidth <= v.clientWidth + 0.5 && c.scrollWidth <= c.clientWidth + 0.5 && v.getBoundingClientRect().right <= document.querySelector('.fstrip').getBoundingClientRect().right + 0.5; }));
+    ok(lw.length === 3 && lw.every(Boolean), 'friend strip (360px): Entrepreneurship | Communications | Sophomore: nothing is cut off', lw);
+    await o.close(); }
+  /* 375px (iPhone mini): ordinary majors and concentrations never break inside a word */
+  { const o = await openApp({ tables: T, grants: { profiles: ['concentration'] }, width: 375 });
+    await o.page.waitForFunction(() => TC.ready && document.querySelectorAll('.hfeed .fcard').length === 5, null, { timeout: 8000 });
+    const bad = [];
+    for (const [m, c, y] of [['Business Administration', 'Marketing Management', 'Sophomore'], ['Computer Science', 'Software Engineering', 'Sophomore'], ['Communication Studies', 'Public Relations', 'Freshman'], ['Mechanical Engineering', 'General Engineering', 'Junior']]) {
+      await o.page.evaluate(([id, m, c, y]) => { Object.assign(PEOPLE[id], { major: m, conc: c, standing: y }); A.openFriend(id); render(true); }, [T.profiles[4].id, m, c, y]); await settle(o.page);
+      const br = await o.page.evaluate(() => [...document.querySelectorAll('.fstrip .fs-v')].flatMap(v => { const tn = v.firstChild, rg = document.createRange(); let pos = 0; return v.textContent.split(' ').filter(wd => { rg.setStart(tn, pos); rg.setEnd(tn, pos + wd.length); pos += wd.length + 1; return new Set([...rg.getClientRects()].map(x => Math.round(x.top))).size > 1; }); }));
+      if (br.length) bad.push([m, c, br]);
+    }
+    ok(!bad.length, 'friend strip (375px): Business Administration, Marketing Management, Software Engineering… never break inside a word', bad);
+    await o.close(); }
+  /* your own profile has the same strip since 2026-10-11 (me-strip): the real screen, computed styles */
+  { const o = await openApp({ tables: T });
+    await o.page.waitForFunction(() => TC.ready, null, { timeout: 8000 });
+    await click(o.page, '.homehdr .me-btn'); await settle(o.page);
+    const m = await o.page.evaluate(() => { const st = document.querySelector('.meown .fstrip'); return { strip: !!st, bg: st && getComputedStyle(st).backgroundColor, bubs: document.querySelectorAll('.mebub').length }; });
+    ok(m.strip && m.bg === 'rgb(241, 245, 249)' && m.bubs === 0, 'friend strip: your own profile has the same strip now (no coloured bubbles)', m);
+    await o.close(); }
+};
+
 tests.friendMajor = async () => {
   const T = JSON.parse(JSON.stringify(FX.TABLES));
   Object.assign(T.profiles[1], { major: 'Finance', class_standing: 'Junior', concentration: 'Financial Management' });
@@ -1316,7 +1453,7 @@ tests.friendMajor = async () => {
   Object.assign(T.profiles[6], { major: 'Economics', class_standing: 'Senior', concentration: 'Real Estate' });   /* a pending requester, not a friend */
   const ids = T.profiles.slice(1, 4).map(p => p.id);
   const look = async (page, id) => { await page.evaluate(id => A.openFriend(id), id); await settle(page);
-    const r = await page.evaluate(() => ({ pill: (document.querySelector('.fmaj-pill') || {}).textContent || null, sub: (document.querySelector('.fmaj-sub') || {}).textContent || null })); await click(page, '[data-a="back"]'); await settle(page); return r; };
+    const r = await page.evaluate(() => { const b = [...document.querySelectorAll('.fstrip .fs-c')]; const v = l => { const x = b.find(e => (e.querySelector('.fs-l') || {}).textContent === l); return x ? x.querySelector('.fs-v').textContent : null; }; const sub = [v('Concentration') ? v('Concentration') + ' concentration' : '', v('Year')].filter(Boolean).join(' · '); return { pill: v('Major'), sub: sub || null }; }); await click(page, '[data-a="back"]'); await settle(page); return r; };
   /* before the SQL runs: concentration can't be read, so major and year only */
   let o = await openApp({ tables: T });
   await o.page.waitForFunction(() => TC.ready && document.querySelectorAll('.hfeed .fcard').length === 5, null, { timeout: 8000 });
@@ -1337,12 +1474,12 @@ tests.friendMajor = async () => {
   a = await look(o.page, ids[2]);
   ok(a.pill === null && a.sub === null, 'friend major: nothing set → nothing drawn', a);
   await o.page.evaluate(id => A.openFriend(id), T.profiles[6].id); await settle(o.page);
-  a = await o.page.evaluate(() => ({ page: /Morgan Nobody/.test(document.getElementById('scroll').innerText) && !!document.querySelector('[data-a="acceptReq"]'), maj: document.querySelectorAll('.fmaj').length, econ: /Economics|Real Estate/.test(document.getElementById('scroll').innerText) }));
+  a = await o.page.evaluate(() => ({ page: /Morgan Nobody/.test(document.getElementById('scroll').innerText) && !!document.querySelector('[data-a="acceptReq"]'), maj: document.querySelectorAll('.fbubs').length, econ: /Economics|Real Estate/.test(document.getElementById('scroll').innerText) }));
   ok(a.page && a.maj === 0 && !a.econ, 'friend major: someone who isn’t your friend yet (a pending request) shows no major', a);
   await click(o.page, '[data-a="back"]');
   const box = await o.page.evaluate(id => { A.openFriend(id); return null; }, ids[0]); await settle(o.page);
-  const lay = await o.page.evaluate(() => { const h = document.querySelector('.fhandle').getBoundingClientRect(), m = document.querySelector('.fmaj').getBoundingClientRect(), b = document.querySelector('[data-a="openChatWith"]').getBoundingClientRect(), pill = document.querySelector('.fmaj-pill').getBoundingClientRect(); return { order: h.bottom <= m.top && m.bottom <= b.top, centred: Math.abs((pill.left + pill.right) / 2 - innerWidth / 2) < 2, fits: pill.right <= innerWidth - 16 }; });
-  ok(lay.order && lay.centred && lay.fits, 'friend major: under the handle, above Message, centred', lay);
+  const lay = await o.page.evaluate(() => { const h = document.querySelector('.fhandle').getBoundingClientRect(), m = document.querySelector('.fbubs').getBoundingClientRect(), bt = document.querySelectorAll('[data-a="openChatWith"]'), b = bt[0].getBoundingClientRect(), nm = document.querySelector('.fpg .mename').getBoundingClientRect(), c = document.querySelector('.fpg .mecard').getBoundingClientRect(); return { one: bt.length === 1, head: !!bt[0].closest('.mehead'), right: b.left >= nm.right - 0.5 && b.right <= c.right + 0.5, small: b.height === 34 && b.width > 60 && b.width < 120 && bt[0].textContent.trim() === 'Message' && /Message/.test(bt[0].getAttribute('aria-label') || ''), above: b.bottom <= m.top + 0.5 && h.bottom <= m.top + 0.5, pin: !!document.querySelector('.fpg [data-a="togglePin"]') }; });
+  ok(lay.one && lay.head && lay.right && lay.small && lay.above && !lay.pin, 'friend major: Message is a small labelled pink pill on the right of the header (no pin, no full-width button), the strip under it (Tate 2026-10-10)', lay);
   ok(o.log.errors.length === 0, 'friend major: no page errors', o.log.errors);
   await o.close();
 };
@@ -1449,7 +1586,7 @@ tests.planPicker = async () => {
   const b = await page.locator('#sheet').innerText();
   const bg = await page.evaluate(() => ({ ghost: getComputedStyle(document.querySelector('#sheet .g-b.ghost')).backgroundColor, clashb: document.querySelectorAll('#sheet .g-b.clashb').length, chip: getComputedStyle(document.querySelector('#sheet .at-chip.on')).backgroundColor }));
   ok(bg.ghost === 'rgb(220, 38, 38)' && bg.clashb === 2 && bg.chip === 'rgb(194, 65, 12)', 'picker: on Plan B (orange chip) the section goes red over ECON 2303, which is marked too', bg);
-  ok(/Clashes with ECON 2303 Sec 03 · Tue\/Thu 10:10–12:00/.test(b) && await page.locator('#sheet [data-a="atGo"]').count() === 0 && await page.locator('#sheet .at-cta button[disabled]').count() === 1, 'picker: a clash in a plan names the class and can’t be added', b);
+  ok(/Clashes with ECON 2303 Sec 03 · Tue\/Thu 10:10–12:00/.test(b) && /Replace ECON 2303 with this class/.test(await page.locator('#sheet [data-a="atGo"]').innerText()) && await page.locator('#sheet .at-cta button[disabled]').count() === 0, 'picker: a clash in a plan names the class and offers to replace it', b);
   await click(page, '#sheet [data-a="atPick"][data-x="C"]');
   ok(/Fits Plan C/.test(await page.locator('#sheet').innerText()) && await page.locator('#sheet .addto.plan-C').count() === 1, 'picker: an empty Plan C fits, in Plan C’s colours');
   const fxOnce = await page.evaluate(() => { const a = !!document.querySelector('#sheet .addto.fx'); render(true); return [a, !!document.querySelector('#sheet .addto.fx'), getComputedStyle(document.querySelector('#sheet .fullpg')).animationName]; });
@@ -1499,6 +1636,73 @@ tests.planPicker = async () => {
    Waitlisted; a clash warns but can be added; another section of a class you have is Swap or Keep both;
    Undo puts the class's own rows back. Fixture My Classes: BUS 3438 §01 MoWe 10:10, BUS 4442 §01 MoWe
    12:10, BUS 4445 §01 MoWe 2:10, BUS 3431 §01 MoWe 4:10, BUS 2201 (no section). */
+/* 2026-10-09 (Tate: "once i added one it wont let me add another like human recources"): a class with no set
+   time was in his Plans A and B, but Add to your week drew only the timed ones and offered only Remove. Now the
+   sheet's week has an Anytime tray, the note says it's under Anytime, and Plans says Anytime too. */
+tests.planAnytime = async () => {
+  const { page, close, log } = await openApp();
+  await page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 });
+  const ids = await page.evaluate(() => {
+    /* a second class with no set time, like his BUS 3384A project (synthetic) */
+    COURSES['BUS 3384A'] = { title: 'Fixture Project Course', units: null, prereq: null, desc: null, short: 'Fixture Project Course' };
+    addSection({ id: '79901', code: 'BUS 3384A', sec: 'V01-ACT Regular', prof: null, days: '', s: null, e: null, async: false, noTime: true, seats: 5, status: 'open', cap: 30, wl: 0, location: '', rawDays: '', instructor: '' });
+    const un = SECTIONS.filter(s => s.noTime || s.async), u1 = un[0], u2 = un.find(s => s.code !== u1.code), u1b = un.find(s => s.code === u1.code && s.id !== u1.id), t1 = SECTIONS.find(s => s.s != null && !s.async && s.days.includes('M'));
+    TC.plans.B = [t1.id, u1.id]; TC.plans.A = []; S.addDest = 'B'; S.plan = 'B'; return { u1: [u1.id, u1.code], u2: [u2.id, u2.code], u1b: u1b && u1b.id, t1: [t1.id, t1.code], t2: SECTIONS.find(s => s.s != null && !s.async && s.code !== t1.code && s.days.includes('T') && !s.days.includes('M')).id }; });
+  const sheet = () => page.evaluate(() => { const w = document.querySelector('.addto .at-week'); const tray = w && w.querySelector('.anyrow');
+    return { chips: tray ? [...tray.querySelectorAll('.any-c')].map(c => (c.classList.contains('new') ? '+' : c.classList.contains('out') ? '-' : '') + [...c.querySelectorAll('span')].map(x => x.textContent).join(' ')) : null,
+      label: tray && tray.querySelector('.any-h').textContent, note: (document.querySelector('.addto .at-note') || {}).textContent, btn: (document.querySelector('.addto .at-cta .btn') || {}).textContent, text: document.querySelector('.addto').innerText }; });
+  /* already in the plan */
+  await page.evaluate(id => openAddTo(id), ids.u1[0]); await tick(page, 400);
+  let r = await sheet();
+  ok(r.label === 'Anytime' && r.chips.join() === ids.u1[1] && /^.+ is already in Plan B — under Anytime, since it has no set time\.$/.test(r.note) && /^Remove from Plan B/.test(r.btn) && !/isn’t drawn/.test(r.text), 'anytime: a class with no set time that is in the plan is shown under Anytime, and the note says so', r);
+  /* a second class with no set time: it glows in the tray, next to the one already there */
+  await page.evaluate(id => { UI.sheet = null; openAddTo(id); }, ids.u2[0]); await tick(page, 400);
+  r = await sheet();
+  ok(r.chips.join() === ids.u1[1] + ',+' + ids.u2[1] && /^Fits Plan B — it has no set time, so it goes under Anytime\.$/.test(r.note) && r.btn === 'Add to Plan B', 'anytime: adding another no-time class — both in the tray, the new one lit, Add to Plan B', r);
+  await page.locator('.addto .at-go').click(); await page.waitForFunction(() => !UI.sheet, null, { timeout: 4000 }).catch(() => {});
+  ok(await page.evaluate(ids => TC.plans.B.includes(ids.u2[0]) && TC.plans.B.includes(ids.u1[0]), ids), 'anytime: it goes in, and the first stays');
+  await page.evaluate(id => openAddTo(id), ids.u2[0]); await tick(page, 400);
+  r = await sheet();
+  ok(!r.chips.some(c => c[0] === '+') && /already in Plan B — under Anytime/.test(r.note), 'anytime: reopened, it is a plain chip, not lit', r);
+  /* a timed class: the plan's no-time classes are still on its sheet */
+  await page.evaluate(id => { UI.sheet = null; openAddTo(id); }, ids.t2); await tick(page, 400);
+  r = await sheet();
+  ok(r.chips && r.chips.join() === ids.u1[1] + ',' + ids.u2[1] && /^Fits Plan B\.$/.test(r.note), 'anytime: adding a timed class still shows the plan’s Anytime classes', r);
+  /* another section of a no-time class: the one it swaps out is struck */
+  if (ids.u1b) { await page.evaluate(id => { UI.sheet = null; openAddTo(id); }, ids.u1b); await tick(page, 400); r = await sheet();
+    ok(r.chips.includes('-' + ids.u1[1]) && r.chips.includes('+' + ids.u1[1]) && /^Swaps out/.test(r.note), 'anytime: a swap strikes the section it replaces', r); }
+  /* a Saturday-only section has a time: it goes under Anytime, and the note says why without saying "no set time" */
+  await page.evaluate(() => { addSection({ id: '79902', code: 'BUS 3384A', sec: 'S02-LEC Regular', prof: null, days: 'S', s: 540, e: 720, async: false, noTime: false, seats: 5, status: 'open', cap: 30, wl: 0, location: '', rawDays: 'Sa 9:00AM - 12:00PM', instructor: '' }); UI.sheet = null; TC.plans.C = []; S.addDest = 'C'; openAddTo('79902'); }); await tick(page, 400);
+  r = await sheet();
+  ok(r.chips.join() === '+BUS 3384A' && /^Fits Plan C — it meets only on the weekend, so it goes under Anytime\.$/.test(r.note) && !/no set time/.test(r.note), 'anytime: a Saturday-only class is under Anytime, and the note says it meets on the weekend — not "no set time"', r);
+  await page.evaluate(() => { TC.plans.C = ['79902']; UI.sheet = null; S.plan = 'C'; A.schedTabGo('plans'); render(true); }); await tick(page, 300);
+  ok(await page.evaluate(() => { const a = document.querySelector('#scroll .plancol.plan-C .anytime'); return !!a && /BUS\s*3384A/.test(a.innerText); }), 'anytime: on Plans a Saturday-only class is under Anytime too (it used to be on neither the week nor the card)');
+  /* My Classes: the tray shows there too, and the label is read out whole */
+  await page.evaluate(id => { UI.sheet = null; TC.plans.C = []; openAddTo(id); A.atPick('mine'); }, ids.u2[0]); await tick(page, 400);
+  r = await sheet();
+  const aria = await page.evaluate(() => [...document.querySelectorAll('.addto .at-week .any-c')].map(c => c.getAttribute('aria-label')));
+  ok(r.chips.some(c => c === '+BUS 3384A') && aria.some(x => /^BUS 3384A V01 · .* — going in$/.test(x)), 'anytime: My Classes shows its tray, and each chip has a spoken label', { r, aria });
+  /* Schedule › Plans says Anytime, with the same chips, in the plan's colour */
+  await page.evaluate(() => { UI.sheet = null; S.plan = 'B'; A.schedTabGo('plans'); render(true); }); await tick(page, 400);
+  const pl = await page.evaluate(() => { const a = document.querySelector('#scroll .plancol.plan-B .anytime'); if (!a) return null; const c = a.querySelector('.any-c');
+    return { head: a.firstElementChild.textContent, chips: [...a.querySelectorAll('.any-c')].map(x => x.innerText.replace(/\s+/g, ' ')), lines: c.querySelectorAll('span').length, bg: getComputedStyle(c).backgroundColor, act: c.dataset.a }; });
+  ok(pl && pl.head === 'Anytime' && pl.chips.length === 2 && pl.lines === 2 && pl.act === 'secSheet' && pl.bg !== 'rgba(0, 0, 0, 0)', 'anytime: Plans says Anytime, two-line chips you can tap', pl);
+  /* contrast, light and dark: the chips and the lit one */
+  for (const th of ['light', 'dark']) {
+    await page.evaluate(th => { document.documentElement.dataset.theme = th; UI.sheet = null; render(true); }, th);
+    await page.evaluate(id => openAddTo(id), ids.u1b || ids.t2); await tick(page, 400);
+    const bad = await page.evaluate(() => { const out = [];
+      const lum = c => { const m = c.match(/[\d.]+/g).map(Number); const f = v => { v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }; return .2126 * f(m[0]) + .7152 * f(m[1]) + .0722 * f(m[2]); };
+      document.querySelectorAll('.addto .at-week .any-c:not(.out), .addto .any-h').forEach(el => { let b = 'rgb(255,255,255)'; for (let e = el; e; e = e.parentElement) { const x = getComputedStyle(e).backgroundColor; if (x && !/rgba\(0, 0, 0, 0\)|transparent/.test(x)) { b = x; break; } }
+        const a = lum(getComputedStyle(el).color), bb = lum(b), r = (Math.max(a, bb) + .05) / (Math.min(a, bb) + .05); if (r < 4.5) out.push(el.className + ' ' + r.toFixed(2)); });
+      return out; });
+    ok(!bad.length, `anytime: the tray reads in ${th} mode`, bad);
+  }
+  await page.evaluate(() => { delete document.documentElement.dataset.theme; });
+  ok(!log.errors.length, 'anytime: no page errors', log.errors);
+  await close();
+};
+
 tests.addToWeek = async () => {
   let failSec = false;
   const { page, close, log } = await openApp({ hook: (url, m) => failSec && m === 'POST' && url.pathname.endsWith('/my_sections') ? { status: 400, body: JSON.stringify({ code: '23514', message: 'check violation' }) } : null });
@@ -1515,7 +1719,7 @@ tests.addToWeek = async () => {
   ok(/Fits your week\./.test(await page.locator('#sheet .at-note').innerText()), 'mine: PHIL fits');
   await click(page, '#sheet [data-a="atPick"][data-x="term:Spring 2027"]');
   const sp = await page.locator('#sheet').innerText();
-  ok(/Spring 2027 sections aren’t posted yet/.test(sp) && await page.locator('#sheet [data-a="atGo"]').count() === 0 && await page.locator('#sheet .g-b').count() === 0, 'mine: the Spring chip explains and offers nothing to add', sp.slice(-200));
+  ok(/Spring 2027 sections aren’t in TermChamp yet/.test(sp) && await page.locator('#sheet [data-a="atGo"]').count() === 0 && await page.locator('#sheet .g-b').count() === 0, 'mine: the Spring chip explains and offers nothing to add', sp.slice(-200));
   await click(page, '#sheet [data-a="atPick"][data-x="mine"]');
   const s0 = W('saved_classes').length, m0 = W('my_sections').length;
   await atGo(page);
@@ -1539,15 +1743,16 @@ tests.addToWeek = async () => {
   const wl = W('my_sections').slice(m2);
   ok(wl.length === 1 && wl[0].body.status === 'waitlisted' && wl[0].body.wl_pos === 7 && wl[0].body.class_nbr === FX.seat('ECON 2303', '04').class_nbr, 'mine: saved as waitlisted, spot 7 (the desktop’s row shape)', wl.map(w => w.body));
   await click(page, '[data-a="tab"][data-x="schedule"]'); await click(page, '[data-a="schedTab"][data-x="mine"]');
+  await page.evaluate(() => { UI.agOpen = UI.agOpen || {}; document.querySelectorAll('.ag-fold .ag-h').forEach(b => { UI.agOpen[b.dataset.x] = true; }); render(true); }); await tick(page, 200);
   const wt = await text(page), gold = await page.evaluate(() => [...document.querySelectorAll('#scroll .g-b.wlist')].map(b => b.dataset.x + '|' + getComputedStyle(b).borderTopStyle));
   ok(/ECON 2303[\s\S]{0,80}Waitlist #7/.test(wt) && gold.length === 2 && gold.every(x => x === 'ECON 2303|dashed'), 'mine: My Classes shows it as a dashed gold block and “Waitlist #7”', { gold, t: wt.slice(-300) });
   /* A clash in My Classes warns, and can still be added. BUS 4401 §01 MoWe 10:10 clashes with BUS 3438. */
   await page.evaluate(() => A.openClass('BUS 4401')); await settle(page, 500);
   await click(page, '.secrow .addbtn');
   const cn = await page.locator('#sheet .at-note').innerText();
-  ok(/Clashes with BUS 3438 Sec 01 · Mon\/Wed 10:10–12:00/.test(cn) && /Add anyway/.test(await page.locator('#sheet [data-a="atGo"]').innerText()) && await page.locator('#sheet .g-b.clashb').count() === 2, 'mine: a clash warns, marks the class, and offers Add anyway', cn);
+  ok(/Clashes with BUS 3438 Sec 01 · Mon\/Wed 10:10–12:00/.test(cn) && /Replace BUS 3438 with this class/.test(await page.locator('#sheet [data-a="atGo"]').first().innerText()) && /Add anyway/.test(await page.locator('#sheet [data-a="atGo"][data-x="anyway"]').innerText()) && await page.locator('#sheet .g-b.clashb').count() === 2, 'mine: a clash warns, marks the class, offers Replace and Add anyway', cn);
   const m3 = W('my_sections').length;
-  await atGo(page);
+  await click(page, '#sheet [data-a="atGo"][data-x="anyway"]'); await settle(page, 700); await settle(page, 1100);
   ok(W('my_sections').slice(m3).length === 1 && await page.evaluate(() => myCodes().has('BUS 4401')), 'mine: Add anyway adds it');
   /* Another section of a class you have: Swap, or Keep both. BUS 3431 §02 vs your §01. */
   await page.evaluate(() => A.openClass('BUS 3431')); await settle(page, 500);
@@ -1713,8 +1918,20 @@ tests.ringsToday = async () => {
   ok(none.length >= 1 && none.every(x => x.free === null && x.ring === '#CBD5E1'), 'rings: a friend with no classes added gets a grey ring, never green', none);
   const ord = await page.evaluate(() => storyOrder().map(id => PEOPLE[id].short));
   ok(none.every(x => ord.indexOf(x.n) >= ord.length - none.length), 'rings: friends with no classes added are last in the row', { ord, none });
-  const line = await page.evaluate(id => { A.story(id); render(true); const el = document.querySelector('#sheet .sthead .b'); return el && getComputedStyle(el).color; }, await page.evaluate(() => TC.friends.find(id => personSecs(id).length)));
-  ok(line && line !== 'rgb(22, 163, 74)', 'rings: in a story’s sheet “No classes today” is grey, not green (Tate, 2026-10-05: no green for free time); the ring on the story stays green', line);
+  /* Tate, 2026-10-09: "take the no classes today out" — the green ring stays, the line under the name goes */
+  const fid = await page.evaluate(() => TC.friends.find(id => personSecs(id).length));
+  const homeLine = await page.evaluate(id => { const c = document.getElementById('hf-' + id); return c ? c.querySelector('.top').innerText : null; }, fid);
+  ok(homeLine !== null && !/No classes today/.test(homeLine), 'rings: Home’s card has no “No classes today” line', homeLine);
+  const story = await page.evaluate(id => { A.story(id); render(true); const h = document.querySelector('#sheet .sthead'), sh = document.getElementById('sheet'); return { head: h ? h.innerText : null, body: sh ? sh.innerText : '' }; }, fid);
+  ok(story.head !== null && !/No classes today/.test(story.head) && /No classes today/.test(story.body), 'rings: a story’s top has no “No classes today” line; its day still says so where the classes would be', story);
+  await page.evaluate(() => { UI.sheet = null; render(true); });
+  await page.evaluate(id => A.openFriend(id), fid); await settle(page);
+  const pg = await page.evaluate(() => ({ st: !!document.querySelector('.fpg .mestatus'), txt: document.querySelector('.fpg .mecard').innerText, ring: (document.querySelector('.fpg .ringav').getAttribute('style').match(/--rc:([^;"]+)/) || [])[1] }));
+  ok(!pg.st && !/No classes today/.test(pg.txt) && pg.ring === '#16A34A', 'rings: a friend’s page has no “No classes today” line and keeps the green ring', pg);
+  await click(page, '[data-a="tab"][data-x="friends"]');
+  const fl = await page.evaluate(() => document.getElementById('scroll').innerText);
+  ok(!/No classes today/.test(fl) && /No classes added|Class times not added/.test(fl), 'rings: the Friends list drops “No classes today” but keeps the other statuses', fl.slice(0, 200));
+  await click(page, '[data-a="tab"][data-x="home"]');
   /* busyToday is the one place a day is filled: a work shift plugged in there makes them busy. */
   const busy = await page.evaluate(() => { const id = TC.friends.find(f => personSecs(f).length), old = busyToday;
     busyToday = f => f === id ? [{ code: 'Work', s: CLOCK.min - 10, e: CLOCK.min + 60, days: CLOCK.day }] : old(f);
@@ -1722,7 +1939,7 @@ tests.ringsToday = async () => {
     const free = TC.friends.filter(f => f !== id && status(f).free === true);
     return Object.assign(st, { last: free.every(f => ord.indexOf(f) < ord.indexOf(id)), rk, end: CLOCK.min + 60 }); });
   ok(busy.free === false && /Work/.test(busy.t), 'rings: status reads busyToday (where work shifts will plug in)', busy);
-  ok(busy.last && busy.rk[0] === 1 && busy.rk[1] === busy.end, 'rings: the story order reads busyToday too — someone at work comes after everyone free, ranked by when the shift ends', busy);
+  ok(busy.last && busy.rk[0] === 3 && busy.rk[1] === busy.end, 'rings: the story order reads busyToday too — someone at work comes after everyone free, ranked by when the shift ends', busy);
   /* the friend page's photo ring matches the stories */
   const pr = await page.evaluate(() => { UI.sheet = null; const out = {}; [TC.friends.find(f => !personSecs(f).length), TC.friends.find(f => personSecs(f).length)].forEach((id, i) => {
     A.openFriend(id); render(true); const el = document.querySelector('#scroll .ringav'); out[i ? 'with' : 'none'] = el && (el.getAttribute('style').match(/--rc:([^;"]+)/) || [])[1]; back(); }); return out; });
@@ -1803,14 +2020,14 @@ tests.plans = async () => {
   await click(page, '#exlist [data-x="ECON 2303"]');
   await click(page, '.secrow .addbtn >> nth=0'); await click(page, '#sheet [data-a="atPick"][data-x="A"]');
   const clashSheet = await page.locator('#sheet').innerText();
-  ok(/Clashes with PHIL 3331/.test(clashSheet) && await page.locator('#sheet [data-a="atGo"]').count() === 0 && await page.locator('#sheet .at-cta button[disabled]').count() === 1, 'plans: a clash is shown with the real reason and can’t be added', clashSheet);
+  ok(/Clashes with PHIL 3331/.test(clashSheet) && /Replace PHIL 3331 with this class/.test(await page.locator('#sheet [data-a="atGo"]').innerText()) && await page.locator('#sheet .at-cta button[disabled]').count() === 0, 'plans: a clash is shown with the real reason and offers to replace it', clashSheet);
   await click(page, '#sheet .xbtn[data-a="closeSheet"]');
   /* Plan B from the server: one real section and one the feed no longer has. */
   await click(page, '[data-a="tab"][data-x="schedule"]');
   await click(page, '[data-a="schedTab"][data-x="plans"]');
   await click(page, '[data-a="pickPlan"][data-x="B"]');
   const t = await text(page);
-  ok(!/\d+ class(es)?\b/.test(t.split('Share')[0]) && /1 section in this plan is no longer in the Fall 2026 list/.test(t) && /ECON 2303/.test(t), 'plans: plan B loads from the server and says what it can’t show', t.slice(0, 400));
+  ok(!/\d+ class(es)?\b/.test(t.split('Share')[0].split('\n').filter(l => !/^\d+ class(es)?$/.test(l)).join('\n')) && /1 section in this plan is no longer in the Fall 2026 list/.test(t) && /ECON\s+2303/.test(t), 'plans: plan B loads from the server and says what it can’t show', t.slice(0, 400));
   ok(!/Use as my schedule|Make this my schedule/.test(t), 'plans: no register button');
   ok(log.errors.length === 0, 'plans: no page errors', log.errors);
   await close();
@@ -2042,8 +2259,65 @@ tests.rateOnce = async () => {
   await click(page, '[data-a="tab"][data-x="rate"]');
   const row = await page.locator('.li:has-text("Ada Examplewood")').first().innerText();
   ok(/5\.0/.test(row) && !/Rate$/.test(row.trim()), 'rate: already-reviewed professor shows your score', row);
-  await click(page, '.li:has-text("Ada Examplewood")');
-  ok(await page.locator('.rf').count() === 0 && /already reviewed/.test(await page.locator('#toast').innerText()), 'rate: one review per professor');
+  ok(/open their page/.test(await page.locator('.li:has-text("Ada Examplewood")').first().getAttribute('aria-label') || ''), 'rate: a rated professor’s row says it opens their page');
+  /* Tate 2026-10-09: "when you click on a professor who your already rated … go to their page" */
+  const adaId = await page.locator('.li:has-text("Ada Examplewood")').first().getAttribute('data-x');
+  await click(page, '.li:has-text("Ada Examplewood")'); await tick(page, 400);
+  const cur1 = await page.evaluate(() => { const e = cur(); return e && { s: e.s, id: e.p && e.p.id }; });
+  ok(await page.locator('.rf').count() === 0 && cur1 && cur1.s === 'profDetail' && cur1.id === adaId && /Ada Examplewood/.test(await text(page)), 'rate: tapping a professor you rated opens their page, not a second review', cur1);
+  await page.evaluate(id => A.rateProf(id), adaId); await tick(page, 300);
+  ok(await page.locator('.rf').count() === 0 && /already reviewed/.test(await page.locator('#toast').innerText()), 'rate: still one review per professor');
+  await close();
+};
+/* Tate 2026-10-09: "if i click on the professors name in the review form it brings you to the professors page" */
+tests.rateFormProfLink = async () => {
+  const { page, close, log } = await openApp({});
+  await click(page, '[data-a="tab"][data-x="rate"]');
+  const row = page.locator('.li[data-a="rateProf"]').first(); const pid = await row.getAttribute('data-x');
+  await row.click(); await tick(page, 400);
+  ok(await page.locator('.rf').count() === 1, 'review form: opens from Rate');
+  await page.evaluate(() => { S.draft.stars = 4; render(true); }); await tick(page, 200);
+  const who = page.locator('.rf-head .rf-who');
+  ok(await who.count() === 1 && /open their page/.test(await who.getAttribute('aria-label')) && (await who.evaluate(e => e.tagName)) === 'BUTTON', 'review form: the photo and name are one button that opens their page');
+  await who.click(); await tick(page, 400);
+  const c = await page.evaluate(() => { const e = cur(); return e && { s: e.s, id: e.p && e.p.id }; });
+  ok(c && c.s === 'profDetail' && c.id === pid && await page.locator('.rf').count() === 0, 'review form: tapping the name opens the professor’s page', { c, pid });
+  await click(page, '[data-a="back"]'); await tick(page, 400);
+  ok(await page.locator('.rf').count() === 1 && await page.evaluate(() => S.draft && S.draft.stars) === 4, 'review form: back returns to the form with what you’d filled in');
+  /* form → their page → Rate on their page: back to the same form, not a second one */
+  const depth = await page.evaluate(() => S.stack[S.tab].length);
+  await page.locator('.rf-head .rf-who').click(); await tick(page, 400);
+  await click(page, '.hero [data-a="rateProf"]'); await tick(page, 400);
+  const st = await page.evaluate(() => ({ n: S.stack[S.tab].length, top: cur().s, stars: S.draft && S.draft.stars, forms: S.stack[S.tab].filter(e => e.s === 'rateForm').length }));
+  ok(st.n === depth && st.top === 'rateForm' && st.stars === 4 && st.forms === 1, 'review form: Rate on their page goes back to the form you were filling in', { depth, st });
+  ok(log.errors.length === 0, 'review form link: no page errors', log.errors);
+  await close();
+};
+/* Tate 2026-10-09: "for subject filters just have all, the persons major and GEs" */
+tests.subjectFilter = async () => {
+  const { page, close, log } = await openApp({});
+  await click(page, '[data-a="tab"][data-x="explore"]');
+  await click(page, '[data-a="sheet"][data-x="filters"]'); await tick(page, 1500);
+  const chips = await page.locator('#sheet [data-a="setSubj"]').allInnerTexts();
+  const major = await page.evaluate(() => TC.profile.major);
+  ok(chips.join('|') === 'All|BUS|GEs', 'filters: Subject is All · your major · GEs', { chips, major });
+  ok(/BUS is your major/.test(await page.locator('#sheet').innerText()), 'filters: it says which one is your major');
+  await click(page, '#sheet [data-a="setSubj"][data-x="GE"]'); await tick(page, 600);
+  const ge = await page.evaluate(() => ({ shown: [...document.querySelectorAll('#exlist .ccard .code')].map(e => e.textContent.trim()), all: Object.keys(COURSES).filter(isGeClass), any: Object.keys(COURSES).length }));
+  ok(ge.shown.length > 0 && ge.shown.length < ge.any && ge.shown.slice().sort().join() === ge.all.slice().sort().join(), 'filters: GEs shows exactly the classes that count toward a GE area', ge);
+  await click(page, '#sheet [data-a="closeSheet"]'); await tick(page, 300);
+  ok(!/GEs/.test(await page.locator('.frow').innerText()) && (await page.locator('.frow .fchip .n').innerText()) === '1', 'filters: the bar shows the filter as the count on Filters, never the words (Tate, 2026-10-11)');
+  await click(page, '[data-a="exMode"][data-x="profs"]'); await tick(page, 300);
+  const gp = await page.evaluate(() => ({ shown: document.querySelectorAll('#exlist .pcard').length, ok: Object.keys(PROFS).filter(k => PROFS[k].teaches && profCourses(k).some(isGeClass)).length }));
+  ok(gp.shown > 0 && gp.shown === gp.ok, 'filters: GEs on Professors shows those teaching a GE class', gp);
+  await click(page, '[data-a="exMode"][data-x="classes"]');
+  await click(page, '[data-a="sheet"][data-x="filters"]'); await click(page, '#sheet [data-a="setSubj"][data-x="BUS"]'); await click(page, '#sheet [data-a="closeSheet"]'); await tick(page, 400);
+  const bus = await page.locator('#exlist .ccard .code').allInnerTexts();
+  ok(bus.length > 0 && bus.every(c => /^BUS /.test(c)), 'filters: your major shows only its subject', bus);
+  /* a subject picked before this build stays visible so it can be cleared */
+  await page.evaluate(() => { S.subj = 'UNIV'; UI.sheet = { type: 'filters' }; render(true); }); await tick(page, 300);
+  ok((await page.locator('#sheet [data-a="setSubj"]').allInnerTexts()).join('|') === 'All|UNIV|BUS|GEs', 'filters: an older pick stays as a chip until cleared');
+  ok(log.errors.length === 0, 'filters: no page errors', log.errors);
   await close();
 };
 
@@ -2066,7 +2340,9 @@ tests.focusDay = async () => {
   ok(!/Rm|Bldg|§|\b7\d{4}\b/.test(wide.join(' ')), 'focus: no room and no class number on the blocks');
   ok(await page.locator('.g-now').count() === 1 && await page.locator('.g-b.live').count() === 1 && /BUS 3431/.test(await page.locator('.g-b.live').innerText()), 'focus: today tapped → now line, and the class I am in is live');
   ok((await page.locator('.g-day').allInnerTexts()).join('/') === 'MON/WED', 'focus: days with no classes drop out while a day is focused');
-  ok(await page.locator('.g-b.wide[data-x="BUS 3438"] .g-face.sq').count() === 1 && await page.locator('.g-b.wide[data-x="BUS 3431"] .g-face.ci').count() === 1, 'focus: square face = same section (Sky), round = same class other section (Avery)');
+  ok(await page.locator('.g-b.wide[data-x="BUS 3438"] .g-face[data-in="same"]').count() === 1 && await page.locator('.g-b.wide[data-x="BUS 3431"] .g-face[data-in="other"]').count() === 1, 'focus: same-section friend (Sky) and same-class friend (Avery) are both marked');
+  { const fx = await page.evaluate(() => [...document.querySelectorAll('.g-b.wide')].map(b => [...b.querySelectorAll('.g-face')].map(f => { const a = f.querySelector('.av'), r = a.getBoundingClientRect(), fr = f.getBoundingClientRect(); return { rad: getComputedStyle(a).borderRadius, round: Math.abs(parseFloat(getComputedStyle(a).borderTopLeftRadius) - r.width / 2) < 0.6 || getComputedStyle(a).borderRadius === '50%', disp: getComputedStyle(f).display, dy: Math.abs((r.top + r.height / 2) - (fr.top + fr.height / 2)) }; })).flat());
+    ok(fx.length >= 4 && fx.every(x => x.round && /grid/.test(x.disp) && x.dy < 0.6), 'focus: every friend face is a circle in the same box (no square, none dropped lower), Tate 2026-10-08', fx); }
   await click(page, '.g-day[data-x="W"]');
   ok(await page.locator('.g-b.wide').count() === 4 && await page.locator('.g-now').count() === 0, 'focus: another day tapped → times shown, no now line (it is Monday)');
   const hFocused = await bodyH();
@@ -2079,6 +2355,408 @@ tests.focusDay = async () => {
   await close();
 };
 
+/* ============ Spring 2027 to choose in, Fall 2026 for right now (spring-wall, Tate 2026-10-08) ============ */
+const SPRING_CFG = { TERM: '2274', TERM_LABEL: 'Spring 2027', NOW_TERM: '2268', NOW_LABEL: 'Fall 2026', NOW_UNTIL: '2027-01-25', MY_TERMS: [{ code: '2268', label: 'Fall 2026' }, { code: '2274', label: 'Spring 2027' }] };
+function springTables() {
+  const T = JSON.parse(JSON.stringify(FX.TABLES));
+  /* Spring's list reuses Fall's class numbers on purpose (the wall must keep them apart); BUS 3438 isn't
+     offered in Spring, and BUS 3431's Spring section meets at another time */
+  const spring = T.course_seats.filter(r => r.course_code !== 'BUS 3438').map(r => Object.assign({}, r, { term: '2274' }, r.course_code === 'BUS 3431' ? { days: 'MoWe 8:10AM - 9:30AM' } : {}));
+  T.course_seats = T.course_seats.concat(spring);
+  const ph = spring.find(r => r.course_code === 'BUS 4401'), b = spring.find(r => r.course_code === 'BUS 3431');
+  T.saved_classes.push({ user_id: FX.FRIENDS[0].id, term: '2274', code: 'BUS 4401' });
+  T.my_sections.push({ user_id: FX.FRIENDS[0].id, term: '2274', code: 'BUS 4401', class_nbr: ph.class_nbr, section: ph.section, instructor: ph.instructor, days: ph.days, status: 'enrolled', wl_pos: null });
+  T.plans.push({ user_id: FX.FRIENDS[1].id, term: '2274', slot: 'A', sections: [{ code: 'BUS 3431', class_nbr: b.class_nbr }], shared: true });
+  return T;
+}
+tests.springWall = async () => {
+  /* what "right now" looks like on the single-term app, to compare */
+  let o = await openApp({});
+  const before = await o.page.evaluate(() => Object.fromEntries(TC.friends.map(f => [f, status(f).t])));
+  await o.close();
+  const { page, close, log } = await openApp({ terms: SPRING_CFG, tables: springTables() });
+  await page.waitForFunction(() => TC.ready && TC.seatsLoaded && TC.friendPlans, null, { timeout: 8000 }); await settle(page, 800);
+  const w = await page.evaluate(() => ({
+    split: splitTerms(), now: nowTerm(), offered: Object.keys(COURSES).includes('BUS 3438'), b31: (secsOf('BUS 3431')[0] || {}).s,
+    secIds: SECTIONS.every(s => /^\d+$/.test(s.id)), status: Object.fromEntries(TC.friends.map(f => [f, status(f).t])),
+    meNow: nowSecs('me').map(s => s.id), meNowCodes: nowSecs('me').map(s => s.code), meSpring: personSecs('me').length,
+    teaches: Object.values(PROFS).some(p => p.teaches && p.teaches['BUS 3438']), b38title: course('BUS 3438').title }));
+  ok(w.split && w.now.code === '2268' && w.now.label === 'Fall 2026', 'wall: two terms — choose in Spring 2027, now is Fall 2026', w.now);
+  ok(!w.offered && w.b31 === 490 && w.secIds && !w.teaches, 'wall: the class lists are Spring’s only — a Fall-only class is nowhere, Spring’s own times, no Fall section on a list or a professor', w);
+  ok(JSON.stringify(w.status) === JSON.stringify(before), 'wall: stories and rings are still the term you’re in (same as before the switch)', { before, after: w.status });
+  ok(w.meNowCodes.includes('BUS 3438') && w.meNow.every(id => /^(n|xn):/.test(id)) && w.meSpring === 0 && w.b38title !== 'BUS 3438', 'wall: your Fall classes are drawn from Fall’s own rows, never from Spring’s list (same class number, other term)', w);
+  const reads = log.reads.map(r => decodeURIComponent(r));
+  const fallSeat = reads.filter(r => /^course_seats\?term=eq\.2268/.test(r)), springSeat = reads.filter(r => /^course_seats\?term=eq\.2274/.test(r));
+  ok(springSeat.length > 0 && fallSeat.length > 0 && fallSeat.every(r => /class_nbr=in\.\(/.test(r)), 'wall: Spring’s whole list is read; Fall is read only by the class numbers people are in', { fallSeat: fallSeat.slice(0, 2) });
+  /* Home: the newest real thing per friend, with a tag */
+  const cards = await page.evaluate(ids => ids.map(id => { const c = document.getElementById('hf-' + id); return c && { tag: (c.querySelector('.fview') || {}).textContent || '', plan: !!c.querySelector('.plancol.plan-A'), blocks: [...c.querySelectorAll('.g-b')].map(b => b.dataset.x) }; }), FX.FRIENDS.map(f => f.id));
+  ok(cards[0] && cards[0].tag === 'Spring 2027 classes' && cards[0].blocks.every(x => x === 'BUS 4401') && cards[0].blocks.length > 0, 'home: a friend with Spring classes shows them, tagged', cards[0]);
+  ok(cards[1] && cards[1].tag === 'Plan A · Spring 2027' && cards[1].plan && cards[1].blocks.includes('BUS 3431'), 'home: a friend with only a shared Spring plan shows that plan in its colour, tagged', cards[1]);
+  ok(cards.slice(2).every(c => c && c.tag === 'Now · Fall 2026'), 'home: everyone else shows their week now, tagged Fall 2026', cards.slice(2).map(c => c && c.tag));
+  const recs = await page.evaluate(() => (document.querySelector('.recs-h') || {}).textContent || '');
+  ok(/planning/.test(recs), 'home: the swipe row is what friends are planning for Spring', recs);
+  /* a Fall block's preview: its term, no seat alert, only people in Fall */
+  const fid = await page.evaluate(() => { const s = nowSecs(TC.friends[2]).find(x => x.s != null) || nowSecs('me').find(x => x.s != null); A.secSheet(s.code, s.id); return s.id; }); await settle(page, 300);
+  const sh = await page.evaluate(() => ({ term: (document.querySelector('#sheet .secterm') || {}).textContent || '', watch: !!document.querySelector('#sheet [data-a="watch"]') }));
+  ok(/^(n|xn):/.test(fid) && sh.term === 'Fall 2026' && !sh.watch, 'wall: a Fall section’s preview says Fall 2026 and offers no seat alert (alerts are Spring’s)', { fid, sh });
+  await page.evaluate(() => A.closeSheet && A.closeSheet()); await settle(page, 200);
+  /* a friend's page: Fall · Spring · A … and it opens on what their Home card shows */
+  await page.evaluate(id => A.openFriend(id), FX.FRIENDS[0].id); await settle(page);
+  const fw = await page.evaluate(() => ({ chips: [...document.querySelectorAll('.fsw button')].map(b => b.textContent + (b.getAttribute('aria-pressed') === 'true' ? '*' : '')), head: (document.querySelector('.fwk-t') || {}).textContent }));
+  ok(fw.chips.join('|') === 'Fall|Spring*' && fw.head === 'Spring 2027', 'friend page: Fall · Spring, open on Spring like their card', fw);
+  await click(page, '.fsw button[data-y="now"]');
+  const fw2 = await page.evaluate(() => ({ head: (document.querySelector('.fwk-t') || {}).textContent, blocks: [...document.querySelectorAll('.fweek .g-b')].map(b => b.dataset.x) }));
+  ok(fw2.head === 'Fall 2026' && !fw2.blocks.includes('BUS 4401') && fw2.blocks.length > 0, 'friend page: Fall shows their week now', fw2);
+  const rl = await page.evaluate(() => { const c = TC.rateList.find(t => t.current); return c && { term: c.term, profs: c.items.map(([p]) => p), fall: nowSecs('me').map(s => s.prof).filter(Boolean) }; });
+  ok(rl && rl.term === 'Fall 2026' && rl.profs.length > 0 && rl.profs.every(p => rl.fall.includes(p)), 'rate: the professors to rate now are the ones you have this term (Fall), not Spring’s', rl);
+  ok(log.errors.length === 0, 'wall: no page errors', log.errors);
+  await close();
+};
+tests.dprAllIn = async () => {
+  /* Tate 2026-10-08: "when i upload my dpr i can't select anything" — every row was already in. Since the
+     report flow (2026-10-09) the read has one button, See my plan (it saves what the report SAYS even when
+     every class is already in), and Report read says you're all caught up. */
+  const { page, close } = await openApp({});
+  const show = rows => page.evaluate(rows => { UI.dpr = { rows, latestTerm: 'Fall 2026', audit: null, program: {} }; UI.sheet = { type: 'dprRead' }; render(true); }, rows);
+  const look = () => page.evaluate(() => { const s = document.getElementById('sheet'); return { msg: (s.querySelector('.dr-allin') || {}).textContent || '', btn: [...s.querySelectorAll('[data-a="dprSave"]')].map(x => [x.textContent.trim(), x.disabled]), dead: /Nothing selected/.test(s.textContent) }; });
+  await show([{ cur: 'BUS 4434', name: 'Real Estate Finance', term: 'Summer', year: 2026, already: true }, { cur: 'BUS 3431', name: 'Security Analysis', term: 'Fall', year: 2026, already: true, _now: true }]);
+  await settle(page, 300);
+  let a = await look();
+  ok(/You’re all caught up\. Every class on this report/.test(a.msg) && !/caught up —/.test(a.msg) && a.btn.length === 1 && a.btn[0][0] === 'See my plan' && !a.btn[0][1] && !a.dead, 'dpr: everything already in → “all caught up”, and See my plan works — never a dead “Nothing selected”', a);
+  await show([{ cur: 'BUS 4434', name: 'Real Estate Finance', term: 'Summer', year: 2026, already: true }, { cur: 'FIN 4400', name: 'Y', term: 'Spring', year: 2027, skip: true, _open: true }]);
+  await settle(page, 300);
+  a = await look();
+  ok(!a.msg && a.btn.length === 1 && !a.btn[0][1], 'dpr: a later-term row is not called “already in TermChamp”', a);
+  await show([{ cur: 'BUS 4434', name: 'Real Estate Finance', term: 'Summer', year: 2026, already: true }, { cur: 'FIN 3300', name: 'X', term: 'Spring', year: 2026, pick: true }]);
+  await settle(page, 300);
+  a = await look();
+  ok(!a.msg && a.btn.length === 1 && a.btn[0][0] === 'See my plan' && !a.btn[0][1], 'dpr: with something new there’s no “caught up” line', a);
+  await close();
+};
+/* Explore's term switch (Tate, 2026-10-10): the "Spring 2027" words beside Filters flip to Fall 2026 and back */
+tests.exploreTerm = async () => {
+  let failFall = true;
+  const { page, close, log } = await openApp({ terms: SPRING_CFG, tables: springTables(), hook: url => failFall && url.pathname.endsWith('/course_seats') && /term=eq\.2268/.test(decodeURIComponent(url.search)) && !/class_nbr=in/.test(decodeURIComponent(url.search)) ? { status: 500, body: '{}' } : null });
+  await page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 }); await settle(page, 600);
+  await click(page, '[data-a="tab"][data-x="explore"]');
+  const codes = () => page.evaluate(() => [...document.querySelectorAll('#exlist .ccard .code')].map(e => e.textContent));
+  const ctl = () => page.evaluate(() => { const b = document.querySelector('.frow .exterm'); return b && { tag: b.tagName, text: b.textContent, aria: b.getAttribute('aria-label'), color: getComputedStyle(b).color, size: getComputedStyle(b).fontSize, h: b.getBoundingClientRect().height }; });
+  const plainColor = await page.evaluate(() => { const e = document.createElement('span'); e.className = 'muted b'; e.style.fontSize = '13px'; document.querySelector('.frow').appendChild(e); const c = getComputedStyle(e).color; e.remove(); return c; });
+  const c0 = await ctl(), s0 = await codes();
+  ok(c0 && c0.tag === 'BUTTON' && c0.text === 'Spring 2027' && /Switch to Fall 2026/.test(c0.aria) && c0.color === plainColor && c0.size === '13px' && c0.h >= 44, 'switch: the words beside Filters are a button, same look (muted, 13px), starting on Spring 2027', { c0, plainColor });
+  ok(s0.length > 0 && !s0.includes('BUS 3438'), 'switch: on Spring the list is Spring’s (no Fall-only class)', s0);
+  const fallReads = () => log.reads.map(r => decodeURIComponent(r)).filter(r => /^course_seats\?term=eq\.2268/.test(r) && !/class_nbr=in/.test(r)).length;
+  ok(fallReads() === 0, 'switch: Fall’s whole list isn’t read until someone switches', fallReads());
+  /* Fall, first try fails: says so, with Try again */
+  await click(page, '.frow .exterm'); await settle(page, 600);
+  const err = await page.evaluate(() => ({ t: (document.querySelector('#exlist') || {}).textContent || '', retry: !!document.querySelector('#exlist [data-a="retryNowAll"]') }));
+  ok(/Couldn’t load Fall 2026 classes/.test(err.t) && err.retry, 'switch: if Fall doesn’t load, the list says so, with Try again', err);
+  failFall = false;
+  await click(page, '#exlist [data-a="retryNowAll"]'); await settle(page, 800);
+  const c1 = await ctl(), s1 = await codes();
+  ok(c1.text === 'Fall 2026' && /Switch to Spring 2027/.test(c1.aria) && c1.color === plainColor, 'switch: tapped, it says Fall 2026 in the same look', c1);
+  ok(s1.includes('BUS 3438') && s1.length > s0.length - 1, 'switch: on Fall the list is Fall’s whole list (BUS 3438, which Spring doesn’t offer, is in it)', s1);
+  ok(fallReads() >= 1, 'switch: Fall’s whole list is read once someone switches', fallReads());
+  const faces = await page.evaluate(() => { const f = TC.friends.find(x => nowSecs(x).some(s => /^n:/.test(s.id))); const code = nowSecs(f).find(x => /^n:/.test(x.id)).code; const b = [...document.querySelectorAll('#exlist .ccard')].find(e => e.dataset.x === code); return { code, n: b ? b.querySelectorAll('.stack > *').length : -1 }; });
+  ok(faces.n >= 1, 'switch: a Fall card shows the friends in it this fall', faces);
+  const nRead = fallReads();
+  await page.evaluate(() => { S.exLimit = 200; }); await click(page, '.frow .exterm'); await click(page, '.frow .exterm');
+  const lim = await page.evaluate(() => S.exLimit);
+  ok(lim === 40 && fallReads() === nRead, 'switch: flipping starts the list from the top and doesn’t read Fall again', { lim, reads: fallReads(), nRead });
+  const wall = await page.evaluate(() => ({ offered: Object.keys(COURSES).includes('BUS 3438'), secIds: Object.keys(SEC).every(k => /^\d+$/.test(k)), lens: LENS_NOW }));
+  ok(!wall.offered && wall.secIds && !wall.lens, 'wall: Fall never enters Spring’s lists (plans, Add to your week and alerts can’t see it)', wall);
+  /* search works on Fall */
+  await page.fill('#exq', '3438'); await settle(page, 500);
+  const sq = await codes();
+  ok(sq.length === 1 && sq[0] === 'BUS 3438', 'switch: search works on Fall’s list', sq);
+  await click(page, '#exlist .ccard[data-x="BUS 3438"]');
+  const rec = await page.evaluate(() => ({ recent: recentAll().map(i => i.x), chip: [...document.querySelectorAll('.hero .hchip')].map(e => e.textContent)[1] }));
+  ok(!rec.recent.includes('BUS 3438') && rec.chip === 'Fall 2026', 'switch: opening a Fall result opens its Fall page and isn’t saved as a recent search', rec);
+  await page.evaluate(() => back()); await settle(page, 300);
+  await page.evaluate(() => A.clearQ && A.clearQ()); await settle(page, 300);
+  /* a Fall class page: read-only, its friends, its sections' sheets */
+  const fc = await page.evaluate(() => { const f = TC.friends.find(x => nowSecs(x).some(s => /^n:/.test(s.id))); const s = nowSecs(f).find(x => /^n:/.test(x.id)); return { f, code: s.code, id: s.id }; });
+  await page.evaluate(code => { const b = [...document.querySelectorAll('#exlist .ccard')].find(e => e.dataset.x === code); b && b.click(); }, fc.code); await settle(page, 500);
+  const pg = await page.evaluate(id => ({ chips: [...document.querySelectorAll('.hero .hchip')].map(e => e.textContent), add: document.querySelectorAll('.addbtn').length, watch: document.querySelectorAll('[data-a="watch"]').length,
+    rows: document.querySelectorAll('.secrow.nowrow').length, row: (() => { const r = document.querySelector(`.secrow.nowrow[data-y="${id}"]`); return r && { faces: r.querySelectorAll('.stack > *').length, aria: r.getAttribute('aria-label') }; })(),
+    stats: [...document.querySelectorAll('.hero .stat small')].map(e => e.textContent) }), fc.id);
+  ok(pg.chips[1] === 'Fall 2026' && pg.add === 0 && pg.watch === 0 && pg.rows > 0, 'class page from Fall: it’s Fall’s, read-only (no +, no Watch)', pg);
+  ok(pg.row && pg.row.faces >= 1 && /in it/.test(pg.row.aria), 'class page from Fall: a section shows the friends in it, and says so out loud', pg.row);
+  ok(pg.stats.join('|') === 'SECTIONS|FRIENDS|SEATS', 'class page from Fall: Sections · Friends · Seats', pg.stats);
+  const top = await page.evaluate(() => ({ share: !!document.querySelector('.topbtns [data-a="sendCard"]'), save: !!document.querySelector('.topbtns [data-a="save"]') }));
+  ok(!top.share && top.save, 'class page from Fall: no Send (the card is Spring’s), Save stays', top);
+  await click(page, `.secrow.nowrow[data-y="${fc.id}"]`);
+  const sh = await page.evaluate(() => ({ term: (document.querySelector('#sheet .secterm') || {}).textContent || '', watch: !!document.querySelector('#sheet [data-a="watch"]'), view: (document.querySelector('#sheet [data-a="openClass"]') || {}).dataset }));
+  ok(sh.term === 'Fall 2026' && !sh.watch && sh.view && sh.view.y === 'now', 'class page from Fall: a section opens its Fall sheet; View class stays on Fall', sh);
+  const d0 = await page.evaluate(() => S.stack[S.tab].length);
+  await click(page, '#sheet [data-a="openClass"]');
+  const d1 = await page.evaluate(() => ({ n: S.stack[S.tab].length, sheet: !!UI.sheet }));
+  ok(d1.n === d0 && !d1.sheet, 'class page from Fall: View class on the page you’re on just closes the sheet (Back still one tap)', { d0, d1 });
+  await page.evaluate(() => A.closeSheet && A.closeSheet()); await settle(page, 200);
+  /* a Fall section nobody you know is in still opens its sheet */
+  const lone = await page.evaluate(() => { const ids = new Set(TC.friends.concat(['me']).flatMap(f => nowSecs(f).map(s => s.id))); const s = Object.values(NOWT.sec).find(x => !ids.has(x.id)); if (!s) return null; A.secSheet(s.code, s.id); return { code: s.code, id: s.id }; }); await settle(page, 300);
+  const lsh = await page.evaluate(() => ({ code: (document.querySelector('#sheet .code') || {}).textContent || '', term: (document.querySelector('#sheet .secterm') || {}).textContent || '' }));
+  ok(lone && lsh.code.startsWith(lone.code) && lsh.term === 'Fall 2026', 'class page from Fall: a section nobody you know is in opens its sheet too', { lone, lsh });
+  await page.evaluate(() => A.closeSheet && A.closeSheet()); await settle(page, 200);
+  await page.evaluate(() => A.back ? A.back() : back()); await settle(page, 300);
+  /* back to Spring */
+  await click(page, '.frow .exterm'); await settle(page, 300);
+  const c2 = await ctl(), s2 = await codes();
+  ok(c2.text === 'Spring 2027' && !s2.includes('BUS 3438'), 'switch: tapped again, back to Spring 2027 and Spring’s list', { c2, s2 });
+  const kept = await page.evaluate(() => ({ s: 'exTerm' in S, stored: Object.values(localStorage).some(v => /exTerm/.test(v)) }));
+  ok(!kept.s && !kept.stored, 'switch: never saved — Explore always starts on Spring 2027', kept);
+  await click(page, '.frow .exterm');
+  await page.evaluate(() => { S.subj = 'BUS'; render(true); }); await settle(page, 200);
+  const sb = await page.evaluate(() => ({ t: [...document.querySelectorAll('.frow .row .muted.b')].map(e => e.textContent), btn: (document.querySelector('.frow .exterm') || {}).textContent }));
+  const flNf = await page.evaluate(() => (document.querySelector('.fchip .n') || {}).textContent || '');
+  ok(!sb.t.includes('BUS') && sb.btn === 'Fall 2026' && flNf === '1', 'switch: with a subject chosen, only the term shows beside Filters — the filter is the count on Filters (Tate, 2026-10-11)', { sb, flNf });
+  await click(page, '[data-a="exMode"][data-x="profs"]');
+  const flSp = await page.evaluate(() => [...document.querySelectorAll('.frow .muted.b')].map(e => e.textContent).join('|'));
+  ok(flSp === 'Fall 2026', 'switch: Professors with a subject chosen shows only the term too — the one you’re on (one switch for both, 2026-10-12)', flSp);
+  await click(page, '[data-a="exMode"][data-x="classes"]');
+  await page.evaluate(() => { S.subj = 'All'; render(true); });
+  await click(page, '[data-a="tab"][data-x="home"]'); await click(page, '[data-a="tab"][data-x="explore"]');
+  const back2 = await ctl();
+  ok(back2.text === 'Spring 2027', 'switch: leave Explore and come back — it’s on Spring 2027 again', back2);
+  /* (Tate, 2026-10-12: "make it so professors also show fall professors … and you can toggle between them too") */
+  await click(page, '[data-a="exMode"][data-x="profs"]');
+  const pr = await page.evaluate(() => { const b = document.querySelector('.frow .exterm'); return { btn: b ? b.textContent : '', aria: b ? b.getAttribute('aria-label') : '', n: document.querySelectorAll('#exlist .pcard').length }; });
+  ok(pr.btn === 'Spring 2027' && pr.aria === 'Showing Spring 2027 professors. Switch to Fall 2026' && pr.n > 0, 'profs: Professors has the same switch, on Spring 2027', pr);
+  await click(page, '.frow .exterm'); await settle(page, 600);
+  const pf = await page.evaluate(() => { const fall = inNow(() => Object.keys(PROFS).filter(passProf)), spring = Object.keys(PROFS).filter(passProf);
+    const cards = [...document.querySelectorAll('#exlist .pcard')].map(c => ({ pk: c.dataset.x, codes: [...c.querySelectorAll('.code')].map(e => e.textContent) }));
+    return { btn: (document.querySelector('.frow .exterm') || {}).textContent, cards, fall, spring, fallC: Object.fromEntries(fall.map(pk => [pk, inNow(() => profCourses(pk))])), springC: Object.fromEntries(spring.map(pk => [pk, profCourses(pk)])) }; });
+  const fallOnly = pf.fall.filter(pk => Object.keys(pf.springC).every(k => k !== pk) || pf.fallC[pk].some(c => !pf.springC[pk].includes(c)));
+  ok(pf.btn === 'Fall 2026' && pf.cards.length === pf.fall.length && pf.cards.every(c => pf.fall.includes(c.pk)) && pf.cards.every(c => c.codes.every(x => pf.fallC[c.pk].includes(x))),
+    'profs: Fall lists the professors teaching a Fall section, each card with their Fall classes', pf);
+  ok(pf.cards.some(c => c.codes.includes('BUS 3438')) && fallOnly.length > 0, 'profs: a Fall-only class’s professor shows with it (BUS 3438 isn’t offered in Spring)', { fallOnly, cards: pf.cards });
+  /* a professor only Fall has (read in later, as a class page's read adds rows): on Fall's list, never Spring's */
+  await page.evaluate(() => { addNowRows(NOWT, [{ course_code: 'BUS 3438', title: 'Corporate Finance', section: '09', instructor: 'Fallonly, Pat', days: 'TuTh 9:10AM - 10:00AM', status: 'Open', capacity: 30, available: 5, waitlist_total: 0, class_nbr: '79999' }], nowTerm().code); render(true); }); await settle(page, 300);
+  const fo = await page.evaluate(() => { const pk = profKeyOf('Fallonly, Pat'); return { pk, fall: [...document.querySelectorAll('#exlist .pcard')].some(c => c.dataset.x === pk), spring: Object.keys(PROFS).filter(passProf).includes(pk) }; });
+  ok(fo.pk && fo.fall && !fo.spring, 'profs: a professor teaching only in Fall is on Fall’s list (and never Spring’s)', fo);
+  pf.cards = await page.evaluate(() => [...document.querySelectorAll('#exlist .pcard')].map(c => ({ pk: c.dataset.x, codes: [...c.querySelectorAll('.code')].map(e => e.textContent) })));
+  const truth = await page.evaluate(() => [...new Set(Object.values(NOWT.sec).map(x => x.prof).filter(Boolean))].sort());
+  ok(JSON.stringify(pf.cards.map(c => c.pk).sort()) === JSON.stringify(truth) && pf.cards.every(c => c.codes.length > 0), 'profs: Fall’s cards are exactly the professors on Fall’s sections, each naming a class', { truth, cards: pf.cards.map(c => c.pk) });
+  const pk0 = pf.cards.find(c => c.codes.includes('BUS 3438')).pk;
+  await page.evaluate(pk => A.openProf(pk), pk0); await settle(page, 500);
+  const pp = await page.evaluate(() => [...document.querySelectorAll('.prof-teach')].map(c => ({ h: c.querySelector('div').textContent, codes: [...c.querySelectorAll('.teach')].map(b => b.dataset.x + (b.dataset.y === 'now' ? '·now' : '')) })));
+  ok(pp.length === 2 && pp[0].h === 'Teaching Fall 2026' && pp[0].codes.includes('BUS 3438·now') && pp[0].codes.every(c => /·now$/.test(c)) && pp[1].h === 'Teaching Spring 2027' && pp[1].codes.every(c => !/·now$/.test(c)),
+    'profs: their page lists what they teach in Fall first (from Fall’s list), each opening Fall’s class page; Spring’s after', pp);
+  await click(page, '[data-a="back"]'); await settle(page, 300);
+  await click(page, '[data-a="exMode"][data-x="classes"]');
+  ok(await page.evaluate(() => (document.querySelector('.frow .exterm') || {}).textContent) === 'Fall 2026', 'profs: one switch — Classes is on Fall too');
+  await click(page, '.frow .exterm'); await settle(page, 300);
+  await page.evaluate(pk => A.openProf(pk), pk0); await settle(page, 400);
+  const pp2 = await page.evaluate(() => [...document.querySelectorAll('.prof-teach')].map(c => c.querySelector('div').textContent));
+  ok(pp2.join('|') === 'Teaching Spring 2027|Teaching Fall 2026', 'profs: on Spring, a professor’s page lists Spring first', pp2);
+  await click(page, '[data-a="back"]'); await settle(page, 300);
+  /* a friend's Fall block opens Fall's page — a Fall-only class too, never a dead end */
+  const blk = await page.evaluate(() => { for (const f of TC.friends.concat(['me'])) { const s = nowSecs(f).find(x => x.code === 'BUS 3438'); if (s) return { code: s.code, id: s.id }; } return null; });
+  await page.evaluate(b => A.openClass(b.code, b.id), blk); await settle(page, 500);
+  const fp = await page.evaluate(() => ({ chips: [...document.querySelectorAll('.hero .hchip')].map(e => e.textContent), missing: (document.querySelector('.empty b') || {}).textContent || '' }));
+  ok(blk && fp.chips[1] === 'Fall 2026' && !/isn’t offered/.test(fp.missing), 'a Fall block (BUS 3438, not offered in Spring) opens its Fall page, not "isn’t offered in Spring 2027"', { blk, fp });
+  /* elsewhere: Spring, as before */
+  await page.evaluate(() => A.openClass('BUS 3431')); await settle(page, 400);
+  const sp = await page.evaluate(() => ({ chips: [...document.querySelectorAll('.hero .hchip')].map(e => e.textContent), add: document.querySelectorAll('.addbtn').length }));
+  ok(sp.chips[1] === 'Spring 2027' && sp.add > 0, 'a class opened from anywhere else is Spring’s, with +', sp);
+  ok(log.errors.length === 0, 'switch: no page errors', log.errors);
+  await close();
+  {
+    const o2 = await openApp({ terms: SPRING_CFG, tables: springTables() }); const pg2 = o2.page;
+    await pg2.waitForFunction(() => TC.ready && TC.seatsLoaded && TC.nowMineRows, null, { timeout: 8000 }); await settle(pg2, 600);
+    const chip = () => pg2.evaluate(() => [...document.querySelectorAll('.hero .hchip')].map(e => e.textContent)[1] || (document.querySelector('.empty b') || {}).textContent);
+    const reads = () => o2.log.reads.map(r => decodeURIComponent(r)).filter(r => /^course_seats\?term=eq\.2268/.test(r) && !/class_nbr=in/.test(r));
+    /* a friend's page › Fall › a class in their list */
+    const fr = await pg2.evaluate(() => TC.friends.find(f => nowSecs(f).some(s => /^n:/.test(s.id)) && !personSecs(f).length && !(PEOPLE[f].unplaced || []).length) || TC.friends.find(f => nowSecs(f).some(s => /^n:/.test(s.id))));
+    await pg2.evaluate(id => A.openFriend(id), fr); await settle(pg2);
+    if (await pg2.locator('.fsw button[data-y="now"]').count()) await click(pg2, '.fsw button[data-y="now"]');
+    await click(pg2, '.li[data-a="openClass"][data-y="now"]');
+    const c1 = await chip(), r1 = reads();
+    ok(c1 === 'Fall 2026', 'tap: a class in a friend’s Fall list opens its Fall page', c1);
+    ok(r1.length === 1 && /course_code=in\./.test(r1[0]), 'tap: that reads just this class from Fall, not the whole term', r1);
+    /* My Classes › Fall */
+    await click(pg2, '[data-a="tab"][data-x="schedule"]');
+    await click(pg2, '[data-a="pickMineTerm"][data-x="Fall 2026"]');
+    await pg2.evaluate(() => { UI.agOpen = UI.agOpen || {}; document.querySelectorAll('.ag-fold .ag-h').forEach(b => { UI.agOpen[b.dataset.x] = true; }); render(true); }); await tick(pg2, 200);
+    /* (Tate, 2026-10-12: "the initial should just show that little pop-up") — the section's sheet first, then View class */
+    const card = await pg2.locator('.arow[data-a="secSheet"]').count(), blocks = await pg2.locator('#scroll [data-a="secSheet"].g-blk, #scroll .g-col [data-a="secSheet"]').count();
+    if (card) await click(pg2, '.arow[data-a="secSheet"]');
+    const sh2 = await pg2.evaluate(() => ({ t: UI.sheet && UI.sheet.type, term: (document.querySelector('#sheet .secterm') || {}).textContent, open: !!document.querySelector('.arow[data-a="openClass"]') }));
+    ok(card > 0 && blocks > 0 && sh2.t === 'sec' && sh2.term === 'Fall 2026' && !sh2.open, 'tap: a class in My Classes › Fall (its row or its block) opens its section’s sheet first, as a friend’s week does', { card, blocks, sh2 });
+    await click(pg2, '#sheet [data-a="openClass"][data-y="now"]');
+    ok(await chip() === 'Fall 2026', 'tap: …and View class opens its Fall page', await chip());
+    /* a story's day: its class boxes are today's Fall classes */
+    await click(pg2, '[data-a="tab"][data-x="home"]');
+    await click(pg2, '[data-a="tab"][data-x="home"]');
+    let story = null;
+    for (const f of await pg2.evaluate(() => TC.friends)) {
+      if (!await pg2.locator(`.story[data-x="${f}"]`).count()) continue;
+      await click(pg2, `.story[data-x="${f}"]`);
+      const y = await pg2.evaluate(() => { const b = document.querySelector('#sheet .stbox'); return b ? b.dataset.y : null; });
+      if (y) { story = y; break; }
+      await pg2.evaluate(() => A.closeSheet && A.closeSheet()); await settle(pg2, 200);
+    }
+    if (story) await click(pg2, '#sheet .stbox');
+    ok(story && /^(n|xn):/.test(story) && await chip() === 'Fall 2026', 'tap: a class box in a friend’s story (today, Fall) opens its Fall page', story);
+    ok(o2.log.errors.length === 0, 'tap: no page errors', o2.log.errors);
+    await o2.close();
+  }
+  /* one term (no Fall/Spring split): the words are plain, as before */
+  const o = await openApp({}); await o.page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 }); await settle(o.page, 400);
+  await click(o.page, '[data-a="tab"][data-x="explore"]');
+  const one = await o.page.evaluate(() => ({ btn: !!document.querySelector('.frow .exterm'), t: [...document.querySelectorAll('.frow .muted.b')].map(e => e.textContent).join('|') }));
+  ok(!one.btn && one.t.length > 0, 'one term: plain words, no switch', one);
+  await o.close();
+};
+tests.springMine = async () => {
+  const { page, close, log } = await openApp({ terms: SPRING_CFG, tables: springTables() });
+  await page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 }); await settle(page, 600);
+  await click(page, '[data-a="tab"][data-x="schedule"]');
+  const a = await page.evaluate(() => ({ on: [...document.querySelectorAll('[data-a="pickMineTerm"]')].map(b => b.dataset.x + (b.classList.contains('on') || b.getAttribute('aria-pressed') === 'true' ? '*' : '')), blocks: [...document.querySelectorAll('#scroll .g-b')].map(b => b.dataset.x) }));
+  ok(a.on.join('|') === 'Fall 2026*|Spring 2027' && a.blocks.includes('BUS 3438'), 'my classes: with no Spring classes yet it opens on Fall (what you’re in), read from Fall', a);
+  /* (2026-10-13, Tate) Share top right on Fall too, like Plans: the card is Fall's classes, labelled Fall */
+  const sb = await page.evaluate(() => { const b = document.querySelector('#scroll .schhdr .schshare'); return b ? { x: b.dataset.x, lab: b.getAttribute('aria-label'), mine: b.classList.contains('dest-mine') } : null; });
+  ok(sb && sb.x === 'now' && sb.lab === 'Share your week' && sb.mine, 'my classes (Fall): the blue Share button sits top right, like Plans (Tate 2026-10-13)', sb);
+  const dis = await page.evaluate(() => { const was = TC.nowMineRows; TC.nowMineRows = null; render(true); const b = document.querySelector('#scroll .schhdr .schshare'), d = !!(b && b.disabled); TC.nowMineRows = was; render(true); return d; });
+  ok(dis, 'my classes (Fall): Share waits for Fall’s classes (disabled while they load)', dis);
+  await page.evaluate(() => { const c = TC.client(); c.storage.from = () => ({ upload: () => Promise.resolve({}) }); });
+  await shareOpenAndWait(page, 'now');
+  const sv = await page.evaluate(() => ({ what: UI.share.what, term: UI.share.term, state: UI.share.state, body: UI.share.body, alt: UI.share.alt, head: (document.querySelector('.sheet h3') || {}).textContent || '', codes: nowSecs('me').map(x => x.code), spring: personSecs('me').map(x => x.code) }));
+  sv.tm = await page.evaluate(() => new URL(UI.share.link).searchParams.get('tm'));
+  ok(sv.what === 'now' && sv.state === 'ready' && sv.term === 'Fall 2026' && sv.tm === 'Fall 2026' && sv.body === 'Here’s my Fall 2026 schedule' && sv.head === 'Share your week' && sv.codes.every(c => sv.alt.includes(c)) && !sv.spring.length, 'my classes (Fall): Share draws Fall’s classes and says “Here’s my Fall 2026 schedule” — not the empty Spring', sv);
+  await page.evaluate(() => { UI.sheet = null; UI.share = null; render(true); });
+  await click(page, '[data-a="pickMineTerm"][data-x="Spring 2027"]');
+  const b = await page.evaluate(() => (document.getElementById('scroll').innerText.match(/No Spring 2027 classes yet[^\n]*/) || [''])[0]);
+  ok(/No Spring 2027 classes yet/.test(b), 'my classes: Spring says to add your classes once you’ve registered', b);
+  /* add a Spring class: the write is Spring's */
+  await page.evaluate(() => A.openClass('PHIL 3331')); await settle(page, 600);
+  const id = await page.evaluate(() => secsOf('PHIL 3331')[0].id);
+  await page.evaluate(id => TC.addMySection(SEC[id], {}), id); await settle(page, 600);
+  const wr = log.writes.filter(x => x.table === 'saved_classes' || x.table === 'my_sections');
+  ok(wr.length >= 2 && wr.every(x => (Array.isArray(x.body) ? x.body : [x.body]).every(r => !r || r.term === '2274')), 'wall: anything added to My Classes is Spring’s', wr.map(x => x.body));
+  await page.evaluate(() => { S.mineTerm = null; save(); });
+  await close();
+};
+tests.notifsStay = async () => {   /* (2026-10-13, Tate) "once you've viewed it have them stay there like instagram" */
+  const { page, close, log } = await openApp({});
+  await page.waitForFunction(() => TC.ready, null, { timeout: 8000 }); await settle(page, 400);
+  const rd = () => page.evaluate(() => ({ labels: [...document.querySelectorAll('.sheet .ntf-l')].map(e => e.textContent), rows: [...document.querySelectorAll('.sheet .ntf')].map(e => ({ cls: e.className, t: e.innerText.replace(/\s+/g, ' ').trim(), dot: !!e.querySelector('.ntf-dot'), chev: !!e.querySelector('.chev'), a: e.dataset.a || '' })), empty: (document.querySelector('.sheet .empty') || {}).textContent || '', bell: !!document.querySelector('[data-x="notifs"] .dot') }));
+  const th = await page.evaluate(() => TC.threads.filter(t => t.last && t.last.sender !== TC.user.id).map(t => t.id));
+  ok(th.length >= 2, 'notifs: the fixture has two threads with a message from someone else', th);
+  await page.evaluate(ids => { TC.threads.forEach(t => { if (t.id === ids[0]) t.last_read_at = null; if (t.id === ids[1]) t.last_read_at = new Date(Date.now() + 1e6).toISOString(); }); S.notifSeen = ''; render(true); }, th);
+  const bellBefore = await page.evaluate(() => !!document.querySelector('[data-x="notifs"] .dot'));
+  await page.evaluate(() => A.sheet('notifs')); await settle(page, 300);
+  let v = await rd();
+  const fresh = v.rows.filter(r => /\bnew\b/.test(r.cls)), seen = v.rows.filter(r => !/\bnew\b/.test(r.cls));
+  ok(bellBefore && v.labels.join('|') === 'New|Earlier' && fresh.length >= 1 && seen.length >= 1 && fresh.every(r => r.dot || /friend request/.test(r.t)) && seen.every(r => r.chev && !r.dot && r.a === 'openChatTab') && !v.empty, 'notifs: New (the unread message, a dot; a friend request) then Earlier (the one you’ve read, with a chevron) — read ones stay', v);
+  ok(v.rows.findIndex(r => !/\bnew\b/.test(r.cls)) > v.rows.findIndex(r => /\bnew\b/.test(r.cls)), 'notifs: every New row sits above Earlier', v.rows.map(r => r.cls));
+  /* read the unread one: it moves to Earlier instead of vanishing */
+  await page.evaluate(ids => { TC.threads.forEach(t => { if (t.id === ids[0]) t.last_read_at = new Date(Date.now() + 1e6).toISOString(); }); TC.requests = []; render(true); }, th);
+  v = await rd();
+  ok(!v.labels.length && v.rows.length >= 2 && v.rows.every(r => !/\bnew\b/.test(r.cls) && r.chev) && !v.empty && !v.bell, 'notifs: once everything’s seen the rows stay (no New / Earlier split, no dot on the bell), not “Nothing new”', v);
+  await page.evaluate(() => { TC.threads = []; render(true); }); v = await rd();
+  ok(/^Nothing new/.test(v.empty) && !v.rows.length, 'notifs: “Nothing new” only with nothing at all', v);
+  ok(log.errors.length === 0, 'notifs: no page errors', log.errors);
+  await close();
+};
+tests.springDpr = async () => {
+  const { page, close, log } = await openApp({ terms: SPRING_CFG, tables: springTables() });
+  await page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 }); await settle(page, 400);
+  const e = await page.evaluate(() => TC.saveDpr({ rows: [{ cur: 'BUS 4488', pick: true, _now: true, term: 'Fall', year: '2026' }, { cur: 'BUS 4401', pick: true, _next: true, term: 'Spring', year: '2027' }, { cur: 'BUS 2201', pick: true, term: 'Spring', year: '2026' }] }));
+  await settle(page, 600);
+  const sv = log.writes.filter(x => x.table === 'saved_classes').flatMap(x => Array.isArray(x.body) ? x.body : [x.body]);
+  const hi = log.writes.filter(x => x.table === 'class_history').flatMap(x => Array.isArray(x.body) ? x.body : [x.body]);
+  ok(!e && sv.some(r => r.code === 'BUS 4488' && r.term === '2268') && sv.some(r => r.code === 'BUS 4401' && r.term === '2274') && !sv.some(r => r.code === 'BUS 4488' && r.term === '2274'), 'dpr: in progress goes to Fall’s My Classes, registered for Spring to Spring’s', sv);
+  ok(hi.length === 1 && hi[0].code === 'BUS 2201' && !hi.some(r => r.code === 'BUS 4488'), 'dpr: only finished classes go to your record (Fall’s in-progress classes aren’t filed as finished)', hi);
+  ok(log.errors.length === 0, 'dpr: no page errors', log.errors);
+  await close();
+};
+tests.springFeedNew = async () => {
+  /* Rowan's card was "now" when you last opened Home; now Rowan shares a Spring plan → first, tagged New plan, once */
+  const T = springTables(), rowan = FX.FRIENDS[1].id;
+  const init = `try { localStorage.setItem('tc-feed-seen:${FX.ME.id}', JSON.stringify({ '${rowan}': 'now', '${FX.FRIENDS[2].id}': 'now' })); } catch (e) {}`;
+  let o = await openApp({ terms: SPRING_CFG, tables: T, init });
+  await o.page.waitForFunction(() => TC.ready && TC.seatsLoaded && TC.friendPlans, null, { timeout: 8000 }); await settle(o.page, 800);
+  const a = await o.page.evaluate(id => ({ first: (document.querySelector('.hfeed .fcard') || {}).id, tag: (document.querySelector('#hf-' + id + ' .fnew') || {}).textContent || '', others: document.querySelectorAll('.hfeed .fnew').length }), rowan);
+  ok(a.first === 'hf-' + rowan && a.tag === 'New plan' && a.others === 1, 'home: a friend with a new Spring plan comes first, tagged New plan', a);
+  const gone = await o.page.evaluate(id => { TC.friends = TC.friends.filter(f => f !== id); render(true); return !!document.getElementById('hf-' + id); }, rowan);
+  ok(!gone, 'home: a friend you remove doesn’t come back as a card', gone);
+  await o.page.evaluate(() => homeRefresh()); await settle(o.page, 1500);
+  const b = await o.page.evaluate(() => document.querySelectorAll('.hfeed .fnew').length);
+  ok(b === 0, 'home: once you’ve seen it, the tag goes', b);
+  await o.close();
+};
+/* The merge's review fixes (merge-fixes, 2026-10-09): prerequisites by term, the Planner waits for your
+   Fall classes, your Home card ignores an untouched drafted plan, drafting counts what you're registered
+   for, onboarding's first tab says Spring. */
+/* The plan card, design A (Tate, 2026-10-09: "I like A. lets do that") */
+tests.springCardA = async () => {
+  const cfg = Object.assign({}, SPRING_CFG, { REGISTRATION_TERM: 'Spring 2027', REGISTRATION_OPENS: '2026-10-19' });
+  const T = springTables(); T.planner_prefs = [{ user_id: FX.ME.id, priority: 'degree', units: 12 }];
+  const { page, close, log } = await openApp({ terms: cfg, tables: T, time: '2026-10-09T16:30:00-07:00', height: 1600 });
+  await page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 });
+  await page.evaluate(() => { S.tab = 'schedule'; S.schedTab = 'planner'; render(true); }); await tick(page, 800);
+  const a = await page.evaluate(() => ({ reg: (document.querySelector('.pla-reg') || {}).textContent || '', sub: (document.querySelector('.pl-sub') || {}).textContent || '', card: document.querySelectorAll('.pl-card, .plr, .pla-tab, .pla-blk').length, rows: [...document.querySelectorAll('.plo')].map(r => r.innerText.replace(/\s+/g, ' ')), text: document.getElementById('scroll').innerText }));
+  ok(/^Opens Oct 19 · in 10 days\s*12 units\s*Add your day$/.test(a.reg.trim()) && !/Registration|Opens/.test(a.sub), 'card A: registration is its own amber line, with the days to go', a.reg);
+  ok(a.card === 0 && a.rows.length > 0 && !/Recommended for Plan|TermChamp’s Plan/.test(a.text), 'card A: no plan card, tabs or week in the Builder — the requirements and their options (2026-10-13)', { card: a.card, rows: a.rows.length });
+  ok(a.rows.every(r => /^[^★]+ [A-Z]{2,5} \d{4}[A-Z]? /.test(r) && !/★/.test(r)), 'card A: each row is the name, the number and the professor — no rating or time until you tap', a.rows.slice(0, 3));
+  await page.locator('.plo').first().click(); await tick(page, 400);
+  ok(await page.evaluate(() => !!(UI.sheet && UI.sheet.type === 'sec' && UI.sheet.fill)), 'card A: a tap opens the section sheet, saying what it fills');
+  await page.evaluate(() => { UI.sheet = null; render(true); });
+  const one = await page.evaluate(() => { const d = new Date(sloISO() + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + 1); const was = CFG.REGISTRATION_OPENS; CFG.REGISTRATION_OPENS = d.toISOString().slice(0, 10); render(true);
+    const t = (document.querySelector('.pla-reg') || {}).textContent || ''; CFG.REGISTRATION_OPENS = was; render(true); return t; });
+  ok(/· in 1 day\s*\d+ units\s*Add your day$/.test(one.trim()), 'card A: “in 1 day” the day before', one);
+  await page.setViewportSize({ width: 320, height: 1400 }); await page.evaluate(() => render(true)); await tick(page, 400);
+  const narrow = await page.evaluate(() => ({ spill: [...document.querySelectorAll('.pla-reg .grow, .pla-add, .plq-t b, .plo-p')].filter(e => e.offsetParent && (e.scrollWidth > e.clientWidth + 1 || e.getBoundingClientRect().right > e.parentElement.getBoundingClientRect().right + 1)).map(e => e.textContent.trim().slice(0, 30)), w: document.documentElement.scrollWidth }));
+  ok(!narrow.spill.length && narrow.w <= 320, 'card A: at 320px nothing spills out of its row', narrow);
+  ok(log.errors.length === 0, 'card A: no page errors', log.errors);
+  await close();
+};
+const DAYN_ = { M: 'Mon', T: 'Tue', W: 'Wed', R: 'Thu', F: 'Fri' };
+tests.mergeFixes = async () => {
+  const T = springTables();
+  T.course_prereqs = (T.course_prereqs || []).concat([{ course_code: 'BUS 4401', prereq_json: { req: [['BUS 3438']] } }]);
+  const { page, close, log } = await openApp({ terms: SPRING_CFG, tables: T });
+  await page.waitForFunction(() => TC.ready && TC.seatsLoaded && TC.friendPlans, null, { timeout: 8000 }); await settle(page, 600);
+  await page.evaluate(() => openPlanner());
+  await page.waitForFunction(() => UI.pl && UI.pl.prereqs !== undefined, null, { timeout: 8000 }); await settle(page, 300);
+  const p = await page.evaluate(() => { const done = TCPL.completed(), mine = [...myCodes()];
+    return { rec: !!TCPL.coursePrereqs('BUS 4401'), fall: nowCodes().has('BUS 3438'), split: plPre('BUS 4401', done, mine).state, old: TCPL.prereqStatus('BUS 4401', done, [], mine).state }; });
+  ok(p.rec && p.fall && p.split === 'met' && p.old === 'inprogress', 'merge: a Fall class you’re taking now counts as done for a Spring pick’s prerequisite', p);
+  const g = await page.evaluate(() => { const was = TC.nowMineRows; const out = { ok: plCanDraft() };
+    TC.err.nowMine = 'x'; out.err = plCanDraft(); out.gate = (plGate().html || '').includes('Fall 2026 classes'); delete TC.err.nowMine;
+    TC.nowMineRows = null; out.none = plCanDraft(); TC.nowMineRows = was; return out; });
+  ok(g.ok && !g.err && g.gate && !g.none, 'merge: no Plan A drafted and the Planner says so while your Fall classes didn’t load', g);
+  const f = await page.evaluate(() => { const ids = secsOf('ECON 2303').slice(0, 1).map(s => String(s.id)), keepP = TC.plans.A, d0 = plDrafted();
+    TC.plans.A = ids; plDraftedSet({ A: ids }); const drafted = feedView('me').k;
+    plDraftedSet({}); const chosen = feedView('me').k; TC.plans.A = keepP; plDraftedSet(d0); return { ids, drafted, chosen }; });
+  ok(f.ids.length && f.drafted === 'now' && f.chosen === 'A', 'merge: your Home card shows your Fall week, not a Plan A only drafted for you', f);
+  const reg = await page.evaluate(() => { const L = TCPL.ledger(); return SECTIONS.find(s => !s.async && s.s != null && unitsOf(s.code, L) > 0); });
+  await page.evaluate(id => TC.addMySection(SEC[id], {}), reg.id); await settle(page, 600);
+  const d = await page.evaluate(id => { const L = TCPL.ledger(), R = planRank(L), r = SEC[id], u = unitsOf(r.code, L) || 0, out = planDraft(R, 'A', L);
+    const drafted = out.ids.reduce((n, x) => n + (unitsOf(SEC[x].code, L) || 0), 0);
+    return { code: r.code, registered: personSecs('me').map(s => s.code), u, units: out.units, drafted, target: plUnitsTarget(), n: out.ids.length, cap: plClassCap(), dup: out.ids.some(x => SEC[x] && SEC[x].code === r.code), clash: out.ids.filter(x => secClash(SEC[x], r)).map(x => SEC[x].code) }; }, reg.id);
+  ok(d.registered.includes(d.code) && d.u > 0 && d.units === d.u + d.drafted && d.units <= d.target && d.n + 1 <= d.cap && !d.dup && !d.clash.length, 'merge: a drafted plan counts the Spring classes you’re registered for and never clashes with them', d);
+  const c = await page.evaluate(() => { const L = TCPL.ledger(), R = planRank(L), pr = TC.prefs, un = PEOPLE.me.unplaced;
+    TC.prefs = Object.assign({}, pr, { units: 12 }); PEOPLE.me.unplaced = (un || []).concat(['ZZZ 1001', 'ZZZ 1002', 'ZZZ 1003']);
+    try { return { cap: plClassCap(), reg: personSecs('me').length + PEOPLE.me.unplaced.length, n: planDraft(R, 'A', L).ids.length }; } finally { TC.prefs = pr; PEOPLE.me.unplaced = un; } });
+  ok(c.cap === 4 && c.reg >= 4 && c.n === 0, 'merge: classes you’re registered for count toward the most a plan takes', c);
+  const o = await page.evaluate(() => { const t = UI.onbTab; UI.onbTab = 'now'; const h = onbManual(); UI.onbTab = t; return (h.match(/data-x="now">([^<]*)</) || [])[1]; });
+  ok(o === 'Spring 2027', 'merge: onboarding’s first tab says Spring 2027 (where what you add goes)', o);
+  ok(log.errors.length === 0, 'merge: no page errors', log.errors);
+  await close();
+};
+/* dprAllIn (2026-10-08) retired in the merge: the report flow replaced the sheet with checkboxes by one with
+   "See my plan" / "Looks right", which is never disabled. */
+tests.plansNoTermNote = async () => {
+  const { page, close } = await openApp({});
+  await click(page, '[data-a="tab"][data-x="schedule"]');
+  const t = page.locator('[data-a="schedTab"][data-x="plans"], [data-a="sched"][data-x="plans"]');
+  if (await t.count()) { await t.first().click(); await settle(page, 400); }
+  const txt = await page.evaluate(() => document.body.innerText);
+  ok(/Add a class from Explore/.test(txt) && !/plan with those/.test(txt) && !/Plans use .* sections/.test(txt), 'plans: no "Plans use Fall 2026 sections. Once Spring 2027 is in TermChamp…" note (Tate 2026-10-08)', txt.slice(0, 200));
+  await close();
+};
 /* The same grid under pressure: a 360px phone, a 13-hour day, 30- and 50-minute classes, back-to-back
    classes, and five friends on one block. Sections are injected into the loaded state (synthetic, the
    same shape the seat feed produces) and the grid is re-rendered. Every block must hold its text. */
@@ -2158,26 +2836,29 @@ tests.myClassesTerms = async () => {
   const chips = () => page.evaluate(() => [...document.querySelectorAll('.seg.terms button')].map(b => ({ t: b.innerText.trim(), on: b.classList.contains('on'), pr: b.getAttribute('aria-pressed') })));
   let c = await chips();
   ok(c.length === 2 && c[0].t === 'Fall 2026' && c[0].on && c[0].pr === 'true' && c[1].t === 'Spring 2027' && !c[1].on && c[1].pr === 'false', 'terms: two chips, Fall 2026 on', c);
+  await page.evaluate(() => { UI.agOpen = UI.agOpen || {}; document.querySelectorAll('.ag-fold .ag-h').forEach(b => { UI.agOpen[b.dataset.x] = true; }); render(true); }); await tick(page, 200);
   let t = await text(page);
-  ok(/Financial Markets[\s\S]*Bram Fixturesen · Mon\/Wed 10:10–12:00/.test(t) && await page.locator('#scroll .schshare[data-x="mine"]').count() === 1, 'terms: the Fall chip is My Classes as before, with Share');
+  ok(/Financial Markets[\s\S]*Bram Fixturesen/.test(t) && await page.locator('#scroll .schshare[data-x="mine"]').count() === 1, 'terms: the Fall chip is My Classes (its days opened), with Share');
   // Spring's code is still '' → its chip reads nothing
   await click(page, '[data-a="pickMineTerm"][data-x="Spring 2027"]');
   t = await text(page); c = await chips();
   const other = () => log.reads.filter(r => /^(saved_classes|my_sections)\?/.test(r) && /term=eq\./.test(r) && !/term=eq\.2268/.test(r));
-  ok(c[1].on && /Spring 2027 isn’t posted yet/.test(t) && !other().length && await page.locator('#scroll .shbtn, #scroll .schshare').count() === 0, 'terms: Spring with no confirmed code says not posted yet, reads nothing, no Share', { t: t.slice(0, 200), r: other() });
+  ok(c[1].on && /Spring 2027 isn’t in TermChamp yet/.test(t) && !other().length && await page.locator('#scroll .shbtn, #scroll .schshare').count() === 0, 'terms: Spring with no confirmed code says not posted yet, reads nothing, no Share', { t: t.slice(0, 200), r: other() });
   ok(JSON.parse(await page.evaluate(() => localStorage.getItem('termchamp-app-v1'))).mineTerm === 'Spring 2027', 'terms: the chosen chip is remembered');
   // the code arrives (Oct 5): read that term's own rows
   await page.evaluate(() => { CFG.MY_TERMS[1].code = '2274'; render(true); }); await tick(page, 800);
+  await page.evaluate(() => { UI.agOpen = UI.agOpen || {}; document.querySelectorAll('.ag-fold .ag-h').forEach(b => { UI.agOpen[b.dataset.x] = true; }); render(true); }); await tick(page, 200);
   t = await text(page);
   ok(other().length === 2 && other().every(r => /term=eq\.2274/.test(r) && /user_id=eq\./.test(r)), 'terms: Spring reads only your saved_classes + my_sections at its own term', other());
-  ok(/BUS 3346[\s\S]*Sec 02[\s\S]*Principles of Marketing[\s\S]*Faro Dummelow · Tue\/Thu 9:40–11:00/.test(t) && /BUS 4401[\s\S]*Bram Fixturesen · Mon\/Wed 1:10–2:30/.test(t), 'terms: Spring cards from your own rows', t.slice(0, 500));
+  ok(/BUS 3346[\s\S]*Principles of Marketing[\s\S]*Faro Dummelow/.test(t) && /BUS 4401[\s\S]*Bram Fixturesen/.test(t) && /Tuesday/.test(t) && /Monday/.test(t), 'terms: Spring’s days from your own rows', t.slice(0, 500));
   ok(!/BUS 3431|BUS 3438|Financial Markets/.test(t), 'terms: Fall’s class number 70100 (BUS 3431) never stands in for Spring’s', t.slice(0, 300));
-  ok(/BUS 3411[\s\S]{0,40}No section yet[\s\S]{0,20}Finance Practicum/.test(t), 'terms: a saved Spring class with no section is listed', t.slice(-200));
+  ok(await page.locator('#scroll .mine-any .any-c[data-x="BUS 3411"]').count() === 1, 'terms: a saved Spring class with no section is under Anytime', t.slice(-200));
   const g = await page.evaluate(() => ({ blocks: [...document.querySelectorAll('#scroll .g-b')].map(b => b.dataset.x + '|' + b.dataset.a), today: document.querySelectorAll('#scroll .g-today').length, now: document.querySelectorAll('#scroll .g-now').length }));
   ok(g.blocks.filter(x => x === 'BUS 3346|openClass').length === 2 && g.blocks.filter(x => x === 'BUS 4401|openClass').length === 2 && g.today === 0, 'terms: Spring’s week draws its classes, with no today or now marks', g);
   await click(page, '#scroll .g-day[data-x="T"]');
   ok(await page.locator('#scroll .g-now').count() === 0 && await page.locator('#scroll .g-b.live').count() === 0, 'terms: a focused day in another term has no now line or live class');
-  await click(page, '#scroll .ccard[data-x="BUS 4401"]');
+  await page.evaluate(() => { UI.agOpen = UI.agOpen || {}; document.querySelectorAll('.ag-fold .ag-h').forEach(b => { UI.agOpen[b.dataset.x] = true; }); render(true); }); await tick(page, 200);
+  await click(page, '#scroll .arow[data-x="BUS 4401"]');
   ok(await page.evaluate(() => S.stack.schedule.length === 2 && cur().s === 'classDetail' && cur().p.code === 'BUS 4401'), 'terms: a Spring card opens its class', await page.evaluate(() => cur()));
   await page.evaluate(() => { S.stack.schedule = [{ s: 'schedule' }]; render(true); }); await tick(page, 200);
   // a refresh reads again; a failed read says so and can retry
@@ -2212,21 +2893,23 @@ tests.schedule = async () => {
   const { page, close, log } = await openApp({});
   await click(page, '[data-a="tab"][data-x="schedule"]');
   let t = await text(page);
-  ok(/My Classes/.test(t) && /BUS 2201/.test(t), 'schedule: my classes');
+  ok(/My Classes/.test(t) && await page.locator('#scroll .mine-any .any-c[data-x="BUS 2201"]').count() === 1, 'schedule: my classes');
   const bar = async () => page.evaluate(() => { const b = [...document.querySelectorAll('.regbar')].find(e => e.offsetParent); return b ? { text: b.innerText.trim(), n: b.children.length, count: /\d+\s*class/i.test(b.innerText) } : null; });
   let rb = await bar();
   ok(rb === null && await page.locator('#scroll .schhdr .schshare[data-x="mine"]').count() === 1, 'schedule: My Classes has no bar (Share is top right) — no class count', rb);
   await page.evaluate(() => { S.schedTab = 'plans'; S.plan = 'A'; render(); }); await tick(page, 200);
   rb = await bar();
-  ok(rb && /^(Friends can see|Only you)$/.test(rb.text) && rb.n === 1 && !rb.count, 'schedule: a plan’s bar is who can see it, alone — no class count', rb);
+  ok(rb === null, 'schedule: a plan has no bar under its week (Tate, 2026-10-11)', rb);
   await page.evaluate(() => { S.schedTab = 'mine'; render(); }); await tick(page, 200);
-  ok(/BUS 2201[\s\S]*No section yet/.test(t), 'schedule: a saved class without a section is listed');
-  ok(/Financial Markets[\s\S]*Bram Fixturesen · Mon\/Wed 10:10–12:00/.test(t), 'schedule: section line from the seat feed', t.slice(0, 600));
-  ok(/Avery[\s\S]*in your section/.test(t), 'schedule: friends in my section');
+  ok(await page.locator('#scroll .mine-any .any-c[data-x="BUS 2201"]').count() === 1, 'schedule: a saved class without a section is under Anytime');
+  await page.evaluate(() => { UI.agOpen = UI.agOpen || {}; document.querySelectorAll('.ag-fold .ag-h').forEach(b => { UI.agOpen[b.dataset.x] = true; }); render(true); }); await tick(page, 200);
+  t = await text(page);
+  ok(/Financial Markets[\s\S]*Bram Fixturesen/.test(t), 'schedule: section line from the seat feed', t.slice(0, 600));
+  ok(await page.evaluate(() => [...document.querySelectorAll('.mine-ag .arow')].some(r => r.querySelector('img, .av, [class*="av"]'))), 'schedule: friends in my section show on its row');
   await click(page, '[data-a="schedTab"][data-x="past"]');
   t = await text(page);
-  await tick(page, 2500); t = await text(page);
-  ok(/requirements filled/.test(t) && !/Finance concentration|Graduating Spring 2027/.test(t), 'schedule: the planner is the real ledger, not the prototype’s invented requirements');
+  await tick(page, 2500); t = await withLeft(page);
+  ok(/\d+ filled\s*(?:\d+ in progress\s*)?\d+ left/.test(t) && !/Finance concentration|Graduating Spring 2027/.test(t), 'schedule: the planner is the real ledger, not the prototype’s invented requirements');
   ok(log.errors.length === 0, 'schedule: no page errors', log.errors);
   await close();
 };
@@ -2668,6 +3351,30 @@ tests.chatActions = async () => {
 };
 
 /* Before sql/professify-chat-likes-hides.sql runs: Like and the deletes stay out; the rest works. */
+/* A message the database refuses (P0001 — the optional slur filter) says the database's sentence and
+   keeps the draft; any other failure still says "Couldn't send — try again" (2026-10-07). */
+tests.sendRefused = async () => {
+  const { conv, T } = CHAT_X();
+  let mode = 'p0001';
+  const hook = (url, m) => (m === 'POST' && url.pathname === '/rest/v1/messages')
+    ? (mode === 'p0001' ? { status: 400, body: JSON.stringify({ code: 'P0001', message: 'Messages can\'t contain slurs. Change it and try again.', details: null, hint: null }) }
+                        : { status: 500, body: JSON.stringify({ code: 'XX000', message: 'down', details: null, hint: null }) }) : null;
+  const { page, close, log } = await openApp({ tables: T, hook });
+  await page.waitForFunction(() => TC.ready, null, { timeout: 8000 });
+  await click(page, '[data-a="tab"][data-x="friends"]');
+  await click(page, `#fbody .thread[data-x="${conv}"]`); await tick(page, 600);
+  for (const [md, re] of [['p0001', /Messages can.t contain slurs\. Change it and try again\./], ['down', /Couldn.t send — try again/]]) {
+    mode = md;
+    await page.locator('#chatin').fill('hello ' + md);
+    await page.locator('#chatin').press('Enter'); await tick(page, 700);
+    const toastT = await page.locator('#toast').innerText();
+    ok(re.test(toastT), `send refused (${md}): the toast says ${md === 'p0001' ? 'the database\'s sentence' : 'Couldn’t send'}`, toastT);
+    ok(await page.locator('#chatin').inputValue() === 'hello ' + md, `send refused (${md}): the draft stays in the box`);
+  }
+  ok(log.errors.length === 0, 'send refused: no page errors', log.errors);
+  await close();
+};
+
 tests.chatActionsOff = async () => {
   const { conv, T } = CHAT_X();
   const miss = (url) => /\/rest\/v1\/(message_likes|message_hides|conversation_clears)$/.test(url.pathname) ? { status: 404, body: JSON.stringify({ code: 'PGRST205', message: "Could not find the table 'public." + url.pathname.split('/').pop() + "' in the schema cache", details: null, hint: null }) } : null;
@@ -2813,7 +3520,7 @@ tests.chatSwipe = async () => {
   const conv2 = keep;
   /* no ⋯ inside a chat */
   await click(page, `#fbody .thread[data-x="${conv2}"]`); await tick(page, 400);
-  ok(await page.evaluate(() => cur().s) === 'chat' && await page.locator('.chathdr').count() === 1 && await page.locator('.chathdr .iconbtn').count() === 1 && await page.locator('.chathdr [data-a="back"]').count() === 1 && await page.locator('.chathdr [aria-label="Chat options"]').count() === 0, 'swipe: a chat has no ⋯ at the top (only Back)', await page.locator('.chathdr').innerHTML());
+  ok(await page.evaluate(() => cur().s) === 'chat' && await page.locator('.chathdr').count() === 1 && await page.locator('.chathdr .iconbtn:not(.gwbtn)').count() === 1 && await page.locator('.chathdr [data-a="back"]').count() === 1 && await page.locator('.chathdr [aria-label="Chat options"]').count() === 0, 'swipe: a chat has no ⋯ at the top (only Back, and a group’s calendar since 2026-10-10)', await page.locator('.chathdr').innerHTML());
   ok(log.errors.length === 0, 'swipe: no page errors', log.errors);
   await close();
 };
@@ -2832,7 +3539,7 @@ tests.chatNoDots = async () => {
   ok(await page.evaluate(() => cur().s) === 'friend' && pa.includes('friendRmAsk') && pa.includes('reportAsk') && pa.includes('blockAsk'), 'no dots: its name opens their page, whose ⋯ has Remove friend, Report and Block', pa);
   await click(page, '#sheet .xbtn');
   await openChatRow(page, GROUP.id);
-  ok(await page.locator('.chathdr .iconbtn').count() === 1 && await page.locator('.chathdr [data-a="chatMenu"]').count() === 1, 'no dots: a group chat’s header has only Back, and its name is a button');
+  ok(await page.locator('.chathdr .iconbtn:not(.gwbtn)').count() === 1 && await page.locator('.chathdr .gwbtn').count() === 1 && await page.locator('.chathdr [data-a="chatMenu"]').count() === 1, 'no dots: a group chat’s header has Back and the group schedule’s calendar (2026-10-10), and its name is a button');
   await click(page, '.chathdr [data-a="chatMenu"]');
   const ga = await sheetActs(page);
   ok(await page.evaluate(() => UI.sheet && UI.sheet.type) === 'chatAct' && ga.includes('pinChat') && ga.includes('leaveAsk') && ga.includes('chatDelAsk') && /In this group/.test(await page.locator('#sheet').innerText()), 'no dots: a group’s name opens its sheet (who’s in it, Pin, Delete, Leave)', ga);
@@ -3169,15 +3876,18 @@ tests.champ = async () => {
   const { page, close, log } = await openApp({ ask: b => asks[b.q] || null });
   await click(page, '[data-a="openChamp"]');
   const say = async q => { await page.locator('#champin').fill(q); await page.locator('#champin').press('Enter'); await tick(page, 800); return (await page.locator('.bot .msg').last().innerText()); };
+  const card = () => page.evaluate(() => { const w = [...document.querySelectorAll('#champscroll .chc-wrap')].pop(); return w ? w.innerText : ''; });
   let a = await say('open bus 3431 after 8');
-  ok(/1 section matches/.test(a) && /Sec 02/.test(a) && !/Sec 01/.test(a) && !/§/.test(a), 'champ: search_sections answered from the real feed (open only)', a);
+  let cd = await card();
+  ok(/^1 match ·/.test(a) && /Sec 02/.test(cd) && !/Sec 01/.test(cd) && !/§/.test(a + cd), 'champ: search_sections answered from the real feed (open only), as section cards', { a, cd });
   ok(log.asks[0] && log.asks[0].term === '2268' && typeof log.asks[0].who === 'string' && log.asks[0].who.length === 16 && !('user_id' in log.asks[0]), 'champ: asks with term + 16-char pseudonym only', log.asks[0]);
-  a = await say('is ada good');
-  ok(/Ada Examplewood/.test(a) && /★4\.5 from 41 ratings/.test(a) && /67% would take again/.test(a), 'champ: professor_stats from real numbers', a);
+  a = await say('is ada good'); cd = await card();
+  ok(/Ada Examplewood · ★ 4\.5 from 41 ratings/.test(a) && /67%\s*take again/.test(cd), 'champ: professor_stats from real numbers', { a, cd });
   a = await say('what is the weather');
   ok(/only know Cal Poly classes/.test(a), 'champ: out of scope is refused', a);
   a = await say('BUS 4442');     // ask stand-in returns a fallback → local answer
-  ok(/BUS 4442 · Investments/.test(a) && /Every section is full/.test(a), 'champ: local fallback answers a bare code', a);
+  cd = await card();
+  ok(/BUS 4442 · Investments/.test(a) && /Every section is full/.test(cd), 'champ: local fallback answers a bare code', { a, cd });
   a = await say('write me a poem');
   ok(/not sure|can’t reach/.test(a) && !/★/.test(a), 'champ: unknown question says so, invents nothing', a);
   ok(log.errors.length === 0, 'champ: no page errors', log.errors);
@@ -3312,39 +4022,84 @@ tests.me = async () => {
   await close();
 };
 
-/* The top card (Tate's D2, 2026-10-06): major and concentration in solid green bubbles, labelled, the
-   year in a blue bubble beside the concentration with no label; every shape of profile; both themes. */
-tests.meBubbles = async () => {
+/* My profile, like a friend's (Tate, 2026-10-11: "change the profile that we made friends profile into and build it
+   into the my profile"): the compact card, an Edit pill where a friend's page has Message, and the same neutral
+   Major · Concentration · Year strip; every shape of profile; both themes. */
+tests.meStrip = async () => {
   const { page, close, log } = await openApp({});
-  const open = async (P) => { await page.evaluate(P => { Object.assign(TC.profile, P); S.stack[S.tab] = [{ s: 'home' }]; render(true); }, P); await click(page, '.homehdr .me-btn'); await tick(page, 300);
-    return page.evaluate(() => { const r = el => el && el.getBoundingClientRect(); const bs = [...document.querySelectorAll('.mebubs .mebub')];
-      return bs.map(b => ({ l: (b.querySelector('.mebub-l') || {}).textContent || '', v: b.querySelector('.mebub-v').textContent, tag: b.tagName, act: b.dataset.a || '', bg: getComputedStyle(b).backgroundImage === 'none' ? getComputedStyle(b).backgroundColor : 'gradient', ink: getComputedStyle(b.querySelector('.mebub-v')).color, top: Math.round(r(b).top), left: Math.round(r(b).left), right: Math.round(r(b).right) })); }); };
+  const open = async P => { await page.evaluate(P => { Object.assign(TC.profile, P); S.stack[S.tab] = [{ s: 'home' }]; render(true); }, P); await click(page, '.homehdr .me-btn'); await tick(page, 300);
+    return page.evaluate(() => { const st = document.querySelector('.meown .fstrip'), cs = st ? [...st.querySelectorAll('.fs-c')] : [];
+      return { cells: cs.map(c => ({ l: c.querySelector('.fs-l').textContent, v: c.querySelector('.fs-v').textContent, tag: c.tagName, act: c.dataset.a || '', y: c.classList.contains('y'), w: Math.round(c.getBoundingClientRect().width) })),
+        sw: st ? Math.round(st.getBoundingClientRect().width) : 0, bubs: document.querySelectorAll('.mebub, .mebubs').length, bg: st ? getComputedStyle(st).backgroundColor : '', inks: cs.filter(c => c.tagName !== 'BUTTON').map(c => getComputedStyle(c.querySelector('.fs-v')).color),
+        pad: cs[0] ? getComputedStyle(cs[0]).padding : '', lab: cs[0] ? getComputedStyle(cs[0].querySelector('.fs-l')).fontSize : '' }; }); };
   let b = await open({ major: 'Business Administration', concentration: 'Financial Management', class_standing: 'Senior' });
-  ok(b.length === 3 && b[0].l === 'MAJOR' && b[0].v === 'Business Administration' && b[1].l === 'CONCENTRATION' && b[1].v === 'Financial Management' && b[2].l === '' && b[2].v === 'Senior', 'bubbles: Major, Concentration, and Senior with no “YEAR” label', b);
-  ok(b[0].bg === 'rgb(198, 238, 228)' && b[1].bg === b[0].bg && b[0].bg !== 'gradient', 'bubbles: major and concentration are the same solid green (no gradient)', b.map(x => x.bg));
-  ok(b[2].bg === 'rgb(214, 228, 255)' && b[2].top === b[1].top && b[2].left > b[1].right, 'bubbles: the year is a blue bubble beside the concentration', b);
-  ok(b[0].top < b[1].top, 'bubbles: the major sits above the concentration', b);
+  ok(b.bubs === 0 && b.cells.map(c => c.l + ':' + c.v).join('|') === 'Major:Business Administration|Concentration:Financial Management|Year:Senior', 'my strip: Major · Concentration · Year in one strip; the coloured bubbles are gone', b);
+  ok(b.bg === 'rgb(241, 245, 249)' && b.inks.length === 3 && b.inks.every(c => c === b.inks[0]), 'my strip: the friend page’s neutral fill, every value in the same plain ink (light)', b);
+  ok(b.cells[2].y && b.cells[2].w < b.cells[0].w && Math.abs(b.cells[0].w - b.cells[1].w) <= 1, 'my strip: the year only as wide as its word; major and concentration share the rest', b.cells);
+  const hd = await page.evaluate(() => { const r = e => e.getBoundingClientRect(), av = document.querySelector('.meown .mehead .av'), box = document.querySelector('.meown .mehead .ringav'), ed = document.querySelector('.meown .meedit'), nm = document.querySelector('.meown .mename'), hn = document.querySelector('.meown .mehandle'), card = document.querySelector('.meown .mecard');
+    return { av: Math.round(r(av).width), box: box && Math.round(r(box).width), edH: Math.round(r(ed).height), edT: ed.innerText.trim(), edL: ed.getAttribute('aria-label'), edA: ed.dataset.a, edBg: getComputedStyle(ed).backgroundColor, nm: getComputedStyle(nm).fontSize, hn: hn && getComputedStyle(hn).fontSize, pad: getComputedStyle(card).padding, rad: getComputedStyle(card).borderRadius }; });
+  ok(hd.av === 46 && hd.box === 52 && hd.nm === '20px' && hd.hn === '13px' && hd.pad === '12px' && hd.rad === '24px', 'my card: the friend page’s compact card — a 46px photo in the 52px ring box, 20px name, 13px handle, 12px padding, 24px corners', hd);
+  ok(hd.edH === 34 && hd.edT === 'Edit' && hd.edL === 'Edit profile' && hd.edA === 'openEditProfile' && hd.edBg === 'rgb(227, 236, 255)', 'my card: an Edit pill (34px, pencil + “Edit”, the pencil’s blue) where a friend’s page has Message', hd);
+  /* the same strip as a friend's page, measured on the real screen */
+  const fr = await page.evaluate(() => { const id = TC.friends[0]; Object.assign(PEOPLE[id], { major: 'Finance', standing: 'Junior', conc: '' }); A.openFriend(id); return true; }); await tick(page, 400);
+  const fs = await page.evaluate(() => { const st = document.querySelector('.fpg .fstrip'), c = st.querySelector('.fs-c'); return { bg: getComputedStyle(st).backgroundColor, pad: getComputedStyle(c).padding, lab: getComputedStyle(c.querySelector('.fs-l')).fontSize, rad: getComputedStyle(st).borderRadius, card: getComputedStyle(document.querySelector('.fpg .mecard')).padding }; });
+  ok(fr && fs.bg === b.bg && fs.pad === b.pad && fs.lab === b.lab && fs.card === hd.pad, 'my strip: the same fill, padding and labels as a friend’s strip', { fs, mine: b });
+  /* every part of the two cards, property by property (the friend's Message pill against your Edit pill) */
+  const PROPS = ['gap', 'marginTop', 'marginBottom', 'borderRadius', 'fontSize', 'fontWeight', 'lineHeight', 'padding', 'height', 'letterSpacing', 'textTransform', 'backgroundColor', 'color'];
+  const look = (pg, edit) => page.evaluate(([pg, edit, PROPS]) => { const q = s => document.querySelector(`.${pg} ${s}`), out = {};
+    for (const [k, s] of [['card', '.mecard'], ['head', '.mehead'], ['ring', '.mehead .ringav'], ['photo', '.mehead .av'], ['name', '.mename'], ['handle', '.mehandle'], ['strip', '.fstrip'], ['cell', '.fs-c.g'], ['year', '.fs-c.y'], ['label', '.fs-l'], ['value', '.fs-c.g .fs-v'], ['pill', edit]]) { const e = q(s); if (!e) { out[k] = null; continue; } const cs = getComputedStyle(e); out[k] = PROPS.filter(p => !(k === 'pill' && /Color$|^color$/.test(p)) && !(k === 'photo' && p === 'backgroundColor') && !(k === 'card' && p === 'marginBottom') && !(p === 'height' && !['pill', 'ring', 'photo'].includes(k))).map(p => p + ':' + cs[p]).join(';'); }
+    return out; }, [pg, edit, PROPS]);
+  const fl = await look('fpg', '.fmsg');
+  await page.evaluate(() => { S.stack[S.tab] = [{ s: 'home' }]; render(true); }); await click(page, '.homehdr .me-btn'); await tick(page, 300);
+  const ml = await look('meown', '.meedit'), diff = Object.keys(fl).filter(k => fl[k] !== ml[k]).map(k => [k, fl[k], ml[k]]);
+  ok(Object.values(ml).every(Boolean) && !diff.length, 'my card: every part matches a friend’s card — card, photo box, name, handle, strip, cells, labels, values and the pill', diff);
   b = await open({ concentration: 'Financial Management concentration' });
-  ok(b[1].v === 'Financial Management', 'bubbles: a stored “… concentration” isn’t said twice under its label', b[1]);
+  ok(b.cells[1].v === 'Financial Management', 'my strip: a stored “… concentration” isn’t said twice', b.cells[1]);
+  b = await open({ concentration: 'General / Open' });
+  ok(b.cells.map(c => c.l).join() === 'Major,Year', 'my strip: “General / Open” is no concentration, as on a friend’s page', b.cells);
   b = await open({ concentration: null, class_standing: 'Senior' });
-  ok(b.length === 2 && b[0].l === 'MAJOR' && b[1].v === 'Senior' && b[0].top === b[1].top, 'bubbles: no concentration → the year sits beside the major', b);
+  ok(b.cells.map(c => c.l + ':' + c.v).join('|') === 'Major:Business Administration|Year:Senior', 'my strip: no concentration → Major and Year', b.cells);
   b = await open({ concentration: null, class_standing: null });
-  ok(b.length === 1 && b[0].v === 'Business Administration', 'bubbles: no year → no empty year bubble', b);
+  ok(b.cells.length === 1 && b.cells[0].v === 'Business Administration', 'my strip: no year → no empty year cell', b.cells);
   b = await open({ major: null, concentration: null, class_standing: 'Junior' });
-  ok(b[0].tag === 'BUTTON' && b[0].act === 'openEditProfile' && b[0].v === 'Add your major', 'bubbles: no major → “Add your major” opens Edit profile', b[0]);
+  ok(b.cells[0].tag === 'BUTTON' && b.cells[0].act === 'openEditProfile' && b.cells[0].v === 'Add your major' && b.cells[1].v === 'Junior' && Math.abs(b.cells[0].w + b.cells[1].w - b.sw) <= 2, 'my strip: no major → “Add your major”, a button taking all the room the year leaves', b);
+  await page.keyboard.press('Shift'); await page.evaluate(() => document.querySelector('.meown .fs-add').focus());
+  const fo = await page.evaluate(() => { const e = document.querySelector('.meown .fs-add'); return { vis: e.matches(':focus-visible'), off: getComputedStyle(e).outlineOffset, style: getComputedStyle(e).outlineStyle }; });
+  ok(fo.vis && fo.off === '-3px' && fo.style !== 'none', 'my strip: “Add your major” shows its focus ring inside the strip (the strip clips anything outside)', fo);
+  const addInk = await page.evaluate(() => getComputedStyle(document.querySelector('.fs-add .fs-v')).color);
+  ok(addInk === 'rgb(37, 99, 235)', 'my strip: “Add your major” is blue, so it reads as something to tap', addInk);
+  await click(page, '.meown .fs-add'); await tick(page, 300);
+  ok(await page.evaluate(() => cur().s === 'editProfile'), 'my strip: “Add your major” opens Edit profile');
+  await page.evaluate(() => { Object.assign(TC.profile, { major: 'Business Administration', concentration: 'Financial Management', class_standing: 'Senior' }); S.stack[S.tab] = [{ s: 'home' }]; render(true); });
+  await click(page, '.homehdr .me-btn'); await tick(page, 300); await click(page, '.meown .meedit'); await tick(page, 300);
+  ok(await page.evaluate(() => cur().s === 'editProfile'), 'my card: Edit opens Edit profile');
   /* contrast, light and dark */
-  await page.evaluate(() => { Object.assign(TC.profile, { major: 'Business Administration', concentration: 'Financial Management', class_standing: 'Senior' }); });
   const lum = c => { const m = c.match(/\d+(\.\d+)?/g).map(Number).slice(0, 3).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]; };
   const cr = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
   for (const th of ['light', 'dark']) {
     await page.evaluate(th => { try { localStorage.setItem('tc-theme', th); } catch (e) {} applyTheme(true); }, th);
-    b = await open({});
-    const pairs = await page.evaluate(() => [...document.querySelectorAll('.mebubs .mebub-l, .mebubs .mebub-v, .merow-l, .merow-v, .merow-s')].map(e => { let n = e, bg = 'rgba(0, 0, 0, 0)'; while (n && /rgba\(0, 0, 0, 0\)|transparent/.test(bg)) { bg = getComputedStyle(n).backgroundColor; n = n.parentElement; } return { t: e.textContent, fg: getComputedStyle(e).color, bg }; }));
+    b = await open({ major: null });
+    const pairs = await page.evaluate(() => [...document.querySelectorAll('.meown .fs-l, .meown .fs-v, .meown .meedit, .meown .mehandle, .merow-l, .merow-v, .merow-s')].map(e => { let n = e, bg = 'rgba(0, 0, 0, 0)'; while (n && /rgba\(0, 0, 0, 0\)|transparent/.test(bg)) { bg = getComputedStyle(n).backgroundColor; n = n.parentElement; } return { t: e.textContent.trim().slice(0, 24), fg: getComputedStyle(e).color, bg }; }));
     const low = pairs.filter(x => cr(x.fg, x.bg) < 4.5).map(x => [x.t, x.fg, x.bg, cr(x.fg, x.bg).toFixed(2)]);
-    ok(pairs.length >= 12 && !low.length, `bubbles: every word on the profile is 4.5:1+ (${th})`, low);
+    ok(pairs.length >= 12 && !low.length, `my strip: every word on the card and the rows is 4.5:1+ (${th})`, low);
+    if (th === 'dark') ok(b.bg === 'rgb(27, 36, 56)', 'my strip: the friend page’s dark fill', b.bg);
   }
-  ok(log.errors.length === 0, 'bubbles: no page errors', log.errors);
+  ok(log.errors.length === 0, 'my strip: no page errors', log.errors);
   await close();
+};
+/* Rate's "Current term" (Tate, 2026-10-11: "make current term. blue as well"). */
+tests.curTermBlue = async () => {
+  const lum = c => { const m = c.match(/\d+(\.\d+)?/g).map(Number).slice(0, 3).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]; };
+  const cr = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  for (const [th, bg, ink] of [['light', 'rgb(227, 236, 255)', 'rgb(30, 64, 175)'], ['dark', 'rgb(23, 39, 72)', 'rgb(169, 198, 255)']]) {
+    const { page, close, log } = await openApp({ init: th === 'dark' ? () => { try { localStorage.setItem('tc-theme', 'dark'); } catch (e) {} } : null });
+    await page.waitForFunction(() => TC.ready, null, { timeout: 8000 });
+    await click(page, '[data-a="tab"][data-x="rate"]'); await tick(page, 400);
+    const c = await page.evaluate(() => { const e = document.querySelector('.curterm'); return e && { t: e.textContent, bg: getComputedStyle(e).backgroundColor, ink: getComputedStyle(e).color }; });
+    ok(c && c.t === 'Current term' && c.bg === bg && c.ink === ink && cr(c.ink, c.bg) >= 4.5, `current term: blue, 4.5:1+ (${th})`, c);
+    ok(log.errors.length === 0, `current term: no page errors (${th})`, log.errors);
+    await close();
+  }
 };
 
 /* My ratings, its own page (2026-10-06): cards set apart from each other, a rating-coloured edge, Edit
@@ -3876,9 +4631,9 @@ tests.prereqVerdict = async () => {
   const cr = (Math.max(L(bg), L(fg)) + .05) / (Math.min(L(bg), L(fg)) + .05);
   ok(cr >= 4.5, 'prereq: the verdict pill text is ≥4.5:1', cr.toFixed(2));
   await click(page, '.hero .stat.pq'); await tick(page, 2500);
-  ok(await page.locator('.tabbar .tab.on').getAttribute('data-x') === 'schedule' && await page.locator('.stabs .on').innerText() === 'Planner', 'prereq: “Not fulfilled” opens Schedule › Planner');
+  ok(await page.locator('.tabbar .tab.on').getAttribute('data-x') === 'schedule' && await page.locator('.stabs .on').innerText() === 'Builder', 'prereq: “Not fulfilled” opens Schedule › Builder');
   let t = await text(page);
-  ok(t.indexOf('Before') >= 0 && t.indexOf('Before') < t.indexOf('TermChamp’s picks'), 'prereq: the card sits above the rest of the Planner (the picks)', t.slice(0, 300));
+  ok(t.indexOf('Before') >= 0 && t.indexOf('left on your flowchart') > 0 && t.indexOf('Before') < t.indexOf('left on your flowchart'), 'prereq: the card sits above the rest of the Builder', t.slice(0, 300));
   ok(/You need 1 more class before STAT 2170/.test(t), 'prereq: the card says what is left', t.slice(0, 400));
   ok(/Still need · any one[\s\S]*MATH 1000[\s\S]*MATH 1180/.test(t), 'prereq: an either/or group lists each class that satisfies it');
   ok(/✓ PHIL 3331 · on your record/.test(t), 'prereq: the part already done is ticked, not listed as needed');
@@ -3892,11 +4647,12 @@ tests.prereqVerdict = async () => {
   ok(await page.locator('.tc-pqfor').count() === 0, 'prereq: leaving Schedule clears the card');
   await openC('STAT 2170'); await click(page, '.hero .stat.pq'); await tick(page, 1500);
   await click(page, '[data-a="plForClose"]');
-  ok(await page.locator('.tc-pqfor').count() === 0 && /TermChamp’s picks/.test(await text(page)), 'prereq: the card closes and the Planner stays');
+  ok(await page.locator('.tc-pqfor').count() === 0 && /left on your flowchart/.test(await text(page)) && await page.locator('#scroll .plq-card').count() > 0, 'prereq: the card closes and the Builder stays');
   await click(page, '[data-a="openChamp"]');
   await page.locator('#champin').fill('prereqs for stat 2170'); await page.locator('#champin').press('Enter'); await tick(page, 800);
   const ch = await page.locator('.bot .msg').last().innerText();
-  ok(/Not yet\. You still need MATH 1000 or MATH 1180 for STAT 2170/.test(ch) && /Show in Planner/.test(await page.locator('#sheet').innerText()), 'prereq: Champ gives the same answer, with a way to the Planner', ch);
+  const chc = await page.locator('#champscroll .chc-wrap').last().innerText();
+  ok(/Not yet — one class to go/.test(ch) && /MATH 1000\s*or\s*MATH 1180/.test(chc) && /PHIL 3331\s*On your record/.test(chc) && /1 of 2/.test(chc) && /Show in Planner/.test(chc), 'prereq: Champ gives the same answer as a checklist card, with a way to the Planner', { ch, chc });
   const reads = log.reads.filter(r => /^course_prereqs/.test(r)).length;
   ok(reads === 1, 'prereq: course_prereqs is read once, not on every render', reads);
   ok(log.errors.length === 0, 'prereq: no page errors', log.errors);
@@ -3939,55 +4695,29 @@ tests.planner = async () => {
   const T = Object.assign({}, FX.TABLES, { course_seats: FX.TABLES.course_seats.concat([{ term: '2268', course_code: 'COMS 1101', title: 'Public Speaking', section: '01', instructor: 'Mockridge, Dov', days: 'MoWe 8:10AM - 9:30AM', status: 'Open', capacity: 30, enrolled: 20, available: 10, waitlist_total: 0, waitlist_capacity: 0, class_nbr: '71001', instruction_mode: 'In Person', location: '' }]) });
   const { page, close, log } = await openApp({ tables: T });
   await click(page, '[data-a="tab"][data-x="schedule"]'); await click(page, '[data-a="schedTab"][data-x="past"]'); await tick(page, 2500);
-  let t = await text(page);
-  ok(/Business Administration/.test(t) && /2 of 33\s*requirements filled/.test(t) && /4 in progress/.test(t), 'planner: the desktop’s ledger — 2 of 33 filled (31 + the 2 choice slots, checked since 2026-10-02), 4 in progress (one via the ENGL 1134 waiver)', (t.match(/[\s\S]{0,40}requirements filled[\s\S]{0,60}/) || [''])[0]);
-  ok(/We can’t check 10 from your record/.test(t), 'planner: what it can’t judge is listed, not counted');
+  let t = await withLeft(page);
+  /* 2026-10-10 (Tate's option A, simple): one number and one bar — the desktop's ledger behind it */
+  const lg = await page.evaluate(() => { const L = TCPL.ledger(), c = (() => { const g = plGate(); if (g.html) return null; const L = g.L, X = auditLines(TC.audit, L), R = L ? planRank(L) : X ? { audit: true, X, all: [], bare: true } : null; if (!R || R.done) return null; const o = document.getElementById('__lc'); if (o) o.remove(); const d = document.createElement('div'); d.id = '__lc'; d.style.cssText = 'position:absolute;left:-10000px;top:0;width:390px'; const ro = UI.plReqOpen; UI.plReqOpen = new Proxy({}, { get: () => true, has: () => true }); try { d.innerHTML = plLeftCard(R, L, /^[ABC]$/.test(UI.plPlan) ? UI.plPlan : 'A'); } finally { UI.plReqOpen = ro; } document.body.appendChild(d); const c0 = d.firstElementChild; if (c0) [...d.children].slice(1).forEach(x => c0.appendChild(x)); return c0; })(), bar = c && c.querySelector('.pll-bar'), b = bar && bar.querySelector('i.f'); setTimeout(() => document.getElementById('__lc')?.remove()); return { F: L.F, N: L.N, T: L.T, cant: L.grid.flatMap(x => x.slots).filter(s => s.state === 'cant').length, w: b && b.style.width, label: bar && bar.getAttribute('aria-label') }; });
+  ok(/2 filled\s*4 in progress\s*27 left on your flowchart/.test(t) && lg.F === 2 && lg.N === 33 && lg.T === 4 && lg.w === '6.1%' && lg.label === '2 filled, 4 in progress, 27 left on your flowchart of 33', 'planner: the desktop’s ledger — 2 filled (31 + the 2 choice slots, checked since 2026-10-02), 4 in progress (one via the ENGL 1134 waiver), 27 left of 33; the bar’s filled part is 2/33', lg);
+  ok(!/requirements filled|We can’t check/.test(t) && !/in progress/.test(t.replace(/\+ \d+ in progress|· \d+ in progress|\b\d+ in progress\b/g, '')), 'past: no legend or can’t-check lines — the number, then Major · GE · Concentration · Electives (in progress only as a row’s “+ N in progress”, Tate 2026-10-11)', (t.match(/[\s\S]{0,60}(in progress|We can’t)[\s\S]{0,60}/) || [''])[0]);
   /* 2026-10-06: the ledger, flowchart and record are Past classes; the full Still need list is folded at the foot of the Planner */
   await click(page, '[data-a="schedTab"][data-x="planner"]'); await tick(page, 600);
-  ok(await page.locator('details.pk-all').evaluate(d => !d.open), 'planner: “Still need · all” starts folded under the picks');
-  await click(page, 'details.pk-all > summary'); await tick(page, 200);
+  /* (2026-10-13) "Still need · all" and the note under it left the Builder (Tate: "dont need this"): what's left is the
+     requirement cards, each opening to its best options */
   const t2 = await text(page);
-  ok(await page.locator('details.pk-all').evaluate(d => d.open), 'planner: tapping “Still need · all” opens it');
-  ok(/Still need[\s\S]*BUS 1100[\s\S]*Career Readiness I/.test(t2), 'planner: still-need list in flowchart order');
-  /* GEs left are part of "Still need", not a card of their own (Tate, 2026-10-03). */
-  const sn = await page.evaluate(() => { const cards = [...document.querySelectorAll('.tc-sec')].filter(c => /^Still need/.test(c.querySelector('.tc-sech')?.innerText.trim() || ''));
-    const c = cards[0]; if (!c) return null;
-    return { cards: cards.length, n: +c.querySelector('.tc-sech').innerText.replace(/\D+/g, ''), rows: c.querySelectorAll('.li').length, ge: c.querySelectorAll('[data-a="plGe"]').length,
-      heads: [...c.querySelectorAll('.tc-needh')].map(h => h.innerText.replace(/\s+/g, ' ').trim()), order: [...c.children].map(x => x.classList.contains('tc-needh') ? 'H' : x.dataset.a === 'plGe' ? 'G' : x.classList.contains('li') ? 'C' : '').filter(Boolean).join(''),
-      geCard: [...document.querySelectorAll('.tc-sech')].some(h => /GE areas and electives/.test(h.innerText)) }; });
-  ok(sn && sn.cards === 1 && !sn.geCard && sn.ge > 0 && sn.rows === sn.n, 'planner: one “Still need” card holds the classes and the GE areas, and its count is every row in it', sn);
-  ok(sn && sn.heads.length === 2 && /^CLASSES \d+$/i.test(sn.heads[0]) && /^(GENERAL EDUCATION|GE AND ELECTIVES) \d+$/i.test(sn.heads[1]) && /^HC+HG+/.test(sn.order), 'planner: labelled “Classes” then “General education”, each with its count', sn);
+  ok(!(await page.locator('#scroll details.pk-all, #scroll .pk-note').count()) && await page.locator('#scroll .plq-card').count() > 0 && !/Still need · all/.test(t2), 'planner: no “Still need · all” and no footnote — the requirement cards are what’s left', await page.locator('#scroll .plq-card').count());
   await click(page, '[data-a="schedTab"][data-x="past"]'); await tick(page, 400);
-  const key = await page.evaluate(() => { const k = document.querySelector('.tc-key'); const row = document.querySelector('.tc-cell.taking .tc-dot');
-    return k && { t: k.innerText.replace(/\s+/g, ' ').trim(), half: [...k.querySelectorAll('.tc-dot')][1]?.innerText, rowHalf: row ? row.innerText : null, oneLine: new Set([...k.children].map(x => Math.round(x.getBoundingClientRect().top))).size }; });
   for (let i = 0; i < 6; i++) { const closed = page.locator('[data-a="plYear"][aria-expanded="false"]'); if (!(await closed.count())) break; await closed.first().click(); await tick(page, 150); }
-  key.rowHalf = await page.evaluate(() => { const r = document.querySelector('.tc-cell.taking .tc-dot'); return r ? r.innerText : null; });
-  ok(key && key.t === '✓ Done ◐ In progress To do ? Can’t check' && key.half === '◐' && key.rowHalf === key.half && key.oneLine === 1, 'planner: the flowchart has a key for its marks — ◐ is In progress — on one line', key);
-  await page.setViewportSize({ width: 375, height: 844 }); await tick(page, 400);
-  const k375 = await page.evaluate(() => new Set([...document.querySelector('.tc-key').children].map(x => Math.round(x.getBoundingClientRect().top))).size);
-  ok(k375 === 1, 'planner: the key stays on one line on a 375px phone', k375);
-  await page.setViewportSize({ width: 390, height: 844 }); await tick(page, 300);
-  /* Every shape of what's left: one card, labels only when both kinds are there, no empty card. */
-  const shapes = await page.evaluate(() => { const real = TCPL.ledger, L0 = real(), out = {};
-    const run = (k, f) => { TCPL.ledger = () => Object.assign({}, L0, f(L0)); try { const h = document.createElement('div'); h.innerHTML = plannerView();
-      const c = [...h.querySelectorAll('.tc-sec')].find(x => /^Still need/.test(x.querySelector('.tc-sech')?.textContent.trim() || ''));
-      out[k] = c ? { n: +c.querySelector('.tc-sech').textContent.replace(/\D+/g, ''), rows: c.querySelectorAll('.li').length, heads: [...c.querySelectorAll('.tc-needh span:first-child')].map(x => x.textContent), note: /Prerequisites didn’t load/.test(c.textContent) } : null; } finally { TCPL.ledger = real; } };
-    const el = { title: 'Free Elective', type: 'elective', id: 'zz', ti: 0, area: null };
-    run('geOnly', L => ({ need: [] })); run('classesOnly', L => ({ needU: [] })); run('none', L => ({ need: [], needU: [] }));
-    run('mixed', L => ({ needU: L.needU.concat([el]) })); run('elOnly', L => ({ needU: [el] }));
-    const pq = UI.pl.prereqs; UI.pl.prereqs = false; run('pqClasses', L => ({})); run('pqGeOnly', L => ({ need: [] })); UI.pl.prereqs = pq;
-    return out; });
-  const S5 = shapes;
-  ok(S5.geOnly && S5.geOnly.heads.length === 0 && S5.geOnly.rows === S5.geOnly.n && S5.classesOnly && S5.classesOnly.heads.length === 0 && S5.classesOnly.rows === S5.classesOnly.n && S5.none === null,
-    'planner: only GEs or only classes left → one card, no group labels; nothing left → no card', S5);
-  ok(S5.mixed && S5.mixed.heads.join('|') === 'Classes|GE and electives' && S5.mixed.rows === S5.mixed.n && S5.elOnly && S5.elOnly.heads.join('|') === 'Classes|Electives',
-    'planner: GEs and electives together read “GE and electives”; electives alone read “Electives”', S5);
-  ok(S5.pqClasses && S5.pqClasses.note && S5.pqGeOnly && !S5.pqGeOnly.note, 'planner: “Prerequisites didn’t load” sits with the classes, never on a GE-only card', S5);
-  ok(/STAT 1210[\s\S]{0,160}Needs MATH 1000 first/.test(t2), 'planner: prerequisites from course_prereqs say what is missing');
-  ok(/PHIL 3331/.test(t) && /Spring 2026/i.test(t) && /ENGL 1134\s*AP \/ IB credit/.test(t), 'planner: past classes and waivers listed, with the desktop’s reason labels', t.slice(t.indexOf('Past classes'), t.indexOf('Past classes') + 200));
-  ok(/Pick your concentration/.test(t) && /Financial Management/.test(t), 'planner: concentration choices from the catalog');
+  /* no key any more: each mark says what it is to a screen reader, and the can't-check spots are rows, not a list */
+  const marks = await page.evaluate(() => ({ done: [...document.querySelectorAll('.pc-row.done .pc-dot')].map(d => d.innerText + '|' + d.getAttribute('aria-label')), taking: [...document.querySelectorAll('.pc-row.taking .pc-dot')].map(d => d.innerText + '|' + d.getAttribute('aria-label')), cant: [...document.querySelectorAll('.pc-row.cant .pc-dot')].map(d => d.innerText + '|' + d.getAttribute('aria-label')), key: !!document.querySelector('.tc-key') }));
+  ok(!marks.key && marks.done.length && marks.done.every(x => x === '✓|Done') && marks.taking.length === 4 && marks.taking.every(x => x === '◐|In progress') && marks.cant.length === lg.cant && lg.cant === 10 && marks.cant.every(x => /^\?\|Mark .+ done$/.test(x)), 'past: ✓ Done, ◐ In progress (all 4), ? Can’t check (all 10, as rows, each a circle to check off) — no key', marks);
+  ok(await page.evaluate(() => { const r = [...document.querySelectorAll('.pc-row.cant')]; return r.length > 0 && r.every(x => { const e = x.querySelector('.pc-sr'); return !!e && /we can’t check this from your record/.test(e.textContent) && e.getBoundingClientRect().width <= 1; }); }), 'past: a can’t-check row says so to a screen reader (no words on screen)');
+  /* (2026-10-13) the Still need card's shapes, labels and prerequisite line left with it */
+  const t3 = await text(page);
+  ok(/PHIL 3331\s*Business Ethics\s*Dov Mockridge/.test(t3) && /ENGL 1134\s*Writing and Rhetoric\s*AP \/ IB credit/.test(t3), 'past: each spot shows the class that filled it — its professor, or a waiver’s reason in the desktop’s words', t3.slice(0, 300));
+  ok(await page.evaluate(() => TCPL.ledger().concUnchosen && TCPL.concInfo(TCPL.ledger().major).list.some(c => c.name === 'Financial Management')), 'planner: concentration choices from the catalog (the pick is the Builder’s, 2026-10-12)');
   await click(page, '[data-a="schedTab"][data-x="planner"]'); await tick(page, 400);
-  await click(page, '[data-a="plGe"][data-x="1C"]'); await tick(page);
+  await page.evaluate(() => A.plGe('1C')); await tick(page);   /* (2026-10-13) the GE area's sheet (its button was in Still need) */
   const g = await page.locator('#sheet').innerText();
   ok(/Oral Communication \(1C\)/.test(g) && /COMS 1101/.test(g) && /1 of \d+ classes in this area are offered Fall 2026/.test(g), 'planner: a GE area lists this term’s real classes for it', g.slice(0, 200));
   await click(page, '[data-a="closeSheet"]');
@@ -3997,11 +4727,13 @@ tests.planner = async () => {
   await click(page, 'form[data-submit="logClass"] .btn'); await tick(page, 600);
   const w = log.writes.filter(x => x.table === 'class_history');
   ok(w.length === 1 && w[0].m === 'POST' && w[0].body.code === 'BUS 2214' && w[0].body.term === 'Fall' && w[0].body.year === 2025 && w[0].body.user_id === FX.ME.id && !('grade' in w[0].body), 'planner: logging a class upserts the desktop’s class_history row (no grade)', w);
-  t = await text(page);
-  ok(/3 of 33\s*requirements filled/.test(t), 'planner: the ledger moves when a class is logged', (t.match(/\d+ of 33/) || [''])[0]);
-  await click(page, '[data-a="askRemoveHistory"][data-x="PHIL 3331"]');
-  await click(page, '#sheet [data-a="removeHistory"]'); await tick(page, 400);
-  ok(log.writes.some(x => x.table === 'class_history' && x.m === 'DELETE' && /code=eq\.PHIL/.test(x.query)), 'planner: remove asks, then deletes that row');
+  t = await withLeft(page);
+  ok(/3 filled\s*4 in progress\s*26 left on your flowchart/.test(t), 'planner: the ledger moves when a class is logged (3 filled, 26 left)', (t.match(/\d+ filled\s*\d+ in progress\s*\d+ left/) || [''])[0]);
+  await click(page, '[data-a="pcOpen"][data-x="PHIL 3331|Spring|2026"]'); await tick(page, 200);
+  await click(page, '#sheet [data-a="pcAskRemove"][data-x="PHIL 3331|Spring|2026"]');
+  ok(/Remove PHIL 3331, Spring 2026\?/.test(await page.locator('#sheet').innerText()), 'planner: Remove names the class and its term');
+  await click(page, '#sheet [data-a="pcRemove"]'); await tick(page, 400);
+  ok(log.writes.some(x => x.table === 'class_history' && x.m === 'DELETE' && /code=eq\.PHIL/.test(x.query) && /term=eq\.Spring/.test(x.query) && /year=eq\.2026/.test(x.query)), 'planner: remove asks, then deletes that row (that term only)');
   ok(log.errors.length === 0, 'planner: no page errors', log.errors);
   await close();
 };
@@ -4015,10 +4747,45 @@ tests.plannerMissing = async () => {
 };
 
 tests.wordmark = async () => {
-  const { page, close } = await openApp({});
-  const t = await page.locator('.homehdr').innerText();
-  ok(/^TermChamp/.test(t.trim()) && await page.locator('.homehdr img.logo').count() === 0, 'design: Home header is the TermChamp wordmark, not the tile', t);
+  /* Tate, 2026-10-11: his logo image, exact, in place of the typed wordmark */
+  const fs = await import('node:fs'), crypto = await import('node:crypto'), pth = await import('node:path');
+  const md5 = b => crypto.createHash('md5').update(b).digest('hex');
+  const dir = pth.resolve(pth.dirname(new URL(import.meta.url).pathname), '../patches/logo');
+  const want = { light: md5(fs.readFileSync(pth.join(dir, 'termchamp-logo-light.png'))), dark: md5(fs.readFileSync(pth.join(dir, 'termchamp-logo-dark.png'))) };
+  const { page, close, log } = await openApp({});
+  const look = () => page.evaluate(() => {
+    const h = document.querySelector('.homehdr h1'), vis = [...h.querySelectorAll('img')].filter(i => getComputedStyle(i).display !== 'none');
+    const r = vis[0] && vis[0].getBoundingClientRect();
+    return { label: h.getAttribute('aria-label'), text: h.textContent.trim(), n: vis.length, src: vis[0] && vis[0].src, loaded: vis[0] && vis[0].complete && vis[0].naturalWidth > 0, nat: vis[0] && [vis[0].naturalWidth, vis[0].naturalHeight], h: r && Math.round(r.height), w: r && Math.round(r.width), alt: vis[0] && vis[0].getAttribute('alt'), tile: !!document.querySelector('.homehdr img.logo') };
+  });
+  const L = await look();
+  const srcHash = s => s ? md5(Buffer.from(s.replace(/^data:image\/png;base64,/, ''), 'base64')) : '';
+  ok(L.label === 'TermChamp' && L.text === '' && L.n === 1 && L.alt === '' && !L.tile, 'logo: Home’s header is one picture, read out as “TermChamp” (no typed wordmark, not the tile)', L);
+  ok(L.loaded && srcHash(L.src) === want.light && L.nat[0] === 672 && L.nat[1] === 144, 'logo: light mode shows Tate’s logo exactly (the cut-out file, drawn from 3× pixels)', { got: srcHash(L.src), want: want.light, nat: L.nat });
+  ok(L.h === 36 && Math.abs(L.w - 168) <= 1, 'logo: 36px tall, its own proportions (168px wide)', L);
+  await page.evaluate(() => { try { localStorage.setItem('tc-theme', 'dark'); } catch (e) {} applyTheme(true); }); await settle(page, 300);
+  const D = await look();
+  ok(D.n === 1 && D.loaded && srcHash(D.src) === want.dark && D.h === 36, 'logo: dark mode shows the dark cut (Term in the dark theme’s navy so it reads on #0A0F1C)', { got: srcHash(D.src), want: want.dark });
+  const lm = await page.evaluate(() => Math.round(document.querySelector('.homehdr h1').getBoundingClientRect().left));
+  ok(lm === 12, 'logo: starts 12px from the screen edge, like the stories', lm);
+  await page.setViewportSize({ width: 320, height: 640 }); await settle(page, 300);
+  const n = await page.evaluate(() => { const h = document.querySelector('.homehdr'), bs = [...h.querySelectorAll('button')].map(b => b.getBoundingClientRect()); const i = [...h.querySelectorAll('h1 img')].find(x => getComputedStyle(x).display !== 'none').getBoundingClientRect(); return { sw: document.getElementById('scroll').scrollWidth, cw: document.getElementById('scroll').clientWidth, imgW: Math.round(i.width), imgR: Math.round(i.right), btnL: Math.round(Math.min(...bs.map(r => r.left))), btnR: Math.round(Math.max(...bs.map(r => r.right))) }; });
+  ok(n.sw <= n.cw && n.imgW === 168 && n.imgR < n.btnL && n.btnR <= 320, 'logo: at 320px it keeps its size, nothing overlaps, nothing runs off the screen', n);
+  const cb = await page.evaluate(() => { const i = document.querySelector('.homehdr .tc-logo-i'), c = getComputedStyle(i); return { pe: c.pointerEvents, tc: c.webkitTouchCallout || c.getPropertyValue('-webkit-touch-callout') }; });
+  ok(cb.pe === 'none', 'logo: a long press doesn’t offer Save Image (it isn’t a target)', cb);
+  ok(log.errors.length === 0, 'logo: no page errors', log.errors);
   await close();
+  /* System theme with the phone in dark mode (nothing saved): the dark cut */
+  { const s2 = await openApp({ init: () => { try { localStorage.removeItem('tc-theme'); } catch (e) {} } });
+    await s2.page.emulateMedia({ colorScheme: 'dark' }); await s2.page.evaluate(() => { try { applyTheme(true); } catch (e) {} }); await settle(s2.page, 300);
+    const sy = await s2.page.evaluate(() => { const v = [...document.querySelectorAll('.homehdr h1 img')].filter(i => getComputedStyle(i).display !== 'none'); return { n: v.length, dark: v[0] && v[0].classList.contains('lg-d'), theme: document.documentElement.getAttribute('data-theme') }; });
+    ok(sy.n === 1 && sy.dark && sy.theme === 'dark', 'logo: System theme following a dark phone shows the dark cut', sy);
+    await s2.close(); }
+  /* onboarding's welcome (signed out, always light) */
+  const o = await openApp({ signedIn: false });
+  const w = await o.page.evaluate(() => { const d = document.querySelector('.onb .wordmark'); const i = d && d.querySelector('img'); return d && { label: d.getAttribute('aria-label'), role: d.getAttribute('role'), text: d.textContent.trim(), src: i && i.src, h: i && Math.round(i.getBoundingClientRect().height), loaded: i && i.complete && i.naturalWidth > 0 }; });
+  ok(w && w.label === 'TermChamp' && w.role === 'img' && w.text === '' && w.loaded && srcHash(w.src) === want.light && w.h === 48, 'logo: the welcome screen shows the same logo, 48px tall', w && Object.assign({}, w, { src: srcHash(w.src) }));
+  await o.close();
 };
 
 tests.ovalRing = async () => {
@@ -4201,42 +4968,38 @@ tests.plannerQuickTick = async () => {
   const nm = await page.evaluate(() => ({ a: courseName('BUS 3411'), b: courseName('BUS 3441'), c: courseName('BUS 4468'), d: courseName('ZZZ 9999'), e: courseName('BUS 1100') }));
   ok(nm.a === 'Finance Practicum' && nm.b === 'Financial Modeling and Analytics in Python or R' && nm.c === 'Blockchain in Finance (catalog title)' && nm.d === '' && nm.e === 'Career Readiness I', 'names: catalog title first, then the flowchart, then the desktop’s 2026–28 names — never a code, nothing invented', nm);
   await page.evaluate(() => { TC.profile.concentration = 'Financial Management'; for (let y = 1; y <= 5; y++) UI.plYears[y] = true; render(true); }); await tick(page, 800);
-  const c3411 = await page.locator('.tc-cell:has(.tc-ccode:text("BUS 3411")) .tc-ctitle').first().innerText();
-  /* Still need · all lives folded at the foot of the Planner (2026-10-06) */
-  const needText = async () => { await page.evaluate(() => { UI.plAllOpen = true; S.schedTab = 'planner'; render(true); }); await tick(page, 300); const x = await text(page); await page.evaluate(() => { S.schedTab = 'past'; render(true); }); await tick(page, 300); return x; };
-  const need = await needText();
-  ok(/^BUS 3411\s*Finance Practicum$/.test(c3411.trim()) && /Still need[\s\S]*BUS 3411\s*Finance Practicum/.test(need), 'names: a slot that only repeats its code (BUS 3411) shows the class’s name, in the flowchart and in Still need', c3411);
-  const cells = await page.locator('.tc-cell').evaluateAll(els => els.map(e => ({ t: e.querySelector('.tc-ctitle') ? e.querySelector('.tc-ctitle').innerText.trim() : '', code: e.querySelector('.tc-ccode') ? e.querySelector('.tc-ccode').innerText.trim() : '', all: e.innerText })));
+  const c3411 = await page.locator('.pc-row:has(.pc-cc:text("BUS 3411")) .pc-main').first().innerText();
+  ok(/^BUS 3411\s*Finance Practicum$/.test(c3411.trim()), 'names: a slot that only repeats its code (BUS 3411) shows the class’s name in the flowchart', c3411);
+  const cells = await page.locator('.pc-row').evaluateAll(els => els.map(e => ({ t: e.querySelector('.pc-main') ? e.querySelector('.pc-main').innerText.trim() : '', code: e.querySelector('.pc-cc') ? e.querySelector('.pc-cc').innerText.trim() : '', all: e.innerText })));
   const dup = cells.filter(c => c.code && c.t.replace(c.code, '').trim().replace(/\s+/g, ' ') === c.code.replace(/\s+/g, ' '));
   ok(cells.length > 20 && !dup.length, 'flowchart: no class names its number twice', dup.slice(0, 3));
   ok(!cells.some(c => /\b\d+u\s*$/.test(c.all.trim())), 'flowchart: no units on the rows', cells.filter(c => /\d+u\s*$/.test(c.all.trim())).slice(0, 2));
-  ok(/Still need[\s\S]*BUS 1100\s*Career Readiness I/.test(need) && !/Still need[\s\S]*BUS (\d{4})\s*BUS \1\b/.test(need), 'still need: the blue code, then the class’s name — never the code twice');
-  ok(/Pick 1\s*Calculus for Data Science I or Business Calculus[\s\S]{0,80}MATH 1264/.test(need), 'still need: a choice slot reads as one pick, with its options', (need.match(/Pick 1[\s\S]{0,120}/) || [''])[0]);
-  const before = (await text(page)).match(/(\d+) of \d+\s*requirements/)[1];
+  /* (2026-10-13) the Still need list's own wording left with it */
+  const before = (await withLeft(page)).match(/(\d+) filled\s*(?:\d+ in progress\s*)?\d+ left on your flowchart/)[1];
   // one tap: on your record, no term, nothing else to do
-  await click(page, '.tc-cell:has(.tc-ccode:text("BUS 1100")) .tc-tick'); await tick(page, 600);
+  await click(page, '.pc-row:has(.pc-cc:text("BUS 1100")) .tc-tick'); await tick(page, 600);
   let w = log.writes.filter(x => x.table === 'class_history');
   ok(w.length === 1 && w[0].m === 'POST' && w[0].body.code === 'BUS 1100' && w[0].body.term === null && w[0].body.year === null && w[0].body.user_id === FX.ME.id && await page.locator('#sheet .tc-form').count() === 0, 'one tap: the class goes on your record with no term, and nothing opens', w);
-  let after = (await text(page)).match(/(\d+) of \d+\s*requirements/)[1];
-  const c1 = page.locator('.tc-cell:has(.tc-ccode:text("BUS 1100"))');
-  ok(+after === +before + 1 && /✓/.test(await c1.locator('.tc-dot').innerText()) && /^Undo/.test(await c1.locator('.tc-tick').getAttribute('aria-label')), 'one tap: the slot is ✓ and the count moves', { before, after });
-  await click(page, '.tc-cell:has(.tc-ccode:text("BUS 1100")) .tc-tick'); await tick(page, 600);
+  let after = (await withLeft(page)).match(/(\d+) filled\s*(?:\d+ in progress\s*)?\d+ left on your flowchart/)[1];
+  const c1 = page.locator('.pc-row:has(.pc-cc:text("BUS 1100"))');
+  ok(+after === +before + 1 && /✓/.test(await c1.locator('.pc-dot').innerText()) && /^Undo/.test(await c1.locator('.tc-tick').getAttribute('aria-label')), 'one tap: the slot is ✓ and the count moves', { before, after });
+  await click(page, '.pc-row:has(.pc-cc:text("BUS 1100")) .tc-tick'); await tick(page, 600);
   w = log.writes.filter(x => x.table === 'class_history' && x.m === 'DELETE');
-  ok(w.length === 1 && /code=eq\.BUS(\+|%20)1100/.test(w[0].query) && /term=is\.null/.test(w[0].query) && /year=is\.null/.test(w[0].query) && (await text(page)).match(/(\d+) of \d+\s*requirements/)[1] === before, 'one tap: ✓ again undoes it — only the term-less record', w);
-  ok(await page.locator('.tc-cell:has(.tc-ccode:text("BUS 1100")) .tc-cbody[data-a="plLogSlot"]').count() === 1, 'one tap: the row itself still opens Log a class for the term and professor');
+  ok(w.length === 1 && /code=eq\.BUS(\+|%20)1100/.test(w[0].query) && /term=is\.null/.test(w[0].query) && /year=is\.null/.test(w[0].query) && (await withLeft(page)).match(/(\d+) filled\s*(?:\d+ in progress\s*)?\d+ left on your flowchart/)[1] === before, 'one tap: ✓ again undoes it — only the term-less record', w);
+  ok(await page.locator('.pc-row:has(.pc-cc:text("BUS 1100")) .pc-main[data-a="plLogSlot"]').count() === 1, 'one tap: the row itself still opens Log a class for the term and professor');
   // a choice slot: one question, which one
-  const ch = page.locator('.tc-cell:has-text("Calculus for Data Science I or Business Calculus")').first();
-  ok(await ch.locator('.tc-tick').count() === 1 && !/\?/.test(await ch.locator('.tc-dot').innerText()), 'choice: “… or …” is no longer “can’t check” — it has the check button');
+  const ch = page.locator('.pc-row:has-text("Calculus for Data Science I or Business Calculus")').first();
+  ok(await ch.locator('.tc-tick').count() === 1 && !/\?/.test(await ch.locator('.pc-dot').innerText()), 'choice: “… or …” is no longer “can’t check” — it has the check button');
   await ch.locator('.tc-tick').click(); await tick(page);
   const opts = await page.locator('.tc-pick .tc-pickb').allInnerTexts();
   ok(opts.length === 2 && /MATH 1264/.test(opts[0]) && /MATH 1267/.test(opts[1]), 'choice: the tap asks only which one', opts);
-  const fBefore = +(await text(page)).match(/(\d+) of \d+\s*requirements/)[1];
+  const fBefore = +(await withLeft(page)).match(/(\d+) filled\s*(?:\d+ in progress\s*)?\d+ left on your flowchart/)[1];
   await click(page, '.tc-pick [data-a="plTickCode"][data-x="MATH 1267"]'); await tick(page, 600);
-  const fAfter = +(await text(page)).match(/(\d+) of \d+\s*requirements/)[1];
+  const fAfter = +(await withLeft(page)).match(/(\d+) filled\s*(?:\d+ in progress\s*)?\d+ left on your flowchart/)[1];
   w = log.writes.filter(x => x.table === 'class_history' && x.m === 'POST');
-  const chDone = await page.locator('.tc-cell.done:has(.tc-ccode:text("MATH 1267"))').count();
+  const chDone = await page.locator('.pc-row.done:has(.pc-cc:text("MATH 1267"))').count();
   ok(w.length === 2 && w[1].body.code === 'MATH 1267' && w[1].body.term === null && chDone === 1 && fAfter === fBefore + 1, 'choice: the pick goes on your record and fills exactly one slot', { w: w.map(x => x.body && x.body.code), fBefore, fAfter });
-  ok((await page.locator('.tc-cell.done:has(.tc-ccode:text("MATH 1267")) .tc-ctitle').innerText()).trim() === 'MATH 1267  Business Calculus'.replace('  ', ' ') || /^MATH 1267\s*Business Calculus$/.test((await page.locator('.tc-cell.done:has(.tc-ccode:text("MATH 1267")) .tc-ctitle').innerText()).trim()), 'choice: the filled slot names the class taken, not the “… or …” line');
+  ok((await page.locator('.pc-row.done:has(.pc-cc:text("MATH 1267")) .pc-main').innerText()).trim() === 'MATH 1267  Business Calculus'.replace('  ', ' ') || /^MATH 1267\s*Business Calculus$/.test((await page.locator('.pc-row.done:has(.pc-cc:text("MATH 1267")) .pc-main').innerText()).trim()), 'choice: the filled slot names the class taken, not the “… or …” line');
   const posts = log.writes.filter(x => x.table === 'class_history' && x.m === 'POST').length;
   await page.evaluate(() => quickLog('PHIL 3331', 'rep')); await tick(page, 400);
   ok(log.writes.filter(x => x.table === 'class_history' && x.m === 'POST').length === posts && await page.locator('#lc-code').inputValue() === 'PHIL 3331' && /already on your record once/.test(await page.locator('#sheet').innerText()), 'one tap: a class already on the record (a repeatable one) asks for the term — a term-less row never lands on a dated one');
@@ -4246,38 +5009,612 @@ tests.plannerQuickTick = async () => {
   /* If the database ever refuses a record with no term, the tap opens Log a class instead of failing. */
   const nn = await openApp({ hook: (url, m) => url.pathname.endsWith('/class_history') && m === 'POST' ? { status: 400, body: JSON.stringify({ code: '23502', message: 'null value in column "term" violates not-null constraint' }) } : null });
   await click(nn.page, '[data-a="tab"][data-x="schedule"]'); await click(nn.page, '[data-a="schedTab"][data-x="past"]'); await tick(nn.page, 2500);
-  await click(nn.page, '.tc-cell:has(.tc-ccode:text("BUS 1100")) .tc-tick'); await tick(nn.page, 600);
+  await click(nn.page, '.pc-row:has(.pc-cc:text("BUS 1100")) .tc-tick'); await tick(nn.page, 600);
   ok(await nn.page.locator('#lc-code').inputValue() === 'BUS 1100' && /Add the term you took it/.test(await nn.page.locator('#sheet').innerText()), 'one tap: a refused term-less record opens Log a class with the class filled in');
   await nn.close();
 };
 
+/* Check off a flowchart row yourself (Tate, 2026-10-09): a GE area or a row we can't check takes one tap. */
+tests.flowchartMarks = async () => {
+  const openPast = async page => { await click(page, '[data-a="tab"][data-x="schedule"]'); await click(page, '[data-a="schedTab"][data-x="past"]'); await tick(page, 2500);
+    await page.evaluate(() => { for (let y = 1; y <= 5; y++) UI.plYears[y] = true; render(true); }); await tick(page, 500); };
+  const filled = async page => +((await page.evaluate(() => { const c = (() => { const g = plGate(); if (g.html) return null; const L = g.L, X = auditLines(TC.audit, L), R = L ? planRank(L) : X ? { audit: true, X, all: [], bare: true } : null; if (!R || R.done) return null; const o = document.getElementById('__lc'); if (o) o.remove(); const d = document.createElement('div'); d.id = '__lc'; d.style.cssText = 'position:absolute;left:-10000px;top:0;width:390px'; const ro = UI.plReqOpen; UI.plReqOpen = new Proxy({}, { get: () => true, has: () => true }); try { d.innerHTML = plLeftCard(R, L, /^[ABC]$/.test(UI.plPlan) ? UI.plPlan : 'A'); } finally { UI.plReqOpen = ro; } document.body.appendChild(d); const c0 = d.firstElementChild; if (c0) [...d.children].slice(1).forEach(x => c0.appendChild(x)); return c0; })(), t = c ? (c => { const g = {}; [...c.querySelectorAll('.pll-leg > span')].forEach(e => { g[e.className] = +e.textContent.trim().split(' ')[0]; }); const n = +((((c.querySelector('.pll-bar') || { getAttribute: () => '' }).getAttribute('aria-label') || '').match(/of (\d+)$/) || [])[1] || '').split(' ')[0] || 0; return n ? `${(g.f || 0) + (g.p || 0)} of ${n} filled` : ''; })(c) : ''; document.getElementById('__lc')?.remove(); return t; })).match(/^(\d+) of \d+ filled$/) || [0, -1])[1];
+  let o = await openApp({});
+  await openPast(o.page);
+  const g = await o.page.evaluate(() => { const c = TCPL.ledger().grid.flatMap(t => t.slots); const ge = c.filter(s => s.state === 'need' && !s.code && s.type === 'ge'), ct = c.find(s => s.state === 'cant');
+    return { ge: ge[0] && { id: ge[0].id, title: ge[0].title }, ge2: ge[1] && { id: ge[1].id, title: ge[1].title }, cant: ct && { id: ct.id, title: ct.title }, major: TC.profile.major }; });
+  ok(g.ge && g.ge2 && g.cant, 'marks: the fixture has GE rows to do and a row we can’t check', g);
+  const cell = id => o.page.locator(`.pc-row:has([data-a="plMark"][data-x="${id}"])`);
+  const b0 = await filled(o.page);
+  const lab0 = await cell(g.ge.id).locator('.tc-mark').getAttribute('aria-label');
+  ok(await cell(g.ge.id).count() === 1 && /^Mark .* done$/.test(lab0) && await cell(g.ge.id).locator('.tc-mark').getAttribute('aria-pressed') === 'false', 'marks: a GE area to do has a circle to check off (a toggle, not pressed)', lab0);
+  await click(o.page, `[data-a="plMark"][data-x="${g.ge.id}"]`); await tick(o.page, 600);
+  let w = o.log.writes.filter(x => x.table === 'flowchart_marks');
+  const c1 = await cell(g.ge.id).evaluate(e => ({ done: e.classList.contains('done'), dot: e.querySelector('.tc-mark').innerText.trim(), mine: (e.querySelector('.tc-mine') || {}).textContent || '', pressed: e.querySelector('.tc-mark').getAttribute('aria-pressed'), label: e.querySelector('.tc-mark').getAttribute('aria-label') }));
+  ok(c1.done && c1.dot === '✓' && c1.mine === 'Marked done by you' && c1.pressed === 'true' && c1.label === lab0, 'marks: one tap — ✓, “Marked done by you”, pressed (same label)', c1);
+  ok(await cell(g.ge.id).evaluate(e => !e.querySelector('.pc-add') && e.querySelector('.pc-main').tagName === 'DIV' && !e.querySelector('.pc-main').hasAttribute('data-a')), 'marks: a checked-off row is not a class — no sheet to open, no “+ Professor”');
+  ok(await filled(o.page) === b0 + 1, 'marks: the requirements count moves by one', { b0, now: await filled(o.page) });
+  ok(w.length === 2 && w[0].m === 'DELETE' && new RegExp('slot_id=eq\\.' + g.ge.id).test(w[0].query) && w[1].m === 'POST' && w[1].body.user_id === FX.ME.id && w[1].body.major === g.major && w[1].body.slot_id === g.ge.id && w[1].body.label === g.ge.title, 'marks: saved to the account with the row’s words (any old row for it replaced first)', w.map(x => [x.m, x.body, x.query]));
+  const need = await o.page.evaluate(id => TCPL.ledger().needU.some(n => n.id === id), g.ge.id);
+  ok(!need, 'marks: a checked-off GE area is no longer on Still need');
+  const kept = await o.page.evaluate(() => JSON.parse(localStorage.getItem('tc-marks:' + TC.user.id) || 'null'));
+  ok(kept && Array.isArray(kept.ops) && kept.ops.length === 0 && kept.list.some(m => m.slot === g.ge.id), 'marks: kept on this phone too, nothing waiting to go up', kept);
+  await click(o.page, `[data-a="plMark"][data-x="${g.ge.id}"]`); await tick(o.page, 600);
+  w = o.log.writes.filter(x => x.table === 'flowchart_marks');
+  ok(w.length === 3 && w[2].m === 'DELETE' && new RegExp('slot_id=eq\\.' + g.ge.id).test(w[2].query) && /user_id=eq\./.test(w[2].query) && await filled(o.page) === b0 && !(await cell(g.ge.id).evaluate(e => e.classList.contains('done'))) && await cell(g.ge.id).locator('.tc-mark').getAttribute('aria-pressed') === 'false', 'marks: tap again — undone, removed from the account, the count back', w[2] && w[2].query);
+  /* two rows tapped at once both take */
+  await o.page.evaluate(({ a, b }) => { A.plMark(a); A.plMark(b); }, { a: g.ge.id, b: g.ge2.id }); await tick(o.page, 800);
+  ok(await cell(g.ge.id).evaluate(e => e.classList.contains('done')) && await cell(g.ge2.id).evaluate(e => e.classList.contains('done')), 'marks: two rows tapped quickly are both checked off');
+  await o.page.evaluate(({ a, b }) => { A.plMark(a); A.plMark(b); }, { a: g.ge.id, b: g.ge2.id }); await tick(o.page, 800);
+  const cantN = async () => await o.page.locator('.pc-row.cant').count();
+  const k0 = await cantN();
+  ok(/\?/.test(await cell(g.cant.id).locator('.tc-mark').innerText()), 'marks: a row we can’t check keeps its “?” and takes the tap');
+  await click(o.page, `[data-a="plMark"][data-x="${g.cant.id}"]`); await tick(o.page, 600);
+  ok(await cantN() === k0 - 1 && await cell(g.cant.id).evaluate(e => e.classList.contains('done')), 'marks: checking off a can’t-check row moves it to done', { k0, now: await cantN() });
+  /* a mark whose words don't match the row is never applied to it (the flowchart changed under it) */
+  const wrong = await o.page.evaluate(({ id, major }) => { TC.marks = [{ major, slot: id, label: 'Some other row' }]; plSync(); return TCPL.ledger().grid.flatMap(t => t.slots).find(s => s.id === id).state; }, { id: g.ge.id, major: g.major });
+  ok(wrong === 'need', 'marks: a mark only applies to the row it was made on (its words must match)', wrong);
+  const empty = await o.page.evaluate(({ id, major }) => { TC.marks = [{ major, slot: id, label: '' }]; plSync(); return TCPL.ledger().grid.flatMap(t => t.slots).find(s => s.id === id).state; }, { id: g.ge.id, major: g.major });
+  ok(empty === 'need', 'marks: a mark with no words applies to no row', empty);
+  const other = await o.page.evaluate(({ id, title }) => { TC.marks = [{ major: 'Physics', slot: id, label: title }]; plSync(); return TCPL.ledger().grid.flatMap(t => t.slots).find(s => s.id === id).state; }, { id: g.ge.id, title: g.ge.title });
+  ok(other === 'need', 'marks: another major’s marks never apply', other);
+  /* an unchosen concentration's row, marked, is counted under a plain "Concentration" */
+  const conc = await o.page.evaluate(major => { const M = TCPL.majorFor(major); let sl = null;
+    (M.terms || []).forEach(t => (t.slots || []).forEach(x => { if (!sl && !x.code && (x.type === 'concentration' || /concentration/i.test(x.note || ''))) sl = x; }));
+    if (!sl) return null; const was = TC.profile.concentration; TC.profile.concentration = ''; TC.marks = [{ major, slot: sl.id, label: sl.title || '' }]; plSync();
+    const L = TCPL.ledger(); TC.profile.concentration = was; TC.marks = []; plSync(); return L.rows.map(r => r.label); }, g.major);
+  ok(conc === null || (conc.some(l => /concentration/i.test(l)) && !conc.some(l => /choose/i.test(l))), 'marks: a marked concentration row is counted under a plain name', conc);
+  ok(o.log.errors.length === 0, 'marks: no page errors', o.log.errors);
+  await o.close();
+  /* the account's marks show on another phone, on Past classes and on Me */
+  const T = Object.assign({}, FX.TABLES, { flowchart_marks: [{ user_id: FX.ME.id, major: g.major, slot_id: g.ge.id, label: g.ge.title }] });
+  o = await openApp({ tables: T });
+  await o.page.evaluate(() => A.openMe()); await tick(o.page, 2500);
+  const me = await o.page.evaluate(() => { const m = (document.getElementById('scroll').innerText.match(/(\d+) of \d+ requirements filled/) || [])[1]; plSync(); const f1 = TCPL.ledger().F; TCPL.set({ marks: [] }); const f0 = TCPL.ledger().F; plSync(); return { m: +m, f0, f1 }; });
+  ok(me.m === me.f1 && me.f1 === me.f0 + 1, 'marks: Me’s “requirements filled” counts your marks', me);
+  await openPast(o.page);
+  ok(await cell(g.ge.id).evaluate(e => e.classList.contains('done') && !!e.querySelector('.tc-mine')), 'marks: marks on the account show on any phone');
+  await o.close();
+  /* a stale row on the account (its words no longer match): the row reads to-do; marking it rewrites it */
+  const T2 = Object.assign({}, FX.TABLES, { flowchart_marks: [{ user_id: FX.ME.id, major: g.major, slot_id: g.ge.id, label: 'Old words' }] });
+  o = await openApp({ tables: T2 });
+  await openPast(o.page);
+  ok(!(await cell(g.ge.id).evaluate(e => e.classList.contains('done'))), 'marks: an account row with other words doesn’t check this row');
+  await click(o.page, `[data-a="plMark"][data-x="${g.ge.id}"]`); await tick(o.page, 600);
+  w = o.log.writes.filter(x => x.table === 'flowchart_marks');
+  ok(w.length === 2 && w[0].m === 'DELETE' && w[1].m === 'POST' && w[1].body.label === g.ge.title && o.tables.flowchart_marks.filter(r => r.slot_id === g.ge.id).length === 1 && o.tables.flowchart_marks.find(r => r.slot_id === g.ge.id).label === g.ge.title, 'marks: marking it again replaces the stale row with this row’s words', o.tables.flowchart_marks);
+  await o.close();
+  /* before RUN 15 (no table): the mark stays on the phone, quietly; once the table is there it goes up */
+  o = await openApp({ hook: (url, m) => url.pathname.endsWith('/flowchart_marks') ? { status: 404, body: JSON.stringify({ code: 'PGRST205', message: 'Could not find the table public.flowchart_marks in the schema cache' }) } : null });
+  await openPast(o.page);
+  await click(o.page, `[data-a="plMark"][data-x="${g.ge.id}"]`); await tick(o.page, 600);
+  const off = await o.page.evaluate(() => ({ toast: (document.querySelector('.toast') || {}).textContent || '', kept: JSON.parse(localStorage.getItem('tc-marks:' + TC.user.id) || 'null'), err: TC.err.marks }));
+  ok(await cell(g.ge.id).evaluate(e => e.classList.contains('done')) && !off.toast && off.kept && off.kept.ops.length === 1 && off.kept.ops[0].on && off.err === 'missing', 'marks: no table yet — the row is checked, kept on the phone, no error', off);
+  await o.close();
+  /* a change waiting on the phone goes up at the next load — and only that change: the account's other marks stay */
+  const T3 = Object.assign({}, FX.TABLES, { flowchart_marks: [{ user_id: FX.ME.id, major: 'Physics', slot_id: 't0s0', label: 'Something' }, { user_id: FX.ME.id, major: g.major, slot_id: g.cant.id, label: g.cant.title }] });
+  const init = `try { localStorage.setItem('tc-marks:${FX.ME.id}', JSON.stringify({ list: [{ major: ${JSON.stringify(g.major)}, slot: ${JSON.stringify(g.ge.id)}, label: ${JSON.stringify(g.ge.title)} }], ops: [{ on: true, m: { major: ${JSON.stringify(g.major)}, slot: ${JSON.stringify(g.ge.id)}, label: ${JSON.stringify(g.ge.title)} } }] })); } catch (e) {}`;
+  o = await openApp({ init, tables: T3 });
+  await openPast(o.page);
+  w = o.log.writes.filter(x => x.table === 'flowchart_marks');
+  const posts = w.filter(x => x.m === 'POST'), dels = w.filter(x => x.m === 'DELETE');
+  ok(posts.length === 1 && posts[0].body.slot_id === g.ge.id && dels.every(x => new RegExp('slot_id=eq\\.' + g.ge.id).test(x.query)) && await cell(g.ge.id).evaluate(e => e.classList.contains('done')), 'marks: a mark made while the account couldn’t be reached goes up at the next load', w.map(x => [x.m, x.body, x.query]));
+  ok(o.tables.flowchart_marks.some(r => r.major === 'Physics') && await cell(g.cant.id).evaluate(e => e.classList.contains('done')), 'marks: and nothing else on the account is removed (other majors, other rows)', o.tables.flowchart_marks);
+  ok(await o.page.evaluate(() => JSON.parse(localStorage.getItem('tc-marks:' + TC.user.id)).ops.length) === 0, 'marks: then nothing is waiting');
+  await o.close();
+};
 tests.plannerGrid = async () => {
   const { page, close, log } = await openApp({});
   await click(page, '[data-a="tab"][data-x="schedule"]'); await click(page, '[data-a="schedTab"][data-x="past"]'); await tick(page, 2500);
   const t = await text(page);
-  ok(/Your flowchart[\s\S]*Year 1[\s\S]*of \d+ done/.test(t), 'grid: the flowchart by year');
-  const y1 = await page.locator('.tc-year').first().innerText();
-  ok(/Fall/i.test(y1) && /BUS 1100[\s\S]*Career Readiness I/.test(y1) && /✓\s*GE · Area 1A/.test(y1), 'grid: Year 1 is open, with the waiver filling GE 1A (✓) — the same state the ledger counts', y1.slice(0, 400));
-  const heads = await page.locator('.tc-yearh').allInnerTexts();
-  const judged = heads.reduce((a, h) => a + (+((h.match(/of (\d+) done/) || [])[1] || 0)), 0);
-  ok(judged === 33 && heads.some(h => /can’t check/.test(h)), 'grid: the years add up to the ledger’s 33, with can’t-check slots said separately', heads);
-  ok(await page.locator('.tc-year').nth(1).locator('.tc-cell').count() === 0, 'grid: later years start folded');
+  ok(/Year 1\s*\d+ of \d+[\s\S]*Year 4\s*\d+ of \d+/.test(t) && !/Your flowchart|Classes you’ve taken/.test(t), 'grid: the flowchart by year, in one place with your classes (no separate cards)');
+  const y1 = await page.locator('.pc-open').first().innerText();
+  ok(/FALL/.test(y1) && /BUS 1100\s*Career Readiness I/.test(y1) && /✓\s*ENGL 1134\s*Writing and Rhetoric\s*AP \/ IB credit/.test(y1) && !/GE · Area 1A|GE Area 1A/.test(y1), 'grid: Year 1 is open, and the GE 1A spot names the class that fills it (the ENGL 1134 waiver, ✓) — the same state the ledger counts', y1.slice(0, 400));
+  const bub = await page.locator('.pc-open').first().evaluate(o => [...o.querySelectorAll('.pc-term > .pc-termh')].map(h => h.innerText));
+  ok(bub.join('|') === 'FALL|SPRING', 'grid: an open year shows its Fall and Spring as bubbles', bub);
+  const heads = await page.locator('.pc-year').allInnerTexts();
+  const judged = heads.reduce((a, h) => a + (+((h.match(/of (\d+)/) || [])[1] || 0)), 0);
+  ok(judged === 33 && heads.every(h => /^Year \d\s*\d+ of \d+$/.test(h.trim())), 'grid: the years add up to the ledger’s 33 — each just “Year N · d of n”', heads);
+  ok(await page.locator('.pc-open').count() === 1 && await page.locator('[data-a="plYear"][data-x="2"]').getAttribute('aria-expanded') === 'false', 'grid: later years start folded');
   await click(page, '[data-a="plYear"][data-x="2"]');
-  ok(await page.locator('.tc-year').nth(1).locator('.tc-cell').count() > 3, 'grid: tapping a year opens it');
-  await click(page, '.tc-year >> nth=0 >> [data-a="plLogSlot"][data-x="BUS 1100"]');
-  ok(await page.locator('#lc-code').inputValue() === 'BUS 1100', 'grid: tapping a class to do opens Log a class with its code filled in');
+  ok(await page.locator('.pc-open').count() === 2 && await page.locator('.pc-open').nth(1).locator('.pc-row').count() > 3, 'grid: tapping a year opens it');
+  await click(page, '.pc-open >> nth=0 >> [data-a="plLogSlot"][data-x="BUS 1100"]');
+  ok(await page.locator('#lc-code').inputValue() === 'BUS 1100', 'grid: tapping a class to do (not offered this term) opens Log a class with its code filled in');
   ok(log.errors.length === 0, 'grid: no page errors', log.errors);
   await close();
 };
 
-tests.dprFromProfile = async () => {
-  const { page, close, log } = await openApp({});
-  await click(page, '.homehdr .me-btn'); await tick(page, 600);
-  await page.locator('input[data-in="dprfile"]').setInputFiles('files/dpr-fixture.pdf');
-  for (let i = 0; i < 20 && !(await page.locator('#sheet .tc-dprrow').count()); i++) await tick(page, 500);
+/* Past classes, Tate's option A, simple (2026-10-10): the flowchart and the classes you've taken in one place —
+   a spot names the class that filled it and its professor; the rest is "Other classes"; only what's needed. */
+const PAST_HIST = [['COMS 1101', 'Spring', 2024, null], ['BUS 2214', 'Fall', 2024, null], ['ECON 3021', 'Spring', 2026, null], ['BUS 3310', 'Winter', 2026, null], ['ITP 3371', 'Winter', 2026, null],
+  ['BUS 4434', 'Summer', 2026, null], ['BUS 4439', 'Spring', 2026, null], ['FSN 1121', 'Spring', 2024, null], ['NUTR 1101', 'Fall', 2023, null], ['AP 300', 'Fall', 2025, '🌍']]
+  .map(([code, term, year, professor]) => ({ user_id: FX.ME.id, code, term, year, professor }));
+const PAST_T = (extra) => Object.assign({}, FX.TABLES, { class_history: FX.TABLES.class_history.concat(PAST_HIST) }, extra || {});
+const toPast = async page => { await click(page, '[data-a="tab"][data-x="schedule"]'); await click(page, '[data-a="schedTab"][data-x="past"]'); await tick(page, 2500); };
+const openYears = async page => { for (let i = 0; i < 6; i++) { const c = page.locator('[data-a="plYear"][aria-expanded="false"]'); if (!(await c.count())) break; await c.first().click(); await tick(page, 150); } };
+tests.pastSimple = async () => {
+  const { page, close, log } = await openApp({ tables: PAST_T(), height: 2400 });
+  await toPast(page); await openYears(page);
+  const t = await text(page);
+  const lt = (await withLeft(page)).slice(t.length + 1);   /* (2026-10-12) your major and the number open the Builder's top card; Past classes opens on Done */
+  ok(/^\s*DONE/.test(t.slice(t.indexOf('Past classes') + 12)) && /^\s*Business Administration\s*\d+ filled[\s\S]*?\d+ left on your flowchart/.test(lt) && !/Degree Progress Report/.test(t) && !/×/.test(t) && !(await page.locator('#scroll [data-a="askRemoveHistory"]').count()), 'past: Past classes opens on Done; your major, then the number, open the Builder’s card; no report row without a report; no × on any row', [t.slice(0, 120), lt.slice(0, 120)]);
+  const rows = await page.evaluate(() => [...document.querySelectorAll('.pc-row')].map(r => ({ st: r.className.replace('pc-row', '').trim(), main: (r.querySelector('.pc-main') || {}).innerText || '', pf: (r.querySelector('.pc-pf') || {}).innerText || '', add: !!r.querySelector('.pc-add') })));
+  const coms = rows.find(r => /COMS 1101/.test(r.main)), bus = rows.find(r => /BUS 2214/.test(r.main));
+  ok(coms && coms.st === 'done' && /^COMS 1101\s*Public Speaking$/.test(coms.main.trim()) && coms.add && !rows.some(r => /GE Area 1C/.test(r.main)), 'past: a GE spot names the class that filled it (COMS 1101 for 1C), with “+ Professor”', coms);
+  ok(bus && bus.st === 'done' && /^BUS 2214\s*Financial Accounting$/.test(bus.main.trim()) && bus.add, 'past: a class spot shows the class you took, with “+ Professor”', bus);
+  const phil = rows.find(r => /PHIL 3331/.test(r.main));
+  ok(phil && phil.pf === 'Dov Mockridge' && !phil.add, 'past: a class with its professor shows the name, no button', phil);
+  const taking = rows.filter(r => r.st === 'taking');
+  ok(taking.length && taking.every(r => !r.add), 'past: taking now has nothing to add', taking);
+  ok(rows.filter(r => r.st === 'need' || r.st === 'cant').every(r => !r.pf && !r.add), 'past: spots still to take, and ones it can’t check, are one line', rows.filter(r => (r.st === 'need' || r.st === 'cant') && (r.pf || r.add)));
+  /* Other classes: the record's classes with no spot; four, then See all */
+  const oth = await page.evaluate(() => { const c = document.querySelector('.pc-oth'); return c && { head: c.querySelector('.pc-hd').innerText.replace(/\s+/g, ' '), rows: [...c.querySelectorAll('.pc-orow')].map(r => ({ main: r.querySelector('.pc-main').innerText.replace(/\s+/g, ' '), add: !!r.querySelector('.pc-add'), btn: r.querySelector('.pc-main').tagName })), more: (c.querySelector('[data-a="pcAll"]') || {}).innerText || '' }; });
+  const n = oth && +oth.head.replace(/\D+/g, '');
+  ok(oth && /^Other classes \d+$/.test(oth.head) && n > 4 && oth.rows.length === 4 && oth.more === 'See all ' + n, 'past: “Other classes” — four rows, then “See all N”', oth);
+  await click(page, '[data-a="pcAll"]');
+  const all = await page.evaluate(() => [...document.querySelectorAll('.pc-oth .pc-orow')].map(r => ({ main: r.querySelector('.pc-main').innerText.replace(/\s+/g, ' '), add: !!r.querySelector('.pc-add'), pf: (r.querySelector('.pc-pf') || {}).innerText || '', now: !!r.querySelector('.pc-nowt') })));
+  const ap = all.find(r => /^AP 300/.test(r.main));
+  ok(all.length === n && !(await page.locator('[data-a="pcAll"]').count()) && ap && !ap.add && !ap.pf && all.filter(r => r !== ap && !r.now).every(r => r.add), 'past: See all shows every one; transfer credit (AP 300) gets no “+ Professor”, the others do', all);
+  ok(all.some(r => r.now) && all.filter(r => r.now).every(r => !r.add && r.pf) && all.findIndex(r => !r.now) > all.findLastIndex(r => r.now), 'past: the classes you\u2019re taking this term that fill no spot come first, “In progress · this term”, with your section\u2019s professor', all.filter(r => r.now));
+  ok(await page.locator('.pc-btns [data-a="sheet"][data-x="logClass"]').count() === 1 && await page.locator('.pc-btns input[data-in="dprfile"]').count() === 1, 'past: + Log a class and Upload report at the bottom');
+  ok(!/We can’t check|Cal Poly’s degree audit decides|Tap the circle/.test(await text(page)), 'past: no help lines or footnotes');
+  /* a long concentration name wraps inside the summary card on a 320px phone */
+  await page.setViewportSize({ width: 320, height: 2400 }); await page.evaluate(() => render(true)); await tick(page, 300);
+  const cc = await page.evaluate(() => ({ sum: document.querySelectorAll('#scroll .pc-sum, #scroll .pc-conc, #scroll .pc-left, #scroll .pc-go').length }));
+  ok(cc.sum === 0, 'past: no summary card, count, concentration pick or Builder button on Past classes — they’re the Builder’s (2026-10-12)', cc);
+  await page.setViewportSize({ width: 390, height: 2400 }); await page.evaluate(() => render(true)); await tick(page, 300);
+  /* a row you checked off (“Marked done by you”) is in the contrast scan too */
+  await page.evaluate(() => { for (let y = 1; y <= 5; y++) UI.plYears[y] = true; const c = TCPL.ledger().grid.flatMap(t => t.slots).find(s => s.state === 'need' && !s.code && s.type === 'ge'); if (c) A.plMark(c.id); }); await tick(page, 600);
+  ok(await page.locator('.pc-pf.tc-mine').count() === 1, 'past: (a GE row checked off, for the contrast scan)');
+  /* contrast, light and dark */
+  for (const th of ['light', 'dark']) {
+    await page.evaluate(th => { document.documentElement.setAttribute('data-theme', th); render(true); }, th); await tick(page, 300);
+    const bad = await page.evaluate(scan => (new Function('return ' + scan))()(4.5).filter(x => /\bpc-/.test(x.cls)), CONTRAST_SCAN.toString());
+    ok(!bad.length, `past: every word on Past classes is 4.5:1 or better (${th})`, bad.slice(0, 4));
+  }
+  ok(log.errors.length === 0, 'past: no page errors', log.errors);
+  await close();
+  /* with a report: one row with the report's own count, which opens the Planner */
+  const reqs = [RQ('Approved Elective', 'not', { kind: 'conc', code: 'R179-10' }), RQ('Business Major Senior Project', 'not', { code: 'R-0037', oneOf: true, options: ['BUS 4461', 'BUS 4462'] }), RQ('BUS 3346', 'satisfied', { code: 'R35-60', options: ['BUS 3346'] })];
+  const r2 = await openApp({ tables: PAST_T({ degree_audit: [{ user_id: FX.ME.id, catalog: 'Fall Quarter 2023', major: 'BUS', concentration: null, units_used: 170, units_needed: 10, requirements: reqs, overrides: [], read_at: '2026-10-08T00:00:00Z' }] }) });
+  await toPast(r2.page);
+  const pastLeft = await r2.page.locator('#scroll .pc-left, #scroll .pc-link').count();
+  await r2.page.evaluate(() => { TC.prefs = TC.prefs || { priority: 'degree', units: 16 }; }); await click(r2.page, '[data-a="schedTab"][data-x="planner"]'); await tick(r2.page, 2500);
+  const left = await pllH(r2.page), who = ((await pllLedger(r2.page)) || {}).who || '';
+  ok(pastLeft === 0 && left === '2 left to graduate' && /^Business Administration/.test(who), 'past: with a report, “2 left to graduate” and your major sit on top of the Builder, not Past classes (Tate 2026-10-12)', { pastLeft, left, who });
+
+
+  await r2.close();
+  /* nothing on the record yet: the report's upload card leads, and there's no Other card or bottom buttons */
+  const r4 = await openApp({ tables: NOREC() });
+  await toPast(r4.page);
+  ok(await r4.page.locator('#scroll .tc-dpr').count() === 1 && await r4.page.locator('.pc-oth, .pc-btns').count() === 0 && await r4.page.evaluate(() => { const d = document.querySelector('#scroll .tc-dpr'), s = document.querySelector('#scroll .pc-pg'); return !!(d && s && (d.compareDocumentPosition(s) & Node.DOCUMENT_POSITION_FOLLOWING)); }), 'past: an empty record starts with the report’s upload card');
+  await r4.close();
+  /* a class taken twice: the spot holds the first attempt; the retake is under Other, with its own term */
+  const r5 = await openApp({ tables: PAST_T({ class_history: FX.TABLES.class_history.concat(PAST_HIST, [{ user_id: FX.ME.id, code: 'BUS 2214', term: 'Spring', year: 2025, professor: 'Esme Samplesworth' }]) }), height: 2400 });
+  await toPast(r5.page); await openYears(r5.page); await click(r5.page, '[data-a="pcAll"]');
+  const tw = await r5.page.evaluate(() => ({ spot: [...document.querySelectorAll('.pc-row.done')].filter(r => /BUS 2214/.test(r.innerText)).map(r => r.querySelector('.pc-main').dataset.x + '|' + ((r.querySelector('.pc-pf') || {}).innerText || (r.querySelector('.pc-add') ? 'add' : ''))), other: [...document.querySelectorAll('.pc-oth .pc-orow')].filter(r => /BUS 2214/.test(r.innerText)).map(r => r.querySelector('.pc-main').dataset.x + '|' + ((r.querySelector('.pc-pf') || {}).innerText || '')) }));
+  ok(tw.spot.join() === 'BUS 2214|Fall|2024|add' && tw.other.join() === 'BUS 2214|Spring|2025|Esme Samplesworth', 'past: a retaken class shows each attempt once — the first in its spot, the retake under Other with its own professor', tw);
+  await r5.close();
+  /* taking now: the professor of your section (here a Free Elective spot holds BUS 3438, Bram Fixturesen's section) */
+  const r3 = await openApp({ height: 2400 });
+  await toPast(r3.page); await openYears(r3.page);
+  const tk = await r3.page.evaluate(() => [...document.querySelectorAll('.pc-row.taking')].map(r => ({ main: r.querySelector('.pc-main').innerText.replace(/\s+/g, ' '), pf: (r.querySelector('.pc-pf') || {}).innerText || '', add: !!r.querySelector('.pc-add') })));
+  ok(tk.some(r => /^BUS 3438/.test(r.main) && r.pf === 'Bram Fixturesen' && !r.add) && tk.every(r => !r.add), 'past: taking now shows your section’s professor', tk);
+  await r3.close();
+};
+/* Tap a class on your record: its professor and term, Rate, Remove — a term change is an UPDATE of that row only */
+tests.pastClassSheet = async () => {
+  const { page, close, log, tables } = await openApp({ tables: PAST_T(), height: 1400 });
+  await toPast(page); await openYears(page);
+  await click(page, '[data-a="pcOpen"][data-x="PHIL 3331|Spring|2026"]'); await tick(page, 200);
+  let sh = await page.locator('#sheet').innerText();
+  ok(/PHIL 3331/.test(sh) && /Business Ethics/.test(sh) && /Professor\s*Dov Mockridge/.test(sh) && /Term\s*Spring 2026/.test(sh) && /Rate Dov Mockridge/.test(sh) && /Remove from my record/.test(sh), 'class sheet: code, name, Professor ›, Term ›, Rate them, Remove', sh);
+  ok(await page.locator('#sheet [data-a="rateProf"][data-x="dov mockridge"][data-y="PHIL 3331"]').count() === 1, 'class sheet: Rate opens that professor’s form for this class');
+  await click(page, '#sheet [data-a="pcTerm"]'); await tick(page, 200);
+  await page.locator('#pc-term').selectOption('Fall'); await page.locator('#pc-year').selectOption('2025');
+  await click(page, '#sheet [data-a="pcTermSave"]'); await tick(page, 600);
+  const w = log.writes.filter(x => x.table === 'class_history' && x.m === 'PATCH');
+  ok(w.length === 1 && w.every(x => !/is\.null/.test(x.query)) && JSON.stringify(w[0].body) === JSON.stringify({ term: 'Fall', year: 2025 }) && /user_id=eq\.11111111/.test(w[0].query) && /code=eq\.PHIL(\+|%20)3331/.test(w[0].query) && /term=eq\.Spring/.test(w[0].query) && /year=eq\.2026/.test(w[0].query), 'class sheet: a new term updates only that row (its code, its old term and year)', w);
+  sh = await page.locator('#sheet').innerText();
+  ok(await page.evaluate(() => UI.sheet && UI.sheet.type) === 'pcClass' && /Term\s*Fall 2025/.test(sh), 'class sheet: back on the class, with the new term', sh);
+  /* a one-tap row (no term): Term starts blank — Save asks for a choice rather than writing one */
+  await click(page, '#sheet [data-a="closeSheet"]');
+  await page.evaluate(() => quickLog('BUS 1100', 'x')); await tick(page, 600);
+  await click(page, '[data-a="pcOpen"][data-x="BUS 1100||"]'); await tick(page, 200);
+  ok(/Term\s*Add/.test(await page.locator('#sheet').innerText()), 'class sheet: a class logged without a term says Term · Add');
+  await click(page, '#sheet [data-a="pcTerm"]'); await tick(page, 200);
+  const blank = await page.evaluate(() => ({ t: document.getElementById('pc-term').value, y: document.getElementById('pc-year').value }));
+  const before = log.writes.filter(x => x.m === 'PATCH').length;
+  await click(page, '#sheet [data-a="pcTermSave"]'); await tick(page, 300);
+  ok(blank.t === '' && blank.y === '' && log.writes.filter(x => x.m === 'PATCH').length === before && /Choose the term and the year/.test(await page.locator('#sheet').innerText()), 'term: nothing is chosen for you — blank until you pick, and Save says so', blank);
+  await page.locator('#pc-term').selectOption('Fall'); await page.locator('#pc-year').selectOption('2023');
+  await click(page, '#sheet [data-a="pcTermSave"]'); await tick(page, 600);
+  const wn = log.writes.filter(x => x.table === 'class_history' && x.m === 'PATCH').slice(before);
+  ok(wn.length === 1 && /code=eq\.BUS(\+|%20)1100/.test(wn[0].query) && /term=is\.null/.test(wn[0].query) && /year=is\.null/.test(wn[0].query) && JSON.stringify(wn[0].body) === JSON.stringify({ term: 'Fall', year: 2023 }), 'term: a row with no term is found by “is null” — one write', wn);
+  /* a class with no professor: Professor reads Add, and no Rate */
+  await click(page, '#sheet [data-a="closeSheet"]');
+  await click(page, '[data-a="pcOpen"][data-x="BUS 2214|Fall|2024"]'); await tick(page, 200);
+  sh = await page.locator('#sheet').innerText();
+  ok(/Professor\s*Add/.test(sh) && !/Rate /.test(sh), 'class sheet: no professor yet — “Add”, and nothing to rate', sh);
+  /* a class from long ago keeps its year in the list */
+  await click(page, '#sheet [data-a="closeSheet"]');
+  await page.evaluate(() => { TC.myHistory.push({ code: 'HIST 2223', term: 'Fall', year: 2012, professor: null }); UI.pcAll = true; render(true); }); await tick(page, 200);
+  await click(page, '[data-a="pcOpen"][data-x="HIST 2223|Fall|2012"]'); await click(page, '#sheet [data-a="pcTerm"]'); await tick(page, 200);
+  ok(await page.evaluate(() => document.getElementById('pc-year').value) === '2012', 'term: a 2012 class opens on 2012, not on a year it was never taken');
+  await click(page, '#sheet [data-a="closeSheet"]'); await tick(page, 200);
+  ok(await page.evaluate(() => UI.sheet && UI.sheet.type) === 'pcClass', 'term: its X goes back to the class');
+  /* transfer credit: no professor row */
+  await click(page, '#sheet [data-a="closeSheet"]'); await page.evaluate(() => { UI.pcAll = true; render(true); }); await tick(page, 200);
+  await click(page, '[data-a="pcOpen"][data-x="AP 300|Fall|2025"]'); await tick(page, 200);
+  ok(!(await page.locator('#sheet [data-a="pcProf"]').count()) && /Term\s*Fall 2025/.test(await page.locator('#sheet').innerText()), 'class sheet: transfer credit has no professor to add');
+  await click(page, '#sheet [data-a="pcAskRemove"]'); await tick(page, 100);
+  ok(/Remove AP 300, Fall 2025\?/.test(await page.locator('#sheet').innerText()), 'class sheet: Remove names the class and its term');
+  await click(page, '#sheet [data-a="pcRemove"]'); await tick(page, 400);
+  ok(log.writes.some(x => x.table === 'class_history' && x.m === 'DELETE' && /code=eq\.AP(\+|%20)300/.test(x.query) && /term=eq\.Fall/.test(x.query) && /year=eq\.2025/.test(x.query)), 'class sheet: Remove asks, then deletes that row');
+  /* a class taken twice: Remove takes off only the attempt you opened */
+  tables.class_history.push({ user_id: FX.ME.id, code: 'BUS 2214', term: 'Spring', year: 2025, professor: null });
+  await page.evaluate(() => TC.reloadHistory().then(() => { UI.pcAll = true; render(true); })); await tick(page, 400);
+  await click(page, '[data-a="pcOpen"][data-x="BUS 2214|Spring|2025"]'); await tick(page, 200);
+  await click(page, '#sheet [data-a="pcAskRemove"]'); await click(page, '#sheet [data-a="pcRemove"]'); await tick(page, 600);
+  const left = await page.evaluate(() => TC.myHistory.filter(h => h.code === 'BUS 2214').map(h => h.term + ' ' + h.year));
+  ok(left.join() === 'Fall 2024', 'class sheet: a class taken twice — Remove takes off only the attempt you opened', left);
+  ok(log.errors.length === 0, 'class sheet: no page errors', log.errors);
+  await close();
+};
+/* Who taught it? — only real names: teaching it now, or listed for it on PolyRatings (old codes through the crosswalk),
+   or one the student searches for; nothing is filled until they pick */
+tests.pastProfPicker = async () => {
+  const poly = FX.POLY.map((p, i) => Object.assign({}, p, { courses: i === 0 ? ['COMS 101', 'PHIL 3331'] : i === 2 ? ['COMS 101', 'BUS 214'] : [] }));
+  const { page, close, log } = await openApp({ tables: PAST_T(), poly, height: 1400 });
+  await toPast(page); await openYears(page);
+  await click(page, '.pc-row:has(.pc-cc:text("COMS 1101")) .pc-add'); await tick(page, 300);
+  let names = await page.locator('#sheet .pc-opt .pc-on').allInnerTexts();
+  const p0 = FX.POLY[0].firstName + ' ' + FX.POLY[0].lastName, p2 = FX.POLY[2].firstName + ' ' + FX.POLY[2].lastName;
+  ok(/Who taught it\?/.test(await page.locator('#sheet').innerText()) && names.length === 2 && names.includes(p0) && names.includes(p2) && await page.locator('#sheet [data-a="pcProfSave"]').isDisabled(), 'picker: the professors PolyRatings lists for COMS 101 (= COMS 1101), and Save waits for a pick', names);
+  ok(names[0] === (FX.POLY[0].numEvals >= FX.POLY[2].numEvals ? p0 : p2), 'picker: most-rated first', names);
+  /* teaching it now comes first */
+  await click(page, '#sheet [data-a="closeSheet"]');
+  const cands = await page.evaluate(() => pcCands('PHIL 3331').map(o => o.name + (o.now ? '*' : '')));
+  ok(cands[0] === 'Dov Mockridge*', 'picker: a professor teaching it now is listed first', cands);
+  /* search: type, the list follows, the keyboard stays */
+  await click(page, '.pc-row:has(.pc-cc:text("COMS 1101")) .pc-add'); await tick(page, 200);
+  await page.evaluate(() => { window.__pcq = document.getElementById('pc-q'); });
+  await page.locator('#sheet input[data-in="pcq"]').fill('fixtur'); await tick(page, 200);
+  names = await page.locator('#sheet .pc-opt .pc-on').allInnerTexts();
+  ok(names.some(n => /Fixturesen/.test(n)) && await page.evaluate(() => document.activeElement && document.activeElement.dataset.in === 'pcq' && document.getElementById('pc-q') === window.__pcq), 'picker: search finds any professor, and typing keeps the keyboard up (the same search box, never redrawn)', names);
+  await page.locator('#sheet input[data-in="pcq"]').fill('Quinn Notlisted'); await tick(page, 200);
+  names = await page.locator('#sheet .pc-opt .pc-on').allInnerTexts();
+  ok(names.length === 1 && names[0] === 'Use “Quinn Notlisted”', 'picker: someone not listed can be typed in', names);
+  await page.locator('#sheet input[data-in="pcq"]').fill(''); await tick(page, 200);
+  await click(page, `#sheet .pc-opt:has-text("${p2}")`); await tick(page, 150);
+  ok(await page.locator('#sheet .pc-opt.on').count() === 1 && !(await page.locator('#sheet [data-a="pcProfSave"]').isDisabled()), 'picker: a pick lights up and Save turns on');
+  ok(!log.writes.some(x => x.table === 'class_history' && x.m === 'PATCH'), 'picker: nothing is saved until Save');
+  await click(page, '#sheet [data-a="pcProfSave"]'); await tick(page, 600);
+  const w = log.writes.filter(x => x.table === 'class_history' && x.m === 'PATCH');
+  ok(w.length === 1 && JSON.stringify(w[0].body) === JSON.stringify({ professor: p2 }) && /code=eq\.COMS(\+|%20)1101/.test(w[0].query) && /term=eq\.Spring/.test(w[0].query) && /year=eq\.2024/.test(w[0].query), 'picker: Save writes that name to that class on your record', w);
+  const row = await page.locator('.pc-row:has(.pc-cc:text("COMS 1101"))').innerText();
+  ok(new RegExp(p2).test(row) && !/\+ Professor/.test(row) && !(await page.locator('#sheet .pc-opt').count()), 'picker: the row now shows them', row);
+  ok(await page.evaluate(n => (TC.rateList || []).some(t => t.items.some(i => PROFS[i[0]] && PROFS[i[0]].name === n)), p2), 'picker: and they’re in Rate’s list to review');
+  /* I don't remember: closes, writes nothing */
+  const before = log.writes.length;
+  await click(page, '.pc-row:has(.pc-cc:text("BUS 2214")) .pc-add'); await tick(page, 200);
+  await click(page, '#sheet [data-a="pcProfNone"]'); await tick(page, 200);
+  ok(!(await page.evaluate(() => UI.sheet)) && log.writes.length === before, 'picker: “I don’t remember” closes and saves nothing');
+  ok(log.errors.length === 0, 'picker: no page errors', log.errors);
+  await close();
+  /* a refused save says so and stays */
+  const f = await openApp({ tables: PAST_T(), poly, height: 1400, hook: (url, m) => url.pathname.endsWith('/class_history') && m === 'PATCH' ? { status: 500, body: '{}' } : null });
+  await toPast(f.page); await openYears(f.page);
+  await click(f.page, '.pc-row:has(.pc-cc:text("COMS 1101")) .pc-add'); await tick(f.page, 200);
+  await click(f.page, `#sheet .pc-opt:has-text("${p0}")`); await click(f.page, '#sheet [data-a="pcProfSave"]'); await tick(f.page, 600);
+  ok(await f.page.evaluate(() => UI.sheet && UI.sheet.type) === 'pcProf' && await f.page.locator('#sheet .tc-err').count() === 1 && !(await f.page.locator('#sheet [data-a="pcProfSave"]').isDisabled()), 'picker: a refused save says so and keeps the pick to try again');
+  await f.close();
+  /* a write that changes nothing (refused, or the row moved) isn't "Saved" */
+  const z = await openApp({ tables: PAST_T(), poly, height: 1400, hook: (url, m) => url.pathname.endsWith('/class_history') && m === 'PATCH' ? { status: 200, body: '[]' } : null });
+  await toPast(z.page); await openYears(z.page);
+  await click(z.page, '.pc-row:has(.pc-cc:text("COMS 1101")) .pc-add'); await tick(z.page, 200);
+  await click(z.page, `#sheet .pc-opt:has-text("${p0}")`); await click(z.page, '#sheet [data-a="pcProfSave"]'); await tick(z.page, 600);
+  ok(await z.page.evaluate(() => UI.sheet && UI.sheet.type) === 'pcProf' && /Couldn’t save that/.test(await z.page.locator('#sheet').innerText()), 'picker: a write that changed nothing says so — never “Saved”');
+  /* any redraw (a reload, the seats) keeps the search and its keyboard */
+  await z.page.locator('#sheet input[data-in="pcq"]').fill('ad'); await z.page.evaluate(() => render(true)); await tick(z.page, 200);
+  ok(await z.page.evaluate(() => document.activeElement && document.activeElement.id === 'pc-q' && document.activeElement.value === 'ad'), 'picker: a redraw while typing keeps the search box focused');
+  /* the X goes back to the class it came from; so does a tap outside */
+  await click(z.page, '#sheet [data-a="pcProfNone"]'); await tick(z.page, 200);
+  await click(z.page, '[data-a="pcOpen"][data-x="COMS 1101|Spring|2024"]'); await click(z.page, '#sheet [data-a="pcProf"]'); await tick(z.page, 200);
+  await click(z.page, '#sheet .xbtn'); await tick(z.page, 200);
+  ok(await z.page.evaluate(() => UI.sheet && UI.sheet.type) === 'pcClass', 'picker: its X goes back to the class sheet');
+  await click(z.page, '#sheet [data-a="pcProf"]'); await tick(z.page, 200);
+  await z.page.evaluate(() => A.closeSheet()); await tick(z.page, 200);
+  ok(await z.page.evaluate(() => UI.sheet && UI.sheet.type) === 'pcClass', 'picker: a tap outside goes back too');
+  await z.close();
+  /* PolyRatings didn't load: it says so */
+  const g = await openApp({ tables: PAST_T(), poly: null, height: 1400 });
+  await toPast(g.page); await openYears(g.page);
+  await click(g.page, '.pc-row:has(.pc-cc:text("COMS 1101")) .pc-add'); await tick(g.page, 200);
+  ok(/PolyRatings didn’t load/.test(await g.page.locator('#sheet').innerText()), 'picker: without PolyRatings it says only professors teaching it now are listed');
+  await g.close();
+};
+/* Right after a report is saved: "Who taught these?" — the three latest terms' classes, never transfer credit */
+tests.pastWhoTaught = async () => {
+  const { page, close, log } = await openApp({ tables: NOREC() });
+  await toPlanner(page);
+  await uploadDpr(page, '.tc-dpr input[data-in="dprfile"]');
+  await click(page, '[data-a="dprSave"]'); await tick(page, 2500);
+  const got = await page.evaluate(() => UI.sheet && UI.sheet.type === 'pcWho' ? UI.sheet.keys : null);
+  const hist = await page.evaluate(() => (TC.myHistory || []).map(h => [TCPL.canon(h.code) || h.code, h.term, h.year, h.professor]));
+  const TO = { Winter: 0, Spring: 1, Summer: 2, Fall: 3 };
+  const real = hist.filter(h => h[3] !== '🌍' && h[1] && h[2]).sort((a, b) => b[2] - a[2] || TO[b[1]] - TO[a[1]]);
+  const latest = [...new Set(real.map(h => h[1] + ' ' + h[2]))].slice(0, 3);
+  const want = real.filter(h => latest.includes(h[1] + ' ' + h[2])).map(h => [h[0], h[1], h[2]].join('|'));
+  ok(got && got.length && JSON.stringify(got) === JSON.stringify(want) && got.every(k => !/^AP /.test(k)), 'who: after the save, “Who taught these?” lists the record’s latest terms (no transfer credit)', { got, hist });
   const sh = await page.locator('#sheet').innerText();
-  ok(/Past classes · 4/i.test(sh) && /PHIL 3331[\s\S]{0,80}already logged/.test(sh), 'dpr (profile): Import PDF on your profile reads the report, knowing your past classes', sh.slice(0, 200));
-  ok(log.errors.length === 0, 'dpr (profile): no page errors', log.errors);
+  ok(/Who taught these\?/.test(sh) && /\+ Add/.test(sh) && /Done/.test(sh) && !/Skip/.test(sh), 'who: one list with “+ Add”, and Done', sh.slice(0, 300));
+  /* the X on the picker opened from the list goes back to the list */
+  await click(page, '#sheet .pc-wrow >> nth=0'); await tick(page, 200);
+  await click(page, '#sheet [data-a="pcProfNone"].xbtn'); await tick(page, 200);
+  ok(await page.evaluate(() => UI.sheet && UI.sheet.type) === 'pcWho', 'who: the picker’s X goes back to the list');
+  await click(page, '#sheet .pc-wrow >> nth=0'); await tick(page, 200);
+  ok(await page.evaluate(() => UI.sheet.type) === 'pcProf', 'who: a row opens Who taught it?');
+  const xf = await page.evaluate(() => { const keep = TC.myHistory; TC.myHistory = keep.concat([{ code: 'AP 300', term: 'Fall', year: 2026, professor: TCPL.abroadMark }, { code: 'ECON 3021', term: 'Fall', year: 2026, professor: null }]); const k = pcWhoKeys(); TC.myHistory = keep; return k; });
+  ok(xf.includes('ECON 3021|Fall|2026') && !xf.some(k => /^AP 300/.test(k)), 'who: transfer credit in the latest term stays out; a class beside it is in', xf);
+  await page.locator('#sheet input[data-in="pcq"]').fill('Ada'); await tick(page, 200);
+  await click(page, '#sheet .pc-opt >> nth=0'); await click(page, '#sheet [data-a="pcProfSave"]'); await tick(page, 600);
+  const back = await page.evaluate(() => ({ t: UI.sheet && UI.sheet.type, txt: document.getElementById('sheet').innerText }));
+  ok(back.t === 'pcWho' && /Ada Examplewood/.test(back.txt), 'who: saving returns to the list, with the name in place of “+ Add”', back);
+  await click(page, '#sheet [data-a="pcWhoDone"].btn'); await tick(page, 600);
+  const done = await page.evaluate(() => ({ sheet: UI.sheet && UI.sheet.type, tab: S.schedTab, plan: !!document.querySelector('#scroll .pl-card, #scroll [data-a="plPrefsOpen"], #scroll .pk-card') }));
+  ok(done.sheet !== 'pcWho' && done.tab === 'planner' && (done.sheet === null || done.sheet === 'plPrefs'), 'who: Done closes it, onto the Planner', done);
+  ok(log.errors.length === 0, 'who: no page errors', log.errors);
+  await close();
+};
+
+/* ============ Transfer students' reports (Tate, 2026-10-11) ============
+   A friend's real report — a junior in his first term after transferring — and the app said "only 7 of his
+   requirements fulfilled". Every community-college and exam class printed in "2026 Fall" WITH a grade (some
+   "300"/"400"), and only the report's icon says they're transfer credit. Synthetic reports in the same shape
+   (files/make-dpr-transfer.py: invented people, classes and grades — never a real report): */
+const XFER_T = (major, standing) => Object.assign({}, NOREC(), { planner_prefs: [],
+  saved_classes: FX.TABLES.saved_classes.filter(r => r.user_id !== FX.ME.id), my_sections: FX.TABLES.my_sections.filter(r => r.user_id !== FX.ME.id),
+  profiles: FX.TABLES.profiles.map(p => p.id === FX.ME.id ? Object.assign({}, p, { major, class_standing: standing }) : p) });
+const uploadFile = async (page, file) => { await page.locator('.tc-dpr input[data-in="dprfile"]').first().setInputFiles('files/' + file); for (let i = 0; i < 30 && !(await page.locator('#sheet .dr-h1, #sheet .tc-err').count()); i++) await tick(page, 500); };
+const readPills = page => page.evaluate(() => [...document.querySelectorAll('#sheet .dr-pill')].map(p => p.innerText.trim()).join('|'));
+const checkRows = async (page, seg) => { await click(page, `[data-a="dprSeg"][data-x="${seg}"]`); await tick(page, 200); return page.evaluate(() => [...document.querySelectorAll('#sheet .dr-row')].map(r => r.innerText.replace(/\s+/g, ' ').trim())); };
+const posted = (log, t) => log.writes.filter(w => w.table === t && w.m === 'POST').map(w => w.body).flat();
+const xferOf = rows => rows.filter(r => /· transfer$/.test(r)).map(r => r.split(' ').slice(0, 2).join(' ')).sort();
+
+/* 1. His shape: first term after transferring (Environmental Management & Protection, a junior) */
+tests.dprTransferFirst = async () => {
+  const { page, close, log } = await openApp({ tables: XFER_T('Environmental Management & Protection', 'Junior') });
+  await toPlanner(page); await uploadFile(page, 'dpr-transfer-first.pdf');
+  ok(await readPills(page) === '18 filled|12 left|13 transfer', 'transfer, first term: Report read counts the report — 17 Satisfied + 1 in progress = 18 filled, 12 left — and all 13 transfer classes', await readPills(page));
+  await click(page, '[data-a="dprCheck"]');
+  const cls = await checkRows(page, 'classes');
+  ok(cls.length === 16 && JSON.stringify(xferOf(cls)) === JSON.stringify(['BIO 1114', 'BUS 1TR', 'COMS 1102', 'CSC 1TR', 'ECON 2030', 'ENGL 1134', 'ENGL 1T13', 'ES 4A1', 'HIST 4A1', 'MATH 1267', 'MU 1T3A', 'POLS 4AA', 'STAT 1210']) && ['ES 3350', 'NR 1142', 'NR 3308'].every(c => cls.some(r => r.startsWith(c + ' ') && !/transfer/.test(r))),
+    'transfer, first term: every graded “2026 Fall” class is transfer credit (its icon, and a grade in a term still running); the 3 ungraded are the ones he’s taking', cls);
+  ok(!cls.some(r => /\b[1-7]00\b/.test(r)), 'transfer, first term: a “300” / “400” where a grade goes is never shown as part of a class’s name', cls.filter(r => /\b[1-7]00\b/.test(r)));
+  const open = await checkRows(page, 'open');
+  ok(open.length === 12 && open.filter(r => /^Pick 1 Major Core Courses - Option\b/.test(r)).length === 1 && !open.some(r => /NR 3319|NR 4402/.test(r)) && open.includes('Conc. Concentration Undeclared'),
+    'transfer, first term: “Choose one” with “Option 1 of 2” / “Option 2 of 2” is ONE line to fill; “(2026)” is off the words', open);
+  const filled = await checkRows(page, 'filled');
+  ok(filled.length === 18 && filled.some(r => /^USCP U\.S\. Cultural Pluralism .* in progress$/.test(r)), 'transfer, first term: a “Not Satisfied” line whose own table lists a class he’s taking now (USCP, ES 3350) is in progress — transfer credit doesn’t hide this term', filled.filter(r => /USCP/.test(r)));
+  await click(page, '[data-a="dprSave"]'); await tick(page, 2500);
+  const hist = posted(log, 'class_history'), mine = posted(log, 'saved_classes');
+  ok(hist.length === 13 && hist.every(r => r.professor === '🌍' && r.term === 'Fall' && r.year === 2026), 'transfer, first term: the 13 transfer classes go to the record, each marked transfer credit (no professor to ask about)', hist.map(r => [r.code, r.professor]));
+  ok(JSON.stringify(mine.map(r => r.code).sort()) === JSON.stringify(['ES 3350', 'NR 1142', 'NR 3308']), 'transfer, first term: My Classes gets only the 3 ungraded classes — never ENGL 1134, MATH 1267 or STAT 1210 (they printed “300”/“400”)', mine);
+  ok(await page.evaluate(() => !UI.sheet || UI.sheet.type !== 'pcWho'), 'transfer, first term: no “Who taught these?” — nothing on the record is a Cal Poly class');
+  await page.evaluate(() => { TC.prefs = TC.prefs || { priority: 'degree', units: 16 }; UI.sheet = null; render(true); });
+  await click(page, '[data-a="schedTab"][data-x="past"]'); await tick(page, 1500); await openYears(page);
+  const sum = await page.evaluate(() => { const c = (() => { const g = plGate(); if (g.html) return null; const L = g.L, X = auditLines(TC.audit, L), R = L ? planRank(L) : X ? { audit: true, X, all: [], bare: true } : null; if (!R || R.done) return null; const o = document.getElementById('__lc'); if (o) o.remove(); const d = document.createElement('div'); d.id = '__lc'; d.style.cssText = 'position:absolute;left:-10000px;top:0;width:390px'; const ro = UI.plReqOpen; UI.plReqOpen = new Proxy({}, { get: () => true, has: () => true }); try { d.innerHTML = plLeftCard(R, L, /^[ABC]$/.test(UI.plPlan) ? UI.plPlan : 'A'); } finally { UI.plReqOpen = ro; } document.body.appendChild(d); const c0 = d.firstElementChild; if (c0) [...d.children].slice(1).forEach(x => c0.appendChild(x)); return c0; })(); return c && { num: (c => { const g = {}; [...c.querySelectorAll('.pll-leg > span')].forEach(e => { g[e.className] = +e.textContent.trim().split(' ')[0]; }); const n = +((((c.querySelector('.pll-bar') || { getAttribute: () => '' }).getAttribute('aria-label') || '').match(/of (\d+)$/) || [])[1] || '').split(' ')[0] || 0; return n ? `${(g.f || 0) + (g.p || 0)} of ${n} filled` : ''; })(c), left: ((c.querySelector('.pll-leg .l') || {}).textContent || '').replace(/\s+/g, ' ').replace(/^(\d+)(?=[a-z])/, '$1 ').trim(), bar: c.querySelector('.pll-bar').getAttribute('aria-label'), _: document.getElementById('__lc')?.remove() }; });
+  ok(sum && sum.num === '18 of 29 filled' && /, 11 left to graduate of 29$/.test(sum.bar) && sum.left === '11 left to graduate', 'transfer, first term: the Builder’s top card says the report’s 18 filled or in progress, 11 left of 29 (the flowchart can’t see transfer credit; the total-units line isn’t a requirement)', sum);
+  const rows = await page.evaluate(() => [...document.querySelectorAll('.pc-fhd ~ * .pc-row, .pc-fhd ~ .pc-row')].map(r => ({ st: r.className.replace('pc-row', '').trim(), main: ((r.querySelector('.pc-main') || {}).innerText || '').replace(/\s+/g, ' ').trim(), pf: (r.querySelector('.pc-pf') || {}).innerText || '', add: !!r.querySelector('.pc-add') })));
+  const g1b = rows.find(r => /^GE Area 1B$/.test(r.main)), stat = rows.find(r => /^STAT 1110\b/.test(r.main));
+  ok(g1b && g1b.st === 'done' && g1b.pf === 'On your report' && stat && stat.st === 'done' && stat.pf === 'On your report', 'transfer, first term: a flowchart spot the report says is Satisfied (GE 1B, STAT 1110) is filled, “On your report”', { g1b, stat });
+  ok(!(await page.locator('#scroll .pc-add').count()), 'transfer, first term: no “+ Professor” anywhere — transfer credit has no Cal Poly professor');
+  await page.evaluate(() => { UI.sheet = null; render(true); document.getElementById('scroll').scrollTop = 0; }); await tick(page, 600); await click(page, '[data-a="tab"][data-x="home"]'); await click(page, '.homehdr .me-btn'); await tick(page, 800);
+  const me = await page.evaluate(() => [...document.querySelectorAll('.merow')].map(r => r.innerText.replace(/\s+/g, ' ').trim()).find(t => /requirements filled/.test(t)));
+  ok(me === '18 of 30 requirements filled Environmental Management & Protection · 3 in progress', 'transfer, first term: the profile’s row is the report’s count too — in progress counts the Satisfied lines whose class is still being taken (NR 3308, NR 1142)', me);
+  ok(log.errors.length === 0, 'transfer, first term: no page errors', log.errors);
+  await close();
+};
+
+/* 2. A senior who transferred a year ago: his transfer credit prints in 2025 Fall with letter grades, beside the
+   Cal Poly classes he took that term — only the report's icons tell them apart. Exam credit: "CR" and no icon. */
+tests.dprTransferContinuing = async () => {
+  const { page, close, log } = await openApp({ tables: XFER_T('Business Administration', 'Senior') });
+  await toPlanner(page); await uploadFile(page, 'dpr-transfer-continuing.pdf');
+  ok(await readPills(page) === '17 filled|6 left|8 transfer', 'transfer, a year on: 14 Satisfied + 3 in progress = 17 filled, 6 left, 8 transfer', await readPills(page));
+  await click(page, '[data-a="dprCheck"]');
+  const cls = await checkRows(page, 'classes');
+  ok(cls.length === 17 && JSON.stringify(xferOf(cls)) === JSON.stringify(['AP 300', 'BUS 1TR', 'BUS 2201', 'COMS 1101', 'ECON 2030', 'ENGL 1134', 'MATH 1221', 'PHIL 1T1B']),
+    'transfer, a year on: the classes the report draws with the transfer icon (and exam credit drawn with none) are transfer — the Cal Poly classes of the same term are not', cls);
+  await click(page, '[data-a="dprSave"]'); await tick(page, 2500);
+  const hist = posted(log, 'class_history'), mine = posted(log, 'saved_classes');
+  const x = hist.filter(r => r.professor === '🌍').map(r => r.code).sort(), cp = hist.filter(r => r.professor == null).map(r => r.code).sort();
+  ok(hist.length === 14 && JSON.stringify(x) === JSON.stringify(['AP 300', 'BUS 1TR', 'BUS 2201', 'COMS 1101', 'ECON 2030', 'ENGL 1134', 'MATH 1221', 'PHIL 1T1B']) && JSON.stringify(cp) === JSON.stringify(['BUS 2207', 'BUS 2212', 'BUS 3346', 'BUS 3387', 'BUS 3391', 'STAT 2170']),
+    'transfer, a year on: the record keeps 8 transfer (marked) and 6 Cal Poly classes', { x, cp });
+  ok(JSON.stringify(mine.map(r => r.code).sort()) === JSON.stringify(['BUS 3431', 'BUS 3438', 'BUS 4401']), 'transfer, a year on: My Classes gets the 3 he’s taking — not this term’s study-abroad placeholder (AP 300, no grade, transfer icon)', mine);
+  const who = await page.evaluate(() => UI.sheet && UI.sheet.type === 'pcWho' ? UI.sheet.keys.slice().sort() : null);
+  ok(JSON.stringify(who) === JSON.stringify(['BUS 2207|Fall|2025', 'BUS 2212|Fall|2025', 'BUS 3346|Spring|2026', 'BUS 3387|Spring|2026', 'BUS 3391|Spring|2026', 'STAT 2170|Fall|2025']),
+    'transfer, a year on: “Who taught these?” asks only about his Cal Poly classes — not BUS 2201 or MATH 1221, which he took at a community college the same term', who);
+  await page.evaluate(() => { TC.prefs = TC.prefs || { priority: 'degree', units: 16 }; UI.sheet = null; S.schedTab = 'past'; render(true); }); await tick(page, 1500); await openYears(page);
+  const num = await page.evaluate(() => [(((() => { const g = plGate(); if (g.html) return null; const L = g.L, X = auditLines(TC.audit, L), R = L ? planRank(L) : X ? { audit: true, X, all: [], bare: true } : null; if (!R || R.done) return null; const o = document.getElementById('__lc'); if (o) o.remove(); const d = document.createElement('div'); d.id = '__lc'; d.style.cssText = 'position:absolute;left:-10000px;top:0;width:390px'; const ro = UI.plReqOpen; UI.plReqOpen = new Proxy({}, { get: () => true, has: () => true }); try { d.innerHTML = plLeftCard(R, L, /^[ABC]$/.test(UI.plPlan) ? UI.plPlan : 'A'); } finally { UI.plReqOpen = ro; } document.body.appendChild(d); const c0 = d.firstElementChild; if (c0) [...d.children].slice(1).forEach(x => c0.appendChild(x)); return c0; })()) || document.createElement('div'))?.classList?.contains('pll') ? (c => { const g = {}; [...c.querySelectorAll('.pll-leg > span')].forEach(e => { g[e.className] = +e.textContent.trim().split(' ')[0]; }); const n = +((((c.querySelector('.pll-bar') || { getAttribute: () => '' }).getAttribute('aria-label') || '').match(/of (\d+)$/) || [])[1] || '').split(' ')[0] || 0; return n ? `${(g.f || 0) + (g.p || 0)} of ${n} filled` : ''; })(document.getElementById('__lc').firstElementChild) : '', document.getElementById('__lc')?.remove()][0]);
+  ok(/^18 of 2[23] filled$/.test(String(num).trim()), 'transfer, a year on: 18 filled or in progress — the report’s 17, and BUS 4401 now that it’s in his classes this term', num);
+  await openGroups(page);
+  const add = await page.evaluate(() => [...document.querySelectorAll('#scroll .pc-row, #scroll .pc-orow')].map(r => [[...r.querySelectorAll('.pc-used, .pc-cc')].map(e => e.innerText.replace(/\s+/g, ' ').trim()).join(' | '), !!r.querySelector('.pc-add')]).filter(([c]) => c));
+  const has = c => add.find(([k]) => k.split(' | ').some(x => x.startsWith(c + ' ') || x === c));
+  ok(has('BUS 2201') && !has('BUS 2201')[1] && has('MATH 1221') && !has('MATH 1221')[1] && has('BUS 2212') && has('BUS 2212')[1], 'transfer, a year on: “+ Professor” on his Cal Poly classes, never on his transfer ones', add);
+  ok(log.errors.length === 0, 'transfer, a year on: no page errors', log.errors);
+  await close();
+};
+
+/* 2b. The same senior's report with Cal Poly's check drawn as a picture too big to be an icon: the page's pictures
+   can't all be matched, so nothing is called "no icon" (ECON 2030's "CR" stays as it is) — the arrows still count */
+tests.dprTransferPartial = async () => {
+  const { page, close, log } = await openApp({ tables: XFER_T('Business Administration', 'Senior') });
+  await toPlanner(page); await uploadFile(page, 'dpr-transfer-partial.pdf');
+  await click(page, '[data-a="dprCheck"]');
+  const cls = await checkRows(page, 'classes');
+  ok(cls.length === 17 && JSON.stringify(xferOf(cls)) === JSON.stringify(['AP 300', 'BUS 1TR', 'BUS 2201', 'COMS 1101', 'ENGL 1134', 'MATH 1221', 'PHIL 1T1B']) && cls.some(r => /^ECON 2030 /.test(r) && !/transfer/.test(r)),
+    'partial icons: rows wearing the transfer icon are still transfer; with pictures the app couldn’t match on the page, a row isn’t called “no icon” (ECON 2030 stays a class)', cls);
+  ok(log.errors.length === 0, 'partial icons: no page errors', log.errors);
+  await close();
+};
+
+/* 2c. Review 2026-10-11: pictures the legend doesn't name, a legend that can't be trusted, pictures inside forms */
+tests.dprTransferOddLegend = async () => {
+  const { page, close, log } = await openApp({ tables: XFER_T('Environmental Management & Protection', 'Junior') });
+  await toPlanner(page); await uploadFile(page, 'dpr-transfer-oddlegend.pdf');
+  ok(await readPills(page) === '18 filled|12 left|13 transfer', 'odd legend: the table’s arrows aren’t the legend’s picture — they’re not taken for Cal Poly’s, and the words still find all 13 transfer classes', await readPills(page));
+  await click(page, '[data-a="dprSave"]'); await tick(page, 2500);
+  ok(JSON.stringify(posted(log, 'saved_classes').map(r => r.code).sort()) === JSON.stringify(['ES 3350', 'NR 1142', 'NR 3308']), 'odd legend: My Classes gets only the 3 ungraded classes (no “300”/“400” class filed as this term’s)', posted(log, 'saved_classes'));
+  ok(log.errors.length === 0, 'odd legend: no page errors', log.errors);
+  await close();
+};
+tests.dprTransferBadLegend = async () => {
+  const { page, close, log } = await openApp({ tables: XFER_T('Business Administration', 'Senior') });
+  await toPlanner(page); await uploadFile(page, 'dpr-transfer-badlegend.pdf');
+  await click(page, '[data-a="dprCheck"]');
+  const cls = await checkRows(page, 'classes');
+  ok(JSON.stringify(xferOf(cls)) === JSON.stringify(['AP 300', 'BUS 1TR', 'ENGL 1134', 'PHIL 1T1B']), 'bad legend: a legend that gives the transfer label Cal Poly’s own picture isn’t used — only the words decide, and no Cal Poly class is called transfer', cls);
+  ok(log.errors.length === 0, 'bad legend: no page errors', log.errors);
+  await close();
+};
+tests.dprTransferForm = async () => {
+  const { page, close, log } = await openApp({ tables: XFER_T('Business Administration', 'Senior') });
+  await toPlanner(page); await uploadFile(page, 'dpr-transfer-form.pdf');
+  await click(page, '[data-a="dprCheck"]');
+  const cls = await checkRows(page, 'classes');
+  ok(JSON.stringify(xferOf(cls)) === JSON.stringify(['AP 300', 'BUS 1TR', 'BUS 2201', 'COMS 1101', 'ECON 2030', 'ENGL 1134', 'MATH 1221', 'PHIL 1T1B']), 'forms: icons drawn inside a form with its own matrix still land on their rows', cls);
+  ok(log.errors.length === 0, 'forms: no page errors', log.errors);
+  await close();
+};
+
+/* 3. The same first-term report with no pictures (a copy that lost them): the words are enough — a grade in a term
+   still running when it was printed, and an articulation number (PHIL 1T1B, Summer 2025) */
+tests.dprTransferNoIcons = async () => {
+  const { page, close, log } = await openApp({ tables: XFER_T('Environmental Management & Protection', 'Junior') });
+  await toPlanner(page); await uploadFile(page, 'dpr-transfer-noicons.pdf');
+  ok(await readPills(page) === '18 filled|12 left|14 transfer', 'no icons: the same counts, and 14 transfer (13 + the Summer 2025 PHIL 1T1B)', await readPills(page));
+  await click(page, '[data-a="dprCheck"]');
+  const cls = await checkRows(page, 'classes');
+  ok(xferOf(cls).length === 14 && xferOf(cls).includes('PHIL 1T1B') && xferOf(cls).includes('BIO 1114') && ['ES 3350', 'NR 1142', 'NR 3308'].every(c => cls.some(r => r.startsWith(c + ' ') && !/transfer/.test(r))), 'no icons: graded classes in the running term and an articulation number are transfer; the 3 ungraded are taking', cls);
+  await click(page, '[data-a="dprSave"]'); await tick(page, 2500);
+  ok(posted(log, 'class_history').length === 14 && posted(log, 'class_history').every(r => r.professor === '🌍') && posted(log, 'saved_classes').length === 3, 'no icons: 14 transfer on the record, 3 in My Classes', posted(log, 'saved_classes'));
+  ok(log.errors.length === 0, 'no icons: no page errors', log.errors);
+  await close();
+};
+
+/* 4. Not a transfer: printed December 20, after Fall's grades posted — graded Fall 2026 is Cal Poly work */
+tests.dprFallGraded = async () => {
+  const { page, close, log } = await openApp({ tables: XFER_T('Business Administration', 'Sophomore') });
+  await toPlanner(page); await uploadFile(page, 'dpr-fall-graded.pdf');
+  ok(await readPills(page) === '3 filled|2 left', 'after grades post: no transfer pill — nothing on it is transfer credit', await readPills(page));
+  await click(page, '[data-a="dprCheck"]');
+  const cls = await checkRows(page, 'classes');
+  ok(!xferOf(cls).length && cls.some(r => /^BUS 2201 .*Fall 2026$/.test(r)), 'after grades post: Fall 2026’s graded classes are Cal Poly classes', cls);
+  await click(page, '[data-a="dprSave"]'); await tick(page, 2500);
+  const hist = posted(log, 'class_history');
+  ok(hist.length === 6 && hist.every(r => r.professor == null) && hist.some(r => r.code === 'BUS 2201' && r.term === 'Fall' && r.year === 2026), 'after grades post: the 6 finished classes go to the record as Cal Poly classes', hist);
+  const who = await page.evaluate(() => UI.sheet && UI.sheet.type === 'pcWho' ? UI.sheet.keys : null);
+  ok(who && who.includes('BUS 2201|Fall|2026') && who.includes('COMS 1101|Fall|2026'), 'after grades post: “Who taught these?” asks about Fall 2026’s classes', who);
+  ok(log.errors.length === 0, 'after grades post: no page errors', log.errors);
+  await close();
+};
+
+/* The reader's new rules, one at a time */
+tests.dprReaderTransfer = async () => {
+  const { page, close } = await openApp({});
+  await page.waitForFunction(() => TC.ready, null, { timeout: 8000 }); await page.evaluate(() => TC.loadPlanner()); await page.waitForFunction(() => !!window.TCPL, null, { timeout: 8000 });
+  const r = await page.evaluate(() => {
+    const X = TCPL.dprXMark, B = TCPL.dprBMark, it = (s, x, y) => ({ str: s, transform: [1, 0, 0, 1, x, y], width: s.length * 4 });
+    const rowsAt = (ys, marks) => TCPL.pdfItemsToText(ys.map((y, i) => it(`2025 Fall ART ${1160 + i} Intro B 3.00`, 44, y)).concat([it('Satisfied: 3 units', 40, 300)]), marks).split('\n');
+    const C = TCPL.dprCMark;
+    const mk = (a, bare) => { a.bare = bare; return a; };
+    const d = TCPL.dprPrinted('Date Printed: October 10, 2026 18:05');
+    const p = (printed, rows) => TCPL.dprParse(['Degree Progress Report', printed, 'Course History', ...rows].join('\n')).rows.map(x => [x.cur, x._xfer, x._open, x.name]);
+    const audit = TCPL.dprAudit(['MAJOR CORE COURSES (2026)', 'Overall Requirement Not Satisfied: 31 units', '(R797)', 'NR/SS 4431 OR NR 4442', 'Not Satisfied: 3 units', '(R797-80)', 'MAJOR CORE COURSES - OPTION (2026)', 'Not Satisfied: Choose one', '3-4 units', '(R2865)', 'NR 3319 & 3320', 'Not Satisfied: Option 1 of 2', '3 units', '(R2865-10)', 'NR/AGB 3326, NR 4418, or NR 4445', 'Not Satisfied: Option 2 of 2', '3-4 units', '(R2865-20)'].join('\n'), {}, []);
+    return {
+      xfer: rowsAt([100, 88.6], mk([{ y: 101.8, t: true }], true)), icon: rowsAt([100, 88.6], mk([{ y: 101.8, t: false, c: true }], true)), allIcons: rowsAt([100], mk([{ y: 101.8, t: false, c: true }], true)),
+      noneHit: rowsAt([100], mk([{ y: 300 + 1.8, t: false, c: true }], true)), far: rowsAt([100], [{ y: 106.5, t: true }]), X, B, C,
+      onlyXfer: rowsAt([100, 88.6], mk([{ y: 101.8, t: true }], true)), offRow: rowsAt([100, 88.6], mk([{ y: 101.8, t: false, c: true }, { y: 88.6 + 1.8 - 5.5, t: false, c: true }], true)),
+      notBare: rowsAt([100, 88.6], mk([{ y: 101.8, t: false, c: true }], false)),
+      unnamed: rowsAt([100, 88.6], mk([{ y: 101.8, t: false, c: false }], true)),
+      parse: (() => { const rows = ln => TCPL.dprParse(['Degree Progress Report', 'Date Printed: October 10, 2026 18:05', 'Course History', ...ln].join('\n')).rows.map(x => [x.cur, x._xfer, x._open, x._now, x.name]);
+        return { bareLetter: rows([`2025 Fall BUS 2207 Legal B+ 4.00 ${B}`]), bareCr: rows([`2025 Fall ECON 2030 Microeconomics CR 3.00 ${B}`]),
+          cpScore: rows([`2026 Fall ENGR 1000 Senior Project 400 3.00 ${C}`]), cpGraded: rows([`2026 Fall BUS 2201 Financial Accounting A 4.00 ${C}`]),
+          w: rows(['2026 Fall BUS 2201 Financial Accounting W 4.00']), apNow: rows([`2026 Fall AP 300 Affiliated Programs Outgoing 12.00 ${X}`, '2026 Fall NR 1142 Environmental Management 4.00']),
+          past300: rows(['2024 Fall CHEM 1120 Gen Chem 300 4.00', '2024 Spr BUS 2201 Financial Accounting A 4.00']) }; })(),
+      legend: [dprLegendSig([it('Transfer/Test/Other Credit', 338, 482.9)], [{ x: 314, y: 484.6, sig: 'arrow' }, { x: 290, y: 484.6, sig: 'other' }, { x: 44, y: 484.6, sig: 'left' }], /Transfer\s*\/\s*Test/i),
+        dprLegendSig([it('Transfer/Test/Other Credit', 338, 482.9)], [{ x: 314, y: 492, sig: 'arrow' }], /Transfer\s*\/\s*Test/i)],
+      date: d && [d.getFullYear(), d.getMonth(), d.getDate()], none: TCPL.dprPrinted('no date here'),
+      last: (x => x && [x.getFullYear(), x.getMonth(), x.getDate()])(TCPL.dprPrinted('Date Printed: October 1, 2025 10:00\nCourse History\nDate Printed: October 10, 2026 18:05')),
+      run: [TCPL.dprTermRunning('Fall', 2026, d), TCPL.dprTermRunning('Fall', 2026, new Date(2026, 11, 20)), TCPL.dprTermRunning('Spring', 2026, d), TCPL.dprTermRunning('Spring', 2027, d), TCPL.dprTermRunning('Fall', 2026, null), TCPL.dprTermRunning('Summer', 2026, new Date(2026, 5, 15)), TCPL.dprTermRunning('Summer', 2026, new Date(2026, 4, 20))],
+      oct: p('Date Printed: October 10, 2026 18:05', ['2026 Fall BIO 1114 Plant Diversity A 4.00', '2026 Fall CHEM 1120 Gen Chem 300 4.00', '2026 Fall NR 1142 Environmental Management 4.00']),
+      dec: p('Date Printed: December 20, 2026 09:00', ['2026 Fall BIO 1114 Plant Diversity A 4.00']), nodate: p('', ['2026 Fall BIO 1114 Plant Diversity A 4.00']),
+      opts: audit.reqs.map(b => [b.code, b.status, b.oneOf, b.label, b.options.join('/')]),
+      /* "Choose one" over lines that don't say "Option N of M"; and "Option N of M" lines beside a plain line, with no "Choose one" */
+      choose: TCPL.dprAudit(['SUPPORT COURSES - OPTION (2026)', 'Not Satisfied: Choose one', '4 units', '(R2866)', 'BIO 1111 & 1112', 'Not Satisfied: 4 units', '(R2866-10)', 'BIO 1150 or BIO 1151', 'Not Satisfied: 4 units', '(R2866-20)'].join('\n'), {}, []).reqs.map(b => [b.code, b.oneOf, b.options.length]),
+      mixed: TCPL.dprAudit(['MATH COURSES (2026)', 'Overall Requirement Not Satisfied: 7 units', '(R620)', 'MATH 1261', 'Not Satisfied: Option 1 of 2', '4 units', '(R620-10)', 'MATH 1221', 'Not Satisfied: Option 2 of 2', '4 units', '(R620-20)', 'STAT 1210', 'Not Satisfied: 3 units', '(R620-30)'].join('\n'), {}, []).reqs.map(b => [b.code, b.oneOf, b.options.join('/')]) };
+  });
+  ok(r.xfer[0].endsWith(' ' + r.X) && !r.xfer[1].includes(r.X) && !r.xfer[2].includes(r.X), 'reader: a class row wearing the transfer icon (its centre 1.8 above the baseline) ends in the transfer mark — the row below and a verdict line don’t', r.xfer);
+  ok(!r.xfer[0].includes(r.B) && !r.xfer[1].includes(r.B), 'reader: with only transfer icons on the page, no row is marked “no icon”', r.xfer);
+  ok(r.icon[0].endsWith(' ' + r.C) && !r.icon[0].includes(r.B) && r.icon[1].endsWith(' ' + r.B) && r.allIcons[0].endsWith(' ' + r.C), 'reader: a row wearing Cal Poly’s own icon ends in its mark; on a page whose icons were all read (and some row wore Cal Poly’s), a row wearing none ends in the no-icon mark', r.icon);
+  ok(!r.unnamed[0].includes(r.C) && !r.unnamed[0].includes(r.X) && !r.unnamed[1].includes(r.B), 'reader: a picture the legend doesn’t name marks nothing — not Cal Poly’s, and it doesn’t make other rows “no icon”', r.unnamed);
+  ok(!r.offRow[1].includes(r.B), 'reader: a picture 5.5pt off a row (not its icon by position) still keeps that row from being called “no icon”', r.offRow);
+  ok(!r.notBare[1].includes(r.B), 'reader: on a page with a picture the app couldn’t read, no row is called “no icon”', r.notBare);
+  const P = r.parse;
+  ok(P.bareLetter[0][1] === false && P.bareCr[0][1] === true, 'reader: no icon makes a row credit only with a credit grade — “CR” yes, a letter grade no', P);
+  ok(P.cpScore[0][1] === false && P.cpScore[0][2] === true && P.cpScore[0][3] === true && /400$/.test(P.cpScore[0][4]), 'reader: on a row wearing Cal Poly’s icon, “400” is the end of the title — the class is being taken, not transfer', P.cpScore);
+  ok(P.cpGraded[0][1] === false, 'reader: a graded row wearing Cal Poly’s icon is never posted credit, whatever the date', P.cpGraded);
+  ok(P.w[0][1] === false, 'reader: a W in the running term (a withdrawal posts mid-term) isn’t posted credit', P.w);
+  ok(P.apNow[0][1] === true && P.apNow[0][3] === false && P.apNow[1][3] === true, 'reader: an ungraded transfer placeholder this term (AP 300) isn’t being taken; the ungraded class beside it is', P.apNow);
+  ok(P.past300[0][1] === true && P.past300[0][2] === false && P.past300[1][1] === false, 'reader: “300” with no icon in an earlier term is credit (transfer); a letter grade beside it isn’t', P.past300);
+  ok(r.legend[0] === 'arrow' && r.legend[1] === null, 'reader: the legend’s transfer picture is the one just left of its label on its line (not one further left, not one off the line)', r.legend);
+  ok(!r.noneHit[0].includes(r.B), 'reader: on a page where no class row wears an icon, nothing is marked “no icon”', r.noneHit);
+  ok(!r.far[0].includes(r.X), 'reader: an icon 6.5 above a row (the row above’s) isn’t that row’s', r.far);
+  ok(JSON.stringify(r.date) === '[2026,9,10]' && r.none === null, 'reader: the date the report was printed', r.date);
+  ok(JSON.stringify(r.last) === '[2026,9,10]', 'reader: with two dates (files read together), the last one — the file whose Course History is read', r.last);
+  ok(JSON.stringify(r.run) === '[true,false,false,true,false,false,true]', 'reader: a term is still running until its finals — Fall 2026 on Oct 10 yes, on Dec 20 no; Spring 2026 no; Spring 2027 yes; no date, no; Summer 2026 on Jun 15 no, on May 20 yes', r.run);
+  ok(JSON.stringify(r.oct) === JSON.stringify([['BIO 1114', true, false, 'BIO 1114'], ['CHEM 1120', true, false, 'CHEM 1120'], ['NR 1142', false, true, 'NR 1142']].map((x, i) => [x[0], x[1], x[2], r.oct[i][3]])) && !r.oct.some(x => /\b300\b/.test(x[3])),
+    'reader: printed in October, a graded Fall 2026 class is transfer; “300” is a grade (never part of the name); the ungraded one is being taken', r.oct);
+  ok(r.dec[0][1] === false && r.nodate[0][1] === false, 'reader: printed after Fall’s grades (or with no date), a graded Fall 2026 class is a Cal Poly class', { dec: r.dec, nodate: r.nodate });
+  ok(r.opts.length === 2 && r.opts[1][0] === 'R-2865' && r.opts[1][2] === true && r.opts[1][3] === 'Major Core Courses - Option' && /NR 3319/.test(r.opts[1][4]) && /NR 4445/.test(r.opts[1][4]) && !/4431/.test(r.opts[1][4]), 'reader: (2026 layout) “Choose one” over “Option 1 of 2” / “Option 2 of 2” is one pick-1 with every option’s classes', r.opts);
+  ok(r.opts[0][0] === 'R797-80' && r.opts[0][3] === 'NR/SS 4431 or NR 4442', 'reader: a cross-listed subject keeps its capitals (NR/SS, not Nr/ss)', r.opts[0]);
+  ok(JSON.stringify(r.choose) === '[["R-2866",true,3]]', 'reader: (2026 layout) “Choose one” is one line even when its lines don’t say “Option N of M”', r.choose);
+  ok(JSON.stringify(r.mixed) === '[["R620-10",true,"MATH 1261/MATH 1221"],["R620-30",false,"STAT 1210"]]', 'reader: (2026 layout) “Option 1 of 2” / “Option 2 of 2” beside a plain line: the options are one pick-1, the plain line its own', r.mixed);
+  await close();
+};
+
+/* Past classes reads the report's own verdicts onto the flowchart — only those: not a line you marked done, not each
+   class a "Select from …" line lists */
+tests.pastByReport = async () => {
+  const { page, close, log } = await openApp({ tables: XFER_T('Environmental Management & Protection', 'Junior'), height: 2400 });
+  await page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 });
+  await page.evaluate(() => {
+    const L = (label, status, extra) => Object.assign({ label, status, kind: 'major', ge: null, level: 'LN', code: null, units: null, courses: null, options: [], oneOf: false, used: [], listed: [] }, extra || {});
+    TC.audit = { reqs: [
+      L('1B: Critical Thinking Course', 'satisfied', { kind: 'ge', ge: '1B' }),
+      L('4B: Select from SS 1120, ES 1112, or GOV 2200', 'satisfied', { kind: 'ge', ge: '4B', options: ['SS 1120', 'ES 1112', 'GOV 2200'] }),
+      L('Approved Electives: SS 1120, ES 1112 or GOV 2200', 'satisfied', { options: ['SS 1120', 'ES 1112', 'GOV 2200'] }),
+      L('STAT 1110', 'satisfied', { options: ['STAT 1110'] }),
+      L('MATH 1264 or 1267 (GE 2)', 'satisfied', { options: ['MATH 1264', 'MATH 1267'] }),
+      L('NR 3363', 'not', { code: 'R797-30', options: ['NR 3363'] }),
+      L('NR 2208, BIO 2215, or BIO 2217', 'not', { options: ['NR 2208', 'BIO 2215', 'BIO 2217'] }),
+      L('SS 1120', 'in_progress', { options: ['SS 1120'] })], counts: {}, overrides: [{ code: 'R797-30' }], catalog: 'Fall Semester 2026' };
+  });
+  await toPast(page); await openYears(page);
+  const num = await page.evaluate(() => [(((() => { const g = plGate(); if (g.html) return null; const L = g.L, X = auditLines(TC.audit, L), R = L ? planRank(L) : X ? { audit: true, X, all: [], bare: true } : null; if (!R || R.done) return null; const o = document.getElementById('__lc'); if (o) o.remove(); const d = document.createElement('div'); d.id = '__lc'; d.style.cssText = 'position:absolute;left:-10000px;top:0;width:390px'; const ro = UI.plReqOpen; UI.plReqOpen = new Proxy({}, { get: () => true, has: () => true }); try { d.innerHTML = plLeftCard(R, L, /^[ABC]$/.test(UI.plPlan) ? UI.plPlan : 'A'); } finally { UI.plReqOpen = ro; } document.body.appendChild(d); const c0 = d.firstElementChild; if (c0) [...d.children].slice(1).forEach(x => c0.appendChild(x)); return c0; })()) || document.createElement('div'))?.classList?.contains('pll') ? (c => { const g = {}; [...c.querySelectorAll('.pll-leg > span')].forEach(e => { g[e.className] = +e.textContent.trim().split(' ')[0]; }); const n = +((((c.querySelector('.pll-bar') || { getAttribute: () => '' }).getAttribute('aria-label') || '').match(/of (\d+)$/) || [])[1] || '').split(' ')[0] || 0; return n ? `${(g.f || 0) + (g.p || 0)} of ${n} filled` : ''; })(document.getElementById('__lc').firstElementChild) : '', document.getElementById('__lc')?.remove()][0]);
+  ok(/^7 of [78] filled$/.test(String(num).trim()), 'by report: the count is the report’s — 5 Satisfied + 1 In Progress + 1 you marked done', num);
+  const rows = await page.evaluate(() => [...document.querySelectorAll('.pc-fhd ~ * .pc-row, .pc-fhd ~ .pc-row')].map(r => ({ st: r.className.replace('pc-row', '').trim(), main: ((r.querySelector('.pc-main') || {}).innerText || '').replace(/\s+/g, ' ').trim(), pf: (r.querySelector('.pc-pf') || {}).innerText || '' })));
+  const at = re => rows.find(r => re.test(r.main)) || {};
+  ok(at(/^GE Area 1B$/).st === 'done' && at(/^GE Area 1B$/).pf === 'On your report', 'by report: a GE spot whose area the report says is Satisfied is filled, “On your report”', at(/^GE Area 1B$/));
+  ok(at(/^STAT 1110\b/).st === 'done' && at(/^STAT 1110\b/).pf === 'On your report', 'by report: a class spot whose own line is Satisfied is filled', at(/^STAT 1110\b/));
+  ok(at(/^Choose one \(3-4 units, use lower\)/).st === 'done' && at(/^Choose one \(3-4 units, use lower\)/).pf === 'On your report', 'by report: a choose-one spot is filled by a Satisfied line naming only classes it takes (MATH 1264 or 1267)', at(/^Choose one \(3-4 units, use lower\)/));
+  ok(at(/^SS 1120\b/).st === 'taking' && at(/^SS 1120\b/).pf === 'On your report', 'by report: SS 1120 is in progress by its own line — a Satisfied “Select from SS 1120, ES 1112 …” line doesn’t make it done', at(/^SS 1120\b/));
+  ok(at(/^NR 3363\b/).st === 'need' && at(/^NR 3363\b/).pf !== 'On your report', 'by report: a line YOU marked done isn’t put on the flowchart as the report’s', at(/^NR 3363\b/));
+  ok(rows.filter(r => r.pf === 'On your report').length === 4, 'by report: nothing else says “On your report”', rows.filter(r => r.pf === 'On your report'));
+  ok(log.errors.length === 0, 'by report: no page errors', log.errors);
   await close();
 };
 
@@ -4309,195 +5646,776 @@ tests.planColors = async () => {
   await close();
 };
 
-tests.dpr = async () => {
-  const { page, close, log } = await openApp({});
-  await click(page, '[data-a="tab"][data-x="schedule"]'); await click(page, '[data-a="schedTab"][data-x="past"]'); await tick(page, 2500);
-  await page.locator('input[data-in="dprfile"]').setInputFiles('files/dpr-fixture.pdf');
-  for (let i = 0; i < 20 && !(await page.locator('#sheet .tc-dprrow').count()); i++) await tick(page, 500);
-  const sh = await page.locator('#sheet').innerText(), html = await page.locator('#sheet').innerHTML();
-  ok(/Past classes · 4/i.test(sh) && /In progress · Fall 2026/i.test(sh) && /Financial Accounting/.test(sh) && !/\(2214\)/.test(sh) && /BUS 2214/.test(sh) && /Business Administration/.test(sh), 'dpr: the report is read on the phone, split into past and this term', sh.slice(0, 400));
-  ok(!/9876543/.test(html) && !/\bA-\b|\bB\+|\bC\+/.test(sh), 'dpr: neither the EMPLID nor any grade reaches the screen');
-  ok(/PHIL 3331[\s\S]{0,80}already logged/.test(sh) && /BUS 3438[\s\S]{0,80}already in My Classes/.test(sh), 'dpr: classes already logged or already in My Classes are marked, not added twice');
-  await click(page, '[data-a="dprSave"]'); await tick(page, 800);
-  const hist = log.writes.filter(w => w.table === 'class_history'), saved = log.writes.filter(w => w.table === 'saved_classes');
-  const rows = hist[0] && hist[0].body;
-  ok(Array.isArray(rows) && rows.length === 3 && rows.every(r => Object.keys(r).sort().join() === 'code,professor,term,user_id,year') && rows.some(r => r.code === 'BUS 2214' && r.term === 'Fall' && r.year === 2024) && rows.some(r => r.code === 'AP 300' && r.professor === '🌍'), 'dpr: past classes upserted as {user_id, code, term, year, professor} — transfer credit marked, no grade', rows);
-  ok(saved.length === 1 && JSON.stringify(saved[0].body) === JSON.stringify([{ user_id: FX.ME.id, term: '2268', code: 'BUS 4488' }]), 'dpr: this term’s class goes to My Classes — even when the report also lists next term', saved[0] && saved[0].body);
-  ok(!JSON.stringify(hist.map(h => h.body)).includes('BUS 4401') && /BUS 4401[\s\S]{0,120}registered for Spring 2027/.test(sh), 'dpr: next term’s registered class is shown but never filed as finished');
-  ok(!JSON.stringify(log.writes).includes('9876543'), 'dpr: the EMPLID is in no write');
-  ok(log.errors.length === 0, 'dpr: no page errors', log.errors);
-  await close();
-};
-tests.dprWrong = async () => {
-  const { page, close } = await openApp({});
-  await click(page, '[data-a="tab"][data-x="schedule"]'); await click(page, '[data-a="schedTab"][data-x="past"]'); await tick(page, 2500);
-  await page.locator('input[data-in="dprfile"]').setInputFiles('files/not-a-dpr.pdf');
-  for (let i = 0; i < 20 && !/isn’t a Degree Progress Report/.test(await page.locator('#sheet').innerText()); i++) await tick(page, 500);
-  ok(/isn’t a Degree Progress Report/.test(await page.locator('#sheet').innerText()), 'dpr: another PDF is refused with what to do instead');
-  await close();
-};
-
 /* ============ Schedule split: Past classes and TermChamp's picks (Tate, 2026-10-06) ============
    "people first upload the DPR", then the Planner shows the best classes to take, with the best professors and friends. */
-tests.plannerPicks = async () => {
-  const { page, close, log } = await openApp({});
-  await page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 });
-  await click(page, '[data-a="tab"][data-x="schedule"]');
-  const tabs = await page.locator('.stabs [data-a="schedTab"]').evaluateAll(es => es.map(e => e.dataset.x + ':' + e.innerText.trim()));
-  ok(tabs.join('|') === 'mine:My Classes|plans:Plans|past:Past classes|planner:Planner', 'split: Schedule’s tabs are My Classes · Plans · Past classes · Planner', tabs);
-  for (const w of [320, 390]) { await page.setViewportSize({ width: w, height: 844 }); await tick(page, 300);
-    const f = await page.evaluate(() => { const s = document.querySelector('.stabs'); return { sw: s.scrollWidth, cw: s.clientWidth, tops: new Set([...s.children].map(c => Math.round(c.getBoundingClientRect().top))).size }; });
-    ok(f.sw <= f.cw && f.tops === 1, `split: the four tabs fit on one line at ${w}px`, f); }
-  /* Past classes: the ledger, then the flowchart in term bubbles, then the record */
-  await click(page, '[data-a="schedTab"][data-x="past"]'); await tick(page, 2500);
-  const past = await page.evaluate(() => { const sc = document.getElementById('scroll'), at = sel => { const e = sc.querySelector(sel); return e ? e.getBoundingClientRect().top + sc.scrollTop : -1; };
-    const h = [...sc.querySelectorAll('.tc-sech, h2, .tc-ltitle')].map(x => x.innerText.trim());
-    return { ledger: at('.tc-lrow'), grid: at('.tc-year'), hist: [...sc.querySelectorAll('.card')].findIndex(c => /Classes you’ve taken/.test(c.innerText)), histTop: (() => { const c = [...sc.querySelectorAll('.card')].find(c => /Classes you’ve taken/.test(c.innerText)); return c ? c.getBoundingClientRect().top + sc.scrollTop : -1; })(),
-      picks: !!sc.querySelector('.pk-hero'), dpr: !!sc.querySelector('.tc-dpr'), oldHead: /(^|\n)Past classes\n\d/.test(sc.innerText.replace(/^[\s\S]*?Planner\n/, '')),
-      terms: sc.querySelectorAll('.tc-term').length, termCells: sc.querySelectorAll('.tc-term .tc-cell').length, cells: sc.querySelectorAll('.tc-cell').length,
-      termBg: sc.querySelector('.tc-term') && getComputedStyle(sc.querySelector('.tc-term')).backgroundColor, yearBg: sc.querySelector('.tc-yearh') && getComputedStyle(sc.querySelector('.tc-yearh')).backgroundColor,
-      termHead: sc.querySelector('.tc-termh') && sc.querySelector('.tc-termh').innerText.replace(/\s+/g, ' ').trim() }; });
-  ok(past.ledger > 0 && past.grid > past.ledger && past.histTop > past.grid && !past.picks && !past.dpr, 'past: the ledger first, then the flowchart, then the classes you’ve taken — no picks, and no DPR card when there is a record', past);
-  ok(past.terms >= 2 && past.termCells === past.cells && /rgba\(37, 99, 235, 0\.06\)/.test(past.termBg) && /rgba\(37, 99, 235, 0\.1\)/.test(past.yearBg), 'past: each term of an open year is its own translucent blue bubble, every class inside one', past);
-  ok(/^FALL \d+ of \d+ done · \d+ units$/i.test(past.termHead), 'past: a term bubble says how much of it is done and its units', past.termHead);
-  const doneInk = await page.evaluate(() => { const d = document.querySelector('#scroll .tc-cell.done .tc-dot'); return d && getComputedStyle(d).color; });
-  ok(doneInk === 'rgb(15, 118, 110)', 'past: a done ✓ is teal in light mode', doneInk);
-  /* Planner: TermChamp's picks */
-  await click(page, '[data-a="schedTab"][data-x="planner"]'); await tick(page, 800);
-  const pl = await page.evaluate(() => { const sc = document.getElementById('scroll'), L = TCPL.ledger(), R = planRecs(L), done = new Set(TCPL.completed().map(c => TCPL.canon(c) || c)), mine = new Set([...myCodes()].map(c => TCPL.canon(c) || c));
-    const shown = [...sc.querySelectorAll('.pk-hero .pk')].map(p => p.querySelector('.pk-main').dataset.x);
-    return { shown, picks: R.picks.map(c => ({ code: c.code, key: c.key, score: c.score, st: c.prereq, n: !!c.n })), ledgerHere: !!sc.querySelector('.tc-lrow'), gridHere: !!sc.querySelector('.tc-year'),
-      bad: R.picks.filter(c => done.has(TCPL.canon(c.code) || c.code) || mine.has(TCPL.canon(c.code) || c.code) || !secsOf(c.code).length).map(c => c.code),
-      sorted: R.picks.every((c, i) => !i || R.picks[i - 1].score >= c.score), keys: new Set(R.picks.map(c => c.key)).size,
-      eyebrow: (sc.querySelector('.pk-ey') || {}).innerText, rows: [...sc.querySelectorAll('.pk-sec .recs-h')].map(h => h.innerText.trim()), order: (() => { const a = sc.querySelector('.pk-hero'), b = sc.querySelector('.pk-sec'), c = sc.querySelector('details.pk-all'); return !!(a && b && c && (a.compareDocumentPosition(b) & 4) && (b.compareDocumentPosition(c) & 4)); })() }; });
-  ok(pl.shown.length >= 1 && pl.shown.length <= 4 && pl.shown.join() === pl.picks.map(c => c.code).join(), 'picks: up to four classes, shown in the order they rank', pl);
-  ok(!pl.bad.length && pl.sorted && pl.keys === pl.picks.length, 'picks: never a class you’ve taken, are taking, or that isn’t offered; one per requirement; best score first', pl);
-  ok(!pl.ledgerHere && !pl.gridHere && pl.eyebrow === 'FALL 2026 CLASSES', 'picks: the Planner has no ledger or flowchart (they’re in Past classes); the picks are for Fall 2026', pl);
-  ok(pl.order && pl.rows.includes('Best professors teaching what you need'), 'picks: the rows come after the picks, then the full Still need list', pl.rows);
-  /* the rules a pick has to follow */
-  const rk = await page.evaluate(() => { const L = TCPL.ledger(), all = planRecs(L).all;
-    const was = TC.profile.class_standing;
-    TC.profile.class_standing = 'Senior'; const sen = planRecs(L); TC.profile.class_standing = was;
-    const top = sen.picks[0]; const pre = all.every(c => !c.prereq || ['met', 'concurrent', 'none'].includes(c.prereq));
-    return { pre, top: top && { code: top.code, behind: top.behind, yr: top.yr, tag: pickReason(top).t }, rest: sen.picks.slice(1).map(c => c.behind), allBehind: sen.all.filter(c => c.behind).map(c => c.code) }; });
-  ok(rk.top && rk.top.behind > 0 && rk.top.tag === 'Top priority', 'picks: for a senior, a class their flowchart put in an earlier year is #1, tagged “Top priority”', rk);
-  /* the + opens Add to your week for that class's best section */
-  const first = pl.shown[0];
-  await click(page, '.pk-hero .pk-add >> nth=0'); await tick(page, 300);
-  const at = await page.evaluate(() => UI.sheet && UI.sheet.type === 'addTo' && SEC[UI.sheet.id] && SEC[UI.sheet.id].code);
-  ok(at === first, 'picks: + opens Add to your week for that class', { at, first });
-  await click(page, '#sheet .xbtn[data-a="closeSheet"]'); await tick(page, 200);
-  /* the Why sheet */
-  await click(page, '.pk-hero .pk-main >> nth=0'); await tick(page, 300);
-  const why = await page.evaluate(() => { const s = document.getElementById('sheet'); return { t: s.innerText, n: s.querySelectorAll('.pw').length, nums: [...s.querySelectorAll('.pw-n')].map(x => x.innerText.trim()).join(), add: !!s.querySelector('[data-a="addPlanSheet"]'), open: !!s.querySelector('[data-a="openClass"]') }; });
-  ok(new RegExp(first.replace(' ', '\\s') + '[\\s\\S]*Why it’s #1 of your picks for Fall 2026').test(why.t) && why.n >= 3 && why.nums.startsWith('1,2,3') && why.add && why.open, 'why: tapping a pick says, numbered, why it’s #1 — with Add and Open class', why);
-  ok(/\d+ sections? in Fall 2026\s*\d+ fits? your week/.test(why.t), 'why: it says how many sections there are and how many fit your week', why.t.slice(0, 500));
-  await click(page, '#sheet .xbtn[data-a="closeSheet"]'); await tick(page, 200);
-  /* rows: a friend in one of the classes, and a class that also fills a GE area */
-  const inj = await page.evaluate(() => { const L = TCPL.ledger(), R = planRecs(L), c = R.picks[0], c2 = R.picks[1] || c, ge = L.needU.find(n => n.type === 'ge' && n.area);
-    TCPL.geCourses.push({ code: c.code, name: 'fixture', area: 'Area ' + ge.area, areaKey: ge.area, units: 4, prof: '__tbd', workload: '' });
-    const f = TC.friends[0]; PEOPLE[f].unplaced = (PEOPLE[f].unplaced || []).concat([c2.code]); render(true);
-    return { fill: c.code, friend: c2.code, short: PEOPLE[f].short }; });
-  await tick(page, 300);
-  const rw = await page.evaluate(() => [...document.querySelectorAll('#scroll .pk-sec')].map(s => [s.querySelector('.recs-h').innerText.trim(), [...s.querySelectorAll('.rmini')].map(b => b.dataset.x)]));
-  ok(rw.map(r => r[0]).join('|') === 'Your friends are taking|Best professors teaching what you need|Fill the most requirements', 'rows: friends, best professors, then classes that fill the most — each a row you scroll', rw);
-  ok(rw[0] && rw[0][1].includes(inj.friend) && rw[2] && rw[2][1].includes(inj.fill), 'rows: the class a friend is in, and the class that also fills a GE area, are in their rows', { rw, inj });
-  const sx = await page.evaluate(() => { const r = document.querySelector('#scroll .pk-sec .recs-row'); return r && getComputedStyle(r).overflowX; });
-  ok(/auto|scroll/.test(sx), 'rows: they scroll sideways', sx);
-  /* rows carry what they say */
-  const rows = await page.evaluate(() => { const R = planRecs(TCPL.ledger()); return { fr: R.friends.every(c => c.fr.length > 0), fill: R.fill.every(c => c.reqN >= 2), pr: R.profs.every((p, i) => !i || R.profs[i - 1].r >= p.r), prN: R.profs.length }; });
-  ok(rows.fr && rows.fill && rows.pr, 'rows: friends’ classes have friends in them, “fill the most” counts at least twice, professors best-rated first', rows);
-  ok(log.errors.length === 0, 'picks: no page errors', log.errors);
-  await close();
-
-  /* Nothing on the record: the Degree Progress Report comes first, on both tabs */
-  const T0 = Object.assign({}, FX.TABLES, { class_history: [], class_waivers: [] });
-  const o = await openApp({ tables: T0 });
-  await click(o.page, '[data-a="tab"][data-x="schedule"]'); await click(o.page, '[data-a="schedTab"][data-x="planner"]'); await tick(o.page, 2500);
-  let d = await o.page.evaluate(() => { const sc = document.getElementById('scroll'); return { dpr: !!sc.querySelector('.tc-dpr'), t: sc.innerText, input: sc.querySelectorAll('.tc-dpr input[data-in="dprfile"]').length, log: !!sc.querySelector('.tc-dpr [data-a="sheet"][data-x="logClass"]'), picks: !!sc.querySelector('.pk-hero'), skip: !!sc.querySelector('[data-a="plShowPicks"]'), go: (() => { const b = sc.querySelector('.tc-dpr-go'); return b && Math.round(b.getBoundingClientRect().height); })() }; });
-  ok(d.dpr && /Upload your Degree Progress Report/.test(d.t) && d.input === 1 && d.log && !d.picks && d.skip && d.go >= 44, 'dpr first: with nothing on your record the Planner asks for the DPR first (upload, or add classes one at a time)', d);
-  await click(o.page, '[data-a="plShowPicks"]'); await tick(o.page, 400);
-  d = await o.page.evaluate(() => { const sc = document.getElementById('scroll'); return { dpr: !!sc.querySelector('.tc-dpr'), nudge: !!sc.querySelector('.tc-dpr-row input[data-in="dprfile"]'), picks: !!sc.querySelector('.pk-hero'), key: localStorage.getItem('tc-pl-nodpr:' + TC.user.id) }; });
-  ok(!d.dpr && d.nudge && d.picks && d.key === '1', 'dpr first: “show picks” shows them, keeps a small upload row, and is remembered for this account', d);
-  await click(o.page, '[data-a="schedTab"][data-x="past"]'); await tick(o.page, 400);
-  d = await o.page.evaluate(() => { const sc = document.getElementById('scroll'), a = sc.querySelector('.tc-dpr'), b = sc.querySelector('.tc-lrow'); return { first: !!(a && b && (a.compareDocumentPosition(b) & 4)), hist: /Classes you’ve taken/.test(sc.innerText) }; });
-  ok(d.first && !d.hist, 'dpr first: Past classes opens on the DPR card, above the ledger (no empty record card)', d);
-  await o.page.locator('.tc-dpr input[data-in="dprfile"]').setInputFiles('files/dpr-fixture.pdf');
-  for (let i = 0; i < 20 && !(await o.page.locator('#sheet .tc-dprrow').count()); i++) await tick(o.page, 500);
-  ok(/Past classes · \d/i.test(await o.page.locator('#sheet').innerText()), 'dpr first: the card’s upload reads the report');
-  ok(o.log.errors.length === 0, 'dpr first: no page errors', o.log.errors);
-  await o.close();
-  /* a freshman has nothing to upload: straight to the picks */
-  const T1 = Object.assign({}, T0, { profiles: FX.TABLES.profiles.map(p => p.id === FX.ME.id ? Object.assign({}, p, { class_standing: 'Freshman' }) : p) });
-  const f = await openApp({ tables: T1 });
-  await click(f.page, '[data-a="tab"][data-x="schedule"]'); await click(f.page, '[data-a="schedTab"][data-x="planner"]'); await tick(f.page, 2500);
-  d = await f.page.evaluate(() => { const sc = document.getElementById('scroll'); return { dpr: !!sc.querySelector('.tc-dpr'), picks: sc.querySelectorAll('.pk-hero .pk').length, st: TC.profile.class_standing }; });
-  ok(d.st === 'Freshman' && !d.dpr && d.picks > 0, 'dpr first: a freshman with no record goes straight to the picks', d);
-  await f.close();
-};
 
 /* The ranking rules, each on a small made-up ledger over the fixture's real Fall 2026 classes.
    Offered and free: BUS 3346, BUS 3387, BUS 4401, BUS 4488, ECON 2303, STAT 2170. Taking now: BUS 3431. The student is a Junior. */
-tests.plannerRank = async () => {
+/* ============ The report → Planner → Plans flow (Tate, 2026-10-08) ============
+   dpr-planner-plans-design-2026-10-08.md · canvas "DPR to Plans Flow". The fixture report (files/dpr-fixture.pdf,
+   made by files/make-dpr-fixture.py) is SYNTHETIC — Jordan Fixture, EMPLID 9876543, invented verdicts and grades —
+   laid out the way Cal Poly's real report prints (read against a real one, 2026-10-08; nothing of it is in here). */
+const NOREC = () => Object.assign({}, FX.TABLES, { class_history: [], class_waivers: [], plans: FX.TABLES.plans.filter(p => p.user_id !== FX.ME.id) });
+const NOPLANS = () => Object.assign({}, FX.TABLES, { plans: FX.TABLES.plans.filter(p => p.user_id !== FX.ME.id) });
+const uploadDpr = async (page, sel) => { await page.locator(sel || 'input[data-in="dprfile"]').first().setInputFiles('files/dpr-fixture.pdf'); for (let i = 0; i < 24 && !(await page.locator('#sheet .dr-h1, #sheet .tc-err').count()); i++) await tick(page, 500); };
+/* `before`: plan the term registration is coming for, before it opens (what the Planner looks like the week
+   before Spring 2027 registration). The shipped config plans Fall 2026 — in session, so registration counts as open. */
+const toPlanner = async (page, before) => { await page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 }); if (before) await page.evaluate(() => { CFG.REGISTRATION_TERM = CFG.TERM_LABEL; }); await click(page, '[data-a="tab"][data-x="schedule"]'); await click(page, '[data-a="schedTab"][data-x="planner"]'); await tick(page, 2500); };
+const planWrites = log => log.writes.filter(w => w.table === 'plans' && w.m === 'POST');
+
+tests.tabsOrder = async () => {
+  const { page, close } = await openApp({});
+  await click(page, '[data-a="tab"][data-x="schedule"]');
+  const tabs = await page.locator('.stabs [data-a="schedTab"]').evaluateAll(es => es.map(e => e.dataset.x + ':' + e.innerText.trim()));
+  ok(tabs.join('|') === 'mine:My Classes|plans:Plans|planner:Builder|past:Past classes', 'tabs: My Classes · Plans · Builder · Past classes — Past classes furthest right (Tate, 2026-10-08; Builder 2026-10-11)', tabs);
+  for (const w of [320, 390]) { await page.setViewportSize({ width: w, height: 844 }); await tick(page, 300);
+    const f = await page.evaluate(() => { const s = document.querySelector('.stabs'); return { sw: s.scrollWidth, cw: s.clientWidth, tops: new Set([...s.children].map(c => Math.round(c.getBoundingClientRect().top))).size }; });
+    ok(f.sw <= f.cw && f.tops === 1, `tabs: the four tabs fit on one line at ${w}px`, f); }
+  await close();
+};
+
+/* Reader v2 on the report's real shape: verdict lines with the code at the end, wrapped words and codes,
+   "· Units:" lines, "1 of N Options", "Courses Used" tables with grades — and nothing personal kept. */
+tests.dprAudit = async () => {
+  const { page, close } = await openApp({});
+  await page.waitForFunction(() => TC.ready, null, { timeout: 8000 });
+  await page.evaluate(() => TC.loadPlanner());
+  await page.waitForFunction(() => !!window.TCPL, null, { timeout: 8000 });
+  const r = await page.evaluate(async () => {
+    const txt = ['Page 1 of 1', 'Name: Jordan Fixture', 'EMPLID: 9876543', 'Date Printed: September 28, 2026 10:00', 'Degree Progress Report', 'For Jordan Fixture',
+      'BUS Primary BS UG Major Fall Semester 2024',
+      'Overall Requirement Not Satisfied: ***GENERAL EDUCATION REQUIREMENTS 2026-2028 Catalog - 48 Units Required (RG-0006)***',
+      'GE AREA 1', 'Satisfied: GE AREA 1: ENGLISH COMMUNICATION AND CRITICAL THINKING - 3 Units Required (R-0070)',
+      '1A', 'Satisfied: 1A: WRITTEN COMMUNICATION COURSE (Note: A minimum grade of C- is required) - 3 Units Required (R70-10)', '· Units: 3.00 required, 3.00 used',
+      'Courses Used', 'Term Subject Catalog Nbr Course Title Grade Units Requirement', '2024 Fall ENGL 1134 Writing and Rhetoric B+ 3.00 1A',
+      'GE AREA 4', 'Not Satisfied: GE AREA 4: SOCIAL AND BEHAVIORAL SCIENCES - 3 Units Required (R-0078)',
+      '4B', 'Not Satisfied: 4B: LOWER-DIVISION SOCIAL SCIENCES COURSE - 3 Units Required (R78-', '20)', '· Units: 3.00 required, 0.00 used, 3.00 needed',
+      'Overall Requirement Not Satisfied: ***BUSINESS PRIMARY MAJOR B.S. 2026-2028 Catalog - 60 Minimum Units Required (RG-0010)***',
+      'BUSINESS MAJOR FINANCE COURSE', 'Not Satisfied: BUSINESS MAJOR FINANCE COURSE - 3 Units Required in 1 of 2 Options (R-0036)',
+      'BUS 3387 (OPT 1)', 'Not Satisfied: BUS 3387 - 3 Units Required (Option 1 of 2) (R36-10)', '· Units: 3.00 required, 0.00 used, 3.00 needed',
+      'BUS 4401 (OPT 2)', 'Not Satisfied: BUS 4401 - 3 Units Required (Option 2 of 2) (R36-20)', '· Units: 3.00 required, 0.00 used, 3.00 needed',
+      'BUSINESS MAJOR SPECIFIED COURSES', 'Overall Requirement Not Satisfied: BUSINESS MAJOR SPECIFIED COURSES - 6 Units Required (R-0035)',
+      'BUS 214 (2214)', 'Satisfied: BUS 214 (2214) - 3 Units Required (R35-30)', '· Units: 3.00 required, 3.00 used',
+      'BUS 3438', 'In Progress: BUS 3438 - 3 Units Required (R35-70)',
+      'APPROVED ELECTIVES', 'Not Satisfied: APPROVED ELECTIVES: Select From the Following: BUS 4436, 4437, or ECON 2303 - 6 Units Required (R35-80)', '· Units: 6.00 required, 3.00 used, 3.00 needed',
+      '2026 Spr BUS 4488 Fixture Digital Marketing C+ 3.00', '   BUS 4488 has been directed to this line.', '   (1234567)',
+      'Not Satisfied: SEE ADVISOR 1234567 - 3 Units Required (R35-90)',
+      'Not Satisfied: PETITION FOR JORDAN FIXTURE - 3 Units Required (R35-91)',
+      'GRADUATION WRITING REQUIREMENT', 'Not Satisfied: GRADUATION WRITING REQUIREMENT: - Satisfactory Completion Required',
+      'Course History', 'Term Subject Catalog Title Grade Units', '2024 Fall BUS 214 (2214) Financial Accounting A- 4.00'].join('\n');
+    const p = TCPL.dprParse(txt), a = p.audit, js = JSON.stringify(a);
+    return { ok: a.ok, counts: a.counts, n: a.blocks, reqs: a.reqs.map(b => [b.level, b.code, b.status, b.kind, b.ge, b.label, (b.options || []).join('/'), b.units && b.units.need, !!b.oneOf]),
+      leak: (js.match(/9876543|1234567|"[ABCDF][+-]?"|B\+|C\+|A-|C-|Jordan|minimum grade/g) || []), rows: p.rows.length };
+  });
+  const has = f => r.reqs.some(f);
+  ok(r.ok && r.rows === 1, 'audit: dprParse still reads the Course History table and now returns the report’s verdicts too', r);
+  ok(r.counts.satisfied === 2 && r.counts.not === 4 && r.counts.in_progress === 1 && r.counts.unknown === 2 && r.n === 16 && r.reqs.length === 9, 'audit: counts use the finest level printed — a requirement with lines counts its lines, a group (RG) never counts', { counts: r.counts, n: r.n, reqs: r.reqs.length });
+  ok(!has(x => x[0] === 'RG') && !has(x => x[1] === 'R-0070' || x[1] === 'R-0078' || x[1] === 'R-0035'), 'audit: no group and no requirement that has lines is counted itself', r.reqs.map(x => x[1]));
+  ok(has(x => x[1] === 'R78-20' && x[2] === 'not' && x[3] === 'ge' && x[4] === '4B' && x[7] === 3 && /^4B: Lower-division Social Sciences Course$/.test(x[5])), 'audit: a GE line keeps its area and units needed — even with its code wrapped onto the next line', r.reqs);
+  ok(has(x => x[1] === 'R-0036' && x[2] === 'not' && x[6] === 'BUS 3387/BUS 4401' && x[8]) && !has(x => x[1] === 'R36-10' || x[1] === 'R36-20'), 'audit: “in 1 of 2 Options” counts once, with both options’ classes', r.reqs);
+  ok(has(x => x[1] === 'R35-30' && x[2] === 'satisfied' && x[6] === 'BUS 2214'), 'audit: the report’s own “BUS 214 (2214)” pair is read as today’s code', r.reqs);
+  ok(has(x => x[1] === 'R35-80' && x[6] === 'BUS 4436/BUS 4437/ECON 2303' && x[7] === 3), 'audit: “BUS 4436, 4437, or ECON 2303” — a bare number takes the subject before it', r.reqs);
+  ok(has(x => x[1] === 'R35-70' && x[2] === 'in_progress'), 'audit: “In Progress:” is read', r.reqs);
+  ok(has(x => x[1] === null && x[2] === 'not' && x[3] === 'gwr'), 'audit: a verdict with no code (the writing requirement) is read as a line', r.reqs);
+  ok(has(x => x[1] === 'R35-90' && x[2] === 'unknown' && /couldn’t read/.test(x[5])) && has(x => x[1] === 'R35-91' && x[2] === 'unknown' && /couldn’t read/.test(x[5])), 'audit: a line whose words carry an ID — or the student’s name — is kept as “can’t check”, never with its words', r.reqs);
+  ok(!r.leak.length, 'audit: no grade, no EMPLID, no other 7-digit number and no name anywhere in what was read', r.leak);
+  /* the 2026 catalog's layout (read on a real semester-catalog report, 2026-10-09): the heading is the name,
+     the verdict's words are notes and counts, the code sits on its own line with no dash for a group or requirement */
+  const n = await page.evaluate(() => {
+    const txt = ['Page 1 of 2', 'Name: Jordan Fixture', 'EMPLID: 9876543', 'Date Printed: October 8, 2026 18:31', 'Degree Progress Report', 'For Jordan Fixture',
+      'ITP Primary BS UG Major Fall Semester 2026', 'UNDERGRADUATE DEGREE REQUIREMENTS', 'Overall Requirement Not Satisfied: 2026-Current Catalog', '(RG5)',
+      'TOTAL UNITS: DEGREE REQUIREMENT (W)', 'Satisfied: (R2847)',
+      'TOTAL UNITS: MINIMUM UNIT DEGREE REQUIREMENT (W)', 'Satisfied: 120 units', 'Excess units not counted.', '(R2847-10)', '· Units: 117.33 required, 117.33 used',
+      'GENERAL EDUCATION REQUIREMENTS', 'Satisfied: 2026-Current Catalog', '43 units required', 'NOTE: Some Major/Support courses also satisfy GE.', '(RG6)',
+      'GE AREA 1: ENGLISH COMMUNICATION AND CRITICAL THINKING', 'Satisfied: 9 units required', '(R70)',
+      '1A: WRITTEN COMMUNICATION COURSE', 'Satisfied: NOTE: Minimum grade of C- required', '3 units', '(R70-10)', '· Courses: 1.00 required, 1.00 used',
+      'Courses Used', 'Term Subject Catalog Nbr Course Title Grade Units Requirement', 'Designation', 'Status', '2025 Fall ENGL 1134 Writing and Rhetoric B+ 3.00 1A',
+      '4A: Select from ES 1112, GOV 2200, HIST 2201, 2202, or POLS 1112', 'Not Satisfied: 3 units', '(R21-10)', '· Courses: 1.00 required, 0.00 used, 1.00 needed',
+      'INDUSTRIAL TECHNOLOGY & PACKAGING CONCENTRATION: INDUSTRIAL TECHNOLOGY', 'Not Satisfied: (2026-Current Catalog)', '30 units required', '(RG4089)', '· Units: 30.00 required, 22.35 used, 7.65 needed',
+      'CORE COURSES', 'Overall Requirement Not Satisfied: 24 units', '(R2066)',
+      'ITP 3390', 'Not Satisfied: 3 units', '(R2066-20)', '· Courses: 1.00 required, 0.00 used, 1.00 needed',
+      'Page 2 of 2', 'Name: Jordan Fixture', 'EMPLID: 9876543', 'Date Printed: October 8, 2026 18:31',
+      'STAT 1110 or 1210', 'Satisfied: 3 units', '(R2066-30)', '· Courses: 1.00 required, 1.00 used',
+      'MATH 1261 (GE 2) (Option 1 of 2)', 'Satisfied: 4 units', '(R2066-40)',
+      'MATH 1221 (Option 2 of 2)', 'Not Satisfied: 4 units', '(R2066-50)',
+      'Course History', 'Term Subject Catalog Nbr Title Grade Units Status', '2025 Fall ENGL 1134 Writing and Rhetoric B+ 3.00 Taken'].join('\n');
+    const a = TCPL.dprParse(txt).audit, js = JSON.stringify(a);
+    return { counts: a.counts, n: a.blocks, total: [a.units_used, a.units_needed, a.units_required], reqs: a.reqs.map(b => [b.level, b.code, b.status, b.kind, b.ge, b.label, (b.options || []).join('/'), !!b.oneOf]),
+      leak: (js.match(/9876543|"[ABCDF][+-]?"|B\+|C-|Jordan|Minimum grade/g) || []) };
+  });
+  const nh = f => n.reqs.some(f);
+  ok(n.n === 13 && n.counts.satisfied === 4 && n.counts.not === 2 && n.counts.unknown === 0 && n.reqs.length === 6 && !nh(x => x[0] !== 'LN'), '2026 layout: groups (RG5), requirements (R70) and lines (R70-10) are told apart with no dash; only lines count', n);
+  ok(nh(x => x[1] === 'R70-10' && x[2] === 'satisfied' && x[3] === 'ge' && x[4] === '1A' && x[5] === '1A: Written Communication Course'), '2026 layout: the heading above the verdict is the line’s name — not the verdict’s note', n.reqs);
+  ok(nh(x => x[1] === 'R21-10' && x[2] === 'not' && x[4] === '4A' && x[6] === 'ES 1112/GOV 2200/HIST 2201/HIST 2202/POLS 1112' && /^4A: Select from ES 1112, GOV 2200, HIST 2201, 2202, or POLS 1112$/.test(x[5])), '2026 layout: “4A: Select from …” keeps its words and its classes', n.reqs);
+  ok(nh(x => x[1] === 'R2066-20' && x[2] === 'not' && x[3] === 'conc' && x[6] === 'ITP 3390') && nh(x => x[1] === 'R2066-30' && x[6] === 'STAT 1110/STAT 1210'), '2026 layout: a class heading is the line’s class (“STAT 1110 or 1210” is either) — across a page break', n.reqs);
+  ok(nh(x => x[1] === 'R2066-40' && x[2] === 'satisfied' && x[7] && x[5] === 'MATH 1261 or MATH 1221' && x[6] === 'MATH 1261/MATH 1221') && !nh(x => x[1] === 'R2066-50'), '2026 layout: two “(Option k of 2)” lines among others count once, as a pick-1 that one satisfies', n.reqs);
+  ok(n.total.join() === '117.33,0,117.33' && nh(x => x[1] === 'R2847-10' && x[3] === 'units' && x[5] === 'Total Units: Minimum Unit Degree Requirement'), '2026 layout: the total units line and its counts (the “(W)” mark dropped)', n);
+  ok(!n.leak.length, '2026 layout: nothing personal and no grade in what was read', n.leak);
+  /* edges (second review, 2026-10-09): a bare name line above a verdict, the tail of a wrapped course row, a
+     verdict whose code is on the next page (after the repeated header with the name), and a requirement that
+     says Not Satisfied while each of its lines is Satisfied */
+  const e = await page.evaluate(() => {
+    const furn = n => ['Page ' + n + ' of 2', 'Name: Jordan Fixture', 'EMPLID: 9876543', 'Date Printed: October 8, 2026 18:31', 'Degree Progress Report', 'For Jordan Fixture'];
+    const txt = furn(1).concat(['ITP Primary BS UG Major Fall Semester 2026',
+      'CORE COURSES', 'Overall Requirement Not Satisfied: 24 units', '(R2066)',
+      'ITP 3390', 'Not Satisfied: 3 units', '(R2066-20)',
+      'Jordan Fixture', 'Not Satisfied: 3 units', '(R2066-30)',
+      'Courses Used', 'Term Subject Catalog Nbr Course Title Grade Units Requirement', '2025 Spring ITP 2260 Intro to Packaging', 'W 4.00 1B',
+      'Not Satisfied: 3 units', '(R2066-40)',
+      'ITP 4410', 'Not Satisfied: 3 units'], furn(2), ['(R2066-50)',
+      'SUPPORT', 'Overall Requirement Not Satisfied: 6 units minimum', '(R2070)',
+      'STAT 1110', 'Satisfied: 3 units', '(R2070-10)', 'STAT 1210', 'Satisfied: 3 units', '(R2070-20)',
+      'Course History', 'Term Subject Catalog Nbr Title Grade Units Status', '2025 Spring ITP 2260 Intro to Packaging W 4.00 Taken']).join('\n');
+    const a = TCPL.dprParse(txt).audit, js = JSON.stringify(a.reqs);
+    return { reqs: a.reqs.map(b => [b.code, b.status, b.label]), leak: (js.match(/Jordan|Fixture|9876543|4\.00|Degree Progress Report/g) || []) };
+  });
+  const eh = f => e.reqs.some(f);
+  ok(!e.leak.length, 'edges: a bare name line, a row’s tail and the repeated page header never become a label', e);
+  ok(eh(x => x[0] === 'R2066-40' && x[1] === 'not'), 'edges: a line under a course row’s tail is still read — as itself, not as “can’t check”', e.reqs);
+  ok(eh(x => x[0] === 'R2066-50' && x[1] === 'not' && x[2] === 'ITP 4410'), 'edges: a code on the next page still closes its verdict, and the line keeps its own name', e.reqs);
+  ok(eh(x => x[0] === 'R-2070' && x[1] === 'not') && !eh(x => x[0] === 'R2070-10' || x[0] === 'R2070-20'), 'edges: a requirement that says Not Satisfied counts as open even when each of its lines is Satisfied — never dropped', e.reqs);
+  /* the name is taken from the header only ("Name:", and "For …" right after the title), accents and all — a
+     note that happens to start with "For" doesn't make every word in it a name */
+  const nm = await page.evaluate(() => {
+    const txt = ['Page 1 of 1', 'Name: José García', 'EMPLID: 9876543', 'Degree Progress Report', 'For José García', 'ITP Primary BS UG Major Fall Semester 2026',
+      'GE AREA 1: ENGLISH COMMUNICATION', 'Satisfied: 9 units required', '(R70)',
+      'For more information about written communication see the catalog',
+      '1A: WRITTEN COMMUNICATION COURSE', 'Satisfied: NOTE: Minimum grade of C- required', '3 units', '(R70-10)',
+      'García', 'Not Satisfied: 3 units', '(R70-20)',
+      'Course History', 'Term Subject Catalog Nbr Title Grade Units Status', '2025 Fall ENGL 1134 Writing and Rhetoric B+ 3.00 Taken'].join('\n');
+    const a = TCPL.dprParse(txt).audit; return { reqs: a.reqs.map(b => [b.code, b.status, b.label, b.ge]), leak: (JSON.stringify(a.reqs).match(/José|García|Jose|Garcia/g) || []) };
+  });
+  ok(nm.reqs.some(x => x[0] === 'R70-10' && x[2] === '1A: Written Communication Course' && x[3] === '1A') && !nm.leak.length && nm.reqs.some(x => x[0] === 'R70-20' && !/Garc/.test(x[2])), 'edges: an accented name is never a label, and a “For more information …” note doesn’t blank the lines around it', nm);
+  /* and before anything is stored, every line is checked again (auditRow): an ID in the words drops them,
+     counts are numbers, class codes are class codes, nothing but the ten fields */
+  const row = await page.evaluate(() => auditRow({ label: 'EMPLID 1234567 Jordan Fixture', status: 'not', kind: 'major', code: 'R35-90', units: { req: '3', used: 'x', need: 3 }, options: ['BUS 3346', '1234567', 'not a code'], note: 'free text', grade: 'A' }));
+  ok(row.label === '' && JSON.stringify(row.units) === '{"req":3,"used":null,"need":3}' && row.options.join() === 'BUS 3346' && Object.keys(row).sort().join() === 'code,courses,ge,kind,label,level,listed,oneOf,options,status,units,used', 'audit: what’s stored is checked again — no ID-bearing words, numbers only, class codes only, nothing extra', row);
+  await close();
+};
+
+/* Screen 2 (Report read) and screen 3 (Check what was read), then the save. */
+tests.dprRead = async () => {
+  let failOnce = true;
+  const hook = (url, m) => { if (failOnce && m === 'POST' && /\/rest\/v1\/class_history$/.test(url.pathname)) { failOnce = false; return { status: 500, body: JSON.stringify({ message: 'fixture: the save failed', code: 'XX000' }) }; } };
+  const { page, close, log } = await openApp({ tables: Object.assign({}, NOREC(), { planner_prefs: [] }), hook });
+  await toPlanner(page);
+  const empty = await page.evaluate(() => { const sc = document.getElementById('scroll'), c = sc.querySelector('.tc-dpr'); return c && { t: c.innerText, input: c.querySelectorAll('input[data-in="dprfile"]').length, laptop: !!c.querySelector('[data-a="plLaptop"]'), log: !!c.querySelector('[data-a="sheet"][data-x="logClass"]'), skip: !!c.querySelector('[data-a="plShowPicks"]'), plan: !!sc.querySelector('.pl-card') }; });
+  ok(empty && /Upload your degree report/.test(empty.t) && /Your picks and plans start here/.test(empty.t) && empty.input === 1 && empty.laptop && empty.log && empty.skip && !empty.plan, 'empty Planner: the one card — Upload PDF, Send the link to my laptop, add by hand, skip', empty);
+  await uploadDpr(page, '.tc-dpr input[data-in="dprfile"]');
+  const read = await page.evaluate(() => { const s = document.getElementById('sheet'); return { t: s.innerText, html: s.innerHTML, page: !!s.querySelector('.dr-pg'), badge: !!s.querySelector('.dr-badge'), pills: [...s.querySelectorAll('.dr-pill')].map(p => p.innerText.trim()), btn: (s.querySelector('[data-a="dprSave"]') || {}).innerText, link: !!s.querySelector('[data-a="dprCheck"]'), rows: s.querySelectorAll('.tc-dprrow, input[type=checkbox]').length }; });
+  ok(/Report read/.test(read.t) && /Business Administration · Junior/.test(read.t) && !/\bBUS · /.test(read.t) && read.page && read.badge, 'read: “Report read”, the profile’s major · year (never the report’s plan code “BUS”), the page illustration — never the PDF itself', read.t.slice(0, 200));
+  ok(read.pills.join('|') === '4 filled|7 left|1 transfer', 'read: the pills count the report’s verdicts as the Planner does — 3 Satisfied + 1 you’re taking a class for this term = 4 filled, 7 left — and the transfer rows', read.pills);
+  ok(read.btn === 'See my plan' && read.link && read.rows === 0, 'read: one button (See my plan) and a quiet “Check what was read” — no checkbox list', read);
+  ok(!/9876543|Jordan Fixture|\bA-|\bB\+|\bC\+/.test(read.html), 'read: neither the EMPLID, the name nor any grade reaches the screen');
+  /* screen 3 */
+  await click(page, '[data-a="dprCheck"]'); await tick(page, 300);
+  let chk = await page.evaluate(() => { const s = document.getElementById('sheet'); return { segs: [...s.querySelectorAll('.dr-seg button')].map(b => b.innerText.trim()), rows: [...s.querySelectorAll('.dr-row')].map(r => r.innerText.replace(/\s+/g, ' ').trim()), flags: s.querySelectorAll('.dr-flag').length, btns: [...s.querySelectorAll('.btn')].map(b => b.innerText.trim()), report: /Report a mistake/.test(s.innerText) }; });
+  ok(chk.segs.join('|') === 'Open · 7|Filled · 4|Classes · 6', 'check: Open · Filled · Classes with the same counts as the pills', chk.segs);
+  ok(chk.rows.length === 7 && chk.rows.includes('Units Total Units for the Degree 49 u') && chk.rows.includes('GWR Graduation Writing Requirement') && chk.rows.includes('GE 5C 5C: Laboratory Activity 1 u') && chk.rows.includes('Major BUS 3346 3 u') && chk.rows.includes('Pick 1 Business Major Finance Course') && chk.rows.includes('Conc. BUS 4431 3 u') && chk.rows.includes('Conc. Approved Electives 3 u'), 'check: every open line is a row with its kind, its words and what it still needs', chk.rows);
+  ok(chk.flags === 7 && chk.btns.join() === 'Looks right' && !chk.report, 'check: a flag on every row and “Looks right” as the only button — no “Report a mistake”', chk);
+  await click(page, '[data-a="dprSeg"][data-x="filled"]'); await tick(page, 200);
+  chk = await page.evaluate(() => [...document.querySelectorAll('#sheet .dr-row')].map(r => r.innerText.replace(/\s+/g, ' ').trim()));
+  ok(chk.length === 4 && chk.some(r => /^GE 4B 4B: Lower-division Social Sciences Course taking [A-Z]{2,4} \d{4}$/.test(r)), 'check: a Not Satisfied line you’re taking a class for this term is under Filled, saying which class', chk);
+  await click(page, '[data-a="dprSeg"][data-x="classes"]'); await tick(page, 200);
+  chk = await page.evaluate(() => [...document.querySelectorAll('#sheet .dr-row')].map(r => r.innerText.replace(/\s+/g, ' ').trim()));
+  ok(chk.length === 6 && chk.some(r => /^BUS 2214 Financial Accounting Fall 2024/.test(r)) && chk.some(r => /^AP 300 .*transfer/.test(r)) && !chk.some(r => /BUS 4401/.test(r)), 'check: Classes are the report’s rows — code, name, term, transfer marked; next term’s registration isn’t a class taken', chk);
+  /* flag the 5C line, then save */
+  await click(page, '[data-a="dprSeg"][data-x="open"]'); await tick(page, 200);
+  await click(page, '.dr-row:has-text("5C: Laboratory Activity") .dr-flag'); await tick(page, 200);
+  const fl = await page.evaluate(() => { const s = document.getElementById('sheet'); return { on: s.querySelectorAll('.dr-flag.on').length, struck: !!s.querySelector('.dr-row.flagged') && /line-through/.test(getComputedStyle(s.querySelector('.dr-row.flagged .dr-lab')).textDecorationLine), note: /1 line flagged/.test(s.innerText), seg: s.querySelector('.dr-seg button').innerText.trim() }; });
+  ok(fl.on === 1 && fl.struck && fl.note && fl.seg === 'Open · 6', 'check: a flagged line is struck through, still there to un-flag, and left out of the count', fl);
+  /* the first save fails (the fixture refuses class_history once): the error shows; the retry clears it */
+  await click(page, '[data-a="dprSave"]'); await tick(page, 1500);
+  const err1 = await page.evaluate(() => ({ err: (document.querySelector('#sheet .tc-err') || {}).innerText, busy: UI.busy.dpr, sheet: UI.sheet && UI.sheet.type }));
+  ok(err1.err && err1.sheet === 'dprCheck' && !err1.busy, 'save: a failed save says so and stays on the screen, ready to try again', err1);
+  await click(page, '[data-a="dprSave"]'); await tick(page, 2500);
+  const w = t => log.writes.filter(x => x.table === t && x.m === 'POST');
+  const hist = w('class_history').slice(-1)[0] && w('class_history').slice(-1)[0].body, aud = w('degree_audit')[0] && w('degree_audit')[0].body, flag = w('dpr_flags')[0] && w('dpr_flags')[0].body;
+  ok(w('degree_audit').length === 1 && !(UI_ERR => UI_ERR)(await page.evaluate(() => UI.dpr && UI.dpr.saveErr)), 'save: the retry goes through and the old error is gone', await page.evaluate(() => UI.dpr && UI.dpr.saveErr));
+  ok(Array.isArray(hist) && hist.length === 4 && hist.every(r => Object.keys(r).sort().join() === 'code,professor,term,user_id,year') && hist.some(r => r.code === 'AP 300' && r.professor === '🌍') && !JSON.stringify(hist).includes('BUS 4401'), 'save: past classes go to class_history (transfer tagged 🌍, next term’s registration never filed)', hist);
+  ok(w('saved_classes').length >= 1 && JSON.stringify(w('saved_classes').slice(-1)[0].body) === JSON.stringify([{ user_id: FX.ME.id, term: '2268', code: 'BUS 4488' }]), 'save: this term’s ungraded class goes to My Classes', w('saved_classes').map(x => x.body));
+  ok(aud && aud.user_id === FX.ME.id && aud.major === 'BUS' && aud.units_used === 71 && aud.units_needed === 49 && Array.isArray(aud.requirements) && aud.requirements.length === 10 && !aud.requirements.some(b => /5C/.test(b.label)), 'save: the report’s verdicts go to degree_audit — one row for me, its units (71 used, 49 needed), without the flagged line', aud && { n: aud.requirements.length, u: [aud.units_used, aud.units_needed], labels: aud.requirements.map(b => b.label) });
+  ok(aud && aud.requirements.every(b => Object.keys(b).sort().join() === 'code,courses,ge,kind,label,level,listed,oneOf,options,status,units,used'), 'save: each line is only its words, verdict, kind, code, counts, classes and the classes used/listed — no note, nothing else', aud && aud.requirements.map(b => Object.keys(b).sort().join()).slice(0, 2));
+  ok(!/9876543|1234567|Jordan|"grade"|\bA-|B\+|C\+/.test(JSON.stringify(aud)), 'save: no grade, EMPLID or name in the audit row');
+  ok(flag && flag.label === '5C: Laboratory Activity' && flag.status === 'not' && flag.units && flag.units.need === 1 && Object.keys(flag).sort().join() === 'catalog,label,major,status,units,who_hash' && !/Jordan|9876543/.test(JSON.stringify(flag)), 'save: the flag is the line’s words, verdict and counts — no user id, no name, no note', flag);
+  ok(!JSON.stringify(log.writes).includes('9876543'), 'save: the EMPLID is in no write');
+  const prof = log.writes.filter(x => x.table === 'profiles' && x.m === 'PATCH');
+  ok(!prof.some(x => x.body && 'major' in x.body), 'save: the report’s plan code (“BUS”) never becomes the profile’s major', prof.map(x => x.body));
+  const after = await page.evaluate(() => ({ tab: S.tab, sub: S.schedTab, sheet: UI.sheet && UI.sheet.type, prefs: !!document.querySelector('#sheet [data-a="plPrefsSave"]'), busy: UI.busy.dpr }));
+  ok(after.tab === 'schedule' && after.sub === 'planner' && after.sheet === 'pcWho' && !after.busy, 'save: lands on the Planner, with “Who taught these?” over it first', after);
+  await click(page, '#sheet [data-a="pcWhoDone"].btn'); await tick(page, 600);
+  const after2 = await page.evaluate(() => ({ sheet: UI.sheet && UI.sheet.type, prefs: !!document.querySelector('#sheet [data-a="plPrefsSave"]') }));
+  ok(after2.sheet === 'plPrefs' && after2.prefs, 'save: then the Planner asks what matters most (first open)', after2);
+  ok(log.errors.length === 0, 'read: no page errors', log.errors);
+  await close();
+};
+
+/* A save that throws part-way still lets go of the button (try/finally), and says what to do. */
+tests.dprSaveThrows = async () => {
+  const { page, close, log } = await openApp({ tables: NOREC() });
+  await toPlanner(page);
+  await uploadDpr(page, '.tc-dpr input[data-in="dprfile"]');
+  await page.evaluate(() => { TC.saveAudit = async () => { throw new Error('fixture: the audit save threw'); }; });
+  await click(page, '[data-a="dprSave"]'); await tick(page, 1500);
+  const v = await page.evaluate(() => ({ busy: UI.busy.dpr, err: (document.querySelector('#sheet .tc-err') || {}).innerText, btn: (document.querySelector('#sheet [data-a="dprSave"]') || {}).disabled }));
+  ok(!v.busy && /try again/.test(v.err || '') && v.btn === false, 'save: if anything in the save throws, the button comes back and the screen says to try again', v);
+  ok(log.errors.length === 0, 'save throws: no page errors', log.errors);
+  await close();
+};
+
+tests.dprWrong = async () => {
+  const { page, close } = await openApp({ tables: NOREC() });
+  await toPlanner(page);
+  await page.locator('.tc-dpr input[data-in="dprfile"]').setInputFiles('files/not-a-dpr.pdf');
+  for (let i = 0; i < 20 && !/isn’t a Degree Progress Report/.test(await page.locator('#sheet').innerText()); i++) await tick(page, 500);
+  const t = await page.locator('#sheet').innerText();
+  ok(/Couldn’t read it/.test(t) && /isn’t a Degree Progress Report/.test(t) && await page.locator('#sheet input[data-in="dprfile"]').count() === 1, 'dpr: another PDF is refused with what to do instead, and a way to try another', t.slice(0, 200));
+  await close();
+};
+
+/* Also from your profile (the Degree Progress Report row). */
+tests.dprFromProfile = async () => {
   const { page, close, log } = await openApp({});
-  await page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 });
-  await click(page, '[data-a="tab"][data-x="schedule"]'); await click(page, '[data-a="schedTab"][data-x="planner"]'); await tick(page, 2500);
+  await click(page, '.homehdr .me-btn'); await tick(page, 600);
+  await uploadDpr(page);
+  const t = await page.locator('#sheet').innerText();
+  ok(/Report read/.test(t) && /See my plan/.test(t), 'dpr (profile): the profile’s import opens the same Report read screen', t.slice(0, 200));
+  await click(page, '#sheet [data-a="dprSave"]'); await tick(page, 2500);
+  const at = await page.evaluate(() => ({ tab: S.tab, sub: S.schedTab }));
+  ok(at.tab === 'schedule' && at.sub === 'planner', 'dpr (profile): See my plan goes from the profile to the Planner', at);
+  ok(log.errors.length === 0, 'dpr (profile): no page errors', log.errors);
+  await close();
+};
+
+/* First open: what matters most — one tap — then the plan is drafted on arrival, private and without seat alerts. */
+tests.plannerPrefs = async () => {
+  const T = Object.assign({}, NOPLANS(), { planner_prefs: [] });
+  let noRank = false;
+  const { page, close, log } = await openApp({ tables: T, hook: (url, m, body) => noRank && m === 'POST' && /\/rest\/v1\/planner_prefs$/.test(url.pathname) && body && 'ranking' in body ? { status: 400, body: JSON.stringify({ message: "Could not find the 'ranking' column of 'planner_prefs' in the schema cache", code: 'PGRST204' }) } : null });
+  await toPlanner(page);
+  const read = () => page.evaluate(() => { const s = document.getElementById('sheet'); return { type: UI.sheet && UI.sheet.type, t: s.innerText, rank: [...s.querySelectorAll('.pp-opt')].map(b => [b.dataset.x, (b.querySelector('.pp-n') || {}).textContent || '', b.getAttribute('aria-pressed')]), units: [...s.querySelectorAll('.pp-units button')].map(b => [b.innerText.trim(), b.className]), x: !!s.querySelector('.xbtn'), save: !!(s.querySelector('[data-a="plPrefsSave"]') || {}).disabled }; });
+  let sh = await read();
+  ok(sh.type === 'plPrefs' && /What matters most\?/.test(sh.t) && sh.rank.map(r => r[0] + r[1]).join() === 'degree1,professors2,friends3' && !sh.x && !sh.save, 'prefs: the first open asks what matters most, ranked 1 · 2 · 3 (degree, professors, friends to start), no close button', sh);
+  ok(sh.units.map(u => u[0]).join() === '12,14,16,18,20' && sh.units.find(u => u[0] === '16')[1].includes('on'), 'prefs: units 12 · 14 · 16 · 18 · 20 with 16 picked', sh.units);
+  ok(await page.evaluate(() => { A.closeSheet(); return UI.sheet && UI.sheet.type === 'plPrefs'; }), 'prefs: tapping outside (the scrim’s close) doesn’t dismiss the first ask');
+  await page.evaluate(() => { UI.sheet = null; render(true); }); await tick(page, 400);
+  const again = await page.evaluate(() => ({ type: UI.sheet && UI.sheet.type, card: !!document.querySelector('#scroll .pl-ask [data-a="plPrefsOpen"]') }));
+  ok(again.type === 'plPrefs' && again.card, 'prefs: if the ask is closed some other way it comes back — and the Builder shows a button for it', again);
+  /* rank: tapping number 1 starts over; then tap in order, and the last fills itself */
+  await click(page, '[data-a="plPrefPick"][data-x="degree"]');
+  sh = await read();
+  ok(sh.rank.every(r => !r[1] && r[2] === 'false') && sh.save && /Tap what matters most/.test(sh.t), 'prefs: tapping number 1 starts the ranking over — Save waits for all three', sh);
+  await click(page, '[data-a="plPrefPick"][data-x="friends"]');
+  sh = await read();
+  ok(sh.rank.map(r => r[1]).join() === ',,1' && sh.save && /Tap what matters next/.test(sh.t), 'prefs: the first tap is number 1', sh.rank);
+  await click(page, '[data-a="plPrefPick"][data-x="degree"]');
+  sh = await read();
+  ok(sh.rank.map(r => r[0] + r[1]).join() === 'degree2,professors3,friends1' && !sh.save, 'prefs: the second tap is number 2, and the last is number 3 by itself', sh.rank);
+  await click(page, '[data-a="plPrefUnits"][data-x="18"]');
+  await click(page, '[data-a="plPrefsSave"]'); await tick(page, 3000);
+  const pw = log.writes.filter(w => w.table === 'planner_prefs');
+  ok(pw.length === 1 && pw[0].body.priority === 'friends' && pw[0].body.ranking === 'friends,degree,professors' && pw[0].body.units === 18 && pw[0].body.user_id === FX.ME.id, 'prefs: saved as one row — the first as priority, the whole order as ranking, and the units', pw[0] && pw[0].body);
+  const after = await page.evaluate(() => { const sc = document.getElementById('scroll'); return { sheet: UI.sheet, rank: ((sc.querySelector('.pl-rank') || {}).innerText || '').replace(/\s+/g, ' ').trim(), pill: (sc.querySelector('.pl-tc .pl-tc-h') || {}).innerText, rec: sc.querySelectorAll('.plq-card .plo').length, w: plWeights(), local: JSON.parse(localStorage.getItem('tc-prefs:' + TC.user.id) || 'null') }; });
+  ok(!after.sheet && after.rank === '' && after.pill === '18 units' && after.rec > 0 && after.local && after.local.order.join() === 'friends,degree,professors', 'prefs: the Builder’s term card shows the units (no 1 · 2 · 3 chips — the order lives in the sheet the card opens, Tate 2026-10-12/13), then the options; the order is also kept on the phone', after);
+  ok(after.w.friends === 1.5 && after.w.degree === 1.0 && after.w.professors === 0.6, 'prefs: the order weighs the picks — 1st 1.5, 2nd 1.0, 3rd 0.6', after.w);
+  ok(planWrites(log).length === 0 && log.writes.filter(w => w.table === 'watch_sections').length === 0, 'prefs: nothing is written into Plans (or seat alerts) by itself — plans change when you set one', planWrites(log).map(w => w.body.slot));
+  /* Edit reopens on the saved order and says what a new one changes */
+  await page.evaluate(() => A.plPrefsOpen()); await tick(page, 200);
+  let re = await read();
+  ok(re.x && re.rank.map(r => r[0] + r[1]).join() === 'degree2,professors3,friends1' && /Save/.test(re.t) && !/worked out again/.test(re.t), 'prefs: Edit reopens on the saved order, with a close button and Save', re);
+  await click(page, '[data-a="plPrefPick"][data-x="friends"]'); await click(page, '[data-a="plPrefPick"][data-x="professors"]'); await click(page, '[data-a="plPrefPick"][data-x="friends"]');
+  re = await read();
+  ok(re.rank.map(r => r[0] + r[1]).join() === 'degree3,professors1,friends2' && /worked out again in this order\. Your own plans stay as they are/.test(re.t), 'prefs: a new order says TermChamp’s plans are worked out again, and your own plans stay', re);
+  /* before RUN 19: the first is saved, the order kept on the phone */
+  noRank = true; await click(page, '[data-a="plPrefsSave"]'); await tick(page, 1500);
+  const tries = log.writes.filter(w => w.table === 'planner_prefs').slice(-2);
+  ok(tries.length === 2 && 'ranking' in tries[0].body && !('ranking' in tries[1].body) && tries[1].body.priority === 'professors' && await page.evaluate(() => !UI.sheet && TC.prefsNoRank && prefOrder().join() === 'professors,friends,degree'), 'prefs: without the ranking column (RUN 19 not run yet) the save is tried again without it — the first is saved, the order kept on the phone', tries.map(t => t.body));
+  ok(log.errors.length === 0, 'prefs: no page errors', log.errors);
+  await close();
+};
+
+/* The plan card, More picks, the Why sheet — drafted from the flowchart (no report) with the fixture's record,
+   the week before the planned term's registration opens. */
+tests.plannerPlan = async () => {
+  const { page, close, log } = await openApp({ tables: NOPLANS() });
+  await toPlanner(page, true);
+  const v = await page.evaluate(() => { const sc = document.getElementById('scroll');
+    return { top: (sc.querySelector('.pl-top') || {}).innerText, reg: (sc.querySelector('.pla-reg') || {}).innerText || '', card: sc.querySelectorAll('.pl-card, .plr').length, cards: sc.querySelectorAll('.plq-card').length,
+      score: !!sc.querySelector('.pk-n, .bar, .pk-score'), behind: /Behind/.test(sc.innerText), seats: /\d+ seats/.test(sc.innerText), ledger: !!sc.querySelector('.tc-lrow, .pc-sum'), old: !!sc.querySelector('.pk-hero'), sech: [...sc.querySelectorAll('.pl-sech')].map(s => s.innerText.replace(/\s+/g, ' ').trim()) }; });
+  const pll = await pllH(page);
+  ok(/Fall 2026/.test(v.top) && !/left|Registration/.test(v.top) && /^Opens Oct 19[\s\S]*16 units/.test(v.reg.trim()) && /^\d+ left on your flowchart$/.test(pll), 'plan: the top is the term and the units pill; registration’s date is its own line; then what’s left', { top: v.top, reg: v.reg, pll });
+  ok(v.card === 0 && v.cards > 0, 'plan: no plan card in the Builder — the requirements and their options (2026-10-13)', { card: v.card, cards: v.cards });
+  ok(!v.score && !v.behind && !v.seats && !v.old && !v.ledger && !v.sech.some(s => /More picks/.test(s)), 'plan: no score numbers, no colour bars, no “Behind”, no seat chips before registration opens, no ledger, no “More picks”', v);
+  /* nothing drafted on arrival */
+  ok(planWrites(log).length === 0 && await page.evaluate(() => !localStorage.getItem('tc-drafted:' + TC.user.id + ':' + CFG.TERM)), 'plan: nothing is drafted into Plans on arrival (2026-10-13)', planWrites(log).map(w => w.body.slot));
+  /* the rules every option follows */
+  const rules = await page.evaluate(() => { const L = TCPL.ledger(), R = planRank(L), done = new Set(TCPL.completed().map(c => TCPL.canon(c) || c)), mine = new Set([...myCodes()].map(c => TCPL.canon(c) || c));
+    const opts = [...document.querySelectorAll('#scroll .plo')].map(e => ({ code: e.dataset.x, sec: SEC[e.dataset.y], no: e.classList.contains('plo-no') }));
+    return { bad: opts.filter(o => done.has(TCPL.canon(o.code) || o.code) || mine.has(TCPL.canon(o.code) || o.code)).map(o => o.code), noSec: opts.filter(o => !o.sec).length, n: opts.length, sorted: R.all.every((c, i) => !i || R.all[i - 1].wscore >= c.wscore), parts: R.all.every(c => c.parts.req <= 40 && c.parts.urg <= 30 && c.parts.prof <= 15 && c.parts.fr <= 10 && c.parts.seat <= 5 && c.score === c.parts.req + c.parts.urg + c.parts.prof + c.parts.fr + c.parts.seat) }; });
+  ok(rules.n > 0 && !rules.bad.length && rules.noSec === 0, 'options: never a class you’ve taken or are taking; each has a section', rules);
+  ok(rules.sorted && rules.parts, 'rank: candidates are ordered by weighted score; the five parts stay in range and add up; Seats is 0 before registration opens', rules);
+  /* Why: from the class page's pick reason (the Builder's rows open the section sheet) */
+  await page.evaluate(() => A.pickWhy(planRank(TCPL.ledger()).all[0].code)); await tick(page, 400);
+  const why = await page.evaluate(() => { const s = document.getElementById('sheet'); return { labs: [...s.querySelectorAll('.pw-lab')].map(x => x.innerText), vals: [...s.querySelectorAll('.pw-val')].map(x => x.innerText) }; });
+  ok(why.labs.join() === 'Requirements,Urgency,Professor,Friends,Seats' && why.vals[4] === 'Oct 19', 'why: the five parts — Seats reads “Oct 19” until registration opens', why);
+  await page.evaluate(() => A.closeSheet()); await tick(page, 200);
+  const sen = await page.evaluate(() => { const was = TC.profile.class_standing; TC.profile.class_standing = 'Senior'; const R = planRank(TCPL.ledger()); TC.profile.class_standing = was; const top = R.all.find(c => c.behind); return top && { code: top.code, tag: pickReason(top).t, urg: top.parts.urg }; });
+  ok(sen && sen.tag === 'Catch up' && sen.urg >= 12, 'rank: for a senior a class from an earlier year is tagged “Catch up” and gains urgency', sen);
+  ok(log.errors.length === 0, 'plan: no page errors', log.errors);
+  await close();
+};
+
+/* The ranking and drafting rules, on small made-up ledgers over the fixture's real Fall 2026 classes. */
+tests.plannerRules = async () => {
+  const { page, close, log } = await openApp({ tables: NOPLANS() });
+  await toPlanner(page, true);
   const r = await page.evaluate(() => {
     const L0 = TCPL.ledger(), cp = TCPL.coursePrereqs, ps = TCPL.prereqStatus, G = TCPL.geCourses, gN = G.length, st = TC.profile.class_standing, out = {};
     const N = (codes, year, term, more) => Object.assign({ codes, year, term: term || 'Fall', title: codes.join(' or '), choice: codes.length > 1 }, more || {});
-    const run = (need, needU) => planRecs(Object.assign({}, L0, { need, needU: needU || [] }));
-    const codes = R => R.picks.map(c => c.code);
+    const run = (need, needU) => planRank(Object.assign({}, L0, { need, needU: needU || [] }));
+    const codes = R => R.all.map(c => c.code);
     const keepPeople = TC.friends.map(f => [f, (PEOPLE[f].unplaced || []).slice()]);
     try {
       TCPL.coursePrereqs = c => c === 'BUS 4488' ? { req: [['MATH 9999']] } : c === 'BUS 4401' ? { req: [['BUS 3346']] } : c === 'STAT 2170' ? { req: [['BUS 3346', 'PHIL 3331']] } : null;
       TCPL.prereqStatus = c => ({ state: c === 'BUS 4488' ? 'unmet' : 'met' });
       out.taking = codes(run([N(['BUS 3431'], 3), N(['ECON 2303'], 3)]));
-      out.prereq = { picks: codes(run([N(['BUS 4488'], 3), N(['ECON 2303'], 3)])), all: run([N(['BUS 4488'], 3)]).all.map(c => c.code) };
-      out.choice = codes(run([N(['BUS 3346', 'BUS 3387'], 3)]));
-      out.dupe = codes(run([N(['BUS 3346'], 3), N(['BUS 3346', 'BUS 4401'], 3)]));   /* BUS 3346 outscores BUS 4401 for both */
+      out.prereq = codes(run([N(['BUS 4488'], 3), N(['ECON 2303'], 3)]));
+      out.choice = run([N(['BUS 3346', 'BUS 3387'], 3)]).all.map(c => [c.code, c.key]);
       const un = run([N(['BUS 3346'], 3), N(['BUS 4401'], 3), N(['STAT 2170'], 3)]).all.find(c => c.code === 'BUS 3346');
-      out.unlocks = un && un.un;   /* BUS 4401 needs it; STAT 2170's group is already covered by PHIL 3331 */
+      out.unlocks = un && un.un;
       TCPL.coursePrereqs = () => null;
-      /* behind the flowchart beats friends, a GE and the term: BUS 4488 (Year 3 Fall, 3 friends, counts twice) vs STAT 2170 (Year 2 Spring) */
       TC.friends.slice(0, 3).forEach(f => { PEOPLE[f].unplaced = (PEOPLE[f].unplaced || []).concat(['BUS 4488']); });
       G.push({ code: 'BUS 4488', name: 'fixture', area: 'Area ZZ', areaKey: 'ZZ', units: 4, prof: '__tbd', workload: '' });
-      const b = run([N(['BUS 4488'], 3, 'Fall'), N(['STAT 2170'], 2, 'Spring')], [{ type: 'ge', area: 'ZZ', ti: 0, title: 'GE ZZ' }]);
-      out.behind = b.picks.map(c => [c.code, pickReason(c).t, c.behind, c.reqN, c.fr.length]);
+      const b = run([N(['BUS 4488'], 4, 'Fall'), N(['STAT 2170'], 2, 'Spring')], [{ type: 'ge', area: 'ZZ', ti: 0, title: 'GE ZZ' }]);
+      out.behind = b.all.map(c => [c.code, pickReason(c).t, c.behind, c.parts.req, c.parts.urg, c.fr.length]);
+      const wasP = TC.prefs;
+      TC.prefs = { priority: 'friends', units: 16 }; const byF = codes(run([N(['BUS 4488'], 4), N(['STAT 2170'], 2, 'Spring')], [{ type: 'ge', area: 'ZZ', ti: 0, title: 'GE ZZ' }]));
+      TC.prefs = { priority: 'degree', units: 16 }; const byD = codes(run([N(['BUS 4488'], 4), N(['STAT 2170'], 2, 'Spring')], [{ type: 'ge', area: 'ZZ', ti: 0, title: 'GE ZZ' }]));
+      TC.prefs = wasP; out.weights = { byF, byD };
       G.splice(gN);
       TC.profile.class_standing = 'Freshman';
       out.ahead = codes(run([N(['BUS 4401'], 4), N(['ECON 2303'], 2)]));
+      TC.profile.class_standing = st;
     } finally { TCPL.coursePrereqs = cp; TCPL.prereqStatus = ps; G.splice(gN); TC.profile.class_standing = st; keepPeople.forEach(([f, u]) => { PEOPLE[f].unplaced = u; }); }
     return out; });
-  ok(r.taking.length === 1 && r.taking[0] === 'ECON 2303', 'rank: a class you’re taking now is never a pick', r.taking);
-  ok(!r.prereq.picks.includes('BUS 4488') && !r.prereq.all.includes('BUS 4488') && r.prereq.picks.includes('ECON 2303'), 'rank: a class whose prerequisites you haven’t met is never a pick (or a candidate)', r.prereq);
-  ok(r.choice.length === 1, 'rank: a “pick 1” requirement gets one pick, not one per option', r.choice);
-  ok(r.dupe.filter(c => c === 'BUS 3346').length === 1 && r.dupe.includes('BUS 4401'), 'rank: a class that fits two requirements is picked once', r.dupe);
-  ok(Array.isArray(r.unlocks) && r.unlocks.join() === 'BUS 4401', 'rank: “unlocks” counts a requirement that still needs it, not one whose prerequisite you already covered', r.unlocks);
-  ok(r.behind[0] && r.behind[0][0] === 'STAT 2170' && r.behind[0][1] === 'Top priority' && r.behind[1] && r.behind[1][0] === 'BUS 4488' && r.behind[1][3] === 2 && r.behind[1][4] === 3, 'rank: a class you’re behind on is #1 even against a class with three friends that counts twice', r.behind);
-  ok(r.ahead.join() === 'ECON 2303', 'rank: a freshman isn’t handed a Year 4 class', r.ahead);
-  /* the section a pick adds: an open seat over a waitlist even with a better-rated professor; a waitlist over full */
+  ok(r.taking.length === 1 && r.taking[0] === 'ECON 2303', 'rules: a class you’re taking now is never a candidate', r.taking);
+  ok(!r.prereq.includes('BUS 4488') && r.prereq.includes('ECON 2303'), 'rules: a class whose prerequisites you haven’t met is never a candidate', r.prereq);
+  ok(r.choice.length === 2 && r.choice[0][1] === r.choice[1][1], 'rules: a “pick 1” requirement’s options share one key, so the draft takes one of them', r.choice);
+  ok(Array.isArray(r.unlocks) && r.unlocks.join() === 'BUS 4401', 'rules: “unlocks” counts a requirement that still needs it, not one whose prerequisite you already covered', r.unlocks);
+  ok(r.behind[0] && r.behind[0][0] === 'STAT 2170' && r.behind[0][1] === 'Catch up' && r.behind[0][4] >= 12 && r.behind[1] && r.behind[1][0] === 'BUS 4488' && r.behind[1][3] === 15 && r.behind[1][5] === 3, 'rules: weighted for the degree, a class you’re behind on outranks a Year 4 class with three friends that counts twice', r.behind);
+  ok(r.ahead.join() === 'ECON 2303', 'rules: a freshman isn’t handed a Year 4 class', r.ahead);
+  ok(r.weights.byD[0] === 'STAT 2170' && r.weights.byF[0] === 'BUS 4488', 'rules: “what matters most” changes the order — friends first puts the class with three friends on top', r.weights);
+  /* sections: before registration opens no seat tier; drafting never takes a clashing section; B never clashes */
   const bs = await page.evaluate(() => { const ss = secsOf('BUS 3431'), keep = ss.map(x => x.status), out = {};
-    try { out.open = plBestSec('BUS 3431').id; ss.find(x => x.id === '70100').status = 'full'; ss.find(x => x.id === '70101').status = 'wait'; out.full = plBestSec('BUS 3431').id; } finally { ss.forEach((x, i) => { x.status = keep[i]; }); }
+    try { ss.find(x => x.id === '70100').status = 'full'; ss.find(x => x.id === '70101').status = 'wait'; out.before = plBestSec('BUS 3431').id; } finally { ss.forEach((x, i) => { x.status = keep[i]; }); }
+    /* strict: with every section of a class clashing with what's in the plan, there's no pick (not a clashing one) */
+    const all = Object.keys(COURSES).filter(c => secsOf(c).filter(s => s.s != null && !s.async).length >= 1);
+    const c1 = all.find(c => secsOf(c).length === 1 && secsOf(c)[0].s != null), s1 = c1 && secsOf(c1)[0];
+    out.strict = s1 ? [plBestSec(c1, [s1], true), !!plBestSec(c1, [s1], false)] : 'none';
+    /* the next three on real fixture classes whose meetings are set here for the case (and put back) */
+    const two = Object.keys(COURSES).filter(c => secsOf(c).length === 2 && secsOf(c).every(s => SEC[s.id])).slice(0, 2);
+    const many = Object.keys(COURSES).filter(c => secsOf(c).length && secsOf(c).every(s => SEC[s.id]) && !two.includes(c)).slice(0, 12);
+    const saved = [...two, ...many].flatMap(c => secsOf(c)).map(s => [s, s.s, s.e, s.days, s.async]);
+    try {
+      /* B: d's A section p and c's A section x; d's other section q clashes with both of c's — B takes q (B
+         prefers the other section), and then c has nowhere to fit: it's left out (it used to keep x, a clash) */
+      if (two.length === 2) {
+        const [x, y] = secsOf(two[0]), [p, q] = secsOf(two[1]);
+        const set = (s, d, a, b) => { s.days = d; s.s = a; s.e = b; s.async = false; };
+        set(x, 'MWF', 540, 600); set(y, 'MWF', 660, 720); set(p, 'TR', 840, 900); set(q, 'MWF', 570, 690);
+        const b = planDraftB([String(p.id), String(x.id)]).map(id => SEC[id]);
+        out.b = { codes: b.map(s => s.code), clash: b.some((s, i) => b.slice(i + 1).some(t => secClash(s, t))), left: !b.some(s => s.code === two[0]) };
+      } else out.b = 'no two-section classes';
+      /* the cap and the target, on candidates that can't clash (online) */
+      many.forEach(c => secsOf(c).forEach(s => { s.async = true; }));
+      const L = TCPL.ledger(), mk = units => ({ all: many.map((code, i) => ({ code, key: 'k' + i, units: units[i] === undefined ? null : units[i], onTerm: false, wscore: 100 - i, score: 0 })) });
+      out.cap = { n: planDraft(mk([]), 'A', L).ids.length, cap: plClassCap(), cands: many.length };
+      const d = planDraft(mk([5, 5, 5, 2, 1, 4, 4]), 'A', L);
+      out.target = { units: d.units, n: d.ids.length, target: plUnitsTarget() };
+    } finally { saved.forEach(([s, a, b, d, as]) => { s.s = a; s.e = b; s.days = d; s.async = as; }); }
     return out; });
-  ok(bs.open === '70101' && bs.full === '70101', 'rank: a pick’s section is an open seat before a waitlist (even with a better-rated professor), and a waitlist before a full one (70100 at 4.5 full, 70101 at 3.6 waitlisted)', bs);
-  /* the hero while prerequisites load, and when they failed */
-  const hero = async v => { await page.evaluate(v => { UI.pl.prereqs = v; render(true); }, v); await tick(page, 200); return page.evaluate(() => ({ t: document.querySelector('.pk-hero').innerText, n: document.querySelectorAll('.pk-hero .pk').length })); };
+  ok(bs.before === '70100', 'rules: before registration opens a full section with the better professor is still the best section (seats don’t count yet)', bs);
+  ok(bs.strict === "none" || (bs.strict[0] === null && bs.strict[1]), 'draft: a section that clashes with the plan is never the draft’s pick (it’s left out instead)', bs.strict);
+  ok(bs.b && !bs.b.clash && bs.b.left && bs.b.codes.length === 1, 'draft: Plan B never puts two clashing sections together — a class with nowhere to fit is left out', bs.b);
+  ok(bs.cap.cands >= 6 && bs.cap.n === bs.cap.cap && bs.cap.cap === 5, 'draft: with no units known, a plan stops at a class per 3 units (16 → 5 classes)', bs.cap);
+  ok(bs.target.units === 16 && bs.target.target === 16, 'draft: never over the units target — no “+1” (5 + 5 + 5, then the 1, never the 2)', bs.target);
+  const pk = await page.evaluate(() => { const L0 = TCPL.ledger(), out = {};
+    const N = (codes, year) => ({ codes, year, term: 'Fall', title: codes.join(' or '), choice: codes.length > 1 });
+    const R1 = planRank(Object.assign({}, L0, { need: [N(['BUS 3346', 'BUS 3387'], 3)], needU: [] }));
+    out.flow = { cands: R1.all.map(c => c.code), drafted: planDraft(R1, 'A', L0).ids.map(id => SEC[id].code) };
+    /* a report line that still needs two classes, with three offered: two of them */
+    const two = { label: 'Internship Electives', status: 'not', kind: 'elective', courses: { req: 2, used: 0, need: 2 }, options: ['BUS 3346', 'BUS 3387', 'BUS 4401'] };
+    const R2 = { all: two.options.map((code, i) => ({ code, key: 'a:0', fills: [two], units: 3, onTerm: false, wscore: 10 - i, score: 0 })) };
+    out.need2 = planDraft(R2, 'A', L0).ids.map(id => SEC[id].code);
+    return out; });
+  ok(pk.flow.cands.length === 2 && pk.flow.drafted.filter(c => c === 'BUS 3346' || c === 'BUS 3387').length === 1, 'draft: a “pick 1” from the flowchart gets one class, not both', pk.flow);
+  ok(pk.need2.length === 2, 'draft: a report line that still needs two classes gets two', pk.need2);
+  /* while prerequisites load, and when they failed */
+  const hero = async v => { await page.evaluate(v => { UI.pl.prereqs = v; render(true); }, v); await tick(page, 200); return page.evaluate(() => ({ t: document.getElementById('scroll').innerText, card: !!document.querySelector('#scroll .plq-card') })); };
   let h = await hero(undefined);
-  ok(/Checking prerequisites/.test(h.t) && h.n === 0, 'rank: no picks until the prerequisites have loaded', h);
+  ok(/Checking prerequisites/.test(h.t) && !h.card, 'rules: no plan until the prerequisites have loaded', h.t.slice(0, 120));
   h = await hero(false);
-  ok(/Prerequisites didn’t load, so these picks don’t check them/.test(h.t) && h.n > 0, 'rank: if they failed, the picks say they don’t check prerequisites', h);
+  ok(/Prerequisites didn’t load, so these options don’t check them/.test(h.t) && h.card, 'rules: if they failed, the Builder says the options don’t check them', h.t.slice(0, 200));
   await hero(true);
-  /* no concentration yet: the Planner asks, with its choices as buttons */
   const cc = await page.evaluate(() => { const c = document.querySelector('#scroll .pk-conc'); return c && { t: c.innerText, b: [...c.querySelectorAll('[data-a="pickConc"]')].map(b => [b.dataset.x, Math.round(b.getBoundingClientRect().height)]) }; });
-  ok(cc && /Pick your concentration/.test(cc.t) && cc.b.length >= 2 && cc.b.every(b => b[1] >= 44) && cc.b.some(b => b[0] === 'Financial Management'), 'rank: with no concentration chosen the Planner asks for it, 44px buttons', cc);
-  await click(page, '.pk-conc [data-a="pickConc"][data-x="Financial Management"]'); await tick(page, 800);
-  ok(await page.locator('#scroll .pk-conc').count() === 0, 'rank: choosing one clears the ask');
-  ok(log.errors.length === 0, 'rank: no page errors', log.errors);
+  ok(cc && /Pick your concentration/.test(cc.t) && cc.b.length >= 2 && cc.b.every(b => b[1] >= 44), 'rules: with no concentration chosen the Planner asks for it, 44px buttons', cc);
+  ok(log.errors.length === 0, 'rules: no page errors', log.errors);
   await close();
+};
+
+/* When the Planner may NOT draft (review 2026-10-08): plans that didn't load, no data, failed prerequisites. */
+tests.plannerNoDraft = async () => {
+  /* 1. the plans read fails: the Builder still shows what you should take and the options; nothing is written */
+  let failPlans = true;
+  const hook = (url, m) => { if (failPlans && m === 'GET' && /\/rest\/v1\/plans$/.test(url.pathname) && /user_id=eq\./.test(url.search)) return { status: 500, body: JSON.stringify({ message: 'fixture: plans read failed', code: 'XX000' }) }; };
+  let o = await openApp({ tables: NOPLANS(), hook });
+  await toPlanner(o.page);
+  const rd = p => p.evaluate(() => ({ err: TC.err.plans, loaded: TC.plansLoaded, rows: document.querySelectorAll('#scroll .plq-card .plo').length, cards: document.querySelectorAll('#scroll .plq-card').length, nudge: !!document.querySelector('#scroll .tc-dpr-row'), pre: UI.pl && UI.pl.prereqs, all: document.getElementById('scroll').innerText }));
+  let v = await rd(o.page);
+  ok(v.err && !v.loaded && v.cards > 0 && v.rows > 0 && !o.log.writes.some(w => w.table === 'plans'), 'no draft: when the plans don’t load, the Builder still shows the requirements and their options, and nothing is written', { err: v.err, cards: v.cards, rows: v.rows });
+  ok(o.log.errors.length === 0, 'no draft (plans): no page errors', o.log.errors);
+  await o.close();
+  /* 2. no record and no report (the student skipped the upload): the flowchart's Year 1, and the nudge */
+  o = await openApp({ tables: NOREC() });
+  await toPlanner(o.page);
+  await click(o.page, '.tc-dpr [data-a="plShowPicks"]'); await tick(o.page, 1500);
+  v = await rd(o.page);
+  ok(v.nudge && v.cards > 0 && planWrites(o.log).length === 0, 'no draft: with no past classes and no report, the flowchart’s requirements show with the report nudge — nothing is written', { nudge: v.nudge, cards: v.cards, writes: planWrites(o.log).length });
+  await uploadDpr(o.page, '.tc-dpr-row input[data-in="dprfile"]'); await click(o.page, '[data-a="dprSave"]'); await tick(o.page, 3000);
+  await o.page.evaluate(() => { TC.prefs = TC.prefs || { priority: 'degree', units: 16 }; UI.sheet = null; S.schedTab = 'planner'; render(true); }); await tick(o.page, 1500);
+  v = await rd(o.page);
+  ok(v.cards > 0 && planWrites(o.log).length === 0, 'no draft: after the report, the requirements are the report’s — and still nothing is written into Plans', { cards: v.cards, writes: planWrites(o.log).map(w => w.body.slot) });
+  ok(o.log.errors.length === 0, 'no draft (no data): no page errors', o.log.errors);
+  await o.close();
+  /* 3. prerequisites failed to load: the options say they don't check them */
+  o = await openApp({ tables: NOPLANS(), hook: (url, m) => m === 'GET' && /\/rest\/v1\/course_prereqs$/.test(url.pathname) ? { status: 500, body: JSON.stringify({ message: 'fixture: prereqs failed', code: 'XX000' }) } : null });
+  await toPlanner(o.page);
+  v = await rd(o.page);
+  ok(v.pre === false && planWrites(o.log).length === 0 && /Prerequisites didn’t load, so these options don’t check them/.test(v.all), 'no draft: without prerequisites, the Builder says the options don’t check them; nothing is written', { pre: v.pre, writes: planWrites(o.log).length });
+  await o.close();
+};
+
+/* After a new report: the plans still exactly as drafted are drafted again; a plan the student changed stays. */
+tests.plannerRefresh = async () => {
+  const { page, close, log } = await openApp({ tables: NOPLANS() });
+  await toPlanner(page);
+  const opts = () => page.evaluate(() => ({ audit: !!(planRank(TCPL.ledger()).audit), a: [...document.querySelectorAll('#scroll .plq-card .plo')].map(e => e.dataset.x) }));
+  const r0 = await opts();
+  ok(!r0.audit && r0.a.length > 0 && planWrites(log).length === 0, 'refresh: the options come from the record, and nothing is written into Plans', r0);
+  /* the student puts a class into Plan C by hand: it's theirs, and it gets a seat alert */
+  const own = await page.evaluate(() => { const s = Object.values(SEC).find(x => x && x.code && x.s != null && !TC.watches[x.id]); TC.setPlan('C', [String(s.id)]); return String(s.id); });
+  await tick(page, 800);
+  const w = log.writes.filter(x => x.table === 'watch_sections').map(x => x.body && x.body.class_nbr);
+  ok(w.length === 1 && w[0] === own, 'refresh: a class the student adds by hand gets its seat alert', w);
+  const c = await page.evaluate(() => TC.plans.C.slice()), n0 = planWrites(log).length;
+  await page.evaluate(() => { S.schedTab = 'past'; render(); }); await tick(page, 800);
+  await uploadDpr(page); await click(page, '[data-a="dprSave"]'); await tick(page, 3000);
+  await page.evaluate(() => { UI.sheet = null; S.schedTab = 'planner'; render(true); }); await tick(page, 1500);
+  const r1 = await opts(), c2 = await page.evaluate(() => TC.plans.C.slice());
+  ok(r1.audit && r1.a.length > 0 && planWrites(log).length === n0 && JSON.stringify(c2) === JSON.stringify(c), 'refresh: after the report, the requirements and options are the report’s; Plan C stays exactly as the student made it', { r1, c, c2, writes: planWrites(log).length - n0 });
+  ok(log.errors.length === 0, 'refresh: no page errors', log.errors);
+  await close();
+};
+
+/* From the report: the Planner ranks what the REPORT says is open, not what the flowchart recomputes. */
+const RQ = (label, status, more) => Object.assign({ label, status, kind: 'major', ge: null, level: 'LN', code: null, units: null, courses: null, options: [], oneOf: false }, more || {});
+tests.plannerFromReport = async () => {
+  const reqs = [
+    RQ('1A: Written Communication Course', 'satisfied', { kind: 'ge', ge: '1A', units: { req: 3, used: 3, need: 0 } }),
+    RQ('4B: Lower-division Social Sciences Course', 'not', { kind: 'ge', ge: '4B', code: 'R78-20', units: { req: 3, used: 0, need: 3 } }),
+    RQ('BUS 3346', 'not', { code: 'R35-60', units: { req: 3, used: 0, need: 3 }, options: ['BUS 3346'] }),
+    RQ('BUS 3387', 'satisfied', { code: 'R35-70', units: { req: 3, used: 3, need: 0 }, options: ['BUS 3387'] }),
+    RQ('Business Major Finance Course', 'not', { level: 'RQ', code: 'R-0036', oneOf: true, options: ['BUS 4401', 'STAT 2170'] }),
+    RQ('BUS 4401/4411', 'not', { code: 'R35-90', courses: { req: 2, used: 1, need: 1 }, options: ['BUS 4401', 'BUS 4411'] }),
+    RQ('Senior Project', 'not', { code: 'R35-95', units: { req: 4, used: 0, need: 4 }, options: ['BUS 4461'] }),
+    RQ('BUS 3438', 'not', { code: 'R35-97', units: { req: 3, used: 0, need: 3 }, options: ['BUS 3438'] }),
+    RQ('Total Units for the Degree', 'not', { kind: 'units', units: { req: 120, used: 80, need: 40 } })];
+  const T = Object.assign({}, NOPLANS(), { degree_audit: [{ user_id: FX.ME.id, printed_on: null, catalog: 'Fall Semester 2024', major: 'BUS', concentration: null, units_used: 80, units_needed: 40, requirements: reqs, read_at: '2026-09-20T00:00:00Z' }] });
+  const { page, close, log } = await openApp({ tables: T });
+  await toPlanner(page); await openReqs(page);
+  const v = await page.evaluate(() => { const sc = document.getElementById('scroll'), L = TCPL.ledger(), R = planRank(L);
+    return { audit: R.audit, left: R.left, done: R.done, covered: [...R.X.covered].map(([b, c]) => b.label + ' ← ' + c), top: (sc.querySelector('.pl-top') || {}).innerText, all: R.all.map(c => [c.code, c.parts.req, pickReason(c).t, c.fills.map(b => b.label)]), planA: [...document.querySelectorAll('#scroll .plq-card .plo')].map(e => e.dataset.x), still: (sc.querySelector('details.pk-all summary') || {}).innerText, rows: [...sc.querySelectorAll('details.pk-all .li')].map(r => r.textContent.replace(/\s+/g, ' ').trim()), note: (sc.querySelector('.pk-note') || {}).innerText }; });
+  ok(v.covered.includes('BUS 3438 ← BUS 3438'), 'report: a Not Satisfied line for a class you’re taking this term counts as in progress, not open', v.covered);
+  ok(v.audit && v.covered.length === 2 && v.left === 5 && /^Fall 2026/.test(v.top) && await pllH(page) === (await page.evaluate(() => { plSync(); return planRank(TCPL.ledger()).X.open.filter(b => !auditIsTotal(b)).length; })) + ' left to graduate' && !/Registration opens|Opens Oct/.test(v.top), 'report: “left” is the report’s own open lines (7) less the 2 you’re taking a class for (the term in session needs no registration line)', { left: v.left, covered: v.covered, top: v.top });
+  ok(v.all.some(x => x[0] === 'BUS 3346' && x[1] === 10) && v.all.some(x => x[0] === 'BUS 4401' && x[1] === 18 && x[2] === 'Counts twice') && v.all.some(x => x[0] === 'STAT 2170' && x[1] === 8 && x[2] === 'Pick 1 of 2') && v.all.some(x => x[0] === 'BUS 4411' ? x[1] === 10 : true), 'report: a required class 10, a “1 of 2 Options” option 8, a class two lines need (BUS 4401: pick-1 + both-of-two) 18 — by the lines’ shape', v.all);
+  ok(!v.all.some(x => x[0] === 'BUS 3387') && !v.all.some(x => x[0] === 'BUS 4461') && !v.all.some(x => x[0] === 'BUS 3438'), 'report: never a class the report says is satisfied, one not offered this term, or one you’re taking', v.all.map(x => x[0]));
+  ok(v.planA.includes('BUS 3346') && !v.planA.includes('BUS 3387') && v.planA.includes('BUS 4401'), 'report: the options under the lines are the required class and the pick-1 options, never the satisfied one', v.planA);
+  ok(!v.still && !v.rows.length && !v.note, 'report: no “Still need · all” list and no footnote in the Builder — the requirement cards hold what’s left (Tate, 2026-10-13)', v);
+  ok(!v.done, 'report: open lines left, so not “all filled”');
+  ok(log.errors.length === 0, 'report: no page errors', log.errors);
+  await close();
+};
+
+/* A plan the student already made is never drafted into; “Draft it for me” drafts the one plan it’s on. */
+tests.plannerExistingPlan = async () => {
+  const { page, close, log } = await openApp({});   /* the fixture's ME has sections in Plan B */
+  await toPlanner(page);
+  const B0 = await page.evaluate(() => TC.plans.B.map(String));
+  ok(!log.writes.some(w => w.table === 'plans') && B0.length > 0 && await page.locator('#scroll .plr, #scroll .pl-card').count() === 0, 'existing: the Builder writes nothing into the plans on the account, and shows no plan card', B0);
+  /* a class in the Builder opens the section sheet with Add to a plan; the Add sheet puts it in a plan */
+  const first = await page.evaluate(() => { const e = document.querySelector('#scroll .plo'); return e && { code: e.dataset.x, id: e.dataset.y }; });
+  await click(page, '#scroll .plo'); await tick(page, 400);
+  const sh = await page.evaluate(() => ({ type: UI.sheet && UI.sheet.type, add: !!document.querySelector('#sheet [data-a="addPlanSheet"]') }));
+  ok(sh.type === 'sec' && sh.add, 'existing: a tap opens the section sheet with Add to a plan', sh);
+  await click(page, '#sheet [data-a="addPlanSheet"]'); await tick(page, 400);
+  ok(await page.evaluate(id => UI.sheet && UI.sheet.type === 'addTo' && String(UI.sheet.id) === String(id), first.id), 'existing: Add to a plan opens the Add sheet on that section', first);
+  await page.evaluate(() => { UI.sheet = null; render(true); });
+  /* Plans: an empty plan points to the Builder */
+  await page.evaluate(() => { TC.commits = []; S.schedTab = 'plans'; S.plan = 'C'; render(true); }); await tick(page, 400);
+  const e = await page.evaluate(() => ({ t: (document.querySelector('#scroll .empty') || {}).innerText || '', btn: !!document.querySelector('#scroll .empty [data-a="schedTab"][data-x="planner"]') }));
+  ok(/Nothing in Plan C yet/.test(e.t) && /Add classes from the Builder or Explore/.test(e.t) && e.btn, 'existing: an empty plan in Plans points to the Builder', e);
+  ok(log.errors.length === 0, 'existing: no page errors', log.errors);
+  await close();
+};
+
+/* Everything filled: the report's every line filled or in progress (the total units aside) — the green card
+   and Tate's fun list, real sections only, not one taken or being taken, prerequisites met. */
+tests.plannerDone = async () => {
+  const fun = [{ term: '2268', course_code: 'KINE 1109', title: 'Bowling', section: '01', instructor: 'Pat Fixturebowl', days: 'Fr 9:10AM - 10:00AM', status: 'Open', capacity: 30, enrolled: 10, available: 20, waitlist_total: 0, waitlist_capacity: 10, class_nbr: '79001', instruction_mode: 'P', location: 'Bldg 43-0110' },
+    { term: '2268', course_code: 'MU 1155', title: 'Beginning Guitar', section: '01', instructor: 'Jo Fixturestring', days: 'MoWe 4:10PM - 5:00PM', status: 'Open', capacity: 30, enrolled: 27, available: 3, waitlist_total: 0, waitlist_capacity: 10, class_nbr: '79002', instruction_mode: 'P', location: 'Bldg 45-0218' }];
+  const reqs = [RQ('1A: Written Communication Course', 'satisfied', { kind: 'ge', ge: '1A' }), RQ('BUS 3438', 'in_progress', { options: ['BUS 3438'] }),
+    RQ('Total Units for the Degree', 'not', { kind: 'units', units: { req: 120, used: 114, need: 6 } })];
+  const T = Object.assign({}, NOPLANS(), { course_seats: FX.TABLES.course_seats.concat(fun),
+    degree_audit: [{ user_id: FX.ME.id, catalog: 'Fall Semester 2024', major: 'BUS', concentration: null, units_used: 114, units_needed: 6, requirements: reqs, read_at: '2026-09-20T00:00:00Z' }] });
+  const { page, close, log } = await openApp({ tables: T });
+  await toPlanner(page);
+  const view = () => page.evaluate(() => { const sc = document.getElementById('scroll'); return { done: (sc.querySelector('.pl-done') || {}).innerText, top: (sc.querySelector('.pl-top') || {}).innerText, card: !!sc.querySelector('.pl-card'), fun: [...sc.querySelectorAll('.pl-picks .pk-card')].map(c => c.innerText.replace(/\s+/g, ' ').trim()), sech: (sc.querySelector('.pl-sech') || {}).innerText, t: sc.innerText }; });
+  let v = await view();
+  ok(/All requirements filled/.test(v.done) && /6 units to go · 1 in progress/.test(v.done) && /Nothing left open/.test(v.top) && !v.card, 'done: the green card — all filled, the units to go from the report, what’s in progress — and no plan drafted', v);
+  ok(/Something fun/.test(v.sech) && v.fun.length === 2 && v.fun.some(f => /KINE 1109 Activity classes 1 u Bowling/.test(f)) && v.fun.some(f => /MU 1155/.test(f)), 'done: Something fun shows the fun classes with a real section this term, with group and units', v.fun);
+  ok(!/Beekeeping|PLSC 1175/.test(v.t) && !log.writes.some(w => w.table === 'plans'), 'done: a fun class with no section this term is never shown, and nothing is written to the plans', { plans: log.writes.filter(w => w.table === 'plans').length });
+  /* a fun class you've taken, or whose prerequisite you haven't met, isn't offered */
+  await page.evaluate(() => { const c = TCPL.completed, ps = TCPL.prereqStatus, cp = TCPL.coursePrereqs; window.__restore = () => { TCPL.completed = c; TCPL.prereqStatus = ps; TCPL.coursePrereqs = cp; };
+    TCPL.completed = () => c().concat(['KINE 1109']); TCPL.coursePrereqs = x => x === 'MU 1155' ? { req: [['MU 1101']] } : cp(x); TCPL.prereqStatus = (x, ...a) => x === 'MU 1155' ? { state: 'unmet' } : ps(x, ...a); render(true); }); await tick(page, 300);
+  v = await view();
+  ok(v.fun.length === 0 && /None of the fun classes have a section you can take/.test(v.t), 'done: a fun class you’ve already taken, or can’t take yet, isn’t offered', v.fun);
+  await page.evaluate(() => { window.__restore(); render(true); }); await tick(page, 200);
+  /* never “all filled” on a guess: a line the reader couldn't place, or an open line other than the units */
+  const g = await page.evaluate(() => { const L = TCPL.ledger(), a = TC.audit, out = {};
+    a.reqs.push({ label: 'A requirement the app couldn’t read', status: 'unknown', kind: null, options: [] }); out.unknown = planRank(L).done; a.reqs.pop();
+    a.reqs.push({ label: 'Graduation Writing Requirement', status: 'not', kind: 'gwr', options: [] }); out.gwr = planRank(L).done; a.reqs.pop();
+    out.ok = planRank(L).done;
+    const was = TC.audit; TC.audit = null;
+    const F = more => planRank(Object.assign({}, L, { need: [], needU: [], cant: [], concUnchosen: 0 }, more)).done;
+    out.flow = { clean: F({}), cant: F({ cant: [{ title: 'Approved elective' }] }), conc: F({ concUnchosen: 1 }) };
+    TC.audit = was; return out; });
+  ok(g.ok && !g.unknown && !g.gwr, 'done: one line the app can’t check, or one open line other than the total units, and it isn’t “all filled”', g);
+  ok(g.flow.clean && !g.flow.cant && !g.flow.conc, 'done: from the flowchart, a slot it can’t check or a concentration not chosen yet keeps it from “all filled”', g.flow);
+  ok(log.errors.length === 0, 'done: no page errors', log.errors);
+  await close();
+};
+
+/* Mark done (Tate, 2026-10-09): a line the report hasn't caught up on — the student marks it done, it stops
+   counting as left and stops getting picks, it survives a new upload, and Undo puts it back. */
+tests.plannerMarkDone = async () => {
+  const reqs = [RQ('Graduation Writing Requirement', 'in_progress', { kind: 'gwr', code: 'R11-10' }),
+    RQ('Approved Elective', 'not', { kind: 'conc', code: 'R179-10', units: { req: 4, used: 0, need: 4 } }),
+    RQ('Business Major Senior Project', 'not', { level: 'RQ', code: 'R-0037', oneOf: true, options: ['BUS 4461', 'BUS 4462'] }),
+    RQ('BUS 3346', 'satisfied', { code: 'R35-60', options: ['BUS 3346'] }), RQ('A requirement the app couldn’t read', 'unknown')];
+  const T = Object.assign({}, NOPLANS(), { degree_audit: [{ user_id: FX.ME.id, catalog: 'Fall Quarter 2023', major: 'BUS', concentration: null, units_used: 180, units_needed: 0, requirements: reqs, overrides: [], read_at: '2026-10-08T00:00:00Z' }] });
+  let failPatch = false;
+  const { page, close, log } = await openApp({ tables: T, hook: (url, m) => failPatch && m === 'PATCH' && /\/rest\/v1\/degree_audit$/.test(url.pathname) ? { status: 500, body: JSON.stringify({ message: 'fixture: offline', code: 'XX000' }) } : null });
+  await toPlanner(page);
+  /* (2026-10-13) Still need left the Builder: what's left is the requirement cards (each opened here); a line you marked
+     done shows in Past classes' Done with Undo */
+  const view = () => page.evaluate(() => { UI.plReqOpen = UI.plReqOpen || {}; document.querySelectorAll('#scroll [data-a="plReqOpen"]').forEach(b => { UI.plReqOpen[b.dataset.x] = true; }); render(true);
+    const sc = document.getElementById('scroll'), X = auditLines(TC.audit, plGate().L);
+    return { top: (sc.querySelector('.pl-top') || {}).innerText || '', open: [...sc.querySelectorAll('.plq-card')].map(c => ((c.querySelector('.plq-t b') || c.querySelector('.pc-main') || {}).innerText || '').replace(/\s+/g, ' ').trim() + (c.querySelector('[data-a="plMarkAsk"]') ? ' Mark done' : '')),
+      marked: X ? [...X.manual].map(b => b.label) : [], done: (sc.querySelector('.pl-done') || {}).innerText || '' }; });
+  const unmark = async name => { await page.evaluate(() => { S.schedTab = 'past'; UI.pcGroups = { major: true, conc: true, ge: true, degree: true }; render(true); }); await tick(page, 300);
+    await click(page, `.pc-done .pc-row:has-text("${name}") [data-a="plUnmark"]`); await tick(page, 800);
+    await page.evaluate(() => { S.schedTab = 'planner'; render(true); }); await tick(page, 300); };
+  let v = await view();
+  ok(await pllH(page) === '2 left to graduate' && v.open.length === 3 && v.open.filter(r => /Mark done$/.test(r)).length === 2 && v.open.some(r => /couldn’t read/.test(r) && !/Mark done/.test(r)), 'mark done: every Not Satisfied line’s card has a Mark done button — a line the app couldn’t read doesn’t', v);
+  await click(page, '.plq-card:has-text("Approved Elective") [data-a="plMarkAsk"]'); await tick(page, 200);
+  const sh = await page.evaluate(() => ({ type: UI.sheet && UI.sheet.type, t: document.getElementById('sheet').innerText }));
+  ok(sh.type === 'plMark' && /Mark it done\?/.test(sh.t) && /Approved Elective/.test(sh.t) && /Your report says this isn’t satisfied yet/.test(sh.t) && /Cal Poly’s degree audit still decides what counts/.test(sh.t), 'mark done: it asks once, saying what it does — and that Cal Poly’s audit still decides', sh.t.slice(0, 300));
+  await click(page, '[data-a="plMarkDo"]'); await tick(page, 800);
+  const w = log.writes.filter(x => x.table === 'degree_audit' && x.m === 'PATCH');
+  ok(w.length === 1 && Array.isArray(w[0].body.overrides) && w[0].body.overrides.length === 1 && w[0].body.overrides[0].code === 'R179-10' && Object.keys(w[0].body).join() === 'overrides', 'mark done: saved on my audit row as the line’s code — nothing else written', w.map(x => x.body));
+  v = await view();
+  ok(await pllH(page) === '1 left to graduate' && v.open.length === 2 && v.open.some(r => /Senior Project/.test(r)) && v.marked.join() === 'Approved Elective', 'mark done: it stops counting as left and counts as marked done by you (Undo in Past classes) — the Senior Project is what’s left', v);
+  const picks = await page.evaluate(() => planRank(TCPL.ledger()).all.filter(c => c.fills.some(b => b.label === 'Approved Elective')).length);
+  ok(picks === 0, 'mark done: no picks for a line marked done', picks);
+  /* a mark made while the account can't be reached is kept on the phone and goes up next time */
+  failPatch = true;
+  await view(); await click(page, '.plq-card:has-text("Senior Project") [data-a="plMarkAsk"]'); await tick(page, 200);
+  await click(page, '[data-a="plMarkDo"]'); await tick(page, 800);
+  const off = await page.evaluate(() => ({ toast: document.getElementById('toast').textContent, local: JSON.parse(localStorage.getItem('tc-audit:' + TC.user.id) || 'null') }));
+  ok(/kept on this phone/.test(off.toast) && off.local && off.local.ovPending && off.local.overrides.length === 2, 'mark done: offline, it’s kept on the phone and says so', { toast: off.toast, pending: off.local && off.local.ovPending });
+  failPatch = false; const nPatch = log.writes.filter(x => x.table === 'degree_audit' && x.m === 'PATCH').length;
+  await page.evaluate(() => loadAudit()); await tick(page, 600);
+  const sent = log.writes.filter(x => x.table === 'degree_audit' && x.m === 'PATCH').slice(nPatch);
+  ok(sent.length >= 1 && sent.slice(-1)[0].body.overrides.length === 2 && !(await page.evaluate(() => JSON.parse(localStorage.getItem('tc-audit:' + TC.user.id) || '{}').ovPending)), 'mark done: next time the account is read, the mark goes up', sent.map(x => x.body));
+  await unmark('Senior Project');
+  /* a new upload keeps it */
+  await page.evaluate(async () => { await TC.saveAudit({ ok: true, reqs: TC.audit.reqs.map(b => Object.assign({}, b)) }, { major: 'BUS' }); });
+  const up = log.writes.filter(x => x.table === 'degree_audit' && x.m === 'POST').slice(-1)[0];
+  ok(up && up.body.overrides && up.body.overrides.length === 1 && up.body.overrides[0].code === 'R179-10', 'mark done: a new upload keeps what was marked', up && up.body.overrides);
+  /* Undo */
+  await unmark('Approved Elective');
+  v = await view();
+  const w2 = log.writes.filter(x => x.table === 'degree_audit' && x.m === 'PATCH').slice(-1)[0];
+  ok(await pllH(page) === '2 left to graduate' && v.open.length === 3 && !v.marked.length && w2 && w2.body.overrides.length === 0, 'mark done: Undo puts it back on the list', { v, last: w2 && w2.body });
+  /* a session whose read of the audit failed never sends marks with a new upload (it would blank them) */
+  await page.evaluate(async () => { const was = TC.auditLoaded; TC.auditLoaded = false; await TC.saveAudit({ ok: true, reqs: TC.audit.reqs.map(b => Object.assign({}, b)) }, { major: 'BUS' }); TC.auditLoaded = was; });
+  const up2 = log.writes.filter(x => x.table === 'degree_audit' && x.m === 'POST').slice(-1)[0];
+  ok(up2 && !('overrides' in up2.body), 'mark done: after a failed read, a new upload leaves the account’s marks alone', up2 && Object.keys(up2.body));
+  /* everything marked or in progress: the green card says so, and the marked lines stay reachable for Undo */
+  await page.evaluate(async () => { await TC.saveOverrides([{ code: 'R179-10', label: 'Approved Elective' }, { code: 'R-0037', label: 'Business Major Senior Project' }]); UI.plRefresh = true; render(true); }); await tick(page, 600);
+  v = await view();
+  ok(await pllH(page) === '' && !v.done, 'mark done: a line the app couldn’t read still keeps it from “all filled”', v);
+  await page.evaluate(() => { TC.audit.reqs.pop(); render(true); }); await tick(page, 300);   /* without that line */
+  v = await view();
+  ok(/All requirements filled/.test(v.done) && /1 in progress · 2 marked done by you/.test(v.done) && v.marked.length === 2, 'mark done: with nothing left the green card shows, says 2 were marked by you, (each with Undo in Past classes)', v);
+  ok(log.errors.length === 0, 'mark done: no page errors', log.errors);
+  await close();
+};
+
+/* A report read saved only on the phone goes up next launch — without blanking marks the account already has. */
+tests.dprPendingPush = async () => {
+  const reqs = [RQ('Approved Elective', 'not', { kind: 'conc', code: 'R179-10' }), RQ('Business Major Senior Project', 'not', { code: 'R-0037', oneOf: true, options: ['BUS 4461', 'BUS 4462'] })];
+  const T = Object.assign({}, NOPLANS(), { degree_audit: [{ user_id: FX.ME.id, requirements: reqs, overrides: [{ code: 'R179-10', label: 'Approved Elective', at: '2026-10-09T01:00:00Z' }], read_at: '2026-10-08T00:00:00Z' }] });
+  const init = `try { localStorage.setItem('tc-audit:${FX.ME.id}', JSON.stringify({ user_id: '${FX.ME.id}', requirements: ${JSON.stringify(reqs)}, overrides: [], read_at: '2026-10-09T02:00:00Z', pending: true })); } catch (e) {}`;
+  const { page, close, log } = await openApp({ tables: T, init });
+  await page.waitForFunction(() => TC.ready, null, { timeout: 8000 }); await tick(page, 800);
+  const up = log.writes.filter(x => x.table === 'degree_audit' && x.m === 'POST');
+  const v = await page.evaluate(() => ({ ov: TC.audit && TC.audit.overrides.map(o => o.code), local: JSON.parse(localStorage.getItem('tc-audit:' + TC.user.id) || '{}') }));
+  ok(up.length === 1 && up[0].body.read_at === '2026-10-09T02:00:00Z' && !('overrides' in up[0].body) && !('pending' in up[0].body), 'pending: the newer read saved on the phone goes up at launch — without touching the account’s marks', up.map(x => Object.keys(x.body)));
+  ok(v.ov && v.ov.join() === 'R179-10' && !v.local.pending && v.local.overrides.length === 1, 'pending: the marks made elsewhere are still there, on the account and the phone', v);
+  ok(log.errors.length === 0, 'pending: no page errors', log.errors);
+  await close();
+};
+
+/* The writing requirement while you're in a GWR class (Tate, 2026-10-09): the report lists this term's class
+   under the line with no grade yet — the line is in progress, not left. Enough classes and units, or it stays open. */
+tests.dprTakingNow = async () => {
+  const { page, close } = await openApp({});
+  await page.waitForFunction(() => TC.ready, null, { timeout: 8000 });
+  await page.evaluate(() => TC.loadPlanner()); await page.waitForFunction(() => !!window.TCPL, null, { timeout: 8000 });
+  const r = await page.evaluate(() => {
+    const T = ['Degree Progress Report', 'BUS Primary BS UG Major Fall Quarter 2023',
+      'GRADUATION WRITING REQUIREMENT', 'Overall Requirement Not Satisfied: GRADUATION WRITING REQUIREMENT (R-0011)', 'GRADUATION WRITING REQUIREMENT',
+      'Not Satisfied: GRADUATION WRITING REQUIREMENT: - Satisfactory Completion Required',
+      'If enrolled in a GWR eligible course, allow a week after grades are finalized before the GWR shows as satisfied (turns green) in this',
+      'section. (R11-10)', 'GRADUATION WRITING REQUIREMENT ELIGIBLE COURSE(S)', 'Courses Used', 'Term Subject Catalog Nbr Course Title Grade Units Requirement', 'Designation', 'Status',
+      '2026 Fall UNIV 4401 GWR Portfolio 0.00',
+      'APPROVED ELECTIVES', 'Not Satisfied: APPROVED ELECTIVES: (See Catalog for Course Options) - 8 Units Required (R2178-10)', '· Units: 8.00 required, 4.00 used, 4.00 needed',
+      'Courses Used', 'Term Subject Catalog Nbr Course Title Grade Units Requirement', '2025 Spr BUS 4488 Digital Marketing B 4.00', '2026 Fall BUS 4436 Fixture Finance 4.00',
+      'BUS 4455', 'Not Satisfied: BUS 4455 - 4 Units Required (R99-70)', '· Units: 4.00 required, 0.00 used, 4.00 needed',
+      'Courses Used', 'Term Subject Catalog Nbr Course Title Grade Units Requirement', '2026 Fall BUS 4455 Fixture Two 2.00',
+      'PICK TWO', 'Not Satisfied: PICK TWO: BUS 4436, 4437 - 8 Units Required (R2179-10)',
+      'Courses Used', 'Term Subject Catalog Nbr Course Title Grade Units Requirement', '2026 Fall BUS 4436 Fixture Finance 4.00',
+      'MATH 1221', 'Not Satisfied: MATH 1221 - 4 Units Required (R40-10)', '· Courses: 2.00 required, 0.00 used, 2.00 needed',
+      'Courses Used', 'Term Subject Catalog Nbr Course Title Grade Units Requirement', '2025 Fall MATH 1221 Calculus D 4.00', '2026 Fall MATH 1221 Calculus 4.00',
+      'BUS 4999', 'Not Satisfied: BUS 4999 - 4 Units Required (R41-10)', '· Courses: 1.00 required, 0.00 used, 1.00 needed',
+      'Courses Used', 'Term Subject Catalog Nbr Course Title Grade Units Requirement', '2025 Spr BUS 4999 Fixture Retake F 4.00',
+      'SENIOR PROJECT', 'Not Satisfied: BUSINESS MAJOR SENIOR PROJECT - 4 Units Required in 1 of 2 Options (R-0037)',
+      'BUS 4461 (OPT 1)', 'Not Satisfied: BUS 4461 - 4 Units Required (Option 1 of 2) (R37-10)',
+      'Course History', 'Term Subject Catalog Title Grade Units',
+      '2025 Spr BUS 4488 Digital Marketing B 4.00', '2025 Fall MATH 1221 Calculus D 4.00', '2026 Fall UNIV 4401 GWR Portfolio 0.00', '2026 Fall BUS 4436 Fixture Finance 4.00', '2026 Fall BUS 4455 Fixture Two 2.00', '2026 Fall MATH 1221 Calculus 4.00', '2025 Spr BUS 4999 Fixture Retake F 4.00', '2026 Fall BUS 4999 Fixture Retake 4.00'].join('\n');
+    const p = TCPL.dprParse(T), a = p.audit;
+    return { rows: p.rows.map(x => [x.cur, !!x._now]), reqs: a.reqs.map(b => [b.code, b.status, b.label]) };
+  });
+  const st = c => (r.reqs.find(x => x[0] === c) || [])[1];
+  ok(st('R11-10') === 'in_progress', 'taking now: the writing requirement with this term’s GWR class under it (no grade yet) is in progress — and its code is read past the advice sentence', r);
+  ok(st('R2178-10') === 'in_progress', 'taking now: 4 units needed, a 4-unit class being taken under it: in progress', r.reqs);
+  ok(st('R99-70') === 'not', 'taking now: 4 units needed and only 2 being taken: still left', r.reqs);
+  ok(st('R-0037') === 'not', 'taking now: a line with no class being taken under it stays as the report says', r.reqs);
+  ok(st('R2179-10') === 'not', 'taking now: a line that prints no counts and lists two classes isn’t settled by one being taken', r.reqs);
+  ok(st('R41-10') === 'not', 'taking now: a line listing only an earlier, graded attempt of a class you’re retaking isn’t in progress', r.reqs);
+  ok(st('R40-10') === 'not', 'taking now: a retake counts once — an earlier graded attempt isn’t a class being taken (2 needed, 1 being taken)', r.reqs);
+  await close();
+};
+
+/* Registration: the term in session is open; the term registration is coming for opens on its date. */
+tests.plannerRegOpen = async () => {
+  const { page, close } = await openApp({ tables: NOPLANS() });
+  await toPlanner(page);
+  let v = await page.evaluate(() => { const sc = document.getElementById('scroll'), R = planRank(TCPL.ledger()); return { top: (sc.querySelector('.pl-top') || {}).innerText + '\n' + ((sc.querySelector('.pla-reg') || {}).innerText || ''), rows: [...sc.querySelectorAll('.plq-card .plo')].map(r => r.innerText), seat: R.all.map(c => c.parts.seat), open: regOpen(), term: CFG.TERM_LABEL, reg: CFG.REGISTRATION_TERM }; });
+  ok(v.open && v.term === 'Fall 2026' && v.reg === 'Spring 2027' && !/Registration opens|Opens Oct|Add your day|You register/.test(v.top), 'reg: planning Fall 2026 (in session) — no “Registration opens Oct 19” (that date is Spring’s)', v.top);
+  ok(v.rows.length && v.rows.every(r => !/seats|Waitlist/i.test(r)) && v.seat.some(s => s > 0), 'reg: in session, Seats counts in the score; the option rows stay plain (seats are on the tap)', v);
+  /* the term registration is for, before its date */
+  await page.evaluate(() => { CFG.REGISTRATION_TERM = CFG.TERM_LABEL; render(true); }); await tick(page, 300);
+  v = await page.evaluate(() => ({ top: (document.querySelector('#scroll .pl-top') || {}).innerText + '\n' + ((document.querySelector('#scroll .pla-reg') || {}).innerText || ''), open: regOpen(), seat0: planRank(TCPL.ledger()).all.every(c => !c.parts.seat), seats: /\d+ seats/.test((document.querySelector('#scroll .plq-list') || {}).innerText || '') }));
+  ok(!v.open && /Opens Oct 19/.test(v.top) && !v.seats && v.seat0, 'reg: planning the term registration is for, before Oct 19 — the line shows, seats don’t, and Seats counts for nothing', v);
+  /* …and on the day */
+  await page.clock.setSystemTime(new Date('2026-10-19T08:00:00-07:00')); await page.evaluate(() => render(true)); await tick(page, 300);
+  v = await page.evaluate(() => ({ top: (document.querySelector('#scroll .pl-top') || {}).innerText + '\n' + ((document.querySelector('#scroll .pla-reg') || {}).innerText || ''), open: regOpen() }));
+  ok(v.open && !/Registration opens/.test(v.top), 'reg: from Oct 19 (Pacific) it’s open', v);
+  await click(page, '.pl-picks .pk-card .pk-main >> nth=0').catch(() => null); await tick(page, 300);
+  const why = await page.evaluate(() => { const s = document.getElementById('sheet'); return s && s.querySelector('.pw-val') ? [...s.querySelectorAll('.pw-val')].map(x => x.innerText) : null; });
+  if (why) ok(/^\d$/.test(why[4]), 'reg open: the Why sheet’s Seats part is a number now', why);
+  await close();
+};
+
+/* The Plans tab says how B and C differ from A. */
+tests.plansDiffLine = async () => {
+  const { page, close } = await openApp({ tables: NOPLANS() });
+  await toPlanner(page);
+  /* A: a class with two sections (BUS 3431, 70100) and one more; B: the other section of it, plus STAT 2170; C: A without its first */
+  const set = await page.evaluate(() => { const other = Object.keys(COURSES).find(c => c !== 'BUS 3431' && c !== 'STAT 2170' && secsOf(c).length);
+    const a = ['70100', String(secsOf(other)[0].id)]; TC.setPlan('A', a); TC.setPlan('B', ['70101', a[1], String(secsOf('STAT 2170')[0].id)]); TC.setPlan('C', [a[1]]); return { other }; });
+  await click(page, '[data-a="schedTab"][data-x="plans"]'); await tick(page, 400);
+  const line = async k => { await click(page, `.seg.plans [data-a="pickPlan"][data-x="${k}"]`); await tick(page, 300); return page.evaluate(() => (document.querySelector('#scroll .pl-diff') || {}).innerText || ''); };
+  const a = await line('A'), b = await line('B'), c = await line('C');
+  ok(a === '' && b === '' && c === '', 'plans: no “Plan A with … / without …” line under any plan (Tate, 2026-10-11: “dont need this take away”)', { a, b, c, set });
+  await close();
+};
+
+/* Onboarding: the report is the last step; a first-year before grades post isn’t asked; the laptop link. */
+tests.onbReportLast = async () => {
+  const { page, close, log } = await openApp({ rpc: Object.assign({}, FX.RPC, { request_planner_link: 'me***@calpoly.edu' }) });
+  await page.waitForFunction(() => TC.ready, null, { timeout: 8000 });
+  await page.evaluate(() => { S.stack.home.push({ s: 'onb', p: { step: 'schedule' } }); render(); }); await tick(page, 500);
+  const s1 = await page.evaluate(() => ({ kick: (document.querySelector('.onb .kicker') || {}).innerText, skip: (document.querySelector('.onb .foot .ghost') || {}).dataset.x, dpr: !!document.querySelector('.onb input[data-in="dprfile"]') }));
+  ok(/Step 1 of 4/i.test(s1.kick) && s1.skip === 'confirm' && !s1.dpr, 'onboarding: step 1 is the schedule and goes on to “Does this look right?” — the report isn’t asked for yet', s1);
+  await page.evaluate(() => { onbGo('people'); }); await tick(page, 500);
+  ok(await page.evaluate(() => (document.querySelector('.onb .foot .btn') || {}).dataset.x === 'degree'), 'onboarding: People you may know continues to the report step');
+  await page.evaluate(() => { onbGo('degree'); }); await tick(page, 500);
+  const d = await page.evaluate(() => { const o = document.querySelector('.onb'); return { t: o.innerText, pills: o.querySelectorAll('.progress i.on').length, pillsAll: o.querySelectorAll('.progress i').length, up: o.querySelectorAll('input[data-in="dprfile"]').length, laptop: !!o.querySelector('[data-a="plLaptop"]'), skip: (o.querySelector('.foot .ghost') || {}).dataset.x, steps: [...o.querySelectorAll('.steps .row')].map(r => r.innerText.replace(/\s+/g, ' ').trim()), fy: !!o.querySelector('[data-x="payoff"].btn') }; });
+  ok(d.pills === d.pillsAll && /Upload your degree progress report/.test(d.t) && /The Builder works out everything from it/.test(d.t) && d.up === 1 && d.laptop && d.skip === 'payoff', 'onboarding: the LAST step (every pill lit) — the report, Upload DPR, Send the link to my laptop, Skip for now', d);
+  ok(d.steps.length === 3 && /^1 Cal Poly Portal\s*Student Center › Academic Progress$/.test(d.steps[0]) && /^2 Degree Progress Report \(DPR\)\s*View PDF › Download$/.test(d.steps[1]) && /^3 Upload it here$/.test(d.steps[2]) && /Private · grades and ID never saved/.test(d.t), 'onboarding: the three portal steps in the portal’s own words and the lock chip', d.steps);
+  ok(!/I’m a first-year|first-year/.test(d.t), 'onboarding: no “I’m a first-year” button (a junior sees none)', d.t.slice(0, 300));
+  await click(page, '[data-a="plLaptop"]'); await tick(page, 600);
+  const toastT = await page.evaluate(() => document.getElementById('toast').textContent);
+  ok(log.rpcs.some(r => r.fn === 'request_planner_link') && /We’ll email the link to me\*\*\*@calpoly\.edu within 5 minutes/.test(toastT), 'onboarding: “Send the link to my laptop” asks the server to email my own address and says when it will arrive', { rpcs: log.rpcs.map(r => r.fn), toast: toastT });
+  await uploadDpr(page, '.onb input[data-in="dprfile"]');
+  ok(/Report read/.test(await page.locator('#sheet').innerText()), 'onboarding: the upload opens Report read');
+  await page.evaluate(() => { window.__asks = []; const real = TC.pushAsk; TC.pushAsk = r => { window.__asks.push(r); return real(r); }; });
+  await click(page, '[data-a="dprSave"]'); await tick(page, 2500);
+  const end = await page.evaluate(() => ({ tab: S.tab, sub: S.schedTab, onb: S.stack.home.some(x => x.s === 'onb'), key: localStorage.getItem('termchamp_app_onb') }));
+  ok(end.tab === 'schedule' && end.sub === 'planner' && !end.onb && !end.key, 'onboarding: after the report, onboarding is over (not remembered as unfinished) and the Planner is open', end);
+  ok(await page.evaluate(() => UI.sheet && UI.sheet.type === 'pcWho'), 'onboarding: the report’s classes ask who taught them first');
+  await tick(page, 900); const held = await page.evaluate(() => window.__asks.slice());
+  await click(page, '#sheet [data-a="pcWhoDone"].btn'); await tick(page, 900);
+  const asked = await page.evaluate(() => window.__asks.slice());
+  ok(held.length === 0 && asked.join() === 'onboarding', 'onboarding: the notification ask waits for “Who taught these?”, then comes once', { held, asked });
+  ok(log.errors.length === 0, 'onboarding: no page errors', log.errors);
+  await close();
+  /* a first-year before the term ends, with nothing on the record: no upload, the flowchart's spring, one Continue */
+  const T1 = Object.assign({}, NOREC(), { profiles: FX.TABLES.profiles.map(p => p.id === FX.ME.id ? Object.assign({}, p, { class_standing: 'Freshman' }) : p) });
+  const f = await openApp({ tables: T1 });
+  await f.page.waitForFunction(() => TC.ready, null, { timeout: 8000 });
+  await f.page.evaluate(() => TC.loadPlanner()); await f.page.waitForFunction(() => !!window.TCPL, null, { timeout: 8000 });
+  await f.page.evaluate(() => { S.stack.home.push({ s: 'onb', p: { step: 'degree' } }); render(); }); await tick(f.page, 600);
+  const fy = await f.page.evaluate(() => { const o = document.querySelector('.onb'); return { t: o.innerText, up: o.querySelectorAll('input[data-in="dprfile"]').length, rows: [...o.querySelectorAll('.onb-fy .row')].map(r => r.innerText.replace(/\s+/g, ' ').trim()), btn: (o.querySelector('.foot .btn') || {}).innerText, ghost: o.querySelectorAll('.foot .ghost').length }; });
+  ok(/Nothing on your report yet/.test(fy.t) && /Your flowchart is the plan until grades post/.test(fy.t) && fy.up === 0 && fy.btn === 'Continue' && fy.ghost === 0, 'onboarding: a first-year before grades post isn’t asked to upload — one Continue', fy);
+  ok(fy.rows.length >= 3 && fy.rows.every(r => /^[A-Z]{2,4} \d{4} |^GE |^Pick 1 /.test(r)) && /We’ll ask for it after Dec 22/.test(fy.t), 'onboarding: it shows the flowchart’s Spring Year 1 and when the report will be asked for (the academic calendar’s end of term)', fy);
+  /* a slot with a choice of classes reads “Pick 1” with the slot's own words, never one option passed off as the class */
+  const ch = await f.page.evaluate(() => { const L = TCPL.ledger(), sp = (L.grid || []).find(t => t.year === 1 && /spring/i.test(t.term)); return sp ? sp.slots.slice(0, 6).filter(s => (s.choice && s.choice.length > 1) || (s.codes && s.codes.length > 1)).map(s => s.title) : []; });
+  ok(ch.every(t => fy.rows.some(r => r.startsWith('Pick 1 ' + t))), 'onboarding: a choice slot reads “Pick 1 · <the slot’s words>”', { ch, rows: fy.rows });
+  await click(f.page, '.onb .foot .btn'); await tick(f.page, 300);
+  await f.page.evaluate(() => { onbRemember(null); S.stack.home = [{ s: 'home' }]; S.tab = 'schedule'; S.schedTab = 'planner'; render(); }); await tick(f.page, 2500);
+  const pl = await f.page.evaluate(() => ({ dpr: !!document.querySelector('#scroll .tc-dpr'), card: !!document.querySelector('#scroll .plq-card') }));
+  ok(!pl.dpr && pl.card, 'onboarding: a first-year’s Builder goes straight to what to take', pl);
+  await f.close();
 };
 
 tests.friendPlans = async () => {
   const { page, close, log } = await openApp({});
+  /* friends' plans are read after the first load finishes: wait for that read rather than racing it */
+  await page.waitForFunction(() => TC.friendPlans || TC.err.friendPlans, null, { timeout: 8000 }).catch(() => {});
   ok(log.reads.some(r => /^plans\?/.test(r) && /user_id=neq\./.test(r) && /term=eq\.2268/.test(r)), 'friend plans: read with the desktop’s query (term, not me)');
   /* Avery has a chat with me, so she is under Chats (2026-10-03); her page opens from the chat header. */
   const openAvery = async () => { await click(page, '.chathdr [data-a="openFriend"]'); await tick(page, 400); };
@@ -4508,10 +6426,10 @@ tests.friendPlans = async () => {
     return c && { title: c.querySelector('.fwk-t').innerText, sw: sw ? [...sw.querySelectorAll('button')].map(b => [b.innerText, b.dataset.y, b.getAttribute('aria-pressed'), Math.round(b.getBoundingClientRect().height)]) : null,
       plan: !!c.querySelector('.plancol.plan-A'), blocks: [...c.querySelectorAll('.g-b')].map(b => b.dataset.x), note: (c.querySelector('.fwk-n') || {}).innerText || '', list: l ? l.innerText.replace(/\s+/g, ' ') : '',
       cards: document.querySelectorAll('.card.fweek').length, oldCard: /’s plans/.test(document.getElementById('scroll').innerText), pill: /with you/i.test((document.querySelector('#scroll .row') || {}).innerText || '') || !!document.querySelector('#scroll .pillchip'),
-      handle: (document.querySelector('.fhandle') || {}).innerText || '' }; });
+      handle: (document.querySelector('.fhandle') || {}).innerText || '', status: (document.querySelector('.fpg .mestatus') || {}).innerText || '' }; });
   let v = await view();
   ok(v && v.title === 'Fall 2026' && v.sw && v.sw.map(x => x[0]).join('|') === 'Fall|A' && v.sw[0][2] === 'true' && !v.plan && v.cards === 1 && !v.oldCard, 'friend plans: the week card says Fall 2026 and has a Fall / A switch — only the plan she shares; no separate plans card', v);
-  ok(v.sw.every(x => x[3] >= 40) && !v.pill && /^@aquill · /.test(v.handle), 'friend plans: the switch is tappable; no “N classes with you” pill; the status sits after the @handle', v);
+  ok(v.sw.every(x => x[3] >= 40) && !v.pill && v.handle === '@aquill' && v.status.length > 0, 'friend plans: the switch is tappable; no “N classes with you” pill; the status sits under the @handle', v);
   await click(page, '.fsw button[data-y="A"]');
   v = await view();
   ok(v.title === 'Plan A' && v.plan && v.sw[1][2] === 'true' && v.blocks.includes('BUS 3438') && v.blocks.includes('STAT 2170') && /^2 classes · 1 with you$/.test(v.note), 'friend plans: A draws her Plan A on the same card in the plan’s colour, with what’s in it', v);
@@ -4597,11 +6515,13 @@ tests.profileGrants = async () => {
   ({ page, close } = await openApp({ init: desk('Financial Management') }));
   await click(page, '[data-a="tab"][data-x="schedule"]'); await click(page, '[data-a="schedTab"][data-x="past"]'); await tick(page, 2500);
   t = await text(page);
-  ok(/Financial Management/.test(t) && !/Pick your concentration/.test(t), 'profile: the concentration picked on the desktop carries over (same origin, same major)', t.slice(0, 300));
+  const cc = await page.evaluate(() => ({ conc: TC.profile && TC.profile.concentration, unchosen: TCPL.ledger().concUnchosen }));
+  ok(cc.conc === 'Financial Management' && cc.unchosen === 0 && !/Pick your concentration/.test(t), 'profile: the concentration picked on the desktop carries over (same origin, same major)', cc);
   await close();
 
   ({ page, close } = await openApp({ init: `localStorage.setItem('professify-profile', JSON.stringify({ major: 'Plant Sciences', conc: 'Financial Management' }))` }));
   await click(page, '[data-a="tab"][data-x="schedule"]'); await click(page, '[data-a="schedTab"][data-x="past"]'); await tick(page, 2500);
+  await page.evaluate(() => { TC.prefs = TC.prefs || { priority: 'degree', units: 16 }; }); await click(page, '[data-a="schedTab"][data-x="planner"]'); await tick(page, 2500);   /* the pick is the Builder's (2026-10-12) */
   ok(/Pick your concentration/.test(await text(page)), 'profile: a desktop memory for another major is ignored');
   await click(page, '[data-a="pickConc"][data-x="Financial Management"]'); await tick(page, 800);
   const mem = await page.evaluate(() => localStorage.getItem('termchamp_app_conc'));
@@ -4613,6 +6533,7 @@ tests.profileGrants = async () => {
   await close();
   ({ page, close } = await openApp({ init: `localStorage.setItem('termchamp_app_conc', JSON.stringify({ u: 'someone-else', major: ${JSON.stringify(FX.ME.major)}, conc: 'Financial Management' }))` }));
   await click(page, '[data-a="tab"][data-x="schedule"]'); await click(page, '[data-a="schedTab"][data-x="past"]'); await tick(page, 2500);
+  await page.evaluate(() => { TC.prefs = TC.prefs || { priority: 'degree', units: 16 }; }); await click(page, '[data-a="schedTab"][data-x="planner"]'); await tick(page, 2500);   /* the pick is the Builder's (2026-10-12) */
   ok(/Pick your concentration/.test(await text(page)), 'profile: another account’s memory on this device is not used');
   await close();
 };
@@ -4695,7 +6616,10 @@ tests.signup = async () => {
   await page.reload(); await tick(page, 2500); await tick(page, 1500);
   ok(/People you may know/.test(await text(page)), 'onboard: closing the app mid-way comes back to the same step');
   noProto(t, 'onboarding');
-  await click(page, '[data-a="onbStep"][data-x="payoff"]');
+  await click(page, '[data-a="onbStep"][data-x="degree"]');
+  t = await text(page);
+  ok(/Upload your degree progress report/.test(t) && await page.locator('.onb .foot .ghost[data-x="payoff"]').count() === 1, 'onboard: then the report, last — with Skip for now', t.slice(0, 200));
+  await click(page, '.onb .foot .ghost[data-a="onbStep"][data-x="payoff"]');
   t = await text(page);
   ok(/You’re in, Jordan!/.test(t) && /Start planning!/.test(t) && !/Stay up to date/.test(t), 'onboard: the payoff — and no notifications step while push isn’t live', t.slice(0, 200));
   await click(page, '[data-a="onbFinish"][data-x="home"]');
@@ -4761,11 +6685,41 @@ tests.ga = async () => {
   await close();
 };
 
+/* The iPhone app never sends people to the website (App Review 4.2 / 2.1, 2026-10-07). window.Capacitor
+   is faked before the page runs, the way Capacitor injects it; the same screens on the web keep their links. */
+tests.nativeNoWeb = async () => {
+  const fake = () => { window.Capacitor = { isNativePlatform: () => true, Plugins: {}, registerPlugin: () => null }; };
+  for (const native of [true, false]) {
+    const tag = native ? 'iPhone app' : 'web';
+    const { page, close, log } = await openApp(native ? { init: fake } : {});
+    ok(await page.evaluate(() => window.TC_NATIVE === true) === native, `${tag}: TC_NATIVE is ${native}`);
+    await click(page, '.homehdr .me-btn'); await click(page, '[data-a="openSettings"]'); await tick(page, 500);
+    const about = await page.evaluate(() => [...document.querySelectorAll('#scroll a')].filter(a => /Open TermChamp on the web/.test(a.textContent)).length);
+    ok(about === (native ? 0 : 1), `${tag}: Settings › About ${native ? 'has no' : 'keeps its'} "Open TermChamp on the web"`, about);
+    const html = await page.evaluate(() => ({ onb: onbSchedule(), wl: onbWaitlist('fixture@sdsu.edu', true), wlOut: onbWaitlist('fixture@sdsu.edu', false) }));
+    for (const [k, h] of Object.entries(html)) {
+      const web = /termchamp\.com/.test(h.replace(/<[^>]+>/g, ' ')) || /href="https:\/\/termchamp\.com/.test(h);
+      ok(web === !native, `${tag}: ${k} ${native ? 'never points to' : 'still links'} termchamp.com`, h.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 300));
+    }
+    ok(/Search your classes/.test(html.onb), `${tag}: onboarding keeps the app's own way to add classes`);
+    const champ = await page.evaluate(() => ({ goto: answerTool({ tool: 'go_to', args: { where: 'the moon' } }, 'open the moon'), theme: answerTool({ tool: 'set_theme', args: {} }, 'dark mode') }));
+    const gotoWeb = /termchamp\.com/.test(champ.goto.t) || (champ.goto.acts || []).some(x => x[1] === 'web');
+    ok(gotoWeb === !native, `${tag}: Champ asked for a screen it can't open ${native ? 'stays in the app' : 'still offers termchamp.com'}`, champ.goto);
+    ok(/Settings › Appearance/.test(champ.theme.t) && champ.theme.acts.some(x => x[1] === 'openSettings') && !/one look/.test(champ.theme.t), `${tag}: Champ points to Settings › Appearance for the look`, champ.theme);
+    const later = await page.evaluate(() => { TC.termMine['2274'] = { rows: [], saved: [] }; return otherTermMine([{ code: CFG.TERM, label: CFG.TERM_LABEL }, { code: '2274', label: 'Spring 2027' }], { code: '2274', label: 'Spring 2027' }); });
+    const laterTxt = String(later || '');
+    ok(/No Spring 2027 classes yet/.test(laterTxt), `${tag}: an empty later term says so`, laterTxt.slice(0, 200));
+    ok(/termchamp\.com/.test(laterTxt) === !native, `${tag}: an empty later term ${native ? 'never points to' : 'still links'} termchamp.com`, laterTxt.replace(/<[^>]+>/g, ' ').slice(0, 200));
+    ok(log.errors.length === 0, `${tag}: no page errors`, log.errors);
+    await close();
+  }
+};
+
 tests.waitlist = async () => {
   let { page, close, log } = await openApp({ signedIn: false });
   await click(page, '[data-a="siMode"][data-x="signup"]');
   await page.locator('#su-email').fill('Aztec.Fixture@SDSU.edu'); await page.locator('#su-pw').fill('whatever12'); await page.locator('#su-agree').check();
-  ok(/SDSU is coming soon/.test(await page.locator('#su-emailhint').innerText()), 'waitlist: the hint says SDSU is coming as you type');
+  ok(/SDSU isn’t open yet — continue to join the waitlist/.test(await page.locator('#su-emailhint').innerText()), 'waitlist: the hint says SDSU isn’t open yet as you type (never "coming soon")');
   await page.locator('#su-go').click(); await settle(page, 500);
   let t = await text(page);
   ok(/TermChamp is coming to SDSU/.test(t) && /Join the list/.test(t) && !log.writes.some(w => /^auth:/.test(w.table)), 'waitlist: an SDSU email gets the waitlist, and no account or code', t.slice(0, 250));
@@ -4839,6 +6793,7 @@ tests.deleteAccount = async () => {
   ok(!calls.some(c => c.fn === 'request_account_deletion') && /Delete account/.test(await text(page)), 'delete: Enter in the box does not delete — only the button does', calls);
   await page.evaluate(() => {
     localStorage.setItem('termchamp_app_recent', '{"u":"x","items":[]}'); localStorage.setItem('termchamp_app_conc', '{"u":"x"}');
+    ['tc-audit:', 'tc-prefs:', 'tc-pl-nodpr:'].forEach(k => localStorage.setItem(k + TC.user.id, '{"x":1}')); localStorage.setItem('tc-drafted:' + TC.user.id + ':' + CFG.TERM, '{"A":[]}');
     /* survive the reload: every set/remove is noted in sessionStorage */
     const note = (k, v) => { try { Storage.prototype.setItem.__o.call(sessionStorage, k, (sessionStorage.getItem(k) || '') + '|' + v); } catch (e) {} };
     const os = Storage.prototype.setItem, orm = Storage.prototype.removeItem;
@@ -4860,8 +6815,11 @@ tests.deleteAccount = async () => {
   const noted = await page.evaluate(() => [sessionStorage.getItem('__set') || '', sessionStorage.getItem('__rm') || '']);
   ok(noted[0].includes('|tc_deleted=' + PURGE_AT), 'delete: the sign-in screen is handed the recovery date', noted);
   ok(/\|sb-rqkndeqbcahozidniesn-auth-token\b/.test(noted[1]), 'delete: the session is dropped on this phone before the reload', noted);
+  ok(noted[1].includes('|tc-marks:' + FX.ME.id), 'delete: flowchart marks are cleared from this phone', noted[1]);
   const left = await page.evaluate(() => [localStorage.getItem('termchamp_app_recent'), localStorage.getItem('termchamp_app_conc')]);
   ok(left[0] === null && left[1] !== null, 'delete: recent searches are cleared; the concentration (phone-only) stays for a recovery', left);
+  const pl = await page.evaluate(id => ['tc-audit:' + id, 'tc-prefs:' + id, 'tc-pl-nodpr:' + id, 'tc-drafted:' + id + ':2268'].map(k => localStorage.getItem(k)), FX.ME.id);
+  ok(pl.every(v => v === null), 'delete: what the report said, the Planner answers and the drafts are cleared from the phone', pl);
   ok(log.errors.length === 0, 'delete: no page errors', log.errors);
   await close();
 };
@@ -5276,6 +7234,383 @@ tests.blockedSettingsText = async () => {
 };
 
 /* ---- Champ asks first; legal text; no screen sends you to the website (chunks 4 and 5, 2026-10-04) ---- */
+/* ============ Champ answers as previews (Tate, 2026-10-08, canvas "Champ Answers With Previews", pick B) ============ */
+tests.champCards = async () => {
+  /* the model sends "best professor" to open_class: the answer is still the professors */
+  const asks = { 'best professor for bus 3431?': { tool: 'open_class', args: { course: 'BUS3431' } }, 'is bram any good': { tool: 'professor_stats', args: { name: 'Bram Fixturesen' } },
+    'open bus after 10': { tool: 'search_sections', args: { subject: 'BUS', start_after: '10:00' } }, 'what is my game plan': { tool: 'game_plan', args: { plan: 'A' } }, 'when am i free': { tool: 'my_free', args: {} }, 'is professor bram good for bus 3431?': { tool: 'professor_stats', args: { name: 'Bram Fixturesen' } } };
+  const { page, close, log } = await openApp({ ask: b => asks[b.q.toLowerCase()] || null });
+  await page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 });
+  const lastCard = () => page.evaluate(() => { const w = [...document.querySelectorAll('#champscroll .chc-wrap')].pop(); return w ? w.innerText.replace(/\s+/g, ' ') : null; });
+  const say = async q => { await page.evaluate(q => { UI.champ = true; render(true); return ask(q); }, q); await tick(page, 400); return { t: (await page.locator('#champscroll .bot .msg').last().innerText()).trim(), c: await lastCard() }; };
+  /* best professor */
+  const n0 = log.asks.length;
+  let r = await say('Best professor for BUS 3431?');
+  const best = await page.evaluate(() => { const w = [...document.querySelectorAll('#champscroll .chc-wrap')].pop(); return { top: (w.querySelector('.chp-top b') || {}).textContent, topAct: w.querySelector('.chp-top') && w.querySelector('.chp-top').dataset.a, rows: [...w.querySelectorAll('.chr b')].map(b => b.textContent), title: /Business Finance/.test(w.innerText) }; });
+  ok(r.t === 'Ada Examplewood — top rated of 2.' && best.top === 'Ada Examplewood' && best.topAct === 'openProf' && best.rows.join() === 'Bram Fixturesen' && !best.title, 'cards: best professor is the top professor’s card, then the others as rows — not the class and a list', { r, best });
+  ok(log.asks.length === n0, 'cards: an unmistakable lookup is answered on the phone — the question isn’t sent', log.asks.slice(n0));
+  ok(/Sec 01 · Mon\/Wed 4:10–6:00pm/.test(r.c) && /in your classes/.test(r.c) && /67%\s*take again/.test(r.c), 'cards: her card has her section (yours, here) and her real numbers', r.c);
+  await page.locator('#champscroll .chc-wrap').last().locator('.chp-top').click(); await tick(page, 300);
+  ok(await page.evaluate(() => !UI.champ && cur().s === 'profDetail' && cur().p.id === 'ada examplewood'), 'cards: tapping the card opens her page');
+  /* the whole day, with the free stretches */
+  r = await say('When am I free Monday?');
+  const day = await page.evaluate(() => { const w = [...document.querySelectorAll('#champscroll .chc-wrap')].pop(); return { free: [...w.querySelectorAll('.chd-f b')].map(b => b.textContent), blocks: [...w.querySelectorAll('.chd-b b')].map(b => b.textContent) }; });
+  ok(r.t === 'Free before 10:10a and after 6p.' && day.free.join('|') === 'Free 8a–10:10a|Free after 6p' && day.blocks.join() === 'BUS 3438,BUS 4442,BUS 4445,BUS 3431', 'cards: “when am I free Monday” draws the day — four classes, and only the stretches of 30 minutes or more are free', { r: r.t, day });
+  r = await say('When am I free Thursday?');
+  ok(/^No classes Thursday/.test(r.t), 'cards: a day with no classes says so', r.t);
+  r = await say('when am i free');
+  ok(await page.evaluate(() => [...document.querySelectorAll('#champscroll .chc-wrap')].pop().querySelectorAll('.chw-row').length) === 5 && /Mon Free before 10:10a and after 6p/.test(r.c), 'cards: the week’s free time is a row per day', r.c);
+  /* does it fit a plan */
+  await page.evaluate(() => { TC.plans.A = ['70105', '70109']; TC.plans.B = [secsOf('BUS 3438')[0].id]; S.plan = 'C'; });
+  const id4401 = await page.evaluate(() => secsOf('BUS 4401')[0].id);
+  r = await say('Does BUS 4401 fit my Plan A?');
+  let fit = await page.evaluate(() => { const w = [...document.querySelectorAll('#champscroll .chc-wrap')].pop(); return { ghost: [...w.querySelectorAll('.g-b.ghost')].map(b => b.dataset.y), clash: w.querySelectorAll('.g-b.ghost.clash, .g-b.clashb').length, plan: !!w.querySelector('.plancol.plan-A'), blocks: w.querySelectorAll('.g-b').length, add: w.querySelector('[data-a="champAddTo"]') && w.querySelector('[data-a="champAddTo"]').textContent }; });
+  ok(/^Yes — Sec 01 fits Plan A/.test(r.t) && fit.plan && fit.ghost.length === 2 && fit.ghost.every(x => x === id4401) && !fit.clash && /No clashes/.test(r.c) && fit.add === 'Add to Plan A', 'cards: “does it fit my Plan A” draws Plan A’s week with the class dashed in, No clashes, Add to Plan A', { r, fit });
+  await page.locator('#champscroll .chc-wrap').last().locator('[data-a="champAddTo"]').click(); await tick(page, 300);
+  ok(await page.evaluate(id => UI.sheet && UI.sheet.type === 'addTo' && UI.sheet.id === id && UI.sheet.dest === 'A', id4401), 'cards: Add opens Add to your week on Plan A');
+  await page.evaluate(() => { UI.sheet = null; render(true); });
+  r = await say('Does BUS 4401 fit plan b?');
+  ok(r.t === 'No — every BUS 4401 section clashes with Plan B.' && /Clashes with BUS 3438/.test(r.c) && await page.evaluate(() => !![...document.querySelectorAll('#champscroll .chc-wrap')].pop().querySelector('.plancol.plan-B .g-b.ghost.clash')), 'cards: against Plan B it clashes, drawn in Plan B’s week', r);
+  r = await say('Does BUS 4401 fit my schedule?');
+  fit = await page.evaluate(() => { const w = [...document.querySelectorAll('#champscroll .chc-wrap')].pop(); return { ghost: w.querySelectorAll('.g-b.ghost.clash').length, hit: [...w.querySelectorAll('.g-b.clashb')].map(b => b.dataset.x) }; });
+  ok(r.t === 'No — every BUS 4401 section clashes with your classes.' && fit.ghost === 2 && fit.hit.includes('BUS 3438') && /Clashes with BUS 3438/.test(r.c), 'cards: against your classes it clashes, drawn in red with the class it hits', { r, fit });
+  /* people */
+  r = await say('Who’s free right now?');
+  const now = await page.evaluate(() => { const w = [...document.querySelectorAll('#champscroll .chc-wrap')].pop(); return { free: [...w.querySelectorAll('.chpp.free b')].map(b => b.textContent), busy: w.querySelectorAll('.chpp:not(.free)').length, msg: w.querySelectorAll('.chpp.free [data-a="openChatWith"]').length, strip: w.querySelectorAll('.chpp.free .chpp-bar em').length }; });
+  ok(/^1 friend is free · Tue 10:30a/.test(r.t) && now.free.join() === 'Sky' && now.msg === 1 && now.strip === 1 && now.busy >= 2, 'cards: who’s free now — the free friend with Message and their day, then who’s in class', { r: r.t, now });
+  r = await say('Who is free with me Monday?');
+  ok(/free when you are on Monday/.test(r.t) && /Free together 8a–10:10a · 2h 10m/.test(r.c), 'cards: free together is the overlap of your day and theirs (8a–6p)', r);
+  /* model tools, as cards */
+  r = await say('is bram any good');
+  ok(/^Bram Fixturesen · ★ 3\.6 from 23 ratings/.test(r.t) && /Teaching Fall 2026/i.test(r.c), 'cards: a professor is their card, with what they teach', r);
+  r = await say('open bus after 10');
+  const secs = await page.evaluate(() => { const w = [...document.querySelectorAll('#champscroll .chc-wrap')].pop(); return { n: w.querySelectorAll('.chs').length, add: w.querySelectorAll('.chs-add[data-a="addPlanSheet"]').length, chips: [...w.querySelectorAll('.chc-facts .chchip')].map(c => c.textContent) }; });
+  ok(/^(1 match|\d+ matches) · \d+ fits? your week/.test(r.t) && secs.n >= 1 && secs.add === secs.n && secs.chips.join('|') === 'BUS|After 10a', 'cards: a section search is section cards with + and the filters it understood', { r: r.t, secs });
+  await page.evaluate(() => { TC.plans.A = ['70100', '70105', '70109']; });
+  r = await say('what is my game plan');
+  const gp = await page.evaluate(() => [...[...document.querySelectorAll('#champscroll .chc-wrap')].pop().querySelectorAll('.chg b')].map(b => b.textContent));
+  ok(/^Grab BUS 3431 first — it’s waitlisted/.test(r.t) && gp[0] === 'BUS 3431', 'cards: the game plan starts with the scarcest', { r: r.t, gp });
+  /* routing: whole day words, a named professor, codes that aren't classes */
+  r = await say('When am I free to hang with my friends?');
+  ok(await page.evaluate(() => [...document.querySelectorAll('#champscroll .chc-wrap')].pop().querySelectorAll('.chw-row').length) === 5, '“friends” isn’t Friday: no day named → the week', r.t);
+  const n1 = log.asks.length;
+  r = await say('Is professor Bram good for BUS 3431?');
+  ok(log.asks.length === n1 + 1 && /^Bram Fixturesen/.test(r.t), 'a question about a named professor goes to the model (and answers about them), not “top rated of”', { r: r.t, asks: log.asks.slice(n1) });
+  r = await say('best professors in fall 2026');
+  ok(!/isn’t offered/.test(r.t), 'a code that isn’t a class (FALL 2026) isn’t taken for one', r.t);
+  await page.evaluate(() => { TC.plans.A = ['70105', '70109']; });
+  const c70105 = await page.evaluate(() => SEC['70105'].code);
+  r = await say(`Does ${c70105} fit my Plan A?`);
+  ok(r.t === `${c70105} is already in Plan A.` && await page.evaluate(() => [...document.querySelectorAll('#champscroll .chc-wrap')].pop().querySelectorAll('.g-b.ghost').length) === 0, 'a class already in the plan is drawn as itself, not dashed in again', r.t);
+  /* light mode: every line on every card, scrolled through */
+  const lightBad = [];
+  for (const q of ['Best professor for BUS 3431?', 'When am I free Monday?', 'Does BUS 4401 fit my Plan A?', 'Who’s free right now?', 'what is my game plan', 'open bus after 10']) {
+    await say(q);
+    const tops = await page.evaluate(() => { const el = document.getElementById('champscroll'); return [0, 500, 1000, 1500].filter(t => t < el.scrollHeight); });
+    for (const t of tops) { await page.evaluate(t => { document.getElementById('champscroll').scrollTop = t; }, t); await tick(page, 60);
+      const c = await page.evaluate(scan => (new Function('return ' + scan))()(4.5).filter(x => /\bch[a-z-]*|\bchs|\bchp|\bchd|\bchw|\bchg|\bchq/.test(x.cls)), CONTRAST_SCAN.toString());
+      if (c.length) lightBad.push({ q, t, c: c.slice(0, 3) }); }
+  }
+  ok(!lightBad.length, 'cards (light): every line on every card is 4.5:1 or better, scrolled through', lightBad);
+  /* follow-ups: only under the newest answer, and they ask */
+  await say('When am I free Monday?');
+  const fl = await page.evaluate(() => ({ n: document.querySelectorAll('#champscroll .chfollow').length, msgs: S.champMsgs.length }));
+  ok(fl.n === 1, 'cards: follow-up questions sit under the newest answer only', fl);
+  /* every card renders from live data: a card whose data is gone draws nothing rather than something wrong */
+  const gone = await page.evaluate(() => chCard({ k: 'fit', code: 'ZZZ 9999', P: 'A', id: 'nope', n: 0 }) + chCard({ k: 'profs', code: 'ZZZ 9999' }) + chCard({ k: 'nope' }));
+  ok(gone === '', 'cards: a card with nothing to show draws nothing', gone);
+  ok(log.errors.length === 0, 'cards: no page errors', log.errors);
+  await close();
+  /* dark mode: every line on the cards is readable */
+  const o = await openApp({ init: `try{localStorage.setItem('tc-theme','dark')}catch(e){}` });
+  await o.page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 });
+  await o.page.evaluate(() => { TC.plans.A = ['70105', '70109']; });
+  const bad = [];
+  for (const q of ['Best professor for BUS 3431?', 'When am I free Monday?', 'Does BUS 4401 fit my Plan A?', 'Who’s free right now?']) {
+    await o.page.evaluate(q => { S.champMsgs = []; UI.champ = true; render(true); return ask(q); }, q); await tick(o.page, 400);
+    await o.page.evaluate(() => { const el = document.getElementById('champscroll'); el.scrollTop = 0; });
+    const c = await o.page.evaluate(scan => (new Function('return ' + scan))()(4.5).filter(x => x.cls.indexOf('chchip') >= 0 || /\bch[a-z-]+/.test(x.cls)), CONTRAST_SCAN.toString());
+    if (c.length) bad.push({ q, c: c.slice(0, 4) });
+  }
+  ok(!bad.length, 'cards (dark): every line on the cards is 4.5:1 or better', bad);
+
+  ok(o.log.errors.length === 0, 'cards (dark): no page errors', o.log.errors);
+  await o.close();
+  /* nothing on the record: the prerequisites card can't say what's done */
+  const PQ = [{ course_code: 'STAT 2170', prereq_json: { req: [['MATH 1000', 'MATH 1180'], ['PHIL 3331']] } }];
+  const e = await openApp({ tables: Object.assign({}, FX.TABLES, { course_prereqs: PQ, class_history: [], class_waivers: [] }), ask: b => b.q === 'prereqs for stat 2170' ? { tool: 'prereqs', args: { course: 'STAT2170' } } : null });
+  await e.page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 });
+  await e.page.evaluate(() => { UI.champ = true; render(true); return ask('prereqs for stat 2170'); }); await tick(e.page, 600);
+  const nr = await e.page.evaluate(() => { const w = [...document.querySelectorAll('#champscroll .chc-wrap')].pop(); return w && { t: w.innerText.replace(/\s+/g, ' '), done: w.querySelectorAll('.chq-dot.ok').length, need: w.querySelectorAll('.chq-dot.need').length, unk: w.querySelectorAll('.chq-dot.unk').length, bar: w.querySelectorAll('.chq-bar i').length }; });
+  ok(nr && /Can’t check/.test(nr.t) && !/0 of 2/.test(nr.t) && nr.done === 0 && nr.need === 0 && nr.unk === 2 && nr.bar === 0 && /I can’t tell yet/.test(await e.page.locator('#champscroll .bot .msg').last().innerText()), 'cards: with nothing logged the checklist says Can’t check — nothing reads as done or missing', nr);
+  /* a class before 8a: the day starts at its hour */
+  await e.page.evaluate(() => { const s = personSecs('me').find(x => x.days.includes('M') && x.s != null); s.s = 430; s.e = 480; });
+  await e.page.evaluate(() => { S.champMsgs = []; return ask('When am I free Monday?'); }); await tick(e.page, 400);
+  const early = await e.page.evaluate(() => { const w = [...document.querySelectorAll('#champscroll .chc-wrap')].pop(); const lab = w.querySelector('.chd-lab span'), b = w.querySelector('.chd-b'); return { first: lab && lab.textContent, top: b && parseFloat(b.style.top) }; });
+  ok(early.first === '7a' && early.top >= 0, 'cards: a 7:10a class starts the day at 7a, inside the card', early);
+  ok(e.log.errors.length === 0, 'cards (no record): no page errors', e.log.errors);
+  await e.close();
+};
+
+/* 2026-10-08: the phone's own menu — it says it's the phone, and the four new tools are the cards. */
+tests.champTools = async () => {
+  const asks = {
+    'whos around rn': { tool: 'friends_free_now', args: {} },
+    'who can i get food with tuesday': { tool: 'free_with_friends', args: { days: ['Tu'] } },
+    'when do rowan and i line up': { tool: 'free_with_friends', args: { friend: 'Rowan' } },
+    'rowan overlap thursday?': { tool: 'free_with_friends', args: { friend: 'Rowan', days: ['Th'] } },
+    'when can i see nobodyknown': { tool: 'free_with_friends', args: { friend: 'Nobodyknown' } },
+    'goat prof for biz 3431': { tool: 'best_professor', args: { course: 'BUS3431' } },
+    'bus 4401 in plan b ok?': { tool: 'fits_plan', args: { course: 'BUS4401', plan: 'B' } },
+    'bus 4401 with my week ok?': { tool: 'fits_plan', args: { course: 'BUS4401', plan: 'mine' } },
+    'follow ada examplewood': { tool: 'watch', args: { kind: 'professor', name: 'Ada Examplewood' } },
+    'where are my ratings': { tool: 'go_to', args: { where: 'my reviews' } },
+    'the terms please': { tool: 'go_to', args: { where: 'terms' } },
+    'when are maya and i both free': { tool: 'free_with_friends', args: { friend: 'Maya' } },
+  };
+  const { page, close, log } = await openApp({ ask: b => asks[b.q.toLowerCase()] || null });
+  await page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 });
+  await page.evaluate(() => { TC.plans.A = ['70105', '70109']; TC.plans.B = [secsOf('BUS 3438')[0].id]; S.plan = 'C'; });
+  const lastCard = () => page.evaluate(() => { const w = [...document.querySelectorAll('#champscroll .chc-wrap')].pop(); return w ? w.innerText.replace(/\s+/g, ' ') : ''; });
+  const say = async q => { const n = log.asks.length; await page.evaluate(q => { UI.champ = true; render(true); return ask(q); }, q); await tick(page, 400);
+    return { t: (await page.locator('#champscroll .bot .msg').last().innerText()).trim(), c: await lastCard(), sent: log.asks.slice(n) }; };
+  let r = await say('whos around rn');
+  ok(r.sent.length === 1 && r.sent[0].client === 'app' && r.sent[0].q === 'whos around rn', 'tools: the phone tells the function it is the phone (client: app)', r.sent);
+  ok(/^1 friend is free/.test(r.t) && /Sky/.test(r.c), 'tools: friends_free_now → who’s free now, with Message', r);
+  r = await say('who can i get food with tuesday');
+  ok(/free when you are on Tuesday/.test(r.t) && /Free together/.test(r.c), 'tools: free_with_friends on a day → free together that day', r);
+  r = await say('when do rowan and i line up');
+  const wk = await page.evaluate(() => { const w = [...document.querySelectorAll('#champscroll .chc-wrap')].pop(); return { rows: [...w.querySelectorAll('.chw-row')].map(x => x.innerText.replace(/\s+/g, ' ')), msg: !!w.querySelector('[data-a="openChatWith"]'), who: (w.querySelector('.chpp-main b') || {}).textContent }; });
+  ok(/^You and Rowan (are both free on \d of 5 days|aren’t free at the same time)/.test(r.t) && wk.rows.length === 5 && wk.who === 'Rowan' && wk.msg, 'tools: free_with_friends with one friend → that friend’s week with you, a day a row, and Message', { r: r.t, wk });
+  ok(wk.rows.every(x => /^(Mon|Tue|Wed|Thu|Fri) (Free together \d|Not free at the same time)/.test(x)), 'tools: each day says the overlap or that there is none', wk.rows);
+  const noFri = await page.evaluate(() => { const f = findFriend('rowan'), orig = window.chTogether; window.chTogether = d => d === 'F' ? [] : orig(d);
+    try { const box = document.createElement('div'); box.innerHTML = chCard({ k: 'togetherWk', f, n: 'x' }); return [...box.querySelectorAll('.chw-row')].map(x => x.textContent.replace(/\s+/g, ' ').trim()); } finally { window.chTogether = orig; } });
+  ok(/^Fri ?Not free at the same time$/.test(noFri[4] || '') && /^Mon ?Free together/.test(noFri[0] || ''), 'tools: a day with no overlap says so', noFri);
+  r = await say('rowan overlap thursday?');
+  const oneDay = await page.evaluate(() => [...[...document.querySelectorAll('#champscroll .chc-wrap')].pop().querySelectorAll('.chpp-main b')].map(b => b.textContent));
+  ok(/^You and Rowan (are both free .* on Thursday|aren’t free at the same time on Thursday)/.test(r.t) && oneDay.length >= 1 && oneDay.every(x => x === 'Rowan'), 'tools: one friend on one day — only that friend on the card', { t: r.t, oneDay });
+  r = await say('when can i see nobodyknown');
+  ok(/^I couldn’t find one friend named Nobodyknown/.test(r.t), 'tools: a name that is not a friend says so — never “everyone”', r.t);
+  r = await say('when are maya and i both free');
+  ok(r.sent.length === 1 && /friend named Maya/.test(r.t), 'tools: the phone doesn’t answer for a name it doesn’t know — the model gets it', r);
+  r = await say('goat prof for biz 3431');
+  ok(r.t === 'Ada Examplewood — top rated of 2.' && /AVERAGE/.test(r.c), 'tools: best_professor → the top professor’s card', r);
+  r = await say('bus 4401 in plan b ok?');
+  ok(r.t === 'No — every BUS 4401 section clashes with Plan B.' && await page.evaluate(() => !![...document.querySelectorAll('#champscroll .chc-wrap')].pop().querySelector('.plancol.plan-B .g-b.ghost')), 'tools: fits_plan with a plan → that plan’s week with the class dashed in', r.t);
+  r = await say('bus 4401 with my week ok?');
+  ok(/your classes\.$/.test(r.t) && /Clashes with BUS 3438/.test(r.c), 'tools: fits_plan mine → your classes', r.t);
+  r = await say('follow ada examplewood');
+  ok(/^Seat alerts on the phone are for sections — here’s Ada Examplewood/.test(r.t) && /AVERAGE/.test(r.c), 'tools: watching a professor says what the phone can do, and shows them', r.t);
+  await say('where are my ratings');
+  await page.locator('#champscroll .bot').last().locator('.act').first().click(); await tick(page, 300);
+  ok(await page.evaluate(() => cur().s === 'myRatings' && !UI.champ), 'tools: go_to my reviews opens My ratings');
+  await page.evaluate(() => { UI.champ = true; render(true); });
+  await say('the terms please');
+  await page.locator('#champscroll .bot').last().locator('.act').first().click(); await tick(page, 300);
+  ok(await page.evaluate(() => cur().s === 'legal' && cur().p.which === 'terms'), 'tools: go_to terms opens the Terms');
+  await page.evaluate(() => { UI.champ = true; render(true); });
+  /* answered on the phone, no model */
+  const n0 = log.asks.length;
+  r = await say('Who’s free right now?');
+  ok(log.asks.length === n0 && /^1 friend is free/.test(r.t), 'local: “Who’s free right now?” (curly apostrophe) is answered on the phone — friends, not your week', r);
+  r = await say('anyone free wednesday');
+  ok(log.asks.length === n0 && /on Wednesday|Wednesday between/.test(r.t), 'local: “anyone free wednesday” → free when you are, Wednesday', r.t);
+  r = await say('when are sky and i both free');
+  ok(log.asks.length === n0 && /^You and Sky/.test(r.t) && await page.evaluate(() => [...document.querySelectorAll('#champscroll .chc-wrap')].pop().querySelectorAll('.chw-row').length) === 5, 'local: a named friend → your week with them, a day a row', r.t);
+  r = await say('when am i free mwf');
+  ok(log.asks.length === n0 && await page.evaluate(() => [...[...document.querySelectorAll('#champscroll .chc-wrap')].pop().querySelectorAll('.chw-d')].map(x => x.textContent).join()) === 'Mon,Wed,Fri', 'local: “mwf” is Monday, Wednesday, Friday', r.c);
+  r = await say('is sky free');
+  ok(log.asks.length === n0 && /^Sky: (Free till|In |No classes|Done for)/.test(r.t), 'local: “is Sky free” is Sky right now — the same words as her status', r.t);
+  r = await say('who is free at the moment');
+  ok(log.asks.length === n0 && /^1 friend is free/.test(r.t), 'local: “at the moment” is now', r.t);
+  for (const q of ['which friends are free when i’m free', 'who’s free tonight', 'is sky free at 3', 'when are sky and i both free mwf']) {
+    const k = log.asks.length; await say(q);
+    ok(log.asks.length === k + 1, `local: “${q}” isn’t a now / one-day question — the model gets it`, log.asks.slice(k));
+  }
+  r = await say('When am I free to hang with my friends?');
+  ok(await page.evaluate(() => [...document.querySelectorAll('#champscroll .chc-wrap')].pop().querySelectorAll('.chw-row').length) === 5, 'local: “…hang with my friends” is still your week (no friend named)', r.t);
+  /* dark: the one-friend week reads */
+  await page.evaluate(() => { document.documentElement.dataset.theme = 'dark'; render(true); });
+  await say('when are sky and i both free');
+  const lo = await page.evaluate(() => { const w = [...document.querySelectorAll('#champscroll .chc-wrap')].pop(); const bad = [];
+    const lum = c => { const m = c.match(/[\d.]+/g).map(Number); const f = v => { v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }; return .2126 * f(m[0]) + .7152 * f(m[1]) + .0722 * f(m[2]); };
+    const bgOf = el => { for (let e = el; e; e = e.parentElement) { const b = getComputedStyle(e).backgroundColor; if (b && !/rgba\(0, 0, 0, 0\)|transparent/.test(b)) return b; } return 'rgb(255,255,255)'; };
+    w.querySelectorAll('.chw-t, .chw-d, .chpp-main b, .chpp-main .grow>span').forEach(el => { const a = lum(getComputedStyle(el).color), b = lum(bgOf(el)); const r = (Math.max(a, b) + .05) / (Math.min(a, b) + .05); if (r < 4.5) bad.push(el.textContent + ' ' + r.toFixed(2)); });
+    return bad; });
+  ok(!lo.length, 'tools: the one-friend week is 4.5:1 in dark mode', lo);
+  await page.evaluate(() => { delete document.documentElement.dataset.theme; render(true); });
+  await close();
+};
+
+/* 2026-10-08: the golden set, on the phone. Every right answer in dev/golden/model-golden-v3.json is a
+   tool call the phone must turn into an answer (and a card that draws); and when the phone answers a
+   golden question by itself (chIntent, no model), it must give the same answer the right tool gives. */
+/* ============ Champ: questions about TermChamp itself (Tate, 2026-10-11) ============
+   "make sure Champ can ask basic question that people ask about termchamp … still tight and regulated and only
+   specific but … a useful tool", and "when someone asks a quesiton that is similar it has this show up … because
+   its close to the question". The model picks one of 16 topics; the phone shows that topic's fixed answer. When the
+   model can't place a question, or can't be reached, the phone offers the closest topics as "Did you mean" chips. */
+tests.champHelp = async () => {
+  const KEYS = ['what_is', 'free', 'who_sees', 'ratings_anonymous', 'ratings_source', 'seats_source', 'add_class', 'plans', 'seat_alerts', 'degree_report', 'add_friends', 'block_report', 'delete_account', 'champ', 'dark_mode', 'contact'];
+  const asks = Object.fromEntries(KEYS.map(k => ['topic ' + k, { tool: 'app_help', args: { topic: k } }]));
+  Object.assign(asks, {
+    'topic refund': { tool: 'app_help', args: { topic: 'refund' } },
+    'topic constructor': { tool: 'app_help', args: { topic: 'constructor' } },
+    'does the ai keep my chats': { tool: 'cant_answer', args: { reason: 'not_about_classes' } },
+    'whats the weather': { tool: 'cant_answer', args: { reason: 'not_about_classes' } },
+    'is bus 4442 worth it if the seats are always wrong': { tool: 'cant_answer', args: { reason: 'needs_judgment' } },
+    'who can see my schedule and is champ private': { tool: 'cant_answer', args: { reason: 'ambiguous' } },
+    'who can see my schedule': { tool: 'app_help', args: { topic: 'who_sees' } },
+  });
+  const { page, close, log } = await openApp({ ask: b => asks[b.q.toLowerCase()] || null });
+  await page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 });
+  const HELPT = await page.evaluate(() => JSON.parse(JSON.stringify(HELP)));
+  ok(JSON.stringify(Object.keys(HELPT)) === JSON.stringify(KEYS), 'help: the phone answers exactly the 16 topics the function offers', Object.keys(HELPT));
+  const last = () => page.evaluate(() => { const b = [...document.querySelectorAll('#champscroll .bot')].pop(), f = document.querySelector('#champscroll .chfollow');
+    return { t: b.querySelector('.msg').innerText.trim(), acts: [...b.querySelectorAll('.acts .act')].map(x => [x.innerText.trim(), x.dataset.a, x.dataset.x || '']),
+      chips: f ? [...f.querySelectorAll('button')].map(x => [x.innerText.trim(), x.dataset.a, x.dataset.x || '', x.className]) : [], n: S.champMsgs.length }; });
+  const say = async q => { const n = log.asks.length; await page.evaluate(q => { UI.champ = true; render(true); return ask(q); }, q); await tick(page, 400); return Object.assign(await last(), { sent: log.asks.length - n }); };
+
+  /* 1. every topic: its own words and its one button */
+  const wrong = [];
+  for (const k of KEYS) { const r = await say('topic ' + k), h = HELPT[k];
+    if (r.sent !== 1 || !r.t.startsWith(h.t) || r.acts.length !== 1 || JSON.stringify(r.acts[0]) !== JSON.stringify(h.a) || r.chips.length) wrong.push({ k, r }); }
+  ok(!wrong.length, 'help: each of the 16 topics shows its fixed answer and its one button, nothing else', wrong.slice(0, 3));
+  /* 2. the words are what the app, the Terms and the Privacy Policy say */
+  await page.evaluate(() => { UI.champ = false; A.openLegal('terms'); }); await tick(page, 900);
+  const terms = await text(page);
+  await page.evaluate(() => A.openLegal('privacy')); await tick(page, 900);
+  const priv = await text(page);
+  const LC = ((terms.match(/Questions: ([\w.+-]+@[\w.-]+\.[a-z]+)/) || [])[1]) || '';
+  ok(LC === 'support@termchamp.com' && HELPT.contact.t.includes(LC) && terms.includes(LC) && await page.evaluate(() => SUPPORT_EMAIL) === LC, 'help: the support address is the one the Terms give', LC);
+  ok(/refreshed roughly once a day/.test(terms) && /about once a day/.test(HELPT.seats_source.t) && /public class search/.test(terms) && /public class search/.test(HELPT.seats_source.t), 'help: seats — Cal Poly’s public class search, about once a day, as the Terms say');
+  ok(/permanently deleted after 30 days/.test(terms) && /deleted after 30 days/.test(HELPT.delete_account.t) && /sign in before then to recover it/.test(terms), 'help: deleting — 30 days to recover, as the Terms say');
+  ok(/does not sell your data and does not run ads/.test(priv) && /no ads/.test(HELPT.free.t) && /never sold/.test(HELPT.free.t), 'help: free — no ads, data never sold, as the Privacy Policy says');
+  ok(/Ratings come from PolyRatings/.test(terms) && /PolyRatings/.test(HELPT.ratings_source.t), 'help: ratings come from PolyRatings');
+  ok(/a person looks at every report within 24 hours/i.test(terms) && /within 24 hours/.test(HELPT.block_report.t), 'help: reports — a person, within 24 hours, as the Terms say');
+  ok(await page.evaluate(() => PL_NAME.A === 'Plan A' && PL_NAME.B === 'Plan B' && PL_NAME.C === 'Plan C') && /Builder/.test(HELPT.plans.t) && /same thing/.test(HELPT.plans.t) && !/best fit|backup/i.test(HELPT.plans.t), 'help: plans — three plans with the same goal, built in the Builder');
+  ok(await page.evaluate(() => PUSH_KINDS.some(([, l]) => l.some(x => x[0] === 'seat_open' && /watching or have in a plan/.test(x[2])))) && /iPhone app/.test(HELPT.seat_alerts.t) && /notifications on/.test(HELPT.seat_alerts.t), 'help: seat alerts — watched or in a plan, on the iPhone app with notifications on');
+  ok((await page.content()).includes('about 30 days, not linked to your account') && /about 30 days, not linked to you/.test(HELPT.champ.t) && /doesn’t train on them/.test(HELPT.champ.t) && /a class or friend you name goes with it/.test(HELPT.champ.t), 'help: Champ — kept about 30 days, not linked to you, not trained on; a named class or friend goes with the question');
+  ok((await page.content()).includes('Never your name, email or account') && /never your name or account/.test(HELPT.champ.t) && /Anthropic’s AI/.test(HELPT.champ.t) && /stay on this phone/.test(HELPT.champ.t), 'help: Champ — Anthropic, never your name or account, your data stays on the phone (the consent screen’s words)');
+  await page.evaluate(() => { go('home'); });
+  /* 3. every button lands where it says */
+  const LAND = { tab: s => s.tab, openLegal: s => s.scr + ':' + s.which, openSettings: s => s.scr, openMyRatings: s => s.scr, exModeGo: s => s.tab + ':' + s.ex, schedTabGo: s => s.tab + ':' + s.sch, sheet: s => s.sheet, champPrivacy: s => s.scr + ':' + s.which, copySupport: s => s.toast };
+  const WANT = { what_is: 'explore', free: 'legal:privacy', who_sees: 'settings', ratings_anonymous: 'myRatings', ratings_source: 'explore:profs', seats_source: 'explore', add_class: 'explore', plans: 'schedule:plans', seat_alerts: 'explore', degree_report: 'schedule:past', add_friends: 'addFriend', block_report: 'friends', delete_account: 'settings', champ: 'legal:privacy', dark_mode: 'settings', contact: /support@termchamp\.com|Email copied/ };
+  const land = [];
+  for (const k of KEYS) {
+    await page.evaluate(() => { UI.sheet = null; UI.champ = false; setTab('home'); S.champMsgs = []; });
+    await say('topic ' + k);
+    await click(page, '#champscroll .bot .acts .act'); await tick(page, 500);
+    const st = await page.evaluate(() => ({ tab: S.tab, scr: cur().s, which: (cur().p || {}).which, ex: S.exMode, sch: S.schedTab, sheet: UI.sheet && UI.sheet.type, toast: (document.getElementById('toast') || {}).innerText || '', champ: UI.champ }));
+    const got = LAND[HELPT[k].a[1]](st), w = WANT[k];
+    if (!(w instanceof RegExp ? w.test(got) : got === w) || (st.champ && k !== 'contact')) land.push({ k, got, w: String(w) });
+  }
+  ok(!land.length, 'help: every topic’s button opens the place it names (Copy email copies it)', land);
+  await page.evaluate(() => { UI.sheet = null; setTab('home'); S.champMsgs = []; });
+  /* 4. the model can't place it → the closest topic is offered; the chip answers from the phone */
+  let r = await say('does the ai keep my chats');
+  ok(r.sent === 1 && r.t === 'Did you mean this?' && r.chips.length === 1 && r.chips[0][0] === 'What does Champ do and where does my information go?' && r.chips[0][1] === 'champHelp' && r.chips[0][2] === 'champ', 'help: a question the model couldn’t place → “Did you mean this?” with the closest topic', r);
+  const n0 = log.asks.length, m0 = r.n;
+  await click(page, '#champscroll .chfollow .chhelp'); await tick(page, 300);
+  r = await last();
+  const me = await page.evaluate(() => [...document.querySelectorAll('#champscroll .msg.me')].pop().innerText.trim());
+  ok(log.asks.length === n0 && r.n === m0 + 2 && me === 'What does Champ do and where does my information go?' && r.t.startsWith(HELPT.champ.t) && r.acts.length === 1 && !r.chips.length, 'help: tapping it asks it as the topic’s question and answers on the phone — nothing sent to the model', { r, me, sent: log.asks.length - n0 });
+  r = await say('who can see my schedule and is champ private');
+  ok(r.t === 'Did you mean one of these?' && r.chips.length === 2 && r.chips.map(c => c[2]).sort().join() === 'champ,who_sees', 'help: two close topics → both offered, no more', r.chips);
+  r = await say('whats the weather');
+  ok(/^I only know Cal Poly classes/.test(r.t) && !r.chips.length, 'help: nothing close → the usual answer, no chips', r);
+  r = await say('is bus 4442 worth it if the seats are always wrong');
+  ok(/^That one’s your call/.test(r.t) && !r.chips.length, 'help: a question naming a course is never offered a TermChamp topic', r);
+  r = await say('topic constructor');
+  ok(/^Can you say that another way/.test(r.t) && !r.acts.length, 'help: a topic named like a built-in (constructor) is not answered', r);
+  r = await say('topic refund');
+  ok(/^Can you say that another way/.test(r.t) && !r.acts.length, 'help: a topic the phone doesn’t know is not guessed at', r);
+  /* 5. no model (the fixture's search fallback) → still offered */
+  r = await say('is termchamp free');
+  ok(r.sent === 1 && r.t === 'Did you mean this?' && r.chips.length === 1 && r.chips[0][2] === 'free', 'help: with no model answer, the closest topic is still offered', r);
+  r = await say('how much is a parking permit');
+  ok(!r.chips.some(c => c[1] === 'champHelp') && /can’t reach|not sure/i.test(r.t), 'help: with no model answer and nothing close, the usual line', r);
+  /* 6. chips belong to the last answer only, and only real topics answer */
+  await say('does the ai keep my chats'); r = await say('whats the weather');
+  ok(await page.locator('#champscroll .chhelp').count() === 0, 'help: an older answer’s chips go when a new answer comes');
+  const before = await page.evaluate(() => S.champMsgs.length);
+  await page.evaluate(() => { A.champHelp('constructor'); A.champHelp('__proto__'); A.champHelp('toString'); A.champHelp('nope'); });
+  ok(await page.evaluate(() => S.champMsgs.length) === before, 'help: champHelp answers only the 16 topics (not constructor, __proto__, …)');
+  /* 7. the matcher: every golden way of asking finds its topic; nothing else is offered one */
+  const here = nodePath.dirname(new URL(import.meta.url).pathname);
+  const gf = [process.env.APP_DIR && nodePath.join(process.env.APP_DIR, 'dev', 'golden', 'model-golden-v3.json'), nodePath.resolve(here, '..', '..', 'dev', 'golden', 'model-golden-v3.json')].filter(Boolean).find(f => nodeFs.existsSync(f));
+  const cases = JSON.parse(nodeFs.readFileSync(gf, 'utf8')).cases;
+  const mr = await page.evaluate(cases => { const out = { miss: [], extra: [], n: 0 };
+    for (const c of cases) { const m = helpMatch(c.q), want = [c, ...(c.alt || [])].filter(e => e.tool === 'app_help').map(e => e.args.topic);
+      if (want.length) { out.n++; if (!want.includes(m[0])) out.miss.push([c.q, m]); } else if (m.length) out.extra.push([c.q, c.tool, m]); }
+    return out; }, cases);
+  ok(!mr.miss.length && mr.n >= 50, `help: each of the ${mr.n} golden ways of asking about TermChamp finds its topic on the phone`, mr.miss.slice(0, 6));
+  ok(!mr.extra.length, 'help: none of the other golden questions is offered a TermChamp topic', mr.extra.slice(0, 6));
+  const HELD = [['whats termchamp', 'what_is'], ['who runs this app', 'what_is'], ['do i have to pay for termchamp', 'free'], ['how much does it cost', 'free'], ['will you sell my information', 'free'],
+    ['can anyone see my classes', 'who_sees'], ['how do i hide my schedule', 'who_sees'], ['is my name on my review', 'ratings_anonymous'], ['can the teacher see what i wrote', 'ratings_anonymous'],
+    ['are the reviews real', 'ratings_source'], ['how often do seats update', 'seats_source'], ['how to add classes', 'add_class'], ['what is plan b for', 'plans'], ['how does watching work', 'seat_alerts'],
+    ['what is a dpr', 'degree_report'], ['how do i invite friends', 'add_friends'], ['someone is being mean to me', 'block_report'], ['close my account', 'delete_account'],
+    ['does anthropic train on my questions', 'champ'], ['is termchamp free in 2027', 'free'], ['who can see my schedule for fall 2026', 'who_sees'], ['where does my data go', 'champ'], ['night mode', 'dark_mode'], ['the app crashed', 'contact'], ['how do i reach a human', 'contact']];
+  const NOT = ["who's free", 'is anyone free', 'when am i free monday', "who's in my classes", 'can i see my classes', 'is bus 4442 open', 'how many seats in stat 2170', 'are the seats in stat 2170 live', 'who made the stat 2170 final', 'hi', 'thanks champ',
+    'hey champ whos free', 'support classes for my major', "what's my progress report say about ge", 'is lee a good professor', 'how do i rate a professor', 'delete my review', "what's in my plan b", 'what can you do', 'add jordan',
+    'who built this campus', 'who runs this class', 'is it free to park', 'how much does this class cost', 'what does it cost to attend', 'ads class', 'advertising major classes',
+    'how do i contact my professor', 'contact info for professor lee', 'how do i block off time in my google calendar'];
+  const hr = await page.evaluate(([H, N]) => ({ h: H.filter(([q, k]) => helpMatch(q)[0] !== k).map(([q]) => [q, helpMatch(q)]), n: N.filter(q => helpMatch(q).length).map(q => [q, helpMatch(q)]) }), [HELD, NOT]);
+  ok(!hr.h.length, `help: ${HELD.length} other ways of asking each find their topic`, hr.h);
+  ok(!hr.n.length, `help: ${NOT.length} everyday questions that sound close are not offered one`, hr.n);
+  const PH = JSON.parse(nodeFs.readFileSync(nodePath.join(here, 'files', 'champ-help-phrasings.json'), 'utf8'));
+  const pr = await page.evaluate(P => ({ found: P.pos.filter(([q, k]) => helpMatch(q)[0] === k).length, wrong: P.pos.filter(([q, k]) => helpMatch(q).length && !helpMatch(q).includes(k)).map(([q, k]) => [q, k, helpMatch(q)]), fp: P.neg.filter(q => helpMatch(q).length).map(q => [q, helpMatch(q)]) }), PH);
+  ok(pr.found >= 155 && !pr.wrong.length && pr.fp.length <= 1, `help: ${PH.pos.length} independently written ways of asking — ${pr.found} find their topic, none a wrong one; ${pr.fp.length} of ${PH.neg.length} everyday questions offered one`, pr);
+  /* 8. the chip, light and dark: blue outline, reads, wraps inside the sheet */
+  await say('does the ai keep my chats');
+  for (const th of ['light', 'dark']) {
+    await page.evaluate(th => { document.documentElement.setAttribute('data-theme', th); render(true); }, th); await tick(page, 300);
+    const lk = await page.evaluate(() => { const c = document.querySelector('#champscroll .chhelp'), s = getComputedStyle(c), sh = document.getElementById('sheet').getBoundingClientRect(), b = c.getBoundingClientRect();
+      const rgb = v => (v.match(/[\d.]+/g) || []).slice(0, 3).map(Number), L = v => { const [r, g, bb] = rgb(v).map(x => { x /= 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * bb; };
+      const a = L(s.color), bg = L(s.backgroundColor); return { cr: (Math.max(a, bg) + 0.05) / (Math.min(a, bg) + 0.05), border: s.borderTopColor, blue: getComputedStyle(document.documentElement).getPropertyValue('--blue').trim(), padT: parseFloat(s.paddingTop), right: b.right <= sh.right - 8, h: b.height }; });
+    ok(lk.cr >= 4.5 && lk.padT >= 8 && lk.right && lk.h >= 44, `help: the Did-you-mean chip reads and fits (${th})`, lk);
+  }
+  await page.evaluate(() => { document.documentElement.setAttribute('data-theme', 'light'); render(true); });
+  ok(log.errors.length === 0, 'help: no page errors', log.errors);
+  await close();
+};
+
+tests.champGolden = async () => {
+  const here = nodePath.dirname(new URL(import.meta.url).pathname);
+  const gf = [process.env.APP_DIR && nodePath.join(process.env.APP_DIR, 'dev', 'golden', 'model-golden-v3.json'), nodePath.resolve(here, '..', '..', 'dev', 'golden', 'model-golden-v3.json')].filter(Boolean).find(f => nodeFs.existsSync(f));
+  ok(!!gf, 'golden: the set is found', gf);
+  if (!gf) return;
+  const cases = JSON.parse(nodeFs.readFileSync(gf, 'utf8')).cases;
+  const { page, close, log } = await openApp({ ask: () => null });
+  await page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 });
+  await page.evaluate(() => { TC.plans.A = ['70105', '70109']; TC.plans.B = [secsOf('BUS 3438')[0].id]; });
+  const r = await page.evaluate(cases => {
+    const SAMPLE = { start_after: '12:00', end_before: '12:00', at_time: '12:00', min_rating: 4, units: 15, section: '1' };
+    const conc = a => Object.fromEntries(Object.entries(a || {}).map(([k, v]) => [k, v && typeof v === 'object' && !Array.isArray(v) ? (v.$in ? v.$in[0] : (k in SAMPLE ? SAMPLE[k] : 'x')) : v]));
+    const strip = a => a ? JSON.stringify({ t: a.t, card: a.card || null }) : null;
+    const out = { none: [], threw: [], cards: 0, cardBad: [], local: 0, localWrong: [] };
+    for (const c of cases) {
+      const exps = [{ tool: c.tool, args: c.args }, ...(c.alt || [])];
+      const answers = exps.map(e => { const j = { tool: e.tool, args: conc(e.args) }; if (j.tool === 'watch' && !j.args.kind) j.args.kind = 'class';
+        try { return answerTool(j, c.q); } catch (err) { out.threw.push(c.q + ' → ' + e.tool + ': ' + err.message); return null; } });
+      const a = answers[0];
+      if (!a || typeof a.t !== 'string' || !a.t) out.none.push(c.q + ' → ' + c.tool);
+      if (a && a.card) { const f = CH_CARDS[a.card.k]; try { if (!f) out.cardBad.push(c.q + ': no card ' + a.card.k); else { f(Object.assign({ n: 'g' }, a.card)); out.cards++; } } catch (err) { out.cardBad.push(c.q + ': ' + err.message); } }
+      let L = null; try { L = chIntent(c.q); } catch (err) { out.threw.push('chIntent ' + c.q + ': ' + err.message); }
+      if (L) { out.local++; if (!answers.some(x => x && strip(x) === strip(L))) out.localWrong.push({ q: c.q, want: c.tool, said: L.t }); }
+    }
+    return out;
+  }, cases);
+  ok(!r.threw.length, 'golden: no right answer throws on the phone', r.threw.slice(0, 6));
+  ok(!r.none.length, `golden: the phone answers every one of the ${cases.length} right answers`, r.none.slice(0, 8));
+  ok(!r.cardBad.length && r.cards > 100, `golden: every card those answers carry draws (${r.cards})`, r.cardBad.slice(0, 6));
+  r.localWrong.forEach(x => console.log('    local answer differs:', JSON.stringify(x)));
+  r.none.forEach(x => console.log('    no answer:', x));
+  ok(!r.localWrong.length && r.local >= 20, `golden: the ${r.local} questions the phone answers by itself get the same answer as the right tool`, r.localWrong.length);
+  ok(log.asks.length === 0, 'golden: nothing was sent to the model', log.asks.length);
+  await close();
+};
+
 tests.champConsent = async () => {
   const asks = { 'is ada good': { tool: 'professor_stats', args: { name: 'Ada Examplewood' } } };
   const { page, close, log } = await openApp({ champ: false, ask: b => asks[b.q] || null });
@@ -5556,9 +7891,9 @@ tests.darkSetting = async () => {
   /* System follows the phone, live */
   await page.emulateMedia({ colorScheme: 'dark' }); await tick(page, 400);
   ok(await darkOf(page) === 'dark' && await bgOfPhone(page) === 'rgb(10, 15, 28)', 'appearance: System switches to dark the moment the phone does', [await darkOf(page), await bgOfPhone(page)]);
-  const flip = await page.evaluate(() => { const st = [...document.querySelectorAll('.fcard .b, .fcard div')].find(e => /^● In /.test(e.textContent.trim()) && e.children.length === 0);
-    return { st: st && getComputedStyle(st).color, meta: [...document.querySelectorAll('meta[name=theme-color]')].map(m => m.content).join() }; });
-  ok(flip.st === 'rgb(110, 162, 255)' && flip.meta === '#0A0F1C,#0A0F1C', 'appearance: the screen is redrawn with dark-mode colours (status line light blue) and the browser bar follows', flip);
+  const flip = await page.evaluate(() => { const st = document.querySelector('.fcard');
+    return { st: st && getComputedStyle(st).backgroundColor, meta: [...document.querySelectorAll('meta[name=theme-color]')].map(m => m.content).join() }; });
+  ok(flip.st && flip.st !== 'rgb(255, 255, 255)' && flip.meta === '#0A0F1C,#0A0F1C', 'appearance: the screen is redrawn with dark-mode colours (the feed cards go dark) and the browser bar follows', flip);
   await page.emulateMedia({ colorScheme: 'light' }); await tick(page, 400);
   ok(await darkOf(page) === 'light', 'appearance: and back to light');
   await page.emulateMedia({ colorScheme: 'dark' }); await tick(page, 300);
@@ -5604,6 +7939,1964 @@ tests.darkOnboarding = async () => {
     ok(D[k].status === 'rgb(244, 246, 251)' && D[k].phone === 'rgb(244, 246, 251)' && D[k].meta === '#F4F6FB,#F4F6FB', `dark onboarding: ${k} — the strip and the browser bar above it are light`, [D[k].status, D[k].phone, D[k].meta]);
     ok(D[k].body === 'rgb(244, 246, 251)', `dark onboarding: ${k} — on a phone the page behind the clock is light too (Safari paints the strip from it)`, D[k].body);
   }
+};
+
+/* Page width on every tab (Tate, 2026-10-10): Explore, Rate, Planner, Past classes and Friends sit 12px from
+   the screen edge, exactly like Home. Titles and small section labels stay at 16px (Home's section titles
+   are 12+4 too), and the Schedule tab row keeps 16. */
+tests.pageWidthHome = async () => {
+  for (const w of [390, 320]) {
+    const { page, close } = await openApp({ width: w });
+    await page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 });
+    const edges = (screen, setup, sel) => page.evaluate(([setup, sel]) => { (0, eval)(setup); render(true); return null; }, [setup, sel]).then(async () => {
+      await page.waitForTimeout(setup.includes('planner') ? 2600 : 700); if (setup.includes('planner')) { await page.evaluate(() => render(true)); await page.waitForTimeout(700); }
+      return page.evaluate(sel => { const sr = document.getElementById('scroll').getBoundingClientRect(), o = {};
+        for (const [k, s] of Object.entries(sel)) o[k] = [...document.querySelectorAll('#scroll ' + s)].filter(e => e.getClientRects().length).map(e => { const r = e.getBoundingClientRect(); const pd = /^\.(title|pl-top|pl-sech|fs-h|fs-note)$/.test(s) ? parseFloat(getComputedStyle(e).paddingLeft) : 0; return [Math.round(r.left - sr.left + pd), Math.round(sr.right - r.right)]; }); return o; }, sel); });
+    const at = (m, k, v) => m[k].length > 0 && m[k].every(([l, r]) => l === v && r === v);
+    const ex = await edges('ex', "S.tab='explore';S.exMode='classes'", { title: '.title', search: '.search', seg: '.seg', chips: '.fchip', cards: '.ccard' });
+    ok(at(ex, 'search', 12) && at(ex, 'seg', 12) && at(ex, 'cards', 12) && ex.chips[0][0] === 12 && ex.title[0][0] === 16, `page width ${w}: Explore classes — search, tabs, chips and cards 12px from the edge, the title 16`, ex);
+    const ep = await edges('ep', "S.tab='explore';S.exMode='profs'", { search: '.search', seg: '.seg', cards: '.pcard' });
+    ok(at(ep, 'search', 12) && at(ep, 'seg', 12) && at(ep, 'cards', 12), `page width ${w}: Explore professors — search, tabs and cards 12px from the edge`, ep);
+    const ra = await edges('ra', "S.tab='rate'", { title: '.title', cards: '.rate-cards .li' });
+    ok(at(ra, 'cards', 12) && ra.title[0][0] === 16, `page width ${w}: Rate — the lists are 12px from the edge, the title 16`, ra);
+    const fr = await edges('fr', "S.tab='friends'", { title: '.title', lab: '.fs-h', search: '.fsearch', lists: '.card.list', threads: '.thread' });
+    ok(at(fr, 'search', 12) && at(fr, 'lists', 12) && at(fr, 'threads', 12) && fr.title[0][0] === 16 && fr.lab.length > 0 && fr.lab.every(([l]) => l === 16), `page width ${w}: Friends — search, requests, chats and friends 12px from the edge, the title 16`, fr);
+    const pl = await edges('pl', "S.tab='schedule';S.schedTab='planner';localStorage.setItem(plSkipKey(),'1');TC.prefs={priority:'degree',units:16}", { plan: '.plq-card', left: '.pll', top: '.pl-top' });
+    ok(at(pl, 'plan', 12) && at(pl, 'left', 12) && pl.top[0][0] === 16, `page width ${w}: Builder — what’s left and the requirement cards are 12px from the edge, the heading 16`, pl);
+    const inj = await edges('inj', "S.tab='schedule';S.schedTab='planner'", { x: '.pl-card' }).then(() => page.evaluate(() => { const h = document.querySelector('#scroll .w12'); h.insertAdjacentHTML('beforeend', '<div class="pl-done" id="t-done">x</div><div class="pk-empty" id="t-empty">x</div>'); const sr = document.getElementById('scroll').getBoundingClientRect(); return ['t-done', 't-empty'].map(i => { const r = document.getElementById(i).getBoundingClientRect(); return [Math.round(r.left - sr.left), Math.round(sr.right - r.right)]; }); }));
+    ok(inj.every(([l, r]) => l === 12 && r === 12), `page width ${w}: the Planner’s "all filled" card and its empty note are 12px from the edge`, inj);
+    const fn = await edges('fn', "S.tab='friends';S.fq='a'", { note: '.fs-note' }); ok(fn.note.length > 0 && fn.note.every(([l]) => l === 16), `page width ${w}: the Friends search hint lines up with the labels`, fn);
+    const pa = await edges('pa', "S.tab='schedule';S.schedTab='past'", { sec: '.pc-sum, .pc-year, .pc-term, .pc-oth, .pc-btns' });
+    ok(at(pa, 'sec', 12) && pa.sec.length >= 4, `page width ${w}: Past classes — the summary, the years, the terms and the buttons are 12px from the edge`, pa);
+    const mi = await edges('mi', "S.tab='schedule';S.schedTab='mine'", { title: '.title', terms: '.seg.terms', cards: '.agenda, .anytime' });
+    ok(at(mi, 'terms', 12) && at(mi, 'cards', 12) && mi.title[0][0] === 16, `page width ${w}: My Classes is unchanged (cards 12, title 16)`, mi);
+    const sw = await page.evaluate(() => { const s = document.getElementById('scroll'); return s.scrollWidth - s.clientWidth; });
+    ok(sw <= 0, `page width ${w}: nothing scrolls sideways`, sw);
+    if (w === 390) { const ho = await edges('ho', "S.tab='home'", { cards: '.hfeed .fcard' }); ok(at(ho, 'cards', 12), 'page width: Home is unchanged', ho); }
+    await close();
+  }
+};
+
+/* ============ Group schedule (Tate, 2026-10-10) ============
+   "lets create a group schedule view where its simple but you see whoever is in the group and at the same
+   time when they are free"; "dont hae any writing on anything until you click the specific day and then
+   everything should shrink to lines on the others"; "show profile photos just have the color as a ball next
+   to the profile pic … for the tapped version dont have the lines so scrambled drop the green free … on
+   compresses". The fixture group is me, Rowan and Sky; it's Wednesday 10:30a. The week runs 8a–6p at 0.8px
+   a minute. */
+const GW_WED = '2026-09-30T10:30:00-07:00';
+const gwOpen = async (page, cid) => { await page.evaluate(id => A.openChat(id), cid); await tick(page, 500); await click(page, '.chathdr .gwbtn'); await tick(page, 500); };
+const gwDayOpen = async (page, d) => { await click(page, `[data-gw="h${d}"]`); await page.waitForTimeout(400); };
+const gwSum = async page => (await page.locator('.gwsum').count()) ? (await page.locator('.gwsum').innerText()).replace(/\s+/g, ' ').trim() : '';
+/* the page as markup with every element's attributes sorted, so a page changed in place compares with a fresh one */
+const gwShape = page => page.evaluate(() => { const w = n => n.nodeType === 3 ? n.textContent : n.nodeType !== 1 ? '' : `<${n.tagName}${[...n.attributes].map(a => ' ' + a.name + '="' + a.value + '"').sort().join('')}>${[...n.childNodes].map(w).join('')}</${n.tagName}>`; const g = document.getElementById('gw'); return g ? w(g) : ''; });
+tests.groupSchedule = async () => {
+  const { page, close, log } = await openApp({ time: GW_WED });
+  await page.waitForFunction(() => TC.ready, null, { timeout: 8000 });
+  const G = FX.CONVS[1].id, D = FX.CONVS[0].id, [ROW, SKY] = [FX.FRIENDS[1].id, FX.FRIENDS[2].id];
+  /* the way in: a group chat's header and its people-and-options sheet; never a 1:1 */
+  await page.evaluate(id => A.openChat(id), D); await tick(page, 500);
+  ok(await page.locator('.chathdr .gwbtn').count() === 0, 'group week: a 1:1 chat has no group schedule button');
+  await page.evaluate(id => { UI.sheet = { type: 'chatAct', cid: id }; render(true); }, D); await tick(page, 200);
+  ok(await page.locator('#sheet [data-a="chatDelAsk"]').count() === 1 && await page.locator('#sheet [data-a="openGroupWeek"]').count() === 0, 'group week: nor a row in a 1:1’s sheet');
+  await page.evaluate(() => { UI.sheet = null; render(true); });
+  await page.evaluate(id => A.openChat(id), G); await tick(page, 500);
+  const btn = page.locator('.chathdr .gwbtn');
+  ok(await btn.count() === 1 && await btn.getAttribute('aria-label') === 'See when everyone’s free' && await btn.getAttribute('data-x') === G, 'group week: a group chat’s header has the calendar button');
+  await click(page, '.chathdr [data-a="chatMenu"]'); await tick(page, 300);
+  const row = page.locator('#sheet [data-a="openGroupWeek"]');
+  ok(await row.count() === 1 && /See when everyone’s free/.test(await row.innerText()), 'group week: and so does the chat’s people-and-options sheet');
+  await row.click(); await tick(page, 500);
+  ok(await page.evaluate(() => cur().s === 'groupWeek' && !UI.sheet), 'group week: the sheet row opens the page and closes the sheet');
+  await click(page, '[data-a="back"]'); await tick(page, 400);
+  /* a half-typed message survives a trip to the schedule */
+  await page.locator('#chatin').fill('half a thought');
+  await click(page, '.chathdr .gwbtn'); await tick(page, 500);
+  ok(await page.evaluate(id => cur().s === 'groupWeek' && cur().p.id === id && !cur().p.d, G), 'group week: the header button opens the page, no day open');
+  await click(page, '[data-a="back"]'); await tick(page, 400);
+  ok(await page.locator('#chatin').inputValue() === 'half a thought', 'group week: what you’d typed in the chat is still there when you come back');
+  await page.locator('#chatin').fill('');
+  await click(page, '.chathdr .gwbtn'); await tick(page, 500);
+  noProto(await text(page), 'the group schedule');
+  /* members: you first, then the others, each a photo with their colour as a ball on it */
+  const mem = await page.evaluate(() => [...document.querySelectorAll('.gwm')].map(m => ({ tag: m.tagName, a: m.dataset.a, x: m.dataset.x, n: m.querySelector('small').textContent, av: !!m.querySelector('.gwpic > .av'), ball: m.querySelector('.gwball') ? getComputedStyle(m.querySelector('.gwball')).backgroundColor : null })));
+  ok(mem.map(m => m.n).join() === 'You,Rowan,Sky' && mem[1].x === ROW && mem[2].x === SKY && mem[1].a === 'openFriend', 'group week: the members are you, then Rowan and Sky; theirs open their pages', mem);
+  ok(mem[0].tag === 'DIV' && !mem[0].a, 'group week: you aren’t a button (it would leave for the Schedule tab)', mem[0]);
+  ok(mem.every(m => m.av) && mem.map(m => m.ball).join('|') === 'rgb(47, 95, 196)|rgb(184, 84, 26)|rgb(181, 58, 114)', 'group week: each member is their photo with a ball in their own colour', mem);
+  ok(/Fall 2026/.test(await page.locator('.gwhd').innerText()) && /Fixture Study Group/.test(await page.locator('.gwhd').innerText()), 'group week: the header names the group and the term');
+  /* the week: nothing written on it */
+  const wk = await page.evaluate(() => {
+    const c = d => document.querySelector(`[data-gw="c${d}"]`);
+    return { txt: document.querySelector('.gwcols').innerText.trim(), ax: document.querySelectorAll('.gwax span').length, sum: document.querySelector('[data-gw="sum"]').innerHTML, hint: document.querySelector('.gwhint').innerText,
+      H: document.querySelector('.gwbody').style.height, heads: [...document.querySelectorAll('.gwdh')].map(b => b.textContent), blue: [...document.querySelectorAll('.gwdh.gwtd')].map(b => b.dataset.x),
+      n: ['M', 'T', 'W', 'R', 'F'].map(d => [c(d).querySelectorAll('.gwb').length, c(d).querySelectorAll('.gwfree').length]),
+      split: [...c('M').querySelectorAll('.gwb')].map(b => /gradient/.test(b.style.background)), btns: document.querySelectorAll('.gwcols button').length,
+      free: [...c('M').querySelectorAll('.gwfree')].map(f => [f.style.top, f.style.height]), now: [...document.querySelectorAll('.gwnow')].map(n => n.closest('.gwc').dataset.x + ':' + n.style.top) };
+  });
+  ok(wk.txt === '' && wk.ax === 0 && wk.sum === '' && wk.btns === 0, 'group week: nothing is written on the week, no hours, no summary, and nothing in it is a button until a day opens', wk);
+  ok(wk.heads.join() === 'MON,TUE,WED,THU,FRI' && wk.blue.join() === 'W' && wk.hint === 'Tap a day to see who’s where', 'group week: MON–FRI with today in blue, and "Tap a day to see who’s where"', wk);
+  ok(JSON.stringify(wk.n) === '[[4,1],[2,2],[4,1],[2,2],[0,1]]', 'group week: a block per class (the same class at the same time is one) and a green band per time everyone’s free', wk.n);
+  ok(wk.split.join() === 'true,false,true,false', 'group week: a class two of you are in is one block in both colours', wk.split);
+  ok(wk.H === '480px' && JSON.stringify(wk.free) === '[["1px","102px"]]', 'group week: 8a–6p is 480px, and Monday’s band runs 8a to 10:10a', wk);
+  ok(wk.now.join() === 'W:120px', 'group week: a red line at 10:30 on today', wk.now);
+  /* tap Wednesday: the page changes in place */
+  await page.evaluate(() => { document.querySelector('[data-gw="cW"]').__gwKeep = 1; document.querySelector('[data-gw="cM"]').__gwKeep = 1; });
+  await click(page, '[data-gw="hW"]'); await page.waitForTimeout(450);
+  const op = await page.evaluate(() => {
+    const c = d => document.querySelector(`[data-gw="c${d}"]`), w = d => Math.round(c(d).getBoundingClientRect().width);
+    const m = c('M').getBoundingClientRect(), hit = document.elementFromPoint(m.left - 2, m.top + 200);
+    return { kept: c('W').__gwKeep === 1 && c('M').__gwKeep === 1, d: cur().p.d, heads: [...document.querySelectorAll('.gwdh')].map(b => b.textContent), pressed: document.querySelector('[data-gw="hW"]').getAttribute('aria-pressed'),
+      w: ['M', 'T', 'W', 'R', 'F'].map(w), thin: ['M', 'T', 'R', 'F'].map(d => [c(d).querySelectorAll('.gwb,.gwfree').length, c(d).querySelectorAll('.gwseg').length]), hit: hit && hit.closest('[data-gw]') && hit.closest('[data-gw]').dataset.gw,
+      seg: [...c('M').querySelectorAll('.gwseg')].map(s => /gradient/.test(s.style.background)), segX: [...document.querySelectorAll('.gwseg')].map(s => Math.round(s.getBoundingClientRect().left - s.closest('.gwc').getBoundingClientRect().left)),
+      blocks: [...c('W').querySelectorAll('button.gwb')].map(b => ({ t: b.innerText.replace(/\s+/g, ' ').trim(), a: b.dataset.a, x: b.dataset.x, y: b.dataset.y, k: b.className, you: b.classList.contains('you'), faces: b.querySelectorAll('.gwfc .av').length })),
+      band: c('W').querySelector('.gwfree').innerText.trim(), past: c('W').querySelectorAll('.gwfree.past').length, ax: [...document.querySelectorAll('.gwax span')].map(s => s.textContent).join(' '),
+      hint: getComputedStyle(document.querySelector('.gwhint')).display, now: [...document.querySelectorAll('.gwnow')].length };
+  });
+  ok(op.kept && op.d === 'W', 'group week: tapping a day changes the page in place (the days slide), not a redraw', op);
+  ok(op.heads.join() === 'M,T,WEDNESDAY,T,F' && op.pressed === 'true', 'group week: the open day reads WEDNESDAY; the others one letter', op.heads);
+  ok(op.w[2] > 200 && [0, 1, 3, 4].every(i => op.w[i] <= 13), 'group week: Wednesday opens wide and the other days shrink to 12px', op.w);
+  ok(op.hit === 'cM', 'group week: a shrunk day can be tapped a little outside its 12px too', op.hit);
+  ok(op.thin.every(([a, b]) => a === 0) && JSON.stringify(op.thin.map(x => x[1])) === '[4,2,2,0]', 'group week: a shrunk day is only its line — no boxes, no green — one stretch per class', op.thin);
+  ok(op.seg.join() === 'true,false,true,false' && op.segX.every(x => x === 3), 'group week: the line is centred, in the colours of who’s in class then', op);
+  ok(JSON.stringify(op.blocks.map(b => b.t)) === JSON.stringify(['BUS 3438 10:10–12:00p', 'BUS 4442 12:10–2:00p', 'BUS 4445 2:10–4:00p', 'BUS 3431 4:10–6:00p']) && op.blocks.every(b => b.a === 'secSheet' && b.x === b.t.slice(0, 8) && b.y), 'group week: the open day shows each class’s code and time, and a class opens its section', op.blocks);
+  ok(op.blocks.map(b => b.faces).join() === '2,1,2,1' && op.blocks.every(b => / tall/.test(b.k)) && op.blocks.map(b => b.you).join() === 'true,false,true,false', 'group week: the faces of who’s in each class, and a yellow outline on one you share', op.blocks);
+  ok(op.band === '' && op.past === 1 && op.ax === '8a 10a 12p 2p 4p 6p', 'group week: today, a free time that’s over is dimmed and says nothing; the hours show', op);
+  ok(await gwSum(page) === 'TODAY No more free time together today' && await page.locator('.gwsend').count() === 0 && op.hint === 'none' && op.now === 1, 'group week: today, a free time that’s over isn’t offered — nothing to send; the hint goes', await gwSum(page));
+  const morphed = await gwShape(page); await page.evaluate(() => render(true)); await tick(page, 100);
+  ok(morphed === await gwShape(page), 'group week: the page changed in place is exactly the page drawn fresh');
+  /* another day moves the opening; the same day again closes it */
+  await click(page, '[data-gw="cR"]'); await page.waitForTimeout(450);
+  const th = await page.evaluate(() => ({ d: cur().p.d, now: document.querySelectorAll('.gwnow').length, band: [...document.querySelectorAll('[data-gw="cR"] .gwfree')].map(f => f.innerText.replace(/\s+/g, ' ')) }));
+  ok(th.now === 0, 'group week: no red line on today while it’s shrunk to a line', th);
+  ok(th.d === 'R' && await gwSum(page) === 'THURSDAY · EVERYONE FREE Before 10:10a · After 2p Send to chat' && th.band.join('|') === 'Everyone free Before 10:10a|Everyone free After 2p', 'group week: tapping Thursday moves there: its free times, both of them', th);
+  await gwDayOpen(page, 'F');
+  ok(await page.locator('[data-gw="cF"] .gwfree').innerText().then(t => t.replace(/\s+/g, ' ')) === 'Everyone free All day' && await gwSum(page) === 'FRIDAY · EVERYONE FREE All day Send to chat', 'group week: a day with no classes is free all day');
+  await gwDayOpen(page, 'F');
+  ok(await page.evaluate(() => !cur().p.d && document.querySelector('.gwcols').innerText.trim() === '' && document.querySelectorAll('.gwseg').length === 0 && !document.querySelector('.gwsum')), 'group week: tapping the open day again closes it');
+  /* a class opens its section preview over the page; closing it leaves the day open */
+  await gwDayOpen(page, 'W');
+  await click(page, '[data-gw="cW"] button.gwb[data-x="BUS 4442"]'); await tick(page, 400);
+  ok(await page.evaluate(() => cur().s === 'groupWeek' && UI.sheet && UI.sheet.type === 'sec' && UI.sheet.code === 'BUS 4442') && /BUS 4442/.test(await page.locator('#sheet').innerText()), 'group week: a class block opens its section');
+  await click(page, '#sheet .xbtn'); await tick(page, 300);
+  ok(await page.evaluate(() => cur().s === 'groupWeek' && cur().p.d === 'W' && /WEDNESDAY/.test(document.querySelector('.gwhr').innerText)), 'group week: closing it, Wednesday is still open');
+  /* a member opens their page; back keeps the day */
+  await click(page, `.gwm[data-x="${SKY}"]`); await tick(page, 400);
+  ok(await page.evaluate(id => cur().s === 'friend' && cur().p.id === id, SKY), 'group week: a member opens their page');
+  await click(page, '[data-a="back"]'); await tick(page, 400);
+  ok(await page.evaluate(() => cur().s === 'groupWeek' && cur().p.d === 'W'), 'group week: back from their page, Wednesday is still open');
+  /* Send to chat: one message, then back in the chat */
+  await gwDayOpen(page, 'R');
+  await page.evaluate(() => { document.querySelector('.gwsend').click(); A.gwSend(); }); await tick(page, 800);   /* a second tap while it sends */
+  const sent = log.writes.filter(w => w.table === 'messages' && w.m === 'POST');
+  ok(sent.length === 1 && sent[0].body.conversation_id === G && sent[0].body.kind === 'text' && sent[0].body.body === 'Everyone’s free Thursday before 10:10a and after 2p', 'group week: Send to chat posts one "Everyone’s free Thursday before 10:10a and after 2p" in the group', sent.map(w => w.body));
+  ok(await page.evaluate(id => cur().s === 'chat' && cur().p.id === id, G) && /Everyone’s free Thursday before 10:10a and after 2p/.test(await text(page)), 'group week: and goes back to the chat, where it shows');
+  ok(log.errors.length === 0, 'group week: no page errors', log.errors);
+  await close();
+};
+/* A member you aren't friends with: shown, greyed, no colour, left out of the free times, and the page says so. */
+tests.groupScheduleNotFriends = async () => {
+  const T = JSON.parse(JSON.stringify(FX.TABLES)), G = FX.CONVS[1].id;
+  T.conversation_members.push({ conversation_id: G, user_id: FX.STRANGER.id, last_read_at: null });
+  /* the stranger has a class in the table; the app must not read or draw it */
+  T.my_sections.push({ user_id: FX.STRANGER.id, term: '2268', code: 'BUS 3346', class_nbr: T.course_seats.find(r => r.course_code === 'BUS 3346').class_nbr, section: '01', instructor: 'Dummelow, Faro', days: 'MoWe 8:10AM - 9:30AM', status: 'enrolled', wl_pos: null });
+  T.saved_classes.push({ user_id: FX.STRANGER.id, term: '2268', code: 'BUS 3346', class_nbr: null, created_at: '2026-09-10T18:00:00Z', waitlist_pos: null });
+  const { page, close, log } = await openApp({ time: GW_WED, tables: T });
+  await page.waitForFunction(() => TC.ready, null, { timeout: 8000 });
+  await gwOpen(page, G);
+  const m = await page.evaluate(id => { const e = document.querySelector(`.gwm[data-x="${id}"]`); return e && { n: e.querySelector('small').textContent, tag: (e.querySelector('em') || {}).textContent, off: e.classList.contains('off'), ball: !!e.querySelector('.gwball'), aria: e.getAttribute('aria-label') }; }, FX.STRANGER.id);
+  ok(m && m.n === 'Morgan' && m.tag === 'Not friends' && m.off && !m.ball && m.aria === 'Morgan Nobody · Not friends', 'not friends: Morgan is shown greyed, “Not friends”, with no colour', m);
+  ok(/You’re not friends with Morgan, so their classes don’t show and the free times leave them out\./.test(await page.locator('.gwnote').innerText()), 'not friends: the page says why');
+  ok(!log.reads.some(r => /^(my_sections|saved_classes)/.test(r) && r.includes(FX.STRANGER.id)), 'not friends: Morgan’s classes are never even asked for', log.reads.filter(r => /^(my_sections|saved_classes)/.test(r)));
+  ok(await page.locator('[data-gw="cM"] .gwfree').count() === 1 && await page.locator('.gwcols .gwb').count() === 12, 'not friends: Morgan’s Monday 8:10a class isn’t drawn and doesn’t take the free time');
+  await gwDayOpen(page, 'R');
+  ok(await gwSum(page) === 'THURSDAY · FREE TOGETHER Before 10:10a · After 2p Send to chat' && (await page.locator('[data-gw="cR"] .gwfree').first().innerText()).replace(/\s+/g, ' ') === 'Free together Before 10:10a', 'not friends: the summary and the bands say FREE TOGETHER, never "everyone"');
+  /* a send that fails leaves you on the page, able to try again */
+  await page.evaluate(() => { window.__send = TC.send; TC.send = async () => false; });
+  await click(page, '.gwsend'); await tick(page, 400);
+  ok(await page.evaluate(() => cur().s === 'groupWeek') && await page.locator('.gwsend').innerText() === 'Send to chat' && !(await page.locator('.gwsend').isDisabled()), 'not friends: a failed send stays here, ready to try again');
+  await page.evaluate(() => { TC.send = window.__send; });
+  await click(page, '.gwsend'); await tick(page, 800);
+  const sent = log.writes.filter(w => w.table === 'messages' && w.m === 'POST').map(w => w.body.body);
+  ok(sent.length === 1 && sent[0] === 'Rowan, Sky and I are free Thursday before 10:10a and after 2p', 'not friends: the message names who’s free', sent);
+  ok(log.errors.length === 0, 'not friends: no page errors', log.errors);
+  await close();
+};
+/* A bigger group: overlapping classes side by side, short and evening classes, a joined line on a shrunk day,
+   a class two others share (no yellow: you're not in it), and someone with no class times. */
+tests.groupScheduleCrowd = async () => {
+  const T = JSON.parse(JSON.stringify(FX.TABLES)), G = FX.CONVS[1].id, [AV, QU, HA] = [FX.FRIENDS[0].id, FX.FRIENDS[3].id, FX.FRIENDS[4].id];
+  [AV, QU, HA].forEach(u => T.conversation_members.push({ conversation_id: G, user_id: u, last_read_at: null }));
+  /* Harper: a 50-minute MWF class, an 80-minute MW class, and an evening class the feed doesn't have */
+  const sec = (c, n) => T.course_seats.find(r => r.course_code === c && r.section === n);
+  [['STAT 2170', '02'], ['BUS 3346', '01']].forEach(([c, n]) => { const r = sec(c, n); T.my_sections.push({ user_id: HA, term: '2268', code: c, class_nbr: r.class_nbr, section: n, instructor: r.instructor, days: r.days, status: 'enrolled', wl_pos: null }); T.saved_classes.push({ user_id: HA, term: '2268', code: c, class_nbr: r.class_nbr, created_at: '2026-09-10T18:00:00Z', waitlist_pos: null }); });
+  T.my_sections.push({ user_id: HA, term: '2268', code: 'BUS 4488', class_nbr: '79990', section: '05', instructor: 'Unratedson, Gil', days: 'TuTh 6:10PM - 7:30PM', status: 'enrolled', wl_pos: null });
+  T.saved_classes.push({ user_id: HA, term: '2268', code: 'BUS 4488', class_nbr: '79990', created_at: '2026-09-10T18:00:00Z', waitlist_pos: null });
+  /* Wednesday 10:10a: three classes at once — BUS 3438 (you, Sky), BUS 4401 (four of them) and Avery's 50-minute ECON 2303 */
+  const st = sec('BUS 4401', '01');
+  [FX.FRIENDS[1].id, AV, QU, HA].forEach(u => { T.my_sections.push({ user_id: u, term: '2268', code: 'BUS 4401', class_nbr: st.class_nbr, section: '01', instructor: st.instructor, days: st.days, status: 'enrolled', wl_pos: null }); T.saved_classes.push({ user_id: u, term: '2268', code: 'BUS 4401', class_nbr: st.class_nbr, created_at: '2026-09-10T18:00:00Z', waitlist_pos: null }); });
+  T.my_sections.push({ user_id: AV, term: '2268', code: 'ECON 2303', class_nbr: '79991', section: '07', instructor: 'Stubbington, Cleo', days: 'MoWe 10:30AM - 11:20AM', status: 'enrolled', wl_pos: null });
+  T.saved_classes.push({ user_id: AV, term: '2268', code: 'ECON 2303', class_nbr: '79991', created_at: '2026-09-10T18:00:00Z', waitlist_pos: null });
+  const { page, close, log } = await openApp({ time: GW_WED, tables: T });
+  await page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 });
+  await gwOpen(page, G);
+  const mem = await page.evaluate(() => [...document.querySelectorAll('.gwm')].map(m => [m.querySelector('small').textContent, m.querySelector('.gwball') ? getComputedStyle(m.querySelector('.gwball')).backgroundColor : '', (m.querySelector('em') || {}).textContent || '']));
+  ok(mem.map(m => m[0]).join() === 'You,Rowan,Sky,Avery,Quinn,Harper' && mem.slice(3).map(m => m[1]).join('|') === 'rgb(27, 127, 116)|rgb(122, 79, 208)|rgb(138, 106, 0)' && mem.every(m => !m[2]), 'crowd: six members, each their own colour', mem);
+  ok(await page.locator('.gwbody').evaluate(e => e.style.height) === '576px', 'crowd: Harper’s 7:30p class stretches the week to 8p (576px)');
+  const tue = await page.evaluate(() => [...document.querySelectorAll('[data-gw="cT"] .gwb')].map(b => { const r = b.getBoundingClientRect(), c = b.closest('.gwc').getBoundingClientRect(); return [Math.round(r.left - c.left), Math.round(r.width)]; }));
+  ok(tue.length === 5 && tue[0][0] === 4 && tue[1][0] > tue[0][0] + tue[0][1] && Math.abs(tue[0][1] - tue[1][1]) <= 1 && tue[2][0] === 4 && tue[3][1] > tue[0][1] * 1.8, 'crowd: classes at the same time sit side by side, half each; a class alone is full width', tue);
+  await gwDayOpen(page, 'T');
+  const phil = await page.evaluate(() => { const b = document.querySelector('[data-gw="cT"] button.gwb[data-x="PHIL 3331"]'); return { you: b.classList.contains('you'), faces: b.querySelectorAll('.gwfc .av').length, bg: b.style.background }; });
+  ok(!phil.you && phil.faces === 2 && /gradient/.test(phil.bg), 'crowd: Avery and Quinn’s class is one block in both colours, no yellow (you’re not in it)', phil);
+  ok(await page.locator('.gwax').innerText().then(t => t.replace(/\s+/g, ' ').trim()) === '8a 10a 12p 2p 4p 6p 8p', 'crowd: the hours run to 8p');
+  await gwDayOpen(page, 'W');
+  const fit = await page.evaluate(() => [...document.querySelectorAll('[data-gw="cW"] button.gwb')].map(b => ({ x: b.dataset.x, k: b.className.replace('gwb ', ''), over: b.scrollHeight > b.clientHeight + 1, cut: [...b.querySelectorAll('b,i')].some(e => e.scrollWidth > e.clientWidth + 1), t: b.innerText.replace(/\s+/g, ' ').trim(), faces: b.querySelectorAll('.gwfc .av').length })));
+  ok(fit.find(b => b.x === 'BUS 3346').k === 'tall' && fit.find(b => b.x === 'STAT 2170').k === 'mid', 'crowd: an 80-minute class has room for code, time and faces; a 50-minute one for code and faces, then the time', fit);
+  ok(fit.find(b => b.x === 'STAT 2170').t === 'STAT 2170 9:10–10:00a' && fit.find(b => b.x === 'STAT 2170').faces === 1, 'crowd: the 50-minute class shows its code, its face and its time', fit.find(b => b.x === 'STAT 2170'));
+  ok(fit.every(b => !b.over && !b.cut), 'crowd: no class’s writing spills or is cut off, even three to a row', fit);
+  const three = await page.evaluate(() => [...document.querySelectorAll('[data-gw="cW"] button.gwb')].filter(b => ['BUS 3438', 'BUS 4401', 'ECON 2303'].includes(b.dataset.x)).map(b => ({ x: b.dataset.x, w: Math.round(b.getBoundingClientRect().width), faces: b.querySelectorAll('.gwfc .av').length, more: (b.querySelector('.gwmore') || {}).textContent || '', fcOver: b.querySelector('.gwfc') ? b.querySelector('.gwfc').scrollWidth > b.querySelector('.gwfc').clientWidth + 1 : false })));
+  ok(three.length === 3 && new Set(three.map(b => b.w)).size === 1 && three[0].w < 90, 'crowd: three classes at once are three equal lanes', three);
+  const b44 = three.find(b => b.x === 'BUS 4401');
+  ok(b44 && b44.faces === 1 && b44.more === '+3' && three.every(b => !b.fcOver), 'crowd: a class four people share shows as many faces as fit, then +3', three);
+  const seg = await page.evaluate(() => [...document.querySelectorAll('[data-gw="cT"] .gwseg')].map(s => [s.style.borderRadius, new Set(s.style.background.match(/rgb\([^)]*\)/g) || ['solid']).size]));
+  ok(JSON.stringify(seg) === JSON.stringify([['3px 3px 0px 0px', 1], ['0px', 2], ['0px', 3], ['0px 0px 3px 3px', 1], ['3px', 1], ['3px', 1]]), 'crowd: Tuesday shrunk is one joined line from 8:10a to 12p (Avery · Avery+Quinn · Rowan+Avery+Quinn · Rowan), then Sky, then Harper at 6:10p', seg);
+  await gwDayOpen(page, 'F');
+  ok(await gwSum(page) === 'FRIDAY · EVERYONE FREE Before 9:10a · After 10a Send to chat' && await page.evaluate(() => gwSendText(cur().p)) === 'Everyone’s free Friday before 9:10a and after 10a', 'crowd: Friday around Harper’s 9:10a class; another day is named in the message', await gwSum(page));
+  /* Harper with no class times: not counted, and the page says so */
+  await page.evaluate(id => { PEOPLE[id].secs = []; PEOPLE[id].unplaced = []; render(true); }, HA); await tick(page, 200);
+  ok(await page.evaluate(id => document.querySelector(`.gwm[data-x="${id}"] em`).textContent, HA) === 'No classes', 'crowd: someone with no classes says “No classes”');
+  ok(/Harper hasn’t added class times yet, so the free times don’t count them\./.test(await page.locator('.gwnote').innerText()) && await gwSum(page) === 'FRIDAY · FREE TOGETHER All day Send to chat', 'crowd: they’re left out of the free times, which then say FREE TOGETHER', await gwSum(page));
+  await page.evaluate(id => { PEOPLE[id].unplaced = ['UNIV 1101']; render(true); }, HA); await tick(page, 200);
+  ok(await page.evaluate(id => document.querySelector(`.gwm[data-x="${id}"] em`).textContent, HA) === 'No times', 'crowd: a class with no time says “No times”');
+  ok(log.errors.length === 0, 'crowd: no page errors', log.errors);
+  await close();
+};
+/* The app as shipped: choosing Spring 2027, in Fall 2026. The week is Fall, and a class opens Fall's section. */
+tests.groupScheduleTwoTerms = async () => {
+  const { page, close, log } = await openApp({ time: GW_WED, terms: SPRING_CFG, tables: springTables() });
+  await page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 }); await settle(page, 800);
+  await gwOpen(page, FX.CONVS[1].id);
+  ok(/Fall 2026/.test(await page.locator('.gwhd').innerText()) && await page.locator('[data-gw="cM"] .gwb').count() === 4, 'two terms: the week is Fall’s, the term everyone’s in');
+  await gwDayOpen(page, 'W');
+  await click(page, '[data-gw="cW"] button.gwb[data-x="BUS 3438"]'); await tick(page, 500);
+  const sh = await page.locator('#sheet').innerText();
+  ok(/BUS 3438/.test(sh) && /Fall 2026/.test(sh) && !/isn.t offered/.test(sh) && await page.evaluate(() => cur().s === 'groupWeek'), 'two terms: BUS 3438 (not offered in Spring) opens its Fall section', sh.slice(0, 200));
+  ok(log.errors.length === 0, 'two terms: no page errors', log.errors);
+  await close();
+};
+/* No friend in the group, hostile names, a blocked member, loads still running or failed, a chat that's gone. */
+tests.groupScheduleEdges = async () => {
+  const T = JSON.parse(JSON.stringify(FX.TABLES)), G = FX.CONVS[1].id;
+  T.conversation_members = T.conversation_members.filter(r => r.conversation_id !== G || r.user_id === FX.ME.id).concat([{ conversation_id: G, user_id: FX.STRANGER.id, last_read_at: null }]);
+  T.conversations = T.conversations.map(c => c.id === G ? Object.assign({}, c, { title: '<img src=x onerror="window.__xss=1">Group' }) : c);
+  T.profiles = T.profiles.map(p => p.id === FX.STRANGER.id ? Object.assign({}, p, { display_name: '<img/src=x/id=xss/onerror=window.__xss=2>Mo' }) : p);
+  const { page, close, log } = await openApp({ time: GW_WED, tables: T });
+  await page.waitForFunction(() => TC.ready, null, { timeout: 8000 });
+  await gwOpen(page, G);
+  const xs = await page.evaluate(id => ({ run: !!window.__xss, imgs: document.querySelectorAll('.gwt img, .gwm small img, .gwnote img').length, title: document.querySelector('.gwt').textContent, name: document.querySelector(`.gwm[data-x="${id}"] small`).textContent }), FX.STRANGER.id);
+  ok(!xs.run && xs.imgs === 0 && xs.title === '<img src=x onerror="window.__xss=1">Group' && xs.name === '<img/src=x/id=xss/onerror=window.__xss=2>Mo', 'edges: a group name and a person’s name are shown as text, never run', xs);
+  ok(/You’re not friends with anyone else here, so only your classes show\./.test(await page.locator('.gwnote').innerText()) && await page.locator('.gwfree').count() === 0, 'no friends here: only your classes, no free times', await page.locator('.gwnote').innerText());
+  await gwDayOpen(page, 'W');
+  ok(await page.locator('.gwsum').count() === 0 && await page.locator('[data-gw="cW"] button.gwb').count() === 4, 'no friends here: an open day has your classes and no summary');
+  ok(await page.evaluate(() => gwSendText(cur().p)) === '', 'no friends here: nothing to send');
+  await page.evaluate(id => { TC.blocks = [{ id }]; render(true); }, FX.STRANGER.id); await tick(page, 200);
+  ok(await page.evaluate(id => document.querySelector(`.gwm[data-x="${id}"] em`).textContent, FX.STRANGER.id) === 'Blocked', 'edges: someone you blocked says “Blocked”');
+  await page.evaluate(() => { TC.ready = false; render(true); }); await tick(page, 200);
+  ok(/Loading everyone’s classes…/.test(await text(page)) && await page.locator('.gwcols').count() === 0, 'group week: while classes load it says so');
+  await page.evaluate(() => { TC.ready = true; TC.err.friendSecs = 'boom'; render(true); }); await tick(page, 200);
+  ok(/Couldn’t load everyone’s classes\./.test(await text(page)) && await page.locator('.gwcols').count() === 0, 'group week: a failed load says so instead of showing everyone free');
+  await page.evaluate(() => { delete TC.err.friendSecs; TC.err.friends = 'boom'; render(true); }); await tick(page, 200);
+  ok(/Couldn’t load everyone’s classes\./.test(await text(page)) && await page.locator('.gwcols').count() === 0, 'group week: so does a failed friends list (rather than calling everyone “Not friends”)');
+  await page.evaluate(() => { delete TC.err.friends; render(true); }); await tick(page, 200);
+  /* a morph that can't match (the page was redrawn in between) falls back to a redraw */
+  await page.evaluate(() => { document.getElementById('gw').dataset.id = 'other'; }); await click(page, '[data-gw="hW"]'); await tick(page, 200);
+  ok(await page.evaluate(id => document.getElementById('gw').dataset.id === id && !cur().p.d, G), 'group week: a page that isn’t this one is redrawn, not patched');
+  await page.evaluate(() => { cur().p.id = 'nope'; render(true); }); await tick(page, 200);
+  ok(/Chat not found\./.test(await text(page)), 'group week: a chat that’s gone says so');
+  ok(log.errors.length === 0, 'group week edges: no page errors', log.errors);
+  await close();
+};
+
+/* Friends' faces on a tapped day (Tate, 2026-10-11): on the right of every block — tall ones too, which used to
+   stack them under the time on the left — and always round, a photo as much as the grey person. Checked with one
+   day with classes (a wide tapped day: a row of faces) and five (a tapped day about 110px wide: a column), at
+   three phone widths, and with the red now-line at three times in the live block. */
+tests.weekFaces = async () => {
+  for (const [w, days, clock] of [[390, 1, '16:30'], [360, 1, '16:30'], [390, 5, '16:30'], [390, 5, '16:02'], [360, 5, '16:08'], [320, 5, '16:30'], [390, 2, '16:08'], [360, 3, '16:15'], [390, 1, '14:20'], [390, 3, '14:20'], [360, 5, '14:20'], [320, 5, '14:20'], [390, 5, '14:50'], [390, 3, '10:30'], [390, 3, '15:00'], [390, 2, '10:30'], [390, 5, '10:45'], [320, 5, '11:20'], [390, 3, '11:50'], [390, 5, '16:50'], [360, 4, '16:50'], [320, 3, '16:50'], [390, 2, '12:50'], [390, 1, '11:50'], [360, 5, '12:50'], [390, 2, '16:05']]) {
+    const tag = `${w}px, ${days} day${days > 1 ? 's' : ''}, ${clock}`;
+    const { page, close } = await openApp({ width: w, height: 780, time: `2026-09-28T${clock}:00-07:00` });
+    await page.route('https://photos.test/**', r => r.fulfill({ status: 200, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="48"><rect width="64" height="48" fill="#fff"/><circle cx="32" cy="20" r="12" fill="#c08a60"/></svg>' }));
+    await page.waitForFunction(() => TC.ready && TC.seatsLoaded && TC.friends.length >= 3, null, { timeout: 8000 });
+    await page.evaluate(days => {
+      S.tab = 'schedule'; S.schedTab = 'mine'; const me = PEOPLE.me, base = me.secs[0], DD = ['M', 'T', 'W', 'R', 'F'].slice(0, days);
+      const mk = (code, s, e, i) => Object.assign({}, base, { code, days: DD, s, e, async: false, id: 'FX' + i });
+      me.secs = [mk('BUS 3438', 600, 710, 0), mk('BUS 4442', 720, 810, 1), mk('BUS 4445', 810, 890, 2), mk('BUS 3431', 960, 1070, 3)];
+      const fr = TC.friends; fr.forEach(f => { PEOPLE[f].secs = []; });
+      const add = (f, ...idx) => idx.forEach(i => PEOPLE[f].secs.push(Object.assign({}, me.secs[i], { id: 'F' + f + i })));
+      add(fr[0], 0, 1, 3); add(fr[1], 0, 1, 3); add(fr[2], 0, 3); PEOPLE[fr[2]].avatar = 'https://photos.test/a.png'; add(fr[2], 2);
+      if (fr[3]) add(fr[3], 0, 3, 1); if (fr[4]) add(fr[4], 0, 3, 1); add(fr[2], 1); /* 4442 is 90 min: 5 friends in a block only tall enough for 2 faces + a +3 */
+      S.schedDay = 'M'; render(true);
+    }, days);
+    await page.waitForTimeout(900);
+    const m = await page.evaluate(() => {
+      const R = e => { const r = e.getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom, w: r.width, h: r.height }; };
+      const hit = (a, b) => a.l < b.r - 0.5 && b.l < a.r - 0.5 && a.t < b.b - 0.5 && b.t < a.b - 0.5;
+      const vis = e => e.getClientRects().length > 0, now = document.querySelector('#scroll .grid .g-now i'), nr = now ? R(now) : null; const nowVis = !!now && getComputedStyle(now).visibility !== 'hidden';
+      return [...document.querySelectorAll('#scroll .grid .g-b.wide')].map(b => { const br = R(b), fc = b.querySelector('.g-faces'), faces = [...b.querySelectorAll('.g-face')].filter(vis).filter(f => { const q = R(f), c = fc && R(fc); /* a face wrapped out of the clip box is not showing */ return !c || (q.b <= c.b + 1 && q.t >= c.t - 1); }), code = R(b.querySelector('.g-code')), time = R(b.querySelector('.g-time'));
+        const fr = fc ? R(fc) : null, img = b.querySelector('.g-face img'), more = [...b.querySelectorAll('.g-more')].filter(vis), true_n = (b.title.match(/(\d+) friends? in this class/) || [])[1];
+        const fb = faces.map(R), hitCode = fb.some(f => hit(f, code) || hit(f, time)), hitNow = !!nr && nowVis && (fb.some(f => hit(f, nr)) || more.some(x => hit(R(x), nr)) || hit(code, nr) || hit(time, nr));
+        return { code: b.querySelector('.g-code').textContent, tight: b.classList.contains('tight'), n: +true_n || 0, shown: faces.length, more: more.length ? +more[0].textContent.replace('+', '') : 0,
+          right: faces.length ? fb[fb.length - 1].r > br.l + br.w / 2 && br.r - Math.max(...fb.map(f => f.r), ...more.map(x => R(x).r)) <= 12 : null, hitCode, hitNow,
+          inside: fb.every(f => f.l >= br.l && f.r <= br.r + 1 && f.t >= br.t - 1 && f.b <= br.b + 1),
+          fromTop: faces.length ? Math.round(fb[0].t - br.t) : null, moreOff: faces.length && more.length ? Math.round(R(more[0]).t - fb[0].t) : null, col: getComputedStyle(fc).flexDirection === 'column', timeTop: Math.round(time.t - br.t),
+          round: [...b.querySelectorAll('.g-face')].filter(vis).every(f => { const a = f.firstElementChild, ar = R(a); return getComputedStyle(a).borderRadius === '50%' && Math.abs(ar.w - ar.h) < 0.5 && ar.w >= 14; }),
+          photo: img ? getComputedStyle(img).borderRadius : null }; });
+    });
+    const withF = m.filter(x => x.n);
+    ok(withF.length === 4 && withF.every(x => x.shown >= 1 && x.right), `faces ${tag}: every block with friends shows faces, on the right`, m);
+    ok(withF.filter(x => !x.tight).every(x => x.shown + x.more === x.n), `faces ${tag}: a tall block shows every friend — faces plus a "+N" that is the true remainder`, withF.map(x => [x.code, x.tight, x.n, x.shown, x.more]));
+    ok(withF.every(x => !x.hitCode && !x.hitNow && x.inside), `faces ${tag}: they never overlap the code, the time or the red now-pill, and stay inside the block`, withF);
+    ok(withF.filter(x => !x.tight && !x.col && x.more).every(x => x.moreOff <= 6), `faces ${tag}: in a row the "+N" stays on the faces' line, never wrapped under them`, withF.map(x => [x.code, x.moreOff]));
+    ok(withF.filter(x => !x.tight && !x.col).every(x => x.fromTop < x.timeTop), `faces ${tag}: in a row they sit on the code's line, not under the time`, withF);
+    ok(withF.every(x => x.round) && (days > 1 || withF.some(x => x.photo === '50%')), `faces ${tag}: every face is a 15px circle` + (days > 1 ? '' : ', a photo clips itself round too'), withF.map(x => [x.code, x.round, x.photo]));
+    if (days === 5 && w === 390 && clock === '16:30') ok(withF.some(x => !x.tight && x.col), `faces ${tag}: a narrow tapped day puts them in a column at the right edge`, withF);
+    if (days === 1 && w === 390) ok(withF.some(x => x.tight) && new Set(withF.map(x => Math.round(x.n && 0))).size === 1, `faces ${tag}: the short blocks and the tall ones both have faces`, withF);
+    const sw = await page.evaluate(() => { const s = document.getElementById('scroll'); return s.scrollWidth - s.clientWidth; });
+    ok(sw <= 0, `faces ${tag}: nothing scrolls sideways`, sw);
+    const pill = await page.evaluate(() => { const i = document.querySelector('#scroll .grid .g-now i'); return i ? getComputedStyle(i).visibility : 'none'; });
+    /* in a class's first minutes the pill has no spot that covers nothing (the code row and three faces fill the width): then it steps aside and the red line alone shows */
+    if (days <= 2 && !['16:05', '16:08'].includes(clock)) ok(pill === 'visible', `faces ${tag}: with room (one or two days) the red time pill shows, apart from a class's first minutes`, pill);
+    await close();
+  }
+};
+
+/* ============ Who your friends are friends with (Tate, 2026-10-11: "lets bring back the feature for the app that
+   shows who your friends are friends with") — friends_of(), live since 2026-09-02, gated server-side on being that
+   person's accepted friend. ============ */
+const FOF_ZARA = 'Zara <img src=x onerror="window.__fofx=1">';
+const FOF_ROWS = () => [FX.FRIENDS[1], FX.FRIENDS[2], FX.FRIENDS[3], FX.STRANGER, FX.SUGGESTED,
+  { id: '44444444-4444-4444-8444-444444444441', display_name: 'Casey Offlist', username: 'coff', avatar_url: null },
+  { id: '44444444-4444-4444-8444-444444444442', display_name: FOF_ZARA, username: 'z"ara', avatar_url: 'javascript:alert(1)' }, { id: FX.ME.id, display_name: 'Me', username: 'me' }]
+  .map(p => ({ id: p.id, display_name: p.display_name, username: p.username, avatar_url: p.avatar_url || null, mutual: false }));
+tests.friendsOfFriend = async () => {
+  const T = JSON.parse(JSON.stringify(FX.TABLES));
+  Object.assign(T.profiles[1], { major: 'Finance', class_standing: 'Junior' });
+  T.profiles[4].display_name = "D'Arcy Sample";   /* FRIENDS[3]: an apostrophe in a name your screen reader must read as one */
+  const R = { ...FX.RPC, friends_of: FOF_ROWS() };
+  const { page, close, log } = await openApp({ tables: T, rpc: R });
+  await page.waitForFunction(() => TC.ready, null, { timeout: 8000 });
+  const AV = FX.FRIENDS[0].id, calls = () => log.rpcs.filter(r => r.fn === 'friends_of');
+  /* a placeholder from a chat ("Someone") for Casey, whom you're not connected to: the read's real name replaces it */
+  await page.evaluate(() => { PEOPLE['44444444-4444-4444-8444-444444444441'] = Object.assign(personFrom({ id: '44444444-4444-4444-8444-444444444441', display_name: 'Someone' }), { thin: true }); });
+  await page.evaluate(id => A.openFriend(id), AV); await tick(page, 600);
+  ok(calls().length === 1 && calls()[0].body.p_user === AV, 'fof: opening a friend asks friends_of for that friend', calls());
+  const row = await page.evaluate(() => { const r = document.querySelector('.fpg .mecard .fofrow'); return r && { t: r.innerText.replace(/\s+/g, ' ').trim(), faces: r.querySelectorAll('.stack .av').length, aria: r.getAttribute('aria-label'), afterStrip: !!r.previousElementSibling && r.previousElementSibling.classList.contains('fstrip') }; });
+  ok(row && row.t === "Friends with D'Arcy, Rowan and 5 more" && row.faces === 3 && row.afterStrip, 'fof: under the strip, “Friends with D’Arcy, Rowan and 5 more” (your own friends named first) with three faces', row);
+  ok(row && row.aria === "Friends with D'Arcy, Rowan and 5 more. See Avery’s friends", 'fof: the row reads the same to a screen reader (an apostrophe is an apostrophe)', row && row.aria);
+  await page.evaluate(id => { S.stack[S.tab].pop(); A.openFriend(id); }, AV); await tick(page, 400);
+  ok(calls().length === 1, 'fof: opening them again soon doesn’t ask again', calls().length);
+  await click(page, '.fofrow'); await tick(page, 400);
+  const lists = () => page.evaluate(() => ({ s: cur().s, title: document.querySelector('.mehd-t').textContent, heads: [...document.querySelectorAll('.fofpg .fs-h')].map(h => h.textContent),
+    both: [...document.querySelectorAll('.fofpg .fof-l')[0].querySelectorAll('.li')].map(r => [r.querySelector('.fsr-nm').textContent, r.dataset.a, (r.querySelector('.fofst') || {}).textContent]),
+    rest: [...document.querySelectorAll('.fofpg .fof-l')[1].querySelectorAll('.li')].map(r => [r.querySelector('.fsr-nm').textContent, r.querySelector('.pbtn').textContent, r.querySelector('.pbtn').getAttribute('aria-label')]),
+    me: [...document.querySelectorAll('.fofpg .fsr-nm')].some(e => e.textContent === 'Me'), imgs: document.querySelectorAll('.fofpg .fsr-nm img, .fofpg .fsr img[src^="javascript"]').length, ran: !!window.__fofx }));
+  let L = await lists();
+  ok(L.s === 'fof' && L.title === 'Avery’s friends' && L.heads.join('|') === 'You’re both friends with · 3|Others · 4', 'fof: the list — “You’re both friends with · 3”, then “Others · 4”', L);
+  ok(JSON.stringify(L.both) === JSON.stringify([["D'Arcy Sample", 'openFriend', 'Friends'], ['Rowan Testa', 'openFriend', 'Friends'], ['Sky Placeholder', 'openFriend', 'Friends']]), 'fof: your shared friends A–Z, each opening their page', L.both);
+  ok(JSON.stringify(L.rest.map(r => r.slice(0, 2))) === JSON.stringify([['Casey Offlist', 'Add'], ['Morgan Nobody', 'Accept'], ['Pat Suggestia', 'Add'], [FOF_ZARA, 'Add']]) && !L.me, 'fof: everyone else A–Z with Add, or Accept for someone who asked you; never you', L);
+  ok(L.rest[0][2] === 'Add Casey Offlist' && L.rest[1][2] === 'Accept Morgan Nobody', 'fof: Add and Accept say whom', L.rest.map(r => r[2]));
+  ok(L.imgs === 0 && !L.ran, 'fof: a name or photo with markup in it is shown as text, never run', L);
+  await click(page, '.fofpg .fsr:has-text("Casey Offlist") [data-a="addFriend"]'); await tick(page, 300);
+  const toastAdd = await page.locator('#toast').textContent(); await tick(page, 300);
+  const w = log.writes.filter(x => x.table === 'friend_requests' && x.m === 'POST');
+  ok(w.length === 1 && w[0].body.to_user === '44444444-4444-4444-8444-444444444441' && /Requested/.test(await page.locator('.fofpg .fsr:has-text("Casey Offlist") .pbtn').innerText()) && toastAdd === 'Request sent to Casey', 'fof: Add sends Casey a request, says so, and the row says Requested', { w: w.map(x => x.body), toastAdd });
+  await click(page, '.fofpg .fsr:has-text("Morgan Nobody") [data-a="acceptReq"]'); await tick(page, 300);
+  const toastAcc = await page.locator('#toast').textContent(); await tick(page, 400);
+  L = await lists();
+  ok(toastAcc === 'You and Morgan are now friends' && L.heads[0] === 'You’re both friends with · 4' && L.both.some(b => b[0] === 'Morgan Nobody'), 'fof: Accept from their list — Morgan’s now your friend and moves up', { toastAcc, heads: L.heads });
+  /* only their friends may look */
+  await page.evaluate(id => { window.__fr = TC.friends.slice(); TC.friends = TC.friends.filter(x => x !== id); render(true); }, AV); await tick(page, 200);
+  ok(/Only Avery’s friends can see who they’re friends with/.test(await text(page)) && await page.locator('.fofpg .fof-l').count() === 0, 'fof: no longer their friend → the list is gone');
+  await page.evaluate(() => { TC.friends = window.__fr; render(true); }); await tick(page, 200);
+  await click(page, `.fofpg [data-a="openFriend"][data-x="${FX.FRIENDS[3].id}"]`); await tick(page, 400);
+  ok(await page.evaluate(id => cur().s === 'friend' && cur().p.id === id, FX.FRIENDS[3].id), 'fof: a shared friend opens their page');
+  /* a stranger's page: never asked, no row */
+  const before = calls().length;
+  await page.evaluate(id => A.openFriend(id), FX.SUGGESTED.id); await tick(page, 400);
+  ok(calls().length === before && await page.locator('.fofrow').count() === 0, 'fof: someone who isn’t your friend — not asked, no row');
+  /* asked again after two minutes; a failed re-ask keeps the list, and tries again after 15 seconds */
+  R.friends_of = { __error: { code: '57014', message: 'canceling statement due to statement timeout' } };
+  await page.clock.runFor(130000);
+  await page.evaluate(id => A.openFriend(id), AV); await tick(page, 400);
+  const avCalls = () => calls().filter(c => c.body.p_user === AV).length;
+  ok(avCalls() === 2 && await page.locator('.fofrow').count() === 1, 'fof: after two minutes it asks again — and a failed re-ask keeps the list you had', calls().length);
+  await page.evaluate(id => { S.stack[S.tab].pop(); A.openFriend(id); }, AV); await tick(page, 300);
+  const n2 = avCalls();
+  R.friends_of = FOF_ROWS();
+  await page.clock.runFor(16000);
+  await page.evaluate(id => { S.stack[S.tab].pop(); A.openFriend(id); }, AV); await tick(page, 300);
+  ok(n2 === 2 && avCalls() === 3, 'fof: …not again within 15 seconds, then again after', { n2, n: avCalls() });
+  /* blocked people are never listed */
+  await page.evaluate(id => { TC.blocks = [{ id }]; render(true); }, FX.FRIENDS[1].id); await tick(page, 200);
+  ok((await page.locator('.fofrow').innerText()).replace(/\s+/g, ' ').trim() === "Friends with D'Arcy, Morgan and 4 more", 'fof: someone you blocked is left out of their list', await page.locator('.fofrow').innerText());
+  /* the words for every shape */
+  const words = await page.evaluate(() => { const f = (both, rest) => fofLine({ both, rest, all: both.concat(rest) }, true); const F = TC.friends;
+    return [f([F[1]], []), f([F[1], F[2]], []), f([F[1]], ['x1']), f([], ['x1']), f([], ['x1', 'x2'])]; });
+  ok(JSON.stringify(words) === JSON.stringify(['Friends with Rowan', 'Friends with Rowan and Sky', 'Friends with Rowan and 1 more', '1 friend', '2 friends']), 'fof: “Friends with Rowan” · “… and Sky” · “… and 1 more” · “1 friend” · “2 friends”', words);
+  ok(log.errors.length === 0, 'fof: no page errors', log.errors);
+  await close();
+};
+/* No other friends; none you share; still loading; the function not there; the read failing. */
+tests.friendsOfFriendStates = async () => {
+  let o = await openApp({ rpc: { ...FX.RPC, friends_of: [{ id: FX.ME.id, display_name: 'Me', username: 'me', avatar_url: null, mutual: false }] } });
+  await o.page.waitForFunction(() => TC.ready, null, { timeout: 8000 });
+  await o.page.evaluate(id => A.openFriend(id), FX.FRIENDS[0].id); await tick(o.page, 500);
+  ok(await o.page.locator('.fofrow').count() === 0, 'fof states: only you on their list → no row');
+  await o.page.evaluate(id => A.openFof(id), FX.FRIENDS[0].id); await tick(o.page, 300);
+  ok(/Avery isn’t friends with anyone else on TermChamp yet/.test(await text(o.page)), 'fof states: their list says they aren’t friends with anyone else yet');
+  await o.page.evaluate(id => { delete TC.fof[id]; TC.fofBusy[id] = 1; render(true); }, FX.FRIENDS[0].id); await tick(o.page, 100);
+  ok(/Loading Avery’s friends…/.test(await text(o.page)), 'fof states: while it asks, their list says it’s loading');
+  await o.close();
+  o = await openApp({ rpc: { ...FX.RPC, friends_of: [FX.STRANGER, FX.SUGGESTED, { id: '44444444-4444-4444-8444-444444444441', display_name: 'Casey Offlist', username: 'coff' }].map(p => ({ id: p.id, display_name: p.display_name, username: p.username, avatar_url: null, mutual: false })) } });
+  await o.page.waitForFunction(() => TC.ready, null, { timeout: 8000 });
+  await o.page.evaluate(id => A.openFriend(id), FX.FRIENDS[0].id); await tick(o.page, 500);
+  ok((await o.page.locator('.fofrow').innerText()).replace(/\s+/g, ' ').trim() === '3 friends', 'fof states: none you know → “3 friends”');
+  await click(o.page, '.fofrow'); await tick(o.page, 300);
+  ok((await o.page.locator('.fofpg .fs-h').allInnerTexts()).join('|').toLowerCase() === 'their friends · 3', 'fof states: their list is one group, “Their friends · 3”', await o.page.locator('.fofpg .fs-h').allInnerTexts());
+  await o.close();
+  o = await openApp({ rpc: { ...FX.RPC, friends_of: { __error: { code: 'PGRST202', message: 'Could not find the function public.friends_of(p_user) in the schema cache' } } } });
+  await o.page.waitForFunction(() => TC.ready, null, { timeout: 8000 });
+  await o.page.evaluate(id => A.openFriend(id), FX.FRIENDS[0].id); await tick(o.page, 500);
+  await o.page.evaluate(id => A.openFriend(id), FX.FRIENDS[1].id); await tick(o.page, 500);
+  ok(await o.page.locator('.fofrow').count() === 0 && o.log.rpcs.filter(r => r.fn === 'friends_of').length === 1 && await o.page.evaluate(() => TC.fofOff === true), 'fof states: no friends_of in the database → no row, and it isn’t asked again', o.log.rpcs.filter(r => r.fn === 'friends_of').length);
+  ok(o.log.errors.length === 0, 'fof states: no page errors (missing function)', o.log.errors);
+  await o.close();
+  o = await openApp({ rpc: { ...FX.RPC, friends_of: { __error: { code: '57014', message: 'canceling statement due to statement timeout' } } } });
+  await o.page.waitForFunction(() => TC.ready, null, { timeout: 8000 });
+  await o.page.evaluate(id => A.openFriend(id), FX.FRIENDS[0].id); await tick(o.page, 500);
+  ok(o.log.rpcs.filter(r => r.fn === 'friends_of').length === 1 && await o.page.locator('.fofrow').count() === 0, 'fof states: a failed read → asked, but no row on their page');
+  await o.page.evaluate(id => A.openFof(id), FX.FRIENDS[0].id); await tick(o.page, 400);
+  ok(/Couldn’t load Avery’s friends\./.test(await text(o.page)) && await o.page.locator('button[data-a="fofRetry"]').count() === 1, 'fof states: their list says it couldn’t load, with a Try again button');
+  const n = o.log.rpcs.filter(r => r.fn === 'friends_of').length;
+  await click(o.page, '[data-a="fofRetry"]'); await tick(o.page, 400);
+  ok(o.log.rpcs.filter(r => r.fn === 'friends_of').length === n + 1, 'fof states: Try again asks again');
+  ok(o.log.errors.length === 0, 'fof states: no page errors (failed read)', o.log.errors);
+  await o.close();
+};
+/* ============ The toast, readable in both themes (Tate, 2026-10-11: "hard to see this little notification when you save
+   a class make sure the case is fixed for the future also i dont know how the light version looks") ============ */
+tests.toastContrast = async () => {
+  const lum = c => { const m = c.match(/\d+(\.\d+)?/g).map(Number).slice(0, 3).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]; };
+  const cr = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  for (const th of ['light', 'dark']) {
+    const { page, close, log } = await openApp({ init: th === 'dark' ? () => { try { localStorage.setItem('tc-theme', 'dark'); } catch (e) {} } : null });
+    await page.waitForFunction(() => TC.ready, null, { timeout: 8000 });
+    /* the real thing: save a class from its page */
+    await page.evaluate(() => A.openClass('BUS 4401')); await tick(page, 400);
+    const sv = page.locator('#scroll [data-a="save"], #fixtop [data-a="save"]').first();
+    ok(await sv.count() === 1, `toast (${th}): the class page has its save button`);
+    await sv.click(); await page.waitForTimeout(150);
+    const c = await page.evaluate(() => { const t = document.getElementById('toast'), cs = getComputedStyle(t); return { on: t.classList.contains('on'), txt: t.textContent, bg: cs.backgroundColor, ink: cs.color, page: getComputedStyle(document.body).backgroundColor }; });
+    ok(c.on && c.txt === 'Saved on this phone' && cr(c.ink, c.bg) >= 4.5, `toast (${th}): “Saved on this phone” is 4.5:1+ on its own colour`, { ...c, ratio: cr(c.ink, c.bg).toFixed(2) });
+    ok(cr(c.bg, c.page) >= 3, `toast (${th}): the toast stands off the page (3:1+)`, { bg: c.bg, page: c.page, ratio: cr(c.bg, c.page).toFixed(2) });
+    await page.evaluate(() => toastUndo('Class removed', () => {})); await page.waitForTimeout(150);
+    const u = await page.evaluate(() => { const t = document.getElementById('toast'), b = t.querySelector('.tundo'); return { bg: getComputedStyle(t).backgroundColor, link: getComputedStyle(b).color, ink: getComputedStyle(t.querySelector('span')).color }; });
+    ok(cr(u.link, u.bg) >= 4.5 && cr(u.ink, u.bg) >= 4.5, `toast (${th}): Undo and its message are 4.5:1+`, { ...u, link: cr(u.link, u.bg).toFixed(2), ink: cr(u.ink, u.bg).toFixed(2) });
+    /* for the future: no rule paints a background from a text colour token under white words */
+    const bad = await page.evaluate(() => { const out = []; for (const sh of document.styleSheets) { let rs; try { rs = sh.cssRules; } catch (e) { continue; } for (const r of rs) { if (!r.style) continue; const bg = r.style.getPropertyValue('background') + ' ' + r.style.getPropertyValue('background-color'); const col = r.style.getPropertyValue('color').replace(/\s/g, '').toLowerCase(); if (/var\(--(ink|muted)/.test(bg) && /^(#fff|#ffffff|white|rgb\(255,255,255\))$/.test(col)) out.push(r.selectorText); } } return out; });
+    ok(!bad.length, `toast (${th}): no rule sets a text token as a background under white text`, bad);
+    await page.screenshot({ path: process.env.SHOT_DIR ? process.env.SHOT_DIR + `/toast-${th}.png` : '/dev/null', clip: { x: 0, y: 0, width: 390, height: 140 } }).catch(() => {});
+    ok(log.errors.length === 0, `toast (${th}): no page errors`, log.errors);
+    await close();
+  }
+  /* signed out in dark mode: sign-up stays light, and so does the toast */
+  { const { page, close, log } = await openApp({ signedIn: false, init: () => { try { localStorage.setItem('tc-theme', 'dark'); } catch (e) {} } });
+    await page.waitForTimeout(300); await page.evaluate(() => toast('We’ll email the link')); await page.waitForTimeout(150);
+    const c = await page.evaluate(() => { const t = document.getElementById('toast'), o = document.querySelector('.onb'); return { onb: !!o, bg: getComputedStyle(t).backgroundColor, ink: getComputedStyle(t).color, page: o ? getComputedStyle(o).backgroundColor : '' }; });
+    ok(c.onb && cr(c.ink, c.bg) >= 4.5 && cr(c.bg, c.page) >= 3, 'toast (dark, signed out): on the light sign-up screen it keeps light-mode colours and stands off the page', { ...c, text: cr(c.ink, c.bg).toFixed(2), page: c.page && cr(c.bg, c.page).toFixed(2) });
+    ok(log.errors.length === 0, 'toast (dark, signed out): no page errors', log.errors);
+    await close(); }
+};
+/* ============ The report as the source of truth (Tate, 2026-10-11) ============
+   "Use the DPR as the primary reference … account for the quarter-to-semester transition … respect my original
+   catalog … avoid incorrectly marking requirements as incomplete … identify conflicts instead of guessing." And:
+   "run a good amount of fake dprs … to try and find breaks in the flow of the system from past classes, planner to
+   plans". files/make-dpr-stress.py draws five (invented people, classes and grades). */
+const openReqs = page => page.evaluate(() => { for (let i = 0; i < 40; i++) { const b = document.querySelector('#scroll .plq[aria-expanded="false"]'); if (!b) break; b.click(); } });
+const pcRows = page => page.evaluate(() => { const ro = UI.plReqOpen; UI.plReqOpen = new Proxy({}, { get: () => true, has: () => true }); let c; try { c = (() => { const g = plGate(); if (g.html) return null; const L = g.L, X = auditLines(TC.audit, L), R = L ? planRank(L) : X ? { audit: true, X, all: [], bare: true } : null; if (!R || R.done) return null; const o = document.getElementById('__lc'); if (o) o.remove(); const d = document.createElement('div'); d.id = '__lc'; d.style.cssText = 'position:absolute;left:-10000px;top:0;width:390px'; const ro = UI.plReqOpen; UI.plReqOpen = new Proxy({}, { get: () => true, has: () => true }); try { d.innerHTML = plLeftCard(R, L, /^[ABC]$/.test(UI.plPlan) ? UI.plPlan : 'A'); } finally { UI.plReqOpen = ro; } document.body.appendChild(d); const c0 = d.firstElementChild; if (c0) [...d.children].slice(1).forEach(x => c0.appendChild(x)); return c0; })(); } finally { UI.plReqOpen = ro; } c = c || document.createElement('div'); const M = r => ({ st: r.className.replace('pc-row', '').replace('look', '').trim(), look: /\blook\b/.test(r.className), main: ((r.querySelector('.pc-main') || {}).innerText || '').replace(/\s+/g, ' ').trim(), sub: [...r.querySelectorAll('.pc-used, .pc-pf, .pc-look, .pc-add')].map(e => e.innerText.replace(/\s+/g, ' ').trim()).join(' | '), still: !!r.closest('.pc-still, .pc-lrows, .pll, .plq-card') }); const Q = q => { const b = q.querySelector('.plq-t b'), lk = q.querySelector('.plq-look'); return { st: 'need', look: !!lk, main: (b && b.firstChild ? b.firstChild.textContent : '').replace(/\s+/g, ' ').trim(), sub: [((q.querySelector('.plq-t > span') || {}).textContent || '').replace(/\s+/g, ' ').trim(), lk ? lk.textContent.replace(/\s+/g, ' ').trim() : ''].filter(Boolean).join(' | '), still: true, opts: [...q.querySelectorAll('.plo')].map(e => e.dataset.x) }; }; const out = [...document.querySelectorAll('#scroll .pc-row')].filter(r => !r.closest('.pll, .plq-card')).map(M).concat([...c.querySelectorAll('.pc-row')].map(M), [...c.querySelectorAll('.plq-card')].filter(q => q.querySelector(':scope > .plq')).map(Q)); document.getElementById('__lc')?.remove(); return out; });
+const pllH = page => page.evaluate(() => ((document.querySelector('#scroll .pll-leg .l') || {}).innerText || '').replace(/\s+/g, ' ').trim());
+/* (2026-10-13) the top card's ledger: filled / in progress / left, the bar's label, the meta line (major · conc, catalog chip, report date, "n requirements") */
+const pllLedger = page => page.evaluate(() => { const c = document.querySelector('#scroll .pll'); if (!c) return null; const t = e => e ? e.innerText.replace(/\s+/g, ' ').trim() : '';
+  const leg = {}; [...c.querySelectorAll('.pll-leg > span')].forEach(e => { leg[e.className] = +t(e).split(' ')[0]; });
+  return { h: t(c.querySelector('.pll-leg .l')), first: (c.firstElementChild || {}).className || '', leg, legText: [...c.querySelectorAll('.pll-leg > span')].map(t),
+    bar: (c.querySelector('.pll-bar') || { getAttribute: () => '' }).getAttribute('aria-label'), segs: [...c.querySelectorAll('.pll-bar i')].map(i => i.className),
+    meta: [...c.querySelectorAll('.pll-info > span')].map(t), who: t(c.querySelector('.pll-info > span:first-child')), cat: t(c.querySelector('.pll-info .pc-catc')), n: +((((c.querySelector('.pll-bar') || { getAttribute: () => '' }).getAttribute('aria-label') || '').match(/of (\d+)$/) || [])[1] || '') || 0,
+    old: c.querySelectorAll('.pll-who, .pll-cat, .pc-num, .pc-nrow, .pc-bar').length }; });
+const ledgerAddsUp = v => !!v && v.n > 0 && (v.leg.f || 0) + (v.leg.p || 0) + (v.leg.l || 0) + (v.leg.u || 0) === v.n && v.leg.l === +v.h.split(' ')[0] && v.bar === v.legText.join(', ') + ` of ${v.n}` && v.old === 0;
+const withLeft = async page => (await text(page)) + '\n' + (await page.evaluate(() => { const c = (() => { const g = plGate(); if (g.html) return null; const L = g.L, X = auditLines(TC.audit, L), R = L ? planRank(L) : X ? { audit: true, X, all: [], bare: true } : null; if (!R || R.done) return null; const o = document.getElementById('__lc'); if (o) o.remove(); const d = document.createElement('div'); d.id = '__lc'; d.style.cssText = 'position:absolute;left:-10000px;top:0;width:390px'; const ro = UI.plReqOpen; UI.plReqOpen = new Proxy({}, { get: () => true, has: () => true }); try { d.innerHTML = plLeftCard(R, L, /^[ABC]$/.test(UI.plPlan) ? UI.plPlan : 'A'); } finally { UI.plReqOpen = ro; } document.body.appendChild(d); const c0 = d.firstElementChild; if (c0) [...d.children].slice(1).forEach(x => c0.appendChild(x)); return c0; })(); const t = c ? c.innerText : ''; document.getElementById('__lc')?.remove(); return t; }));
+const pcSum = page => page.evaluate(() => { const c = (() => { const g = plGate(); if (g.html) return null; const L = g.L, X = auditLines(TC.audit, L), R = L ? planRank(L) : X ? { audit: true, X, all: [], bare: true } : null; if (!R || R.done) return null; const o = document.getElementById('__lc'); if (o) o.remove(); const d = document.createElement('div'); d.id = '__lc'; d.style.cssText = 'position:absolute;left:-10000px;top:0;width:390px'; const ro = UI.plReqOpen; UI.plReqOpen = new Proxy({}, { get: () => true, has: () => true }); try { d.innerHTML = plLeftCard(R, L, /^[ABC]$/.test(UI.plPlan) ? UI.plPlan : 'A'); } finally { UI.plReqOpen = ro; } document.body.appendChild(d); const c0 = d.firstElementChild; if (c0) [...d.children].slice(1).forEach(x => c0.appendChild(x)); return c0; })(); return c && { num: (c => { const g = {}; [...c.querySelectorAll('.pll-leg > span')].forEach(e => { g[e.className] = +e.textContent.trim().split(' ')[0]; }); const n = +((((c.querySelector('.pll-bar') || { getAttribute: () => '' }).getAttribute('aria-label') || '').match(/of (\d+)$/) || [])[1] || '').split(' ')[0] || 0; return n ? `${(g.f || 0) + (g.p || 0)} of ${n} filled` : ''; })(c), link: (c.querySelector('.pc-link') || {}).textContent || '', left: ((c.querySelector('.pll-leg .l') || {}).textContent || '').replace(/\s+/g, ' ').replace(/^(\d+)(?=[a-z])/, '$1 ').trim(), cat: (() => { const d = document.createElement('div'); try { d.innerHTML = plannerView(); } catch (e) { return 'ERR ' + e.message; } return (d.querySelector('.pl-top .pl-cat') || {}).textContent || ''; })(), inCard: !!c.querySelector('.pc-catc'), past: !!document.querySelector('#scroll .pc-left, #scroll .pc-num, #scroll .pc-go'), _: document.getElementById('__lc')?.remove() }; });
+const openGroups = async page => { for (let i = 0; i < 6; i++) { const c = page.locator('[data-a="pcGroup"][aria-expanded="false"]'); if (!(await c.count())) break; await c.first().click(); await tick(page, 150); } };
+const saveReport = async page => { await click(page, '[data-a="dprSave"]'); await tick(page, 2500); await page.evaluate(() => { TC.prefs = TC.prefs || { priority: 'degree', units: 16 }; if (UI.sheet && UI.sheet.type === 'pcWho') UI.sheet = null; render(true); }); };
+const toPastTab = async page => { await page.evaluate(() => { document.getElementById('scroll').scrollTop = 0; }); await click(page, '[data-a="schedTab"][data-x="past"]'); await tick(page, 1500); };
+
+/* 1. A senior on the Fall Quarter 2023 catalog: the old layout, lettered GE, quarter numbers with their pairs, a
+      listed-but-not-counted class, a repeated class, the closing "COURSE CREDITS NOT USED" table */
+/* ============ What the 300 synthetic reports found (Tate, 2026-10-12) ============
+   "create 300 different (artificial ones …) so we know every scenario we might be up against". check-dpr-synth.mjs runs
+   all 300; this report (make-dpr-corpus.py --fixture) holds one of each thing they found. */
+tests.dprCorpusFound = async () => {
+  const T0 = XFER_T('Business Administration', 'Senior');   /* (review) a crosswalk that disagrees with the report's pair: LA 222 → LA 2222; the report says (2212) */
+  const { page, close, log } = await openApp({ tables: Object.assign({}, T0, { course_equiv: (T0.course_equiv || []).concat([{ legacy_code: 'LA 222', current_code: 'LA 2222' }]) }), height: 2600 });
+  await toPlanner(page);
+  await page.waitForFunction(() => window.TCPL && TCPL.canon('LA 222') === 'LA 2222', null, { timeout: 8000 });
+  await page.evaluate(() => { const f = TCPL.dprParse; TCPL.dprParse = t => { const r = f(t); window.__dprRaw = { text: t, rows: r.rows.map(x => ({ c: x.code, pick: !!x.pick, fail: !!x._fail })) }; return r; }; });
+  await uploadFile(page, 'dpr-corpus-found.pdf');
+  ok(await readPills(page) === '4 filled|1 left', 'found: after a "1 of 2 Options" requirement, the major’s next lines count as themselves (4 filled: the two classes, the option, MATE 4300 in progress; 1 left: BUS 207)', await readPills(page));
+  const rd = await page.evaluate(() => { const a = UI.dpr.audit; const g = c => (a.reqs || []).find(b => b.code === c);
+    return { r10: g('R40-10') && g('R40-10').options, r95: g('R40-95') && g('R40-95').status, r96: g('R40-96') && g('R40-96').status, opt: g('R-0041') && g('R-0041').options,
+      rows: UI.dpr.rows.map(x => ({ c: x.code, cur: x.cur, pick: !!x.pick, now: !!x._now, skip: x.skip || '' })) }; });
+  ok(rd.r95 === 'not' && rd.r96 === 'in_progress' && JSON.stringify(rd.opt) === '["BUS 4401","BUS 4411"]', 'found: R40-95 (open) and R40-96 (in progress) are their own lines, not more options of R-0041', rd);
+  ok(JSON.stringify(rd.r10) === '["CSC 1001"]', 'found: a renamed subject — "CPE 101 (1001)" names CSC 1001, the crosswalk’s subject with the report’s number', rd.r10);
+  const row = c => rd.rows.find(x => x.c === c) || {};
+  ok(row('LA 222').cur === 'LA 2212', 'found: the report’s own pair wins — LA 222 (2212) is LA 2212, not the crosswalk’s LA 2222', row('LA 222'));
+  ok(row('CPE 101').cur === 'CSC 1001', 'found: …and the crosswalk keeps a renamed subject when it agrees on the number (CPE 101 (1001) → CSC 1001)', row('CPE 101'));
+  ok(row('MATE 4300').now === true && row('MATE 4300').pick, 'found: a class being taken whose cut-off title ends in a letter ("…Life C") is being taken, not graded C', row('MATE 4300'));
+  ok(!row('BUS 207').pick && row('BUS 207').skip && !row('BUS 212').pick && row('BUS 212').skip, 'found: an F and a W are read but not picked to save', [row('BUS 207'), row('BUS 212')]);
+  const raw = await page.evaluate(() => window.__dprRaw.rows.filter(x => /BUS 20[7]|BUS 212/.test(x.c)));
+  ok(raw.length === 2 && raw.every(x => x.fail && !x.pick), 'found: the shared reader itself leaves the F and the W unpicked (the website’s import unticks them)', raw);
+  /* (review) more grades, "IP" in the grade column, and grades never posted as transfer credit. Each re-parse says
+     whether its replacement matched, so a miss can't pass. */
+  const gr = await page.evaluate(() => { const t = window.__dprRaw.text, out = {};
+    const run = (re, rep, code) => { const t2 = t.replace(re, rep); const r = TCPL.dprParse(t2); const x = r.rows.find(y => y.code === code); return { hit: t2 !== t, x }; };
+    ['WU', 'NP', 'AU', 'RP', 'P'].forEach(g => { const { hit, x } = run(/(Business Statistics\s+)W(?=\s)/g, '$1' + g, 'BUS 212'); out[g] = hit && x ? [!!x._fail, !!x.pick, !!x._open, !!x._prov] : null; });
+    { const { hit, x } = run(/(Introduction to Planting Design\s+)A(?=\s)/g, '$1IP', 'LA 222'); out.IP = hit && x ? [!!x._open, !!x._fail, String(x._title || x.name || '')] : null; }
+    /* a grade on a row with no icon in the term the report was printed in (BUS 3431, Fall 2026, its pictures taken off): a
+       posted grade there is transfer credit; WU and AU never are */
+    ['WU', 'AU', 'A'].forEach(g => { const { hit, x } = run(/(Security Analysis)\s+4\.50[^\n]*/g, '$1   ' + g + '   4.50', 'BUS 3431'); out['post' + g] = hit && x ? !!x._xfer : null; });
+    plSync(); return out; });
+  ok(['WU', 'NP', 'AU'].every(g => JSON.stringify(gr[g]) === '[true,false,false,false]'), 'found: WU, NP and AU are grades that didn’t pass — read, not picked, not “being taken”', gr);
+  ok(JSON.stringify(gr.RP) === '[true,false,false,true]' && JSON.stringify(gr.P) === '[false,true,false,false]', 'found: RP (grade pending) isn’t saved but is marked pending; P is a pass, picked', [gr.RP, gr.P]);
+  ok(gr.IP && gr.IP[0] === true && gr.IP[1] === false && !/\bIP$/.test(gr.IP[2]), 'found: “IP” in the grade column is in progress, not part of the title', gr.IP);
+  ok(gr.postA === true && gr.postWU === false && gr.postAU === false, 'found: a grade posted in the printing term is transfer credit — never a WU or an AU', [gr.postA, gr.postWU, gr.postAU]);
+  await saveReport(page);
+  const hist = posted(log, 'class_history').map(r => r.code).sort(), mine = posted(log, 'saved_classes').map(r => r.code).sort();
+  ok(JSON.stringify(hist) === '["BUS 4401","CSC 1001","LA 2212"]', 'found: Past classes gets the three passed classes, by today’s numbers — never the F or the W', hist);
+  ok(mine.includes('MATE 4300') && mine.includes('BUS 3431'), 'found: the two classes being taken go to My Classes', mine);
+  const comp = await page.evaluate(() => { plSync(); return TCPL.completed().map(c => TCPL.canon(c) || c); });
+  ok(!comp.includes('BUS 2207') && !comp.includes('BUS 2212') && comp.includes('LA 2212'), 'found: a class never passed doesn’t count as completed (prerequisites, the flowchart, the Builder)', comp);
+  ok(!JSON.stringify(log.writes).match(/Foundcase|9811001/), 'found: nothing personal stored');
+  ok(log.errors.length === 0, 'found: no page errors', log.errors);
+  await close();
+};
+
+/* (Sonnet review, 2026-10-12) report wins never keeps a class the report shows not passed */
+tests.dprCorpusStaleFail = async () => {
+  const me = FX.ME.id;
+  const T = Object.assign({}, XFER_T('Business Administration', 'Senior'), { class_history: [
+    { user_id: me, code: 'BUS 2207', term: 'Spring', year: 2025, professor: null },     // the F, saved by an older import
+    { user_id: me, code: 'BUS 4401', term: 'Winter', year: 2025, professor: null }] }); // passed (an earlier term): stays
+  const { page, close, log } = await openApp({ tables: T, height: 2600 });
+  await page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 });
+  await click(page, '[data-a="tab"][data-x="schedule"]'); await toPastTab(page);
+  await page.locator('input[data-in="dprfile"]').first().setInputFiles('files/dpr-corpus-found.pdf');
+  for (let i = 0; i < 30 && !(await page.locator('#sheet .dr-h1, #sheet .tc-err').count()); i++) await tick(page, 500);
+  const rc = await page.evaluate(() => (UI.dpr.rc || []).map(x => x.kind + ':' + x.code + ':' + x.why));
+  ok(rc.some(s => /^hist:BUS 2207:On your account as Spring 2025 · your report shows it not passed$/.test(s)) && !rc.some(s => /BUS 4401/.test(s)), 'report wins: an F an older import saved comes off — “your report shows it not passed”; a passed class stays', rc);
+  await saveReport(page);
+  const del = log.writes.filter(w => w.m === 'DELETE' && w.table === 'class_history').map(w => decodeURIComponent(w.query));
+  ok(del.some(q => /code=eq\.BUS\+2207/.test(q)) && !del.some(q => /BUS\+4401/.test(q)), 'report wins: saving deletes it', del);
+  /* a failed attempt with a passed retake later: the failed term's row comes off naming the retake; RP (grade pending) keeps its class */
+  const st = await page.evaluate(() => { const keep = TC.myHistory;
+    TC.myHistory = [{ code: 'BUS 2207', term: 'Spring', year: 2025 }, { code: 'BUS 2207', term: 'Fall', year: 2025 }, { code: 'BUS 4463', term: 'Spring', year: 2025 }];
+    const r = { rows: [{ code: 'BUS 207', cur: 'BUS 2207', term: 'Spring', year: 2025, _fail: true }, { code: 'BUS 207', cur: 'BUS 2207', term: 'Fall', year: 2025 }, { code: 'BUS 463', cur: 'BUS 4463', term: 'Spring', year: 2025, _fail: true, _prov: true }] };
+    const out = dprStale(r).filter(x => x.kind === 'hist').map(x => x.code + ' ' + x.h.term + ': ' + x.why); TC.myHistory = keep; return out; });
+  ok(JSON.stringify(st) === '["BUS 2207 Spring: On your account as Spring 2025 · your report has it Fall 2025"]', 'report wins: an F retaken and passed comes off naming the retake’s term; the passed retake and an RP stay', st);
+  const x = await page.evaluate(() => dprCounts({ rows: [{ _xfer: true }, { _xfer: true, _fail: true }, { _xfer: true, flag: true }] }).xfer);
+  ok(x === 1, 'transfer pill: counts transfer credit you have — never a transfer row not passed (or flagged)', x);
+  ok(log.errors.length === 0, 'report wins (fail): no page errors', log.errors);
+  await close();
+};
+
+/* (Tate, 2026-10-12: "also add these Not covered yet: Summer terms, minors and double majors, the "I" grade, and
+   semester-catalog students past their first term") — the corpus draws all four; this report holds one of each the
+   reader has to tell apart. The account already holds BUS 3391 (an older import saved the Incomplete as done). */
+tests.dprCorpusMore = async () => {
+  const me = FX.ME.id;
+  const T = Object.assign({}, XFER_T('Business Administration', 'Senior'), { class_history: [{ user_id: me, code: 'BUS 3391', term: 'Fall', year: 2025, professor: null }] });
+  const { page, close, log } = await openApp({ tables: T, height: 2600 });
+  await page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 });
+  await click(page, '[data-a="tab"][data-x="schedule"]'); await toPastTab(page);
+  await page.waitForFunction(() => window.TCPL, null, { timeout: 8000 });
+  await page.evaluate(() => { const f = TCPL.dprParse; TCPL.dprParse = t => { window.__dprText = t; return f(t); }; });
+  await page.locator('input[data-in="dprfile"]').first().setInputFiles('files/dpr-corpus-more.pdf');
+  for (let i = 0; i < 30 && !(await page.locator('#sheet .dr-h1, #sheet .tc-err').count()); i++) await tick(page, 500);
+  ok(await readPills(page) === '3 filled|2 left', 'more: 3 filled (the Summer class, the class being taken, the minor’s first), 2 left (the Incomplete’s line, the minor’s second)', await readPills(page));
+  const rd = await page.evaluate(() => Object.fromEntries(UI.dpr.rows.map(x => [x.code, { cur: x.cur, term: x.term + ' ' + x.year, pick: !!x.pick, now: !!x._now, fail: !!x._fail, prov: !!x._prov, open: !!x._open, title: x._title, skip: x.skip || '' }])));
+  const R = c => rd[c] || {};
+  ok(R('BUS 214').term === 'Summer 2024' && R('BUS 214').cur === 'BUS 2214' && R('BUS 214').pick, 'more: a class taken in a Summer term reads as Summer 2024, by today’s number, picked to save', R('BUS 214'));
+  ok(R('BUS 391').fail && R('BUS 391').prov && !R('BUS 391').pick && !R('BUS 391').open && String(R('BUS 391').title).replace(/^\(\d{4}\)\s*/, '') === 'Career Readiness II', 'more: “I” in a term that’s over is an Incomplete — read, not passed, grade pending, never “being taken”, and not part of the title', R('BUS 391'));
+  ok(R('BUS 3392').now && !R('BUS 3392').fail && R('BUS 3392').title === 'Career Readiness I', 'more: a class being taken whose title ends in “I” is being taken, not an Incomplete (no class in its term is graded yet)', R('BUS 3392'));
+  ok(/^grade pending/.test(R('BUS 391').skip), 'more: the phone says an Incomplete’s grade is pending — not “not passed”', R('BUS 391').skip);
+  /* (review) the same report read other ways: printed after finals; an AP placeholder; a transfer-icon row; a row whose icon was lost */
+  const vr = await page.evaluate(() => { const t = window.__dprText, out = {};
+    const row = (txt, code) => { const r = TCPL.dprParse(txt), x = r.rows.find(y => y.code === code); return x && { fail: !!x._fail, prov: !!x._prov, now: !!x._now, open: !!x._open, pick: !!x.pick, xfer: !!x._xfer, title: String(x._title || '').replace(/^\(\d{4}\)\s*/, '') }; };
+    const at = (re, add) => { const m = re.exec(t); return m ? t.slice(0, m.index) + add + '\n' + t.slice(m.index) : t; };
+    const t1 = t.replace(/2025 Fall(\s+BUS\s+391)/, '2026 Fall$1').replace(/(Security Analysis)\s+(4\.50)[^\n]*/, '$1   A   $2\uE002');
+    out.dec = t1 !== t ? row(t1, 'BUS 391') : null;
+    out.ap = row(at(/2025 Fall\s+BUS\s+391/, '2025 Fall AP 300 Calculus I 12.00'), 'AP 300');
+    out.tr = row(at(/2025 Fall\s+BUS\s+391/, '2025 Spr MU 1T3A Music Theory I 4.00\uE000'), 'MU 1T3A');
+    out.bm = row(at(/2025 Fall\s+BUS\s+391/, '2025 Spr BUS 393 (3393) Career Readiness III I 4.00\uE001'), 'BUS 393');
+    /* October's report also lists Spring, registered ahead: Fall's "Career Readiness I" is still being taken */
+    out.ahead = row(at(/2025 Fall\s+BUS\s+391/, '2027 Spr BUS 3450 Managerial Analysis 4.50\uE002'), 'BUS 3392');
+    plSync(); return out; });
+  ok(vr.dec && vr.dec.fail && vr.dec.prov && !vr.dec.now && !vr.dec.open && vr.dec.title === 'Career Readiness II', 'more: printed after finals (a class in the newest term graded), an “I” in that term is an Incomplete too — not being taken', vr.dec);
+  ok(vr.ap && !vr.ap.fail && vr.ap.xfer && vr.ap.title === 'Calculus I' && vr.tr && !vr.tr.fail && vr.tr.xfer && vr.tr.title === 'Music Theory I', 'more: transfer and exam credit whose title ends in “I” is never an Incomplete (an AP placeholder, a transfer-icon row)', [vr.ap, vr.tr]);
+  ok(vr.bm && !vr.bm.fail && /Career Readiness III I$/.test(vr.bm.title), 'more: a row whose icon was lost is never read as an Incomplete (exam credit wears no icon) — the I stays a word', vr.bm);
+  ok(vr.ahead && !vr.ahead.fail && vr.ahead.open && vr.ahead.title === 'Career Readiness I', 'more: with Spring registered ahead on the report, Fall’s class whose title ends in “I” is still being taken — its term isn’t over on the report’s date', vr.ahead);
+  const lines = await page.evaluate(() => (UI.dpr.audit.reqs || []).filter(b => /^R89-/.test(b.code)).map(b => b.code + ':' + b.status + ':' + b.kind));
+  ok(JSON.stringify(lines) === '["R89-10:satisfied:major","R89-20:not:major"]', 'more: a minor’s lines are read and counted, as the report counts them', lines);
+  const rc = await page.evaluate(() => (UI.dpr.rc || []).map(x => x.kind + ':' + x.code + ':' + x.why));
+  ok(!rc.some(s => /BUS 3391/.test(s)), 'more: an Incomplete keeps its class on the account (its grade is pending, like RP)', rc);
+  await saveReport(page);
+  const hist = posted(log, 'class_history').map(r => r.code + ' ' + r.term + ' ' + r.year).sort(), mine = posted(log, 'saved_classes').map(r => r.code);
+  ok(JSON.stringify(hist) === '["BUS 2214 Summer 2024","ECON 2201 Spring 2025"]', 'more: Past classes gets the Summer class (as Summer 2024) and the minor’s class — never the Incomplete', hist);
+  ok(mine.includes('BUS 3392') && mine.includes('BUS 3431'), 'more: both classes being taken go to My Classes', mine);
+  ok(!JSON.stringify(log.writes).match(/Morecase|9811002/), 'more: nothing personal stored');
+  ok(log.errors.length === 0, 'more: no page errors', log.errors);
+  await close();
+};
+
+/* (Tate, 2026-10-12: "this view should show the professors rating. same with the plans view.") */
+tests.rowRatings = async () => {
+  const { page, close, log } = await openApp({ height: 1600 });
+  await page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 });
+  await page.evaluate(() => { setTab('schedule'); S.schedTab = 'mine'; UI.agOpen = {}; render(true); }); await tick(page, 400);
+  const read = () => page.evaluate(() => { UI.agOpen = UI.agOpen || {}; document.querySelectorAll('.ag-fold .ag-h').forEach(b => { UI.agOpen[b.dataset.x] = true; }); render(true);
+    return [...document.querySelectorAll('#scroll .arow')].map(r => { const sec = SEC[r.dataset.y] || personSecs('me').find(x => x.id === r.dataset.y); const line = r.querySelector('.muted.b'); const rt = line && line.querySelector('.rowrt');
+      return { prof: sec && sec.prof, want: sec && ratingOf(sec.prof) != null ? 'rated ' + ratingOf(sec.prof).toFixed(1) : null, got: rt ? rt.textContent.trim() : null, ink: !rt || (rt.getAttribute('style') || '').includes(rateTone(ratingOf(sec.prof)).ink), color: rt ? getComputedStyle(rt).color : '', star: !!(rt && rt.querySelector('svg')), text: line ? line.innerText.replace(/\s+/g, ' ').trim() : '' }; }); });
+  const mine = await read();
+  ok(mine.length > 0 && mine.every(r => r.got === r.want) && mine.some(r => r.got) && mine.filter(r => r.got).every(r => r.star && r.ink), 'ratings: My Classes’ day list names each professor’s rating, with its star, in the rating’s colour (none when PolyRatings has none; “rated” is read aloud)', mine);
+  const one = mine.find(r => r.got);
+  ok(one && one.text.includes(' ' + one.got + ' · ') && one.text.indexOf(one.got) > 3, 'ratings: name, rating, then the seats — “Name ★ 3.2 · Full”', one);
+  await page.evaluate(() => { TC.plans.A = SECTIONS.filter(s => s.s != null && s.prof && ratingOf(s.prof) != null).slice(0, 3).map(s => s.id); S.schedTab = 'plans'; S.plan = 'A'; render(true); }); await tick(page, 300);
+  const plans = await read();
+  ok(plans.length > 0 && plans.every(r => r.got === r.want) && plans.some(r => r.got), 'ratings: Plans’ day list too', plans);
+  ok(log.errors.length === 0, 'ratings: no page errors', log.errors);
+  await close();
+};
+
+tests.dprStressQuarter = async () => {
+  const { page, close, log } = await openApp({ tables: XFER_T('Business Administration', 'Senior'), height: 2600 });
+  await toPlanner(page); await uploadFile(page, 'dpr-stress-quarter.pdf');
+  ok(await readPills(page) === '36 filled|3 left|5 transfer', 'quarter catalog: Report read — 33 Satisfied + 3 in progress = 36 filled, 3 left (the Senior Project is its own line, 2026-10-12), 5 transfer (ART 3TC1, DUD 3TR, PORT 1TC2, BUS 401, TRAN 302)', await readPills(page));
+  await saveReport(page);
+  const hist = posted(log, 'class_history');
+  ok(hist.length === 33 && hist.filter(r => r.code === 'BUS 2207').length === 1 && hist.filter(r => r.code === 'BUS 3306').length === 1, 'quarter catalog: 33 finished classes to the record (BUS 207’s W attempt isn’t a class taken — only its C, as BUS 2207 (2026-10-12)), 4 in progress kept out', { n: hist.length, b207: hist.filter(r => r.code === 'BUS 2207').map(r => r.term + ' ' + r.year) });
+  const au = log.writes.find(w => w.table === 'degree_audit' && w.m === 'POST'); const reqs = au ? au.body.requirements : [];
+  const bus214 = reqs.find(b => b.label === 'BUS 2214'), cr3 = reqs.find(b => /^Career Readiness III/.test(b.label)), ge1 = reqs.find(b => /^C1:/.test(b.label));
+  ok(au && au.body.catalog === 'Fall Quarter 2023' && au.body.printed_on === '2026-10-09', 'quarter catalog: the account keeps the report’s catalog and printed date', au && [au.body.catalog, au.body.printed_on]);
+  ok(bus214 && JSON.stringify(bus214.used) === '[{"c":"BUS 214","t":"Winter 2025","n":"BUS 2214"}]', 'quarter catalog: a line keeps the class the report used — as printed (BUS 214), today’s number (BUS 2214), the term — never its grade or title', bus214 && bus214.used);
+  ok(ge1 && ge1.used.length === 1 && ge1.used[0].c === 'ART 3TC1' && ge1.used[0].x === true && !ge1.used[0].n, 'quarter catalog: a transfer placeholder (ART 3TC1) is kept as transfer credit, with no number to translate it to', ge1 && ge1.used);
+  ok(cr3 && cr3.status === 'not' && JSON.stringify(cr3.listed) === '["BUS 3306"]', 'quarter catalog: a Not Satisfied line that lists a class on the Course History (BUS 3306, finished) the report didn’t count keeps it as "listed" — a conflict, never a guess', cr3 && cr3.listed);
+  ok(!reqs.some(b => (b.used || []).some(e => /BUS 100|TRAN 302/.test(e.c))), 'quarter catalog: the closing "COURSE CREDITS NOT USED" table (BUS 100, TRAN 302) is no line’s classes', reqs.filter(b => (b.used || []).some(e => /BUS 100|TRAN 302/.test(e.c))).map(b => b.label));
+  ok(!JSON.stringify(au ? au.body : {}).match(/\b(?:[A-DF][+-]?|W|CR)\s+\d+\.\d\d\b|9711001|Stressquarter/), 'quarter catalog: nothing stored carries a grade beside units, the EMPLID or the name');
+  await toPastTab(page);
+  const sum = await pcSum(page);
+  ok(sum && sum.num === '36 of 38 filled' && sum.left === '2 left to graduate' && !sum.link && !sum.past && sum.cat === 'Quarter catalog' && !sum.inCard, 'quarter catalog: the Builder’s card counts the report (35, plus the Approved Elective in progress now that BUS 4442 is in My Classes, of 38 — the total-units line isn’t a requirement) and names its catalog and date', sum);
+  ok(!(await page.locator('[data-a="plYear"]').count()) && !(await page.locator('.pc-fhd').count()), 'quarter catalog: NO flowchart years — the 2026–28 semester flowchart isn’t this student’s catalog', await page.locator('[data-a="plYear"]').count());
+  await page.evaluate(() => { UI.pcInpOpen = true; render(true); }); await tick(page, 200);   /* (2026-10-12) the in-progress lines open from under what's left — in the Builder */
+  let rows = await pcRows(page);
+  const still = rows.filter(r => r.still);
+  await openGroups(page); const rowsOpen = await pcRows(page); await page.evaluate(() => { UI.pcGroups = {}; render(true); }); await tick(page, 200);
+  ok(rows.filter(r => r.still).length === 2 && still.filter(r => r.st === 'need').map(r => r.main).join('|') === 'Career Readiness III: BUS 3306|Business Major Senior Project: BUS 4463 or BUS 4464' && rowsOpen.filter(r => !r.still && r.st === 'taking').length >= 4 && rowsOpen.some(r => !r.still && /^Approved Elective/.test(r.main) && r.st === 'taking' && /Taking BUS 4442 this term/.test(r.sub)), 'quarter catalog: what’s left is the open line; the 4 in progress (GWR, BUS 3431, BUS 3438, and the Approved Elective by BUS 4442 in My Classes) sit in Done (2026-10-12: not under what’s left) (GWR, BUS 3431, BUS 3438, and the Approved Elective by BUS 4442 in My Classes — the report hadn’t attached it)', still.map(r => r.st + ':' + r.main + ' [' + r.sub + ']'));
+  const cr = still.find(r => /^Career Readiness III/.test(r.main));
+  ok(cr && cr.look && /^[^|]*\| Needs a look: your report lists BUS 3306 on your record but didn’t count it here/.test(cr.sub), 'quarter catalog: the conflict wears "Needs a look" and says which class — the report decides, the app says so', cr);
+  ok(!rows.some(r => !r.still), 'quarter catalog: the groups start folded');
+  await openGroups(page); rows = await pcRows(page);
+  const heads = await page.evaluate(() => [...document.querySelectorAll('[data-a="pcGroup"]')].map(b => b.innerText.replace(/\s+/g, ' ').trim()));
+  ok(heads.join('|') === 'Major and support 11 of 13|Financial Management ✓ All 4|General education ✓ All 19|Degree requirements ✓ Both', 'quarter catalog: the report’s groups — major and support, the concentration by name, GE, degree requirements (the writing requirement and USCP; units and GPA checks aren’t listed)', heads);
+  const b214 = rows.find(r => r.main === 'BUS 2214'), c1 = rows.find(r => /^C1: Arts Course/.test(r.main)), tech = rows.find(r => /^TECHNOLOGY MANAGEMENT COURSE/i.test(r.main) || /^Technology Management Course/.test(r.main)), e = rows.find(r => /^E: /.test(r.main));
+  ok(b214 && b214.st === 'done' && /^BUS 214 → BUS 2214 Winter 2025 \| \+ Professor$/.test(b214.sub), 'quarter catalog: a major line names the class as taken, today’s number, the term, and asks for the professor', b214);
+  ok(c1 && c1.st === 'done' && c1.sub === 'ART 3TC1 Fall 2025 · transfer credit', 'quarter catalog: a GE line filled by transfer credit says so — and asks for no professor', c1);
+  ok(tech && tech.st === 'done' && /BUS 310 → BUS 3310 Winter 2026/.test(tech.sub), 'quarter catalog: a "1 of 2 Options" requirement counts once, as done, with the option’s class', tech);
+  ok(e && e.st === 'done' && /FSN 250 Winter 2024/.test(e.sub), 'quarter catalog: Area E (gone from the semester catalog) stays Satisfied with its class — the student’s own catalog is respected', e);
+  ok(rows.filter(r => r.st === 'done' && !r.still).length === 39 - 6 - 1 && !rows.some(r => r.st === 'need' && !r.still), 'quarter catalog: 32 lines done (33, less the upper-division units check), and nothing the report says is Satisfied shows as to do', rows.filter(r => r.st === 'need' && !r.still).map(r => r.main));
+  await page.evaluate(() => { UI.pcAll = true; render(true); }); await tick(page, 200);   /* Units only starts folded (2026-10-12) */
+  const units = await page.evaluate(() => { const c = document.querySelector('.pc-uo'); return c ? [...c.querySelectorAll('.pc-cc')].map(e => e.innerText) : null; });
+  ok(units && units.includes('BUS 1100') && units.includes('TRAN 302') && units.includes('BUS 3306') && !units.includes('BUS 2214'), 'quarter catalog: "Units only" lists the classes the report used for nothing (BUS 100 → today’s BUS 1100, the study-abroad placeholder, BUS 3306)', units);
+  /* the Planner: picks only for what the report leaves open — never a class whose line is Satisfied */
+  await click(page, '[data-a="schedTab"][data-x="planner"]'); await tick(page, 3000);
+  const pk = await page.evaluate(() => { plSync(); const R = planRank(TCPL.ledger()); return { left: R.left, codes: R.all.map(c => c.code), done: R.done }; });
+  ok(pk.left === 2 && !pk.codes.some(c => /^(BUS 3431|BUS 3438|BUS 3346|BUS 3387|PHIL 3331|BUS 4401|BUS 4442)$/.test(c)), 'quarter catalog: the Planner sees 1 open line and never picks a class the report says is done or being taken (BUS 3431, 3438, 3346, 3387, PHIL 3331, BUS 4401, 4442)', pk);
+  /* reload: the account’s row carries everything */
+  await page.reload({ waitUntil: 'domcontentloaded' }); await page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 12000 }); await tick(page, 1500);
+  await page.evaluate(() => { S.tab = 'schedule'; S.schedTab = 'past'; UI.pcInpOpen = true; save(); render(true); }); await tick(page, 2500); await openGroups(page);
+  const sum2 = await pcSum(page), rows2 = await pcRows(page), b2 = rows2.find(r => r.main === 'BUS 2214');
+  ok(sum2 && sum2.num === '36 of 38 filled' && sum2.left === '2 left to graduate' && b2 && /BUS 214 → BUS 2214 Winter 2025/.test(b2.sub) && rows2.filter(r => r.still).length === 2, 'quarter catalog: after a reload everything is read back from the account — the same counts, the same classes per line', { sum2, b2 });
+  ok(log.errors.length === 0, 'quarter catalog: no page errors', log.errors);
+  await close();
+};
+
+/* 2. A junior on a quarter catalog in Fall 2026: quarter past, semester present (quarter-equivalent units), Area E
+      and the C elective open, a line the reader can’t place — then the January report over it */
+tests.dprStressMixed = async () => {
+  const T = XFER_T('Business Administration', 'Junior');
+  T.plans = FX.TABLES.plans.filter(p => p.user_id !== FX.ME.id).concat([{ user_id: FX.ME.id, term: '2268', slot: 'B', sections: [{ code: 'BUS 3387', class_nbr: '70111' }], shared: true }, { user_id: FX.ME.id, term: '2268', slot: 'C', sections: [{ code: 'ECON 2303', class_nbr: '70105' }], shared: false }]);
+  const { page, close, log } = await openApp({ tables: T, height: 2600 });
+  await toPlanner(page); await uploadFile(page, 'dpr-stress-mixed.pdf');
+  ok(await readPills(page) === '9 filled|7 left|1 can’t check', 'mixed, October: 8 Satisfied + D UD in progress (NR 3308 this term: 4.50 quarter-equivalent units cover its 4) = 9 filled, 7 left, 1 the reader couldn’t place', await readPills(page));
+  await saveReport(page);
+  await toPastTab(page);
+  await page.evaluate(() => { UI.pcInpOpen = true; UI.pcLeftAll = true; UI.plLeftAll = true; render(true); }); await tick(page, 200);   /* (2026-10-12) in progress opens from under what's left, in the Builder */
+  await openGroups(page); let rows = await pcRows(page); const still = rows.filter(r => r.still);
+  ok(still.length === 7 && still.some(r => r.st === 'cant' && /couldn’t read this line/.test(r.sub)) && rows.some(r => !r.still && r.st === 'taking' && /^D UD/.test(r.main) && /NR 3308 Fall 2026 · this term/.test(r.sub)), 'mixed: what’s left shows the open lines and the unplaceable one as "can’t check"; D UD, in progress by the class being taken, sits in Done', still.map(r => r.st + ':' + r.main + ' [' + r.sub + ']'));
+  ok(!(await page.locator('[data-a="plYear"]').count()), 'mixed: no semester flowchart for a Fall Quarter 2024 catalog');
+  /* the Planner: an open quarter GE line gets picks in today’s areas — C UD → UD 3 (PHIL 3331 has a section); E → 4B */
+  await click(page, '[data-a="schedTab"][data-x="planner"]'); await tick(page, 3000);
+  const pk = await page.evaluate(() => { plSync(); const R = planRank(TCPL.ledger()); return { left: R.left, codes: R.all.map(c => c.code), phil: (R.all.find(c => c.code === 'PHIL 3331') || {}).fills, areas: (TC.audit.reqs || []).filter(b => b.kind === 'ge' && b.status === 'not').map(b => b.label.split(':')[0] + '→' + plGeArea(b).join('/')) }; });
+  ok(pk.codes.includes('PHIL 3331') && (pk.phil || []).some(b => /^C UD/.test(b.label)), 'mixed: the Planner offers PHIL 3331 for the open "C UD" line — a quarter area matched to today’s UD 3 by the registrar’s table', pk);
+  ok(pk.areas.join('|') === 'C UD→UD3|E→4B|Lower-division C Elective→3A/3B', 'mixed: C UD is UD 3, Area E is "an additional 4B", the C elective is 3A or 3B (registrar.calpoly.edu/GE_2026)', pk.areas);
+  /* the January report over it: Fall grades posted, BUS 3387 a late add the student had in Plan B, one new line */
+  await toPastTab(page); await page.locator('.pc-btns input[data-in="dprfile"]').first().setInputFiles('files/dpr-stress-mixed-v2.pdf'); for (let i = 0; i < 30 && !(await page.locator('#sheet .dr-h1, #sheet .tc-err').count()); i++) await tick(page, 500);
+  ok(await readPills(page) === '11 filled|6 left|1 can’t check', 'mixed, January: 11 filled (C UD, D UD, BUS 3387 now Satisfied), 6 left', await readPills(page));
+  await click(page, '[data-a="dprSave"]'); await tick(page, 2500);
+  const sh = await page.evaluate(() => UI.sheet && UI.sheet.type === 'dprDiff' ? { d: UI.sheet.d, text: document.querySelector('#sheet').innerText.replace(/\s+/g, ' ') } : null);
+  ok(sh && sh.d.filled.length === 2 && /^C UD/.test(sh.d.filled[0]) && sh.d.filled[1] === 'BUS 3387' && sh.d.added === 1 && !sh.d.opened.length, 'mixed, re-upload: the app says what changed — 2 lines now filled (D UD was already in progress), 1 new line, nothing reopened', sh && sh.d);
+  ok(sh && JSON.stringify(sh.d.affected) === '{"B":["BUS 3387"]}' && /Plan B · BUS 3387/.test(sh.text) && /Take it out/.test(sh.text), 'mixed, re-upload: Plan B holds BUS 3387, which filled an open line before and is done now — offered, not removed', sh && sh.d.affected);
+  const histAll = posted(log, 'class_history');
+  ok(histAll.filter(r => r.code === 'BUS 2214').length === 1 && !histAll.some(r => r.code === 'BUS 2215' || r.code === 'BUS 3391'), 'mixed, re-upload: classes already on the record aren’t written again; Spring 2027’s registered classes aren’t finished classes', histAll.map(r => r.code + '@' + r.term + r.year));
+  await click(page, '[data-a="dprDrop"]'); await tick(page, 600);
+  const plans = await page.evaluate(() => ({ B: (TC.plans.B || []).map(id => SEC[id] && SEC[id].code), C: (TC.plans.C || []).map(id => SEC[id] && SEC[id].code) }));
+  ok(plans.B.length === 0 && plans.C.join() === 'ECON 2303', 'mixed, re-upload: "Take it out" removes BUS 3387 from Plan B; Plan C (the student’s own) is untouched', plans);
+  ok(log.errors.length === 0, 'mixed: no page errors', log.errors);
+  await close();
+};
+
+/* 3. A major the app has no flowchart for: the report is still the whole screen */
+tests.dprStressNoMajor = async () => {
+  const { page, close, log } = await openApp({ tables: XFER_T('Dance', 'Freshman'), height: 2000 });
+  await toPlanner(page); await uploadFile(page, 'dpr-stress-nomajor.pdf');
+  ok(await readPills(page) === '2 filled|3 left', 'no flowchart: Report read still counts the report', await readPills(page));
+  await saveReport(page); await toPastTab(page);
+  const sum = await pcSum(page), t = await text(page);
+  ok(sum && sum.num === '2 of 5 filled' && !/don’t have this major’s flowchart/.test(t), 'no flowchart: Past classes shows the report’s 2 of 5 — not "we don’t have this major’s flowchart"', { sum, t: t.slice(0, 200) });
+  await openGroups(page); const rows = await pcRows(page);
+  ok(rows.some(r => r.main === 'DANC 1100' && r.st === 'done' && /DANC 1100 Fall 2026/.test(r.sub)) && rows.filter(r => r.still).length === 3, 'no flowchart: the major line, its class and the 3 open lines', rows.map(r => r.st + ':' + r.main));
+  await click(page, '[data-a="schedTab"][data-x="planner"]'); await tick(page, 1500);   /* (2026-10-12) what's left is the Builder's, even with no flowchart */
+  const nb = await page.evaluate(() => { const c = document.querySelector('#scroll .pll'); return c && { h: c.querySelector('.pll-leg .l').innerText.replace(/\s+/g, ' ').trim(), rows: document.querySelectorAll('#scroll .plq-card').length, opts: document.querySelectorAll('#scroll .plo').length }; });
+  const nl = await pllLedger(page);
+  ok(nb && /^\d+ left to graduate$/.test(nb.h) && ledgerAddsUp(nl) && nl.n === 5 && (nl.leg.f || 0) + (nl.leg.p || 0) === 2 && nl.h === `${nl.leg.l} left to graduate` && nb.rows >= 2 && nb.opts === 0, 'no flowchart: the Builder still opens with what’s left from the report — 5 requirements, 2 filled or in progress, the rest left (no options to pick from)', { nb, nl });
+  ok(log.errors.length === 0, 'no flowchart: no page errors', log.errors);
+  await close();
+};
+
+/* 4. A sophomore who moved to the semester catalog: bare quarter numbers, a duplicated row, a class two lines use,
+      "Choose one" with an option in progress — and the flowchart years, since it IS this student’s catalog */
+tests.dprStressDupes = async () => {
+  const { page, close, log } = await openApp({ tables: XFER_T('Business Administration', 'Sophomore'), height: 2600 });
+  await toPlanner(page); await uploadFile(page, 'dpr-stress-dupes.pdf');
+  ok(await readPills(page) === '5 filled|2 left', 'semester catalog: 4 Satisfied + the option in progress = 5 filled, 2 left — "Choose one" counted once', await readPills(page));
+  await saveReport(page);
+  const hist = posted(log, 'class_history');
+  ok(hist.length === 3 && hist.filter(r => r.code === 'MATH 1267').length === 1 && hist.some(r => r.code === 'ECON 2040'), 'semester catalog: the duplicated MATH 221 row goes on the record ONCE, under today’s number', hist.map(r => r.code));
+  const au = log.writes.find(w => w.table === 'degree_audit' && w.m === 'POST');
+  ok(au && !au.body.requirements.some(b => (b.used || []).some(e => /^PSY 200/.test(e.c))), 'semester catalog: the closing "FREE ELECTIVES" table (no verdict, "(RG8)" / "(R30)" on their own lines) is no line’s classes', au && au.body.requirements.filter(b => (b.used || []).some(e => /^PSY 200/.test(e.c))).map(b => b.label));
+  await toPastTab(page); await openGroups(page);
+  const rows = await pcRows(page), stat = rows.find(r => /^Statistics - Option/.test(r.main)), m = rows.filter(r => /MATH 221 → MATH 1267/.test(r.sub));
+  ok(stat && stat.st === 'taking' && /STAT 1210 Fall 2026 · this term/.test(stat.sub), 'semester catalog: the pick-1 line is in progress by STAT 1210 this term', stat);
+  ok(m.length === 2, 'semester catalog: a class two lines use (GE 2 and MATH 1267) is named under both — the report double counts it, the record holds it once', m.map(r => r.main));
+  ok((await page.locator('.pc-fhd').count()) === 1 && (await page.locator('[data-a="plYear"]').count()) > 0, 'semester catalog: the 2026–28 flowchart years show under the report — they ARE this student’s catalog');
+  await page.evaluate(() => { UI.pcAll = true; render(true); }); await tick(page, 200);   /* Units only starts folded (2026-10-12) */
+  const units = await page.evaluate(() => { const c = document.querySelector('.pc-uo'); return c ? [...c.querySelectorAll('.pc-cc')].map(e => e.innerText) : null; });
+  ok(units && units.join() === 'PSY 2200', 'semester catalog: PSY 200 (today’s PSY 2200) is "Units only"', units);
+  ok(log.errors.length === 0, 'semester catalog: no page errors', log.errors);
+  await close();
+};
+
+/* 5. The reader alone, on the quarter report: what it keeps per line */
+tests.dprReaderUsed = async () => {
+  const { page, close, log } = await openApp({});
+  await page.waitForFunction(() => TC.ready, null, { timeout: 8000 });
+  await page.evaluate(() => TC.loadPlanner()); await page.waitForFunction(() => !!window.TCPL, null, { timeout: 8000 });
+  const r = await page.evaluate(async b64 => {
+    const lib = await loadPdfJs(); const doc = await lib.getDocument({ data: Uint8Array.from(atob(b64), c => c.charCodeAt(0)), isOffscreenCanvasSupported: false }).promise; const t = await dprDocText(doc); doc.destroy();
+    plSync(); const p = TCPL.dprParse(t); const by = l => p.audit.reqs.find(b => b.label === l || new RegExp('^' + l).test(b.label));
+    return { printed: p.audit.printed, a1: by('A1:').used, tech: by('TECHNOLOGY MANAGEMENT').used, cr3: by('Career Readiness III').listed, ae: by('Approved Elective').listed, gwr: by('Graduation Writing').used, conc: by('BUS 3431').used, units: by('Total Units').used, n: p.audit.reqs.length,
+      nowhere: p.audit.reqs.filter(b => (b.used || []).some(e => e.c === 'BUS 100')).map(b => b.label) };
+  }, nodeFs.readFileSync(nodePath.join('files', 'dpr-stress-quarter.pdf')).toString('base64'));
+  ok(r.printed === '2026-10-09', 'reader: the printed date, as a date', r.printed);
+  ok(JSON.stringify(r.a1) === '[{"c":"COMS 101","t":"Spring 2024","n":"COMS 1101"}]' && Object.keys(r.conc[0]).sort().join() === 'c,n,p,t', 'reader: a GE line’s class — printed number, term, today’s number from the report’s own (NNNN) pair — and nothing else (no title, no grade, no units)', [r.a1, r.conc]);
+  ok(JSON.stringify(r.ae) === '[]', 'reader: a class the line lists that’s being TAKEN (BUS 4442, ungraded) is not a conflict — only a finished, uncounted one is', r.ae);
+  ok(r.tech && r.tech.length === 1 && r.tech[0].c === 'BUS 310' && r.tech[0].n === 'BUS 3310', 'reader: a "1 of 2 Options" requirement carries the option’s class', r.tech);
+  ok(JSON.stringify(r.cr3) === '["BUS 3306"]', 'reader: a Not Satisfied line lists BUS 3306, finished on the Course History and not counted', r.cr3);
+  ok(r.gwr && r.gwr.length === 1 && r.gwr[0].p === true && !r.gwr[0].x, 'reader: a class being taken is marked so (never transfer)', r.gwr);
+  ok(r.conc && r.conc[0].c === 'BUS 431' && r.conc[0].n === 'BUS 3431' && r.conc[0].p === true, 'reader: a quarter-numbered class being taken is translated and marked taking', r.conc);
+  ok(!r.units.length && !r.nowhere.length, 'reader: the units line has no classes, and the "COURSE CREDITS NOT USED" table is attached to no line', { units: r.units, nowhere: r.nowhere });
+  ok(log.errors.length === 0, 'reader: no page errors', log.errors);
+  await close();
+};
+
+
+/* 6. The review's cases, one rule at a time (review 2026-10-11): what the area map, the conflict flag and the diff
+      must never do */
+tests.dprTruthRules = async () => {
+  const { page, close, log } = await openApp({ tables: XFER_T('Psychology', 'Junior'), height: 2400 });
+  await page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 });
+  await page.evaluate(() => TC.loadPlanner()); await page.waitForFunction(() => !!window.TCPL, null, { timeout: 8000 });
+  const r = await page.evaluate(() => {
+    const L = (label, status, extra) => Object.assign({ label, status, kind: 'ge', ge: null, level: 'LN', code: null, units: null, courses: null, options: [], oneOf: false, used: [], listed: [] }, extra || {});
+    const areas = l => plGeArea(L(l, 'not')).join('/');
+    const out = { dei: areas('Diversity, Equity, & Inclusion Elective (GE UD 4)') + areas('Upper-division Science Elective (GE UD 2/5)'), psy: areas('PSY 2240 (GE 5B)'), a4: areas('GE Area 4: 4B Social & Behavioral Sciences'), a3: areas('Area 3: Upper-division Arts & Humanities Course'),
+      a25: areas('Area 2 or 5: UD Math & Quantitative Reasoning or Physical & Life Sciences Course'), ldc: areas('Lower-division C Elective'), el: areas('GE Elective: Areas B, C, and D') };
+    /* a class in My Classes (PHIL 3331, UD 3) that the report already put under one UD 3 line never covers another */
+    const ph = (plGeMap().get('PHIL 3331') || []).includes('UD3'); PEOPLE.me.unplaced = (PEOPLE.me.unplaced || []).concat(['PHIL 3331']);
+    const X = auditLines({ catalog: 'Fall Quarter 2024', reqs: [L('C UD: Upper-division Arts & Humanities Course', 'in_progress', { ge: 'CUD', used: [{ c: 'PHIL 3331', t: 'Fall 2026', p: true }] }), L('Area 3: Upper-division Arts & Humanities Course', 'not')] }, null);
+    out.ph = ph; out.eCovered = X.covered.size;
+    /* two open UD 3 lines and that one class: it covers ONE of them */
+    const X2 = auditLines({ catalog: 'Fall Quarter 2024', reqs: [L('Area 3: Upper-division Arts & Humanities Course', 'not'), L('C UD: Upper-division Arts & Humanities Course', 'not', { ge: 'CUD' })] }, null);
+    out.twoCovered = X2.covered.size;
+    /* the diff: two same-word lines, the second flips — one "now filled", not two; a line that vanished isn't "done" */
+    TC.plans = { A: [], B: [], C: [] };
+    const d = auditDiff({ reqs: [L('GE Elective: Areas B, C, and D', 'satisfied'), L('GE Elective: Areas B, C, and D', 'not')], overrides: [] }, { ok: true, reqs: [L('GE Elective: Areas B, C, and D', 'satisfied'), L('GE Elective: Areas B, C, and D', 'satisfied')] });
+    out.diff = d && { filled: d.filled.length, opened: d.opened.length, added: d.added };
+    const sec = Object.values(SEC)[0]; TC.plans = { A: [sec.id], B: [], C: [] };
+    const d2 = auditDiff({ reqs: [L(sec.code, 'not', { kind: 'major', options: [sec.code] })], overrides: [] }, { ok: true, reqs: [L('Something else', 'not', { kind: 'major' })] });
+    const d3 = auditDiff({ reqs: [L(sec.code, 'not', { kind: 'major', code: 'R40-10', options: [sec.code] })], overrides: [] }, { ok: true, reqs: [L(sec.code, 'satisfied', { kind: 'major', code: 'R40-10', options: [sec.code] })] });
+    out.vanished = d2 && d2.affected; out.doneNow = d3 && d3.affected; out.sec = sec.code;
+    /* the wrong attempt: a class taken twice, and the report's term matches neither — no row, so no professor */
+    TC.myHistory = [{ code: 'BUS 2207', term: 'Winter', year: 2024, professor: 'First Attempt' }, { code: 'BUS 2207', term: 'Fall', year: 2024, professor: 'Second Attempt' }];
+    out.attempt = pcUsedRow({ c: 'BUS 207', n: 'BUS 2207', t: 'Spring 2025' });
+    out.attempt2 = (pcUsedRow({ c: 'BUS 207', n: 'BUS 2207', t: 'Fall 2024' }) || {}).professor;
+    return out;
+  });
+  ok(r.dei === '' && r.psy === '', 'rules: a major line that also counts for GE ("DEI Elective (GE UD 4)", "Upper-division Science Elective (GE UD 2/5)", "PSY 2240 (GE 5B)") is never "any class of that area"', r);
+  ok(r.a4 === '' && r.a3 === 'UD3' && r.a25 === 'U25', 'rules: "Area 3: Upper-division …" is UD 3, "Area 2 or 5: UD …" is UD 2/5 — but "GE Area 4: 4B …" (a lower-division heading) is not UD 4', r);
+  ok(r.ldc === '3A/3B' && r.el === '2/5A/5B/5C/3A/3B/4A/4B/U25/UD3/UD4', 'rules: the C elective is 3A or 3B; a GE elective is any B, C or D area, lower or upper division (the registrar\u2019s quarter GE sheet)', r);
+  ok(r.ph && r.eCovered === 0, 'rules: a class the report already put under one line (PHIL 3331 under C UD) never covers another line of its area — as Area E ("an additional 4B") must never be covered by D2’s class', r);
+  ok(r.ph && r.twoCovered === 1, 'rules: one class in My Classes covers ONE of two open lines of its area, never both', r);
+  ok(r.diff && r.diff.filled === 1 && !r.diff.opened && !r.diff.added, 'rules: two lines with the same words stay two — the one that flipped is "now filled", the other isn’t "added"', r.diff);
+  ok(JSON.stringify(r.vanished) === '{}' && JSON.stringify(r.doneNow) === JSON.stringify({ A: [r.sec] }), 'rules: a plan’s class is "done now" only when the line it filled is Satisfied on the new report — not when the line just vanished', { vanished: r.vanished, doneNow: r.doneNow });
+  ok(r.attempt === null && r.attempt2 === 'Second Attempt', 'rules: a class taken twice shows the attempt in the report’s term, never the other one’s professor', r);
+  /* the reader: an F is no conflict, a class used for another line is no conflict, a NOTE naming a code keeps the table */
+  const t = await page.evaluate(() => {
+    const H = ['Degree Progress Report', 'Current Academic Objective Requirement (Catalog) Term', 'PSY Primary BS UG Major Fall Quarter 2024', 'DEGREE PROGRESS REPORT'];
+    const rows = ['Satisfied: D1: AMERICAN INSTITUTIONS COURSE - Select from PSY 2240 or POLS 112 (1112) - 4 Units Required (R73-10)', 'Courses Used', '2025 Fall PSY 2240 Biopsych A 4.00 D1',
+      'Not Satisfied: D2: LOWER-DIVISION SOCIAL SCIENCES COURSE: PSY 2240 or ECON 222 (2040) - 4 Units Required (R73-20)', '· Units: 4.00 required, 0.00 used, 4.00 needed',
+      'Not Satisfied: B4: MATHEMATICS COURSE: MATH 1410 - 4 Units Required (R71-40)', '· Units: 4.00 required, 0.00 used, 4.00 needed',
+      'Satisfied: C1: ARTS COURSE - 4 Units Required (R74-10)', 'Courses Used', '2024 Fall ART 101 Art A 4.00 C1', 'NOTE: this also counts toward (R-0099)', '2025 Wtr ART 102 Art B 4.00 C1',
+      'Course History', '2024 Fall ART 101 Art A 4.00', '2025 Wtr ART 102 Art B 4.00', '2025 Fall PSY 2240 Biopsych A 4.00', '2025 Fall MATH 1410 Calc F 4.00'];
+    const p = TCPL.dprParse(H.concat(rows).join('\n')); const by = l => p.audit.reqs.find(b => b.label.startsWith(l)) || {};
+    return { d2: by('D2').listed, b4: by('B4').listed, c1: (by('C1').used || []).map(e => e.c) };
+  });
+  ok(JSON.stringify(t.d2) === '[]', 'rules: PSY 2240 is listed under D2 but the report used it for D1 — not a conflict', t);
+  ok(JSON.stringify(t.b4) === '[]', 'rules: a class failed (F) on a line that lists it is no conflict to flag', t);
+  ok(t.c1.join() === 'ART 101,ART 102', 'rules: a NOTE naming another code inside a table doesn’t end the line’s classes', t);
+  /* a report saved before this build (no classes per line): the old screen and a line asking for it again */
+  await page.evaluate(() => { TC.myHistory = []; TC.audit = { reqs: [{ label: 'PSY 1102', status: 'satisfied', kind: 'major', ge: null, level: 'LN', code: 'R40-10', units: null, courses: null, options: ['PSY 1102'], oneOf: false }], counts: {}, overrides: [], catalog: 'Fall Semester 2026' }; });
+  await click(page, '[data-a="tab"][data-x="schedule"]'); await click(page, '[data-a="schedTab"][data-x="past"]'); await tick(page, 2000);
+  ok((await page.locator('.pc-again').count()) === 1 && (await page.locator('[data-a="plYear"]').count()) > 0 && !(await page.locator('.pc-still').count()), 'rules: a report saved before this build keeps the old screen, with "Upload your report again to see which class filled each requirement"');
+  /* a save that fails: no "Your report changed" sheet for changes that weren't saved */
+  const sh = await page.evaluate(async () => { UI.dpr = { rows: [], audit: { ok: true, reqs: [{ label: 'PSY 1102', status: 'not', kind: 'major', level: 'LN', code: 'R40-10', options: ['PSY 1102'], used: [], listed: [] }] }, program: { catalog: 'Fall Semester 2026' } };
+    TC.saveDpr = async () => null; const real = TC.saveAudit; TC.saveAudit = async (a, prog) => { UI.dprDiff = auditDiff(TC.audit, a); return 'Couldn’t save what your report says'; };
+    await A.dprSave(); TC.saveAudit = real; return UI.sheet && UI.sheet.type; });
+  ok(sh !== 'dprDiff', 'rules: a report that didn’t save never says "Your report changed"', sh);
+  ok(log.errors.length === 0, 'rules: no page errors', log.errors);
+  await close();
+};
+
+/* (2026-10-11) The registrar's sheet "Staying on QUARTER Catalog: GE Pattern Guidelines" */
+tests.dprQuarterGeSheet = async () => {
+  const { page, close, log } = await openApp({ tables: XFER_T('Psychology', 'Junior'), height: 2400 });
+  await page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 });
+  await page.evaluate(() => TC.loadPlanner()); await page.waitForFunction(() => !!window.TCPL, null, { timeout: 8000 });
+  const r = await page.evaluate(() => {
+    const L = (label, status, extra) => Object.assign({ label, status, kind: 'ge', ge: null, level: 'LN', code: null, units: null, courses: null, options: [], oneOf: false, used: [], listed: [] }, extra || {});
+    const areas = l => plGeArea(L(l, 'not')).join('/');
+    const out = { el: areas('GE Elective: Areas B, C, and D'), be: areas('Area B Electives'), be2: areas('B Elective'), bud: plGeArea(L('B UD: Upper-Division B', 'not', { ge: 'BUD' })).join('/') };
+    /* the subject with the most 3A/3B classes the planner knows — the one most likely to be picked twice */
+    const G = plGeMap(), sub = c => c.split(' ')[0], cnt = {};
+    const isC = c => (G.get(c) || []).some(a => a === '3A' || a === '3B');
+    [...G.keys()].forEach(c => { if (isC(c)) cnt[sub(c)] = (cnt[sub(c)] || 0) + 1; });
+    const P = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0], Q = Object.keys(cnt).find(s => s !== P);
+    const pcs = [...G.keys()].filter(c => sub(c) === P && isC(c)).slice(0, 2), pc = pcs[0], qc = [...G.keys()].find(c => sub(c) === Q && isC(c));
+    out.P = P; out.Q = Q; out.pc = pc; out.qc = qc;
+    /* the term's seats here hold no 3A/3B class: give two of C1's subject and one of another a section, like the real list does */
+    const s0 = Object.values(SEC)[0]; let nb = 99100;
+    pcs.concat([qc]).forEach(c => { COURSES[c] = COURSES[c] || { title: c, units: null, prereq: null, desc: null, short: c }; addSection(Object.assign({}, s0, { id: String(nb++), code: c, sec: '01' })); });
+    const reqs = (c1) => [L('C1: Arts Course', 'satisfied', { ge: 'C1', used: [{ c: c1 + ' 101', n: c1 + ' 1101', t: 'Fall 2024' }] }), L('C2: Letters Course', 'satisfied', { ge: 'C2', used: [{ c: 'LIT 230', t: 'Winter 2025' }] }), L('Lower-division C Elective', 'not')];
+    const RP = reqs(P), RQ = reqs(Q);
+    out.barP = plGeBar(RP[2], pc, RP); out.barQ = plGeBar(RP[2], qc, RP); out.barOther = plGeBar(L('GE Elective: Areas B, C, and D', 'not'), pc, RP);
+    out.barEngl = plGeBar(RP[2], 'LIT 2230', RP);
+    /* a class in My Classes of C1's subject never puts the C elective in progress; one of another subject does */
+    PEOPLE.me.unplaced = (PEOPLE.me.unplaced || []).concat([pc]);
+    out.covP = auditLines({ catalog: 'Fall Quarter 2024', reqs: RP }, null).covered.size;
+    out.covQ = auditLines({ catalog: 'Fall Quarter 2024', reqs: RQ }, null).covered.size;
+    PEOPLE.me.unplaced = PEOPLE.me.unplaced.filter(c => c !== pc);
+    /* the Planner never picks a class of C1's subject for the C elective */
+    TC.audit = { reqs: RP, counts: {}, overrides: [], catalog: 'Fall Quarter 2024' }; plSync();
+    const R = planRank(TCPL.ledger()), forC = R.all.filter(c => (c.fills || []).some(b => /C Elective/.test(b.label)));
+    out.picks = forC.map(c => c.code); out.badPicks = out.picks.filter(c => sub(c) === P); out.qPicked = out.picks.includes(qc);
+    return out;
+  });
+  ok(r.el === '2/5A/5B/5C/3A/3B/4A/4B/U25/UD3/UD4', 'quarter GE sheet: "GE Elective: Area B, C or D" is any additional Area 2, 3, 4 or 5, lower or upper division', r);
+  ok(r.be === '5A/5B/5C' && r.be2 === '5A/5B/5C', 'quarter GE sheet: the high-unit template\u2019s "Area B Electives" is any 5A\u20135C course', r);
+  ok(r.bud === 'U25', 'quarter GE sheet: Upper-Division B is UD 2 or UD 5', r);
+  ok(r.barP === true && r.barQ === false && r.barOther === false && r.barEngl === true, 'quarter GE sheet: the C elective must be "in a different subject" from C1 and C2 \u2014 only the C elective is barred', r);
+  ok(r.covP === 0 && r.covQ === 1, 'quarter GE sheet: a class of C1\u2019s subject in My Classes never puts the C elective in progress; another subject\u2019s does', r);
+  ok(r.qPicked && r.badPicks.length === 0, 'quarter GE sheet: the Planner never picks a class of C1\u2019s subject for the C elective', r);
+  ok(log.errors.length === 0, 'quarter GE sheet: no page errors', log.errors);
+  await close();
+};
+
+/* A clash offers "Replace <the class it clashes with> with this class" (Tate, 2026-10-11), in a plan and in My Classes, with Undo. */
+tests.clashReplace = async () => {
+  let failDel = false;
+  const { page, close, log } = await openApp({ hook: (url, m) => failDel && m === 'DELETE' && url.pathname.endsWith('/saved_classes') ? { status: 400, body: JSON.stringify({ code: '23514', message: 'nope' }) } : null });
+  await page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 });
+  const W = t => log.writes.filter(w => w.table === t);
+  const codes = P => page.evaluate(P => (TC.plans[P] || []).map(i => SEC[i] && SEC[i].code).sort().join(), P);
+  /* a plan: PHIL 3331 in Plan A, ECON 2303 §03 clashes with it */
+  await page.evaluate(() => { const ph = Object.values(SEC).find(x => x.code === 'PHIL 3331'); TC.setPlan('A', [ph.id]); S.plan = 'A'; render(true); });
+  await page.evaluate(() => A.openClass('ECON 2303')); await settle(page, 500);
+  await click(page, '.secrow .addbtn >> nth=0');
+  if (await page.locator('#sheet [data-a="atGroup"][data-x="plans"][aria-pressed="false"]').count()) await click(page, '#sheet [data-a="atGroup"][data-x="plans"]');
+  await click(page, '#sheet [data-a="atPick"][data-x="A"]');
+  const b0 = await page.locator('#sheet .at-cta').innerText();
+  ok(/Replace PHIL 3331 with this class/.test(b0) && await page.locator('#sheet .g-b.clashb').count() >= 1 && await codes('A') === 'PHIL 3331', 'replace: plan clash — the button names the clashing class; nothing changed yet', b0);
+  await atGo(page);
+  ok(await codes('A') === 'ECON 2303', 'replace: Plan A now has ECON 2303 and no PHIL 3331', await codes('A'));
+  ok(/Replaced PHIL 3331 with ECON 2303 in Plan A/.test(await page.locator('#toast').innerText()), 'replace: the toast says what was replaced', await page.locator('#toast').innerText());
+  await click(page, '#toast [data-a="toastUndo"]'); await settle(page, 600);
+  ok(await codes('A') === 'PHIL 3331', 'replace: Undo brings PHIL 3331 back and ECON 2303 out', await codes('A'));
+  /* My Classes: BUS 4401 §01 clashes with BUS 3438 */
+  await page.evaluate(() => { UI.sheet = null; S.stack[S.tab] = []; render(true); });
+  await page.evaluate(() => A.openClass('BUS 4401')); await settle(page, 500);
+  await click(page, '.secrow .addbtn');
+  if (await page.locator('#sheet [data-a="atGroup"][data-x="classes"][aria-pressed="false"]').count()) await click(page, '#sheet [data-a="atGroup"][data-x="classes"]');
+  const m0 = await page.evaluate(() => [...myCodes()].sort().join()), w0 = W('my_sections').length, s0 = W('saved_classes').length;
+  ok(/Replace BUS 3438 with this class/.test(await page.locator('#sheet .at-cta').innerText()) && /BUS 3438/.test(m0) && !/BUS 4401/.test(m0), 'replace: My Classes clash — Replace is the main button, Add anyway the quiet one', m0);
+  await atGo(page);
+  const m1 = await page.evaluate(() => [...myCodes()].sort().join());
+  const mw = W('my_sections').slice(w0), sw = W('saved_classes').slice(s0);
+  ok(/BUS 4401/.test(m1) && !/BUS 3438/.test(m1), 'replace: BUS 4401 is in My Classes and BUS 3438 is out', m1);
+  ok(mw.some(w => w.m === 'POST' && w.body.code === 'BUS 4401') && sw.some(w => w.m === 'DELETE' && /BUS(\+|%20)3438/.test(w.query)) && !mw.some(w => w.m === 'DELETE' && /BUS(\+|%20)4401/.test(w.query)), 'replace: saves the new section, takes the old class out, touches nothing else', { mw: mw.map(w => w.m + ' ' + (w.body ? w.body.code : w.query)), sw: sw.map(w => w.m + ' ' + (w.query || '')) });
+  ok(/Replaced BUS 3438 with BUS 4401/.test(await page.locator('#toast').innerText()), 'replace: the toast says what was replaced');
+  await click(page, '#toast [data-a="toastUndo"]'); await settle(page, 900);
+  const m2 = await page.evaluate(() => [...myCodes()].sort().join());
+  ok(/BUS 3438/.test(m2) && !/BUS 4401/.test(m2) && m2 === m0, 'replace: Undo puts BUS 3438 back and takes BUS 4401 out', { m0, m2 });
+  /* a replace whose removal fails after the new class went in keeps an Undo, and Undo puts everything back */
+  await page.evaluate(() => { UI.sheet = null; S.stack[S.tab] = []; render(true); });
+  await page.evaluate(() => A.openClass('BUS 4401')); await settle(page, 500);
+  await click(page, '.secrow .addbtn');
+  if (await page.locator('#sheet [data-a="atGroup"][data-x="classes"][aria-pressed="false"]').count()) await click(page, '#sheet [data-a="atGroup"][data-x="classes"]');
+  failDel = true; await atGo(page); failDel = false;
+  const tt = await page.locator('#toast').innerText();
+  ok(/Undo/.test(tt) && await page.locator('#toast [data-a="toastUndo"]').count() === 1 && await page.locator('#sheet .at-note.bad').count() === 1, 'replace: a half-done replace says so and keeps an Undo', tt);
+  await click(page, '#toast [data-a="toastUndo"]'); await settle(page, 900);
+  const m3 = await page.evaluate(() => [...myCodes()].sort().join());
+  ok(m3 === m0 && /BUS 3438/.test(m3) && !/BUS 4401/.test(m3), 'replace: Undo after a half-done replace restores BUS 3438 and drops BUS 4401', { m0, m3 });
+  /* a full plan: replacing never makes it bigger, so it still works */
+  await page.evaluate(() => { UI.sheet = null; S.stack[S.tab] = []; render(true); });
+  await page.evaluate(() => { const ph = Object.values(SEC).find(x => x.code === 'PHIL 3331'), ids = [ph.id]; for (let i = 0; i < 11; i++) { SEC['ZF' + i] = Object.assign({}, ph, { id: 'ZF' + i, code: 'ZZZ 10' + i, async: true, s: null, e: null, days: [] }); ids.push('ZF' + i); } TC.setPlan('A', ids); S.plan = 'A'; render(true); });
+  await page.evaluate(() => A.openClass('ECON 2303')); await settle(page, 500);
+  await click(page, '.secrow .addbtn >> nth=0');
+  if (await page.locator('#sheet [data-a="atGroup"][data-x="plans"][aria-pressed="false"]').count()) await click(page, '#sheet [data-a="atGroup"][data-x="plans"]');
+  await click(page, '#sheet [data-a="atPick"][data-x="A"]');
+  await atGo(page);
+  const full = await page.evaluate(() => (TC.plans.A || []).map(i => SEC[i] && SEC[i].code));
+  ok(full.length === 12 && full.includes('ECON 2303') && !full.includes('PHIL 3331'), 'replace: a plan with 12 sections still replaces the clashing one', full);
+  /* a class with two sections where only one clashes: just that section goes, the class stays */
+  await page.evaluate(() => { UI.sheet = null; S.stack[S.tab] = []; render(true); });
+  await page.evaluate(() => { const b = PEOPLE.me.secs.find(x => x.code === 'BUS 3438'); PEOPLE.me.secs.push(Object.assign({}, b, { id: '999001', days: ['T'], s: 840, e: 900 })); });
+  await page.evaluate(() => A.openClass('BUS 4401')); await settle(page, 500);
+  await click(page, '.secrow .addbtn');
+  if (await page.locator('#sheet [data-a="atGroup"][data-x="classes"][aria-pressed="false"]').count()) await click(page, '#sheet [data-a="atGroup"][data-x="classes"]');
+  const w1 = W('my_sections').length, s1 = W('saved_classes').length, clashNbr = await page.evaluate(() => String(PEOPLE.me.secs.find(x => x.code === 'BUS 3438' && x.id !== '999001').id));
+  ok(/Replace BUS 3438 with this class/.test(await page.locator('#sheet .at-cta').innerText()), 'replace: a class with a second section that doesn’t clash still offers Replace');
+  await atGo(page);
+  const mw2 = W('my_sections').slice(w1), sw2 = W('saved_classes').slice(s1);
+  ok(mw2.some(w => w.m === 'DELETE' && new RegExp('class_nbr=eq\\.' + clashNbr).test(w.query) && /BUS(\+|%20)3438/.test(w.query)) && !sw2.some(w => w.m === 'DELETE' && /BUS(\+|%20)3438/.test(w.query)), 'replace: only the clashing section is removed; the class stays in My Classes', { mw: mw2.map(w => w.m + ' ' + (w.body ? w.body.class_nbr : w.query)), sw: sw2.map(w => w.m + ' ' + (w.query || '')) });
+  ok(log.errors.length === 0, 'replace: no page errors', log.errors);
+  await close();
+};
+
+/* Champ's first sheet: four broad questions in a 2 x 2 grid, a little smaller than the old stack of three (Tate, 2026-10-11). */
+tests.champChips = async () => {
+  const WANT = ['When am I free this week?', "Who's free right now?", 'What’s my day look like?', 'My best professor'];
+  for (const [w, th] of [[320, 'light'], [360, 'light'], [390, 'dark'], [430, 'light'], [390, 'light']]) {
+    const tag = `${w}px ${th}`;
+    const { page, close, log } = await openApp({ width: w, height: 780, init: th === 'dark' ? () => { try { localStorage.setItem('tc-theme', 'dark'); } catch (e) {} } : null, ask: b => b.q === 'When am I free this week?' ? null : null });
+    await page.waitForFunction(() => TC.ready, null, { timeout: 8000 });
+    await click(page, '[data-a="openChamp"]');
+    await tick(page, 500);
+    const m = await page.evaluate(() => {
+      const R = e => { const r = e.getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom, w: r.width, h: r.height }; };
+      const sh = document.querySelector('#sheet'), g = sh.querySelector('.cchips'), cs = [...sh.querySelectorAll('.cchip')];
+      return { grid: g ? getComputedStyle(g).display : null, cls: g ? g.className : '', texts: cs.map(c => c.dataset.x), shown: cs.map(c => c.innerText.trim()), r: cs.map(R), g: g ? R(g) : null, sh: R(sh), fs: cs.map(c => parseFloat(getComputedStyle(c).fontSize)), sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth, over: cs.map(c => c.scrollWidth > c.clientWidth + 1), col: g ? getComputedStyle(g).gridTemplateColumns : '', clipped: cs.filter(c => { const q = R(c), s = R(sh); return q.l < s.l - 0.5 || q.r > s.r + 0.5; }).length };
+    });
+    ok(m.grid === 'grid' && /cgrid/.test(m.cls) && m.r.length === 4, `chips ${tag}: four chips in a grid`, m);
+    ok(JSON.stringify(m.texts) === JSON.stringify(WANT) && JSON.stringify(m.shown) === JSON.stringify(WANT), `chips ${tag}: the four broad questions, in order`, m.texts);
+    const xs = [...new Set(m.r.map(r => Math.round(r.l)))], ys = [...new Set(m.r.map(r => Math.round(r.t)))];
+    ok(xs.length === 2 && ys.length === 2, `chips ${tag}: 2 columns x 2 rows`, { xs, ys });
+    ok(m.r[0].t === m.r[1].t && m.r[2].t === m.r[3].t && m.r[0].l === m.r[2].l && m.r[1].l === m.r[3].l && m.r[2].t > m.r[0].b, `chips ${tag}: rows line up, row 2 below row 1`, m.r);
+    ok(Math.abs(m.r[0].w - m.r[1].w) < 1 && Math.abs(m.r[2].w - m.r[3].w) < 1 && Math.abs(m.r[0].h - m.r[1].h) < 1 && Math.abs(m.r[2].h - m.r[3].h) < 1, `chips ${tag}: the two in a row match`, m.r);
+    ok(m.clipped === 0 && m.over.every(x => !x) && m.sw <= m.cw, `chips ${tag}: inside the sheet, no text clipped, no sideways scroll`, m);
+    ok(m.fs.every(f => f < 14) && m.r.every(r => r.h <= 52 && r.h >= 34), `chips ${tag}: smaller than the old 14px / 38px chips`, { fs: m.fs, h: m.r.map(r => r.h) });
+    ok(Math.abs((m.r[0].l - m.g.l) - (m.g.r - m.r[1].r)) < 1, `chips ${tag}: grid is centred`, m);
+    if (w === 390 && th === 'light') {
+      await click(page, '#sheet .cchip >> nth=1'); await tick(page, 900);
+      ok(log.asks.length === 0 && await page.locator('#sheet .bot .msg').count() === 1, `chips ${tag}: tapping one is answered on the phone, nothing sent`, log.asks);
+      ok(/Who's free right now\?/.test(await page.locator('#sheet .msg.me').first().innerText()), `chips ${tag}: the question is posted`);
+      const bar = await page.evaluate(() => { const g = document.querySelector('#sheet .cchips'); return { cls: g.className, n: g.querySelectorAll('.cchip').length, d: getComputedStyle(g).display }; });
+      ok(!/cgrid/.test(bar.cls) && bar.n === 4 && bar.d === 'flex', `chips ${tag}: in a conversation the strip stays a scrolling row`, bar);
+    }
+    ok(log.errors.length === 0, `chips ${tag}: no page errors`, log.errors);
+    await close();
+  }
+};
+
+/* "My best professor" in the two-term app: your professors are your Fall classes' (Spring is empty), not "none" (Tate, 2026-10-11). */
+tests.champMyProfs = async () => {
+  const { page, close, log } = await openApp({ terms: SPRING_CFG, tables: springTables(), ask: b => b.q === 'My best professor' ? { tool: 'my_professors', args: {} } : null });
+  await page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 }); await settle(page, 600);
+  const want = await page.evaluate(() => [...new Set(nowSecs('me').map(s => s.prof).filter(pk => pk && PROFS[pk]))].map(pk => PROFS[pk].name));
+  ok(await page.evaluate(() => splitTerms() && personSecs('me').length === 0) && want.length > 0, 'my professors: Spring is empty and your Fall classes have named professors', want);
+  await click(page, '[data-a="openChamp"]');
+  await page.locator('#champin').fill('My best professor'); await page.locator('#champin').press('Enter'); await tick(page, 900);
+  const a = await page.locator('.bot .msg').last().innerText(), card = await page.evaluate(() => { const w = [...document.querySelectorAll('#champscroll .chc-wrap')].pop(); return w ? w.innerText : ''; });
+  ok(new RegExp('Your ' + want.length + ' professor').test(a) && !/None of your classes/.test(a), 'my professors: Champ counts the professors of the classes you are in now', a);
+  ok(want.every(n => card.includes(n)), 'my professors: and shows each one', { want, card });
+  ok(log.errors.length === 0, 'my professors: no page errors', log.errors);
+  await close();
+};
+
+/* (2026-10-11) Tate: "for a class im currenty enrolled in it shouldnt say complete but it should have the in progress
+   thing … no matter where the class is in the flowchart" */
+tests.inProgressNow = async () => {
+  const { page, close, log } = await openApp({});
+  await click(page, '[data-a="tab"][data-x="schedule"]'); await click(page, '[data-a="schedTab"][data-x="past"]'); await tick(page, 2500);
+  const r = await page.evaluate(() => {
+    plSync(); const L0 = TCPL.ledger(), slots = L0.grid.flatMap(t => t.slots);
+    const need = slots.filter(s => s.state === 'need' && s.code && !s.choice && COURSES[(s.codes || [s.code])[0]] === undefined ? true : s.state === 'need' && s.code && !s.choice);
+    const a = need[0], b = need[1], ca = (a.codes || [a.code])[0], cb = (b.codes || [b.code])[0];
+    const onSlot = new Set(slots.flatMap(s => [s.code, ...(s.codes || []), ...(s.choice || [])]).filter(Boolean).map(c => TCPL.canon(c) || c));
+    const other = Object.keys(COURSES).find(c => !onSlot.has(TCPL.canon(c) || c) && !myCodes().has(c) && !(TC.myHistory || []).some(h => (TCPL.canon(h.code) || h.code) === c));
+    const nowLab = nowTerm().label, [nt, ny] = nowLab.split(' ');
+    /* this term: a flowchart class and a class on no spot; last summer: another flowchart class */
+    TC.myHistory = (TC.myHistory || []).concat([{ code: ca, term: nt, year: +ny, professor: 'Pat Nowterm' }, { code: other, term: nt, year: +ny, professor: null }, { code: cb, term: 'Summer', year: +ny, professor: null }]);
+    const xr = { code: 'ZZ 9999', term: nt, year: +ny, professor: TCPL.abroadMark };
+    plSync(); const L = TCPL.ledger(), st = id => L.grid.flatMap(t => t.slots).find(s => s.id === id).state;
+    const out = { ca, cb, other, nowLab, sa: st(a.id), sb: st(b.id), doneHasA: TCPL.completed().map(c => TCPL.canon(c) || c).includes(TCPL.canon(ca) || ca), doneHasB: TCPL.completed().map(c => TCPL.canon(c) || c).includes(TCPL.canon(cb) || cb), taking: takingCodes().has(ca), aId: a.id, xferNow: histNotDone(xr) };
+    /* the report: Satisfied, filled by a class being taken now — in progress */
+    const R = (label, status, used) => ({ label, status, kind: 'major', ge: null, level: 'LN', code: null, units: null, courses: null, options: [], oneOf: false, used, listed: [] });
+    const A = { catalog: 'Fall Quarter 2023', reqs: [R('BUS 431 (3431)', 'satisfied', [{ c: 'BUS 3431', t: nowLab, p: true }]), R('BUS 342 (3342)', 'satisfied', [{ c: 'BUS 342', n: 'BUS 3342', t: 'Spring 2025' }]), R('ART 101', 'satisfied', [{ c: 'ART 3TC1', t: nowLab, x: true }]), R('DANC 1100', 'satisfied', [{ c: 'DANC 1100', t: nowLab }])] };
+    const X = auditLines(A, null);
+    out.now = X.now.size; out.inprog = X.inprog.map(b => b.label); out.filled = X.filled.length;
+    /* after the term's last day, grades are in: this term's row is finished */
+    const keep = CFG.TERM_ENDS; CFG.TERM_ENDS = '2000-01-01'; plSync(); out.after = TCPL.ledger().grid.flatMap(t => t.slots).find(s => s.id === a.id).state; out.afterRep = auditLines(A, null).now.size; CFG.TERM_ENDS = keep; plSync();
+    out.rowNow = /pc-row taking/.test(pcReqRow(A.reqs[0], X, null, 0)); out.rowPast = /pc-row done/.test(pcReqRow(A.reqs[1], X, null, 1));
+    render(true); return out;
+  });
+  ok(r.sa === 'taking' && r.taking && !r.doneHasA, 'in progress: a class on your record dated this term is in progress on its flowchart spot, not done — and no prerequisite counts it finished', r);
+  ok(r.xferNow === false, 'in progress: transfer credit posted this term is finished, never in progress', r);
+  ok(r.sb === 'done' && r.doneHasB, 'in progress: a class from an earlier term (last summer) is still done', r);
+  await page.evaluate(() => { for (let y = 1; y <= 5; y++) UI.plYears[y] = true; UI.pcAll = 1; render(true); }); await tick(page, 600);
+  const v = await page.evaluate(([ca, other]) => {
+    const rows = [...document.querySelectorAll('.pc-row')], slot = rows.find(e => (e.querySelector('.pc-cc') || {}).textContent === ca);
+    const oth = [...document.querySelectorAll('.pc-orow')].find(e => (e.querySelector('.pc-cc') || {}).textContent === other);
+    const othA = [...document.querySelectorAll('.pc-orow')].some(e => (e.querySelector('.pc-cc') || {}).textContent === ca);
+    return { slot: slot && { cls: slot.className, dot: slot.querySelector('.pc-dot').textContent.trim(), prof: (slot.querySelector('.pc-pf') || {}).textContent || '' }, oth: oth && oth.innerText.replace(/\s+/g, ' '), othA };
+  }, [r.ca, r.other]);
+  ok(v.slot && /taking/.test(v.slot.cls) && v.slot.dot === '◐' && v.slot.prof === 'Pat Nowterm', 'in progress: on Past classes its spot shows ◐ with the professor from your record', v);
+  ok(!v.othA, 'in progress: the class isn\u2019t also listed under Other classes', v);
+  ok(v.oth && /In progress · this term/.test(v.oth), 'in progress: a class this term on no flowchart spot says “In progress · this term” in Other classes', v);
+  /* a class in My Classes this term on no spot, not on your record: listed as in progress */
+  const m = await page.evaluate(other => { TC.myHistory = TC.myHistory.filter(h => h.code !== other); PEOPLE.me.unplaced = (PEOPLE.me.unplaced || []).concat([other]); if (PEOPLE.me.nowUnplaced) PEOPLE.me.nowUnplaced = PEOPLE.me.nowUnplaced.concat([other]); render(true);
+    const e = [...document.querySelectorAll('.pc-orow')].find(x => (x.querySelector('.pc-cc') || {}).textContent === other); return e ? e.innerText.replace(/\s+/g, ' ') : null; }, r.other);
+  ok(m && /In progress · this term/.test(m), 'in progress: a class in My Classes this term that fills no spot is listed under Other classes as in progress', m);
+  ok(r.now === 1 && r.inprog.join() === 'BUS 431 (3431)' && r.filled === 4 && r.rowNow && r.rowPast, 'in progress: a report line the registrar marked Satisfied with a class being taken now (no grade) is in progress (still counted filled); transfer credit, past classes and a class graded this term stay done', r);
+  ok(r.after === 'done' && r.afterRep === 1, 'in progress: once the term has ended (CFG.TERM_ENDS) a row of it is done; a line the report says is being taken stays in progress', r);
+  ok(log.errors.length === 0, 'in progress: no page errors', log.errors);
+  await close();
+};
+
+/* (2026-10-11) Tate: "i dont think blockchain in finance is even required so make sure if this is an elective or
+   concentration course to specify that … showing all the possible finance concentration classes that are applicable
+   this goes for all majors" */
+tests.concSpots = async () => {
+  const { page, close, log } = await openApp({});
+  await page.waitForFunction(() => TC.ready, null, { timeout: 8000 });
+  await page.evaluate(() => TC.loadPlanner()); await page.waitForFunction(() => !!window.TCPL, null, { timeout: 8000 });
+  const r = await page.evaluate(() => {
+    Object.assign(TC.profile, { major: 'Business Administration', concentration: 'Financial Management' }); plSync();
+    const L = TCPL.ledger(), cs = L.grid.flatMap(t => t.slots).filter(s => s.ck);
+    const el = cs.find(s => s.ck === 'el'), nd = L.need.find(n => n.choice && n.codes.length > 2);
+    return { kinds: cs.map(s => s.ck).join(), req: cs.filter(s => s.ck === 'req').map(s => s.code).join(), one: (cs.find(s => s.ck === 'one') || {}).choice, el: el && el.choice, need: nd && nd.codes };
+  });
+  ok(r.kinds === 'req,req,req,one,el,el,el' && r.req === 'BUS 3411,BUS 3431,BUS 3438' && JSON.stringify(r.one) === JSON.stringify(['BUS 3440', 'BUS 3441']), 'conc spots: Financial Management is BUS 3411, 3431, 3438 required, "BUS 3440 or BUS 3441" as one spot, then three electives', r);
+  ok(r.el && r.el.length === 12 && r.el.includes('BUS 4468') && r.el.includes('BUS 4442') && !r.el.some(c => ['BUS 3411', 'BUS 3431', 'BUS 3438', 'BUS 3440', 'BUS 3441'].includes(c)), 'conc spots: an elective spot is any of the 12 track classes (Blockchain in Finance is one of them, not a required class)', r);
+  ok(r.need && r.need.length === 12, 'conc spots: the Planner’s list for an open elective holds every class that counts', r.need);
+  /* every major, every concentration: no required class twice, no elective that's a required class, never the required list offered again */
+  const all = await page.evaluate(() => {
+    const bad = [], seen = { majors: 0, conc: 0 };
+    Object.values(SCHED_MAJORS).forEach(m => {
+      if (!(m.terms || []).some(t => (t.slots || []).some(s => s.type === 'concentration'))) return;
+      const ci = TCPL.concInfo(m.name); if (!ci.list.length) return; seen.majors++;
+      ci.list.forEach(c => { seen.conc++;
+        Object.assign(TC.profile, { major: m.name, concentration: c.name }); plSync(); const L = TCPL.ledger(); if (!L) return;
+        const cells = L.grid.flatMap(t => t.slots).filter(s => s.ck), req = cells.filter(s => s.ck === 'req').map(s => s.code), reqSet = new Set(req.concat(cells.filter(s => s.ck === 'one').flatMap(s => s.choice || [s.code])));
+        if (new Set(req).size !== req.length) bad.push(m.name + ' / ' + c.name + ': a required class twice');
+        cells.filter(s => s.ck === 'el').forEach(s => { if ((s.choice || [s.code]).some(x => x && reqSet.has(x))) bad.push(m.name + ' / ' + c.name + ': an elective spot offers a required class'); });
+        if (cells.some(s => /additional concentration course/.test(s.title))) bad.push(m.name + ' / ' + c.name + ': old "additional concentration course"');
+      });
+    });
+    return { bad: [...new Set(bad)], seen };
+  });
+  ok(all.seen.conc > 40 && !all.bad.length, 'conc spots: every major with concentrations (' + all.seen.majors + ' majors, ' + all.seen.conc + ' concentrations) — required once, electives never a required class', all);
+  /* Past classes says what each spot is */
+  await page.evaluate(() => { Object.assign(TC.profile, { major: 'Business Administration', concentration: 'Financial Management' }); });
+  await click(page, '[data-a="tab"][data-x="schedule"]'); await click(page, '[data-a="schedTab"][data-x="past"]'); await tick(page, 2000);
+  await page.evaluate(() => { for (let y = 1; y <= 5; y++) UI.plYears[y] = true; render(true); }); await tick(page, 500);
+  const k = await page.evaluate(() => [...document.querySelectorAll('.pc-kind')].map(e => e.textContent));
+  ok(k.filter(x => x === 'Required · Financial Management').length === 3 && k.includes('Required · Financial Management · either one') && k.filter(x => x === 'Elective · Financial Management · any of 12').length >= 1, 'conc spots: on Past classes each spot says Required, Required · either one, or Elective · any of 12', k);
+  const soc = await page.evaluate(() => { const c = TCPL.concInfo('Sociology').list[0]; Object.assign(TC.profile, { major: 'Sociology', concentration: c.name }); render(true); return [...document.querySelectorAll('.pc-kind')].map(e => e.textContent); });
+  ok(soc.some(x => /^Elective · .* · .+/.test(x)) && !soc.some(x => /any of/.test(x)), 'conc spots: a concentration with no class list for its electives shows the catalog’s note instead', soc);
+  ok(log.errors.length === 0, 'conc spots: no page errors', log.errors);
+  await close();
+};
+
+/* ============ Your registration day (Tate, 2026-10-11: "people have different registration days so have them be able to
+   upload their registration day and maybe even display it to friends … something like 10 days until registration plan out
+   your perfect schedule"; design B; "the time is fine to share too"; the plan card's tiles go) ============ */
+const REG_CFG = Object.assign({}, SPRING_CFG, { REGISTRATION_TERM: 'Spring 2027', REGISTRATION_OPENS: '2026-10-19', REGISTRATION_TERM_CODE: '2274', REGISTRATION_ROUND1_ENDS: '2026-11-03' });
+const REG_ROWS = () => [
+  { user_id: FX.FRIENDS[1].id, day: '2026-10-21', at_time: '08:00:00' },
+  { user_id: FX.FRIENDS[0].id, day: '2026-10-20', at_time: '09:00:00' },
+  { user_id: FX.FRIENDS[0].id, day: '2026-10-20', at_time: '09:00:00' },          /* the same friend twice: once */
+  { user_id: FX.FRIENDS[2].id, day: '2026-10-23', at_time: '10:30:00' },
+  { user_id: FX.FRIENDS[4].id, day: '2026-10-22', at_time: '11:00:00' },          /* Harper, whom you blocked */
+  { user_id: FX.STRANGER.id, day: '2026-10-22', at_time: '11:00:00' },            /* not your friend */
+  { user_id: FX.FRIENDS[3].id, day: 'soon', at_time: '25:00' }];                  /* nonsense: dropped */
+const REG_BLOCKS = [{ id: FX.FRIENDS[4].id, display_name: 'Harper Mock', username: 'hmock', avatar_url: null, created_at: '2026-09-01T00:00:00Z' }];
+const regOpenPlanner = async (o = {}) => {
+  const T = springTables(); T.planner_prefs = [{ user_id: FX.ME.id, priority: 'degree', units: 12 }];
+  if (o.mine) T.registration_days = [o.mine];
+  if (o.names) o.names(T);
+  const R = { ...FX.RPC, friend_registration_days: o.rows || REG_ROWS(), my_blocks: REG_BLOCKS, ...(o.rpc || {}) };
+  const app = await openApp({ terms: o.cfg || REG_CFG, tables: T, rpc: R, time: o.time || '2026-10-13T10:30:00-07:00', height: 1000, hook: o.hook || null, init: o.init || null });
+  await app.page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 });
+  await app.page.evaluate(() => { S.tab = 'schedule'; S.schedTab = 'planner'; render(true); }); await tick(app.page, 900);
+  return app;
+};
+const regLine = page => page.evaluate(() => {
+  const l = document.querySelector('#scroll .pla-reg'), f = document.querySelector('#scroll .reg-fr');
+  const hd = l && l.querySelector('.pl-tc-h'), sb = l && l.querySelector('.pl-tc-s'), ad = l && l.querySelector('.pla-add');
+  const sub = sb ? sb.textContent.split(' · ').filter(x => !/^\d+ units$/.test(x)).join(' · ') : '';
+  return { line: l ? [hd ? hd.textContent : '', sub].filter(Boolean).join(' · ') + (ad ? ' ' + ad.textContent.trim() : '') : null, units: sb ? +((sb.textContent.match(/(\d+) units/) || [])[1] || 0) : null, tag: l && l.tagName, mine: !!(l && l.classList.contains('mine')), aria: l && l.getAttribute('aria-label'), act: l && l.dataset.a,
+    fr: f ? f.innerText.replace(/\s+/g, ' ').trim() : null, faces: f ? f.querySelectorAll('.stack .av').length : 0, frAria: f && f.getAttribute('aria-label'),
+    h: l ? Math.round(l.getBoundingClientRect().height) : 0, fh: f ? Math.round(f.getBoundingClientRect().height) : 0,
+    tiles: document.querySelectorAll('#scroll .pl-card .pla-stat, #scroll .pl-card .pla-stats').length, card: !!document.querySelector('#scroll .plq-card') };
+});
+tests.builderTermCard = async () => {   /* (2026-10-13, Tate's option B) units + registration day, one card, one sheet */
+  const { page, close, log } = await regOpenPlanner({});
+  let v = await regLine(page);
+  ok(v.act === 'plTermOpen' && v.units > 0, 'term card: one card with the registration line and your units', v);
+  const pill = await page.evaluate(() => document.querySelectorAll('#scroll .pl-pill, #scroll [data-a="plPrefsOpen"]').length);
+  ok(pill === 0, 'term card: no separate “N units · Edit” pill', pill);
+  await click(page, '#scroll .pl-tc'); await tick(page, 300);
+  const sh = () => page.evaluate(() => { const s = document.getElementById('sheet'); return { type: UI.sheet && UI.sheet.type, h: (s.querySelector('h3') || {}).textContent, units: [...s.querySelectorAll('[data-a="plPrefUnits"]')].map(b => b.textContent + (b.getAttribute('aria-pressed') === 'true' ? '*' : '')),
+    days: s.querySelectorAll('.rd-d').length, time: !!s.querySelector('#rd-time'), share: !!s.querySelector('[data-a="regShareToggle"]'), rank: s.querySelectorAll('[data-a="plPrefPick"]').length, save: !!s.querySelector('[data-a="plTermSave"]'), err: (s.querySelector('.tc-err') || {}).textContent || '' }; });
+  let a = await sh();
+  ok(a.type === 'plTerm' && a.h === 'Spring 2027' && a.units.length === 5 && a.units.some(u => u.endsWith('*')) && a.days > 0 && a.time && a.share && a.rank === 3 && a.save, 'term card: its sheet holds units, your registration day (day, time, who can see it) and what matters most, with one Save', a);
+  /* a typed time survives other taps */
+  await page.fill('#rd-time', '09:15'); await page.evaluate(() => A.plPrefUnits(14)); await tick(page, 100);
+  ok(await page.inputValue('#rd-time') === '09:15', 'term sheet: a typed time survives picking units', await page.inputValue('#rd-time'));
+  await page.evaluate(() => render(true)); await tick(page, 100);
+  ok(await page.inputValue('#rd-time') === '09:15', 'term sheet: … and any other redraw', await page.inputValue('#rd-time'));
+  /* a time with no day says so */
+  await click(page, '#sheet [data-a="plTermSave"]'); await tick(page, 300); a = await sh();
+  ok(a.type === 'plTerm' && /Pick your day too/.test(a.err), 'term sheet: a time with no day asks for the day', a.err);
+  const day = await page.evaluate(() => regRoundDays().find(d => d >= sloISO()));
+  await page.evaluate(d => A.regPickDay(d), day); await tick(page, 100);
+  const before = log.writes.length;
+  await click(page, '#sheet [data-a="plTermSave"]'); await tick(page, 1200);
+  const w = log.writes.slice(before);
+  const pw = w.filter(x => x.table === 'planner_prefs'), rw = w.filter(x => x.table === 'registration_days');
+  ok(pw.length === 1 && pw[0].body.units === 14 && rw.length === 1 && rw[0].body.day === day && rw[0].body.at_time === '09:15' && !(await page.evaluate(() => UI.sheet)), 'term sheet: one Save writes the units and your day, then closes', { pw: pw.map(x => x.body), rw: rw.map(x => x.body) });
+  v = await regLine(page);
+  ok(v.mine && v.units === 14 && /^Register /.test(v.line), 'term card: then reads “Register …” with 14 units, in blue', v);
+  /* nothing changed: nothing written */
+  await click(page, '#scroll .pl-tc'); await tick(page, 300);
+  const b2 = log.writes.length; await click(page, '#sheet [data-a="plTermSave"]'); await tick(page, 800);
+  ok(log.writes.length === b2, 'term sheet: Save with nothing changed writes nothing', log.writes.slice(b2).map(x => x.table));
+  /* Remove my day keeps the sheet open */
+  await click(page, '#scroll .pl-tc'); await tick(page, 300);
+  await click(page, '#sheet [data-a="regDayRemove"]'); await tick(page, 600); a = await sh();
+  ok(a.type === 'plTerm' && a.save, 'term sheet: Remove my day leaves the sheet open (your other changes stay)', a);
+  await page.evaluate(() => { UI.sheet = null; render(true); });
+  /* outside registration the card is your units and what matters most, in blue */
+  await page.evaluate(() => { CFG.REGISTRATION_TERM = 'Winter 2099'; render(true); }); await tick(page, 200);
+  v = await regLine(page);
+  ok(v.mine && /^14 units · What matters most: /.test(v.line) && v.fr === null, 'term card: with no registration ahead, “14 units” and what matters most, blue, no friends line', v);
+  ok(log.errors.length === 0, 'term card: no page errors', log.errors);
+  await close();
+};
+tests.schedTabTop = async () => {   /* (2026-10-13, Tate's screen recording) a Schedule sub-tab opens at its top */
+  const { page, close, log } = await openApp({ height: 700 });
+  await page.waitForFunction(() => TC.ready, null, { timeout: 8000 });
+  await click(page, '[data-a="tab"][data-x="schedule"]'); await click(page, '[data-a="schedTab"][data-x="past"]'); await tick(page, 1200);
+  await page.evaluate(() => { document.getElementById('scroll').scrollTop = 400; }); await tick(page, 200);
+  const y0 = await page.evaluate(() => document.getElementById('scroll').scrollTop);
+  await page.evaluate(() => A.tab('home')); await tick(page, 300);
+  await page.evaluate(() => A.tab('schedule')); await tick(page, 300);
+  const back = await page.evaluate(() => document.getElementById('scroll').scrollTop);
+  await page.evaluate(() => A.schedTab('plans')); await tick(page, 300);
+  const y1 = await page.evaluate(() => document.getElementById('scroll').scrollTop);
+  ok(y0 > 100 && y1 === 0, 'tabs: Past classes scrolled down, Home, back to Schedule, then Plans — Plans opens at its top', { y0, back, y1 });
+  await page.evaluate(() => { document.getElementById('scroll').scrollTop = 300; }); await tick(page, 100);
+  await page.evaluate(() => A.schedTab('mine')); await tick(page, 300);
+  ok(await page.evaluate(() => document.getElementById('scroll').scrollTop) === 0, 'tabs: and Plans → My Classes too');
+  ok(log.errors.length === 0, 'tabs: no page errors', log.errors);
+  await close();
+};
+tests.registrationDay = async () => {
+  const lum = c => { const m = c.match(/\d+(\.\d+)?/g).map(Number).slice(0, 3).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]; };
+  const cr = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  const { page, close, log } = await regOpenPlanner({ names: T => { Object.assign(T.profiles[2], { major: 'Finance', class_standing: 'Junior' }); } });
+  const calls = () => log.rpcs.filter(r => r.fn === 'friend_registration_days');
+  let v = await regLine(page);
+  ok(v.line === 'Opens Oct 19 · in 6 days Add your day' && v.tag === 'BUTTON' && !v.mine && v.act === 'plTermOpen' && v.units > 0, 'regday: no day yet — the amber line (with your units under it), “Opens Oct 19 · in 6 days”, with Add your day', v);
+  ok(/^Opens Oct 19 · in 6 days\. Add your day\. \d+ units\. Edit your registration day, units and what matters most$/.test(v.aria), 'regday: … its spoken name starts with what it shows (voice control), then says what it edits', v.aria);
+  ok(v.fr === '3 friends added their day' && v.faces === 3, 'regday: “3 friends added their day” — not Harper (blocked), not a stranger, a friend twice counted once, nonsense dropped', v);
+  ok(calls().length >= 1 && calls().every(c => c.body && c.body.p_term === '2274'), 'regday: friends’ days are asked for the registration term', calls());
+  ok(v.tiles === 0 && v.card, 'regday: the Builder has no Classes · Professors · Day off tiles (Tate: “take out this”) — the requirement cards', v);
+  ok(v.h >= 44 && v.fh >= 44, 'regday: both lines are 44px tap targets', v);
+  /* the sheet */
+  await page.evaluate(() => A.regDayOpen()); await tick(page, 300);
+  const sheet = () => page.evaluate(() => { const s = document.getElementById('sheet'); return { h: (s.querySelector('h3') || {}).textContent, days: [...s.querySelectorAll('.rd-d')].map(b => b.textContent + (b.disabled ? '-' : '') + (b.getAttribute('aria-pressed') === 'true' ? '*' : '')),
+    save: (s.querySelector('[data-a="regDaySave"]') || {}).disabled, share: (s.querySelector('[data-a="regShareToggle"]') || { getAttribute: () => null }).getAttribute('aria-checked'), remove: !!s.querySelector('[data-a="regDayRemove"]'),
+    where: s.innerText.includes('Cal Poly Portal › Student Center › Enrollment Dates'), round: (s.querySelector('.rd-h') || {}).textContent, lab: (s.querySelector('.rd-d') || { getAttribute: () => '' }).getAttribute('aria-label'), time: (s.querySelector('#rd-time') || {}).value }; });
+  let sh = await sheet();
+  ok(sh.h === 'When do you register?' && sh.where && sh.round === 'Round 1 · Oct 19 – Nov 3', 'regday: “When do you register?”, where to find it, Round 1’s dates', sh);
+  ok(sh.days.join(' ') === '19 20 21 22 23 26 27 28 29 30 Nov 2 3' && sh.lab === 'Monday, October 19', 'regday: Round 1’s twelve weekdays, Nov 2 named as the month turns, each read as a full date', sh);
+  ok(sh.save === true && sh.share === 'true' && !sh.remove, 'regday: Save waits for a day; friends can see it by default (like Plans); nothing to remove yet', sh);
+  await click(page, '#sheet .rd-d >> text="23"'); await page.fill('#rd-time', '08:30');
+  await page.locator('#sheet h3').click(); await page.evaluate(() => render(true)); await tick(page, 200);
+  ok((await sheet()).time === '08:30', 'regday: a time you typed survives anything that redraws the sheet', (await sheet()).time);
+  const hit = await page.evaluate(() => { const t = document.querySelector('#sheet [data-a="regShareToggle"]'), r = t.getBoundingClientRect(), a = getComputedStyle(t, '::after'); return { h: r.height - parseFloat(a.top) - parseFloat(a.bottom), w: r.width - parseFloat(a.left) - parseFloat(a.right), days: Math.min(...[...document.querySelectorAll('#sheet .rd-d')].map(b => b.getBoundingClientRect().height)) }; });
+  ok(hit.h >= 44 && hit.w >= 44 && hit.days >= 44, 'regday: the switch and every day are 44px to tap', hit);
+  await click(page, '#sheet [data-a="regShareToggle"]'); sh = await sheet();
+  ok(sh.share === 'false' && sh.time === '08:30' && sh.days.includes('23*') && sh.save === false, 'regday: picking the day and switching sharing keep the time you typed', sh);
+  await click(page, '#sheet [data-a="regShareToggle"]');
+  await click(page, '#sheet [data-a="regDaySave"]'); await tick(page, 300);
+  const toastSaved = await page.locator('#toast').textContent(); await tick(page, 600);
+  const w = log.writes.filter(x => x.table === 'registration_days');
+  ok(w.length === 1 && w[0].m === 'POST' && JSON.stringify({ ...w[0].body, updated_at: 0 }) === JSON.stringify({ user_id: FX.ME.id, term: '2274', day: '2026-10-23', at_time: '08:30', shared: true, updated_at: 0 }) && /on_conflict=user_id%2Cterm/.test(w[0].query), 'regday: Save upserts your one row for the term: day, time, shared', w.map(x => [x.m, x.body, x.query]));
+  ok(toastSaved === 'Your day is saved', 'regday: … and says so', toastSaved);
+  v = await regLine(page);
+  ok(v.line === 'Register Fri, Oct 23, 8:30a · in 10 days' && v.mine && v.act === 'plTermOpen', 'regday: design B — “You register Fri, Oct 23, 8:30a · in 10 days”, in blue, tap to change', v);
+  ok(v.fr === '2 friends before you · 1 same day' && v.frAria === '2 friends before you · 1 same day. See registration days', 'regday: friends under it — “2 friends before you · 1 same day”', v);
+  ok(calls().length >= 2, 'regday: a save asks for friends’ days again (the counts are relative to yours)', calls().length);
+  const stored = await page.evaluate(() => localStorage.getItem('tc-regday:' + TC.user.id + ':2274'));
+  ok(stored && !JSON.parse(stored).pending && JSON.parse(stored).day === '2026-10-23', 'regday: once the server has it, this phone keeps a plain copy (nothing pending)', stored);
+  /* contrast, light */
+  const colours = () => page.evaluate(() => { const g = s => { const e = document.querySelector(s); if (!e) return null; const c = getComputedStyle(e); let b = c.backgroundColor, p = e; while (/rgba\(0, 0, 0, 0\)|transparent/.test(b) && p.parentElement) { p = p.parentElement; b = getComputedStyle(p).backgroundColor; } return [c.color, b]; };
+    return { mine: g('#scroll .pla-reg.mine'), fr: g('#scroll .reg-fr .grow') }; });
+  let c = await colours();
+  ok(cr(...c.mine) >= 4.5 && cr(...c.fr) >= 4.5, 'regday: both lines are 4.5:1 or better (light)', { mine: cr(...c.mine).toFixed(2), fr: cr(...c.fr).toFixed(2) });
+  await page.evaluate(() => { document.documentElement.setAttribute('data-theme', 'dark'); }); await tick(page, 200);
+  c = await colours();
+  ok(cr(...c.mine) >= 4.5 && cr(...c.fr) >= 4.5, 'regday: … and in dark mode', { mine: cr(...c.mine).toFixed(2), fr: cr(...c.fr).toFixed(2), c });
+  await page.evaluate(() => { document.documentElement.removeAttribute('data-theme'); }); await tick(page, 200);
+  /* Registration days */
+  await click(page, '#scroll .reg-fr'); await tick(page, 500);
+  const list = () => page.evaluate(() => ({ s: cur().s, title: (document.querySelector('.regpg .mehd-t') || {}).textContent,
+    rows: [...document.querySelectorAll('.regpg .regd')].map(r => [r.querySelector('.regd-d').innerText.replace(/\s+/g, ' '), r.querySelector('.regd-n').textContent, (r.querySelector('.regd-s') || {}).textContent || '', r.dataset.a, r.classList.contains('me')]),
+    note: (document.querySelector('.regpg .regd-note') || {}).textContent || '', add: !!document.querySelector('.regpg [data-a="regDayOpen"].regd-add'), imgs: document.querySelectorAll('.regpg .regd-n img').length, ran: !!window.__regx }));
+  let L = await list();
+  ok(L.s === 'regDays' && L.title === 'Registration days', 'regday: the friends line opens Registration days', L);
+  ok(JSON.stringify(L.rows) === JSON.stringify([['TUE Oct 20', 'Avery Quill', '9a · 3 days before you', 'openFriend', false], ['WED Oct 21', 'Rowan Testa', '8a · 2 days before you', 'openFriend', false],
+    ['FRI Oct 23', 'You', '8:30a', 'regDayOpen', true], ['FRI Oct 23', 'Sky Placeholder', '10:30a · same day as you', 'openFriend', false]]), 'regday: you and your friends by day then time, each with how far from yours; you first on a shared day', L.rows);
+  ok(L.note === '1 friend hasn’t added theirs.' && !L.add, 'regday: “1 friend hasn’t added theirs.” (Quinn; Harper’s blocked, so not counted)', L);
+  /* a friend's page */
+  await click(page, '.regpg .regd >> text="Rowan Testa"'); await tick(page, 600);
+  const fr = await page.evaluate(() => { const r = document.querySelector('.fpg .mecard .regrow'); return r && { t: r.innerText.replace(/\s+/g, ' ').trim(), afterStrip: !!r.previousElementSibling && r.previousElementSibling.classList.contains('fstrip'), s: cur().s }; });
+  ok(fr && fr.t === 'Registers Wed, Oct 21 · 8a · 2 days before you' && fr.afterStrip && fr.s === 'friend', 'regday: Rowan’s page — “Registers Wed, Oct 21 · 8a · 2 days before you” under the strip', fr);
+  await page.evaluate(id => { S.stack[S.tab].pop(); A.openFriend(id); }, FX.FRIENDS[3].id); await tick(page, 600);
+  ok(await page.evaluate(() => !document.querySelector('.fpg .regrow')), 'regday: Quinn didn’t add one: no row', null);
+  /* change it: sharing off */
+  await page.evaluate(() => { S.stack[S.tab] = S.stack[S.tab].slice(0, 1); render(true); }); await tick(page, 400);
+  await page.evaluate(() => A.regDayOpen()); await tick(page, 300); sh = await sheet();
+  ok(sh.days.includes('23*') && sh.time === '08:30' && sh.share === 'true' && sh.remove, 'regday: opening it again shows your day, time and sharing, and Remove my day', sh);
+  await click(page, '#sheet [data-a="regShareToggle"]'); await click(page, '#sheet [data-a="regDaySave"]'); await tick(page, 900);
+  const w2 = log.writes.filter(x => x.table === 'registration_days');
+  ok(w2.length === 2 && w2[1].body.shared === false && w2[1].body.day === '2026-10-23', 'regday: sharing off is saved', w2.map(x => x.body));
+  await page.evaluate(() => A.openRegDays()); await tick(page, 500); L = await list();
+  ok(L.rows[2][1] === 'You' && L.rows[2][2] === '8:30a · Only you can see it', 'regday: with sharing off your row says “Only you can see it”', L.rows);
+  /* remove */
+  await page.evaluate(() => { S.stack[S.tab] = S.stack[S.tab].slice(0, 1); render(true); }); await tick(page, 400);
+  await page.evaluate(() => A.regDayOpen()); await tick(page, 300); await click(page, '#sheet [data-a="regDayRemove"]'); await tick(page, 300);
+  const toastGone = await page.locator('#toast').textContent(); await tick(page, 600);
+  const del = log.writes.filter(x => x.table === 'registration_days' && x.m === 'DELETE');
+  ok(del.length === 1 && /user_id=eq.11111111-1111-4111-8111-111111111111/.test(del[0].query) && /term=eq.2274/.test(del[0].query) && toastGone === 'Your day is removed', 'regday: Remove my day deletes your row for the term, and says so', { q: del.map(x => x.query), toastGone });
+  v = await regLine(page);
+  ok(v.line === 'Opens Oct 19 · in 6 days Add your day' && v.fr === '3 friends added their day', 'regday: … and the amber line is back', v);
+  ok(!log.errors.length, 'regday: no page errors', log.errors);
+  await close();
+  /* the next sign-in reads it back from the server; a name with markup stays text */
+  const o2 = await regOpenPlanner({ mine: { user_id: FX.ME.id, term: '2274', day: '2026-10-21', at_time: '13:05:00', shared: true, updated_at: '2026-10-12T00:00:00Z' },
+    names: T => { T.profiles[1].display_name = 'Avery <img src=x onerror="window.__regx=1">'; } });
+  v = await regLine(o2.page);
+  ok(v.line === 'Register Wed, Oct 21, 1:05p · in 8 days' && v.fr === '1 friend before you · 1 same day · 1 after', 'regday: read back from the server — “You register Wed, Oct 21, 1:05p · in 8 days”; “1 friend before you · 1 same day · 1 after”', v);
+  await o2.page.evaluate(() => A.openRegDays()); await tick(o2.page, 500);
+  const L2 = await o2.page.evaluate(() => ({ names: [...document.querySelectorAll('.regpg .regd-n')].map(e => e.textContent), imgs: document.querySelectorAll('.regpg .regd-n img, .reg-fr img[src="x"]').length, ran: !!window.__regx }));
+  ok(L2.names[0] === 'Avery <img src=x onerror="window.__regx=1">' && !L2.imgs && !L2.ran, 'regday: a name with markup in it is shown as text, never run', L2);
+  await o2.close();
+};
+/* The states around it: the day itself, after it, before RUN 17, a failed save, another term */
+tests.registrationDayStates = async () => {
+  const mine = { user_id: FX.ME.id, term: '2274', day: '2026-10-23', at_time: '08:30:00', shared: true, updated_at: '2026-10-12T00:00:00Z' };
+  for (const [time, want, fr] of [
+    ['2026-10-22T12:00:00-07:00', 'Register tomorrow, 8:30a', '1 friend same day'],
+    ['2026-10-23T06:15:00-07:00', 'Register today at 8:30a · in 2h 15m', '1 friend same day'],
+    ['2026-10-23T08:20:00-07:00', 'Register today at 8:30a · in 10m', '1 friend same day'],
+    ['2026-10-23T09:00:00-07:00', 'Your registration opened at 8:30a', '1 friend same day'],
+    ['2026-10-24T09:00:00-07:00', null, null]]) {
+    const o = await regOpenPlanner({ mine, time });
+    const v = await regLine(o.page);
+    ok((want ? v.line === want : /^\d+ units · What matters most: /.test(v.line)) && v.fr === fr, `regday states: ${time.slice(5, 16)} → ${want || 'just your units (your day is over)'}`, v);
+    await o.close();
+  }
+  /* registration open, no day yet; then Round 1 over */
+  let o = await regOpenPlanner({ time: '2026-10-21T09:00:00-07:00' });
+  let v = await regLine(o.page);
+  ok(v.line === 'Registration is open Add your day' && v.fr === '2 friends added their day', 'regday states: Round 1 under way, no day yet — “Registration is open · Add your day”; friends whose day is past drop off', v);
+  await o.page.evaluate(() => A.regDayOpen()); await tick(o.page, 300);
+  const d = await o.page.evaluate(() => [...document.querySelectorAll('#sheet .rd-d')].slice(0, 3).map(b => b.textContent + (b.disabled ? '-' : '')));
+  await o.page.evaluate(() => A.regPickDay('2026-10-19')); await tick(o.page, 200);
+  const picked = await o.page.evaluate(() => UI.sheet.day);
+  ok(d.join(' ') === '19- 20- 21' && picked === '', 'regday states: a day that’s over can’t be picked', { d, picked });
+  await o.close();
+  o = await regOpenPlanner({ time: '2026-11-04T09:00:00-08:00' });
+  v = await regLine(o.page);
+  ok(/^\d+ units · What matters most: /.test(v.line) && !v.units && v.fr === null, 'regday states: Round 1 over, no day — just your units', v);
+  await o.close();
+  /* before RUN 17: no table, no function — kept on the phone, friends' days don't show */
+  const gap = (url, m) => /\/rest\/v1\/registration_days/.test(url.pathname) ? { status: 404, body: JSON.stringify({ code: 'PGRST205', message: 'Could not find the table \'public.registration_days\' in the schema cache' }) } : null;
+  o = await regOpenPlanner({ hook: gap, rpc: { friend_registration_days: { __error: { code: 'PGRST202', message: 'Could not find the function public.friend_registration_days(p_term)' } } } });
+  v = await regLine(o.page);
+  ok(v.line === 'Opens Oct 19 · in 6 days Add your day' && v.fr === null, 'regday states: before RUN 17 — the line, no friends', v);
+  await o.page.evaluate(() => A.regDayOpen()); await tick(o.page, 200); await o.page.evaluate(() => A.regPickDay('2026-10-26')); await tick(o.page, 200);
+  await o.page.evaluate(() => A.regDaySave()); await tick(o.page, 200);
+  const t1 = await o.page.locator('#toast').textContent(); await tick(o.page, 500);
+  v = await regLine(o.page);
+  const st = await o.page.evaluate(() => JSON.parse(localStorage.getItem('tc-regday:' + TC.user.id + ':2274') || 'null'));
+  ok(t1 === 'Saved on this phone' && v.line === 'Register Mon, Oct 26 · in 13 days' && st && st.pending && st.day === '2026-10-26' && st.shared === true, 'regday states: … saving keeps it on this phone, says so, and counts down (no time given: none shown)', { t1, v, st });
+  await o.close();
+  /* RUN 17 lands: the phone's day goes up on the next sign-in */
+  const pend = id => { try { localStorage.setItem('tc-regday:' + id + ':2274', JSON.stringify({ day: '2026-10-26', time: '', shared: true, at: Date.parse('2026-10-13T12:00:00Z'), pending: true })); } catch (e) {} };
+  o = await regOpenPlanner({ init: `(${pend})('${FX.ME.id}')` });
+  let w = o.log.writes.filter(x => x.table === 'registration_days');
+  v = await regLine(o.page);
+  ok(w.length === 1 && w[0].body.day === '2026-10-26' && w[0].body.at_time === null && v.line === 'Register Mon, Oct 26 · in 13 days', 'regday states: once the table is there, the day kept on the phone goes up', { w: w.map(x => x.body), v });
+  await o.close();
+  /* … unless the server's is newer */
+  o = await regOpenPlanner({ init: `(${pend})('${FX.ME.id}')`, mine: Object.assign({}, mine, { updated_at: '2026-10-13T15:00:00Z' }) });
+  w = o.log.writes.filter(x => x.table === 'registration_days');
+  v = await regLine(o.page);
+  ok(!w.length && v.line === 'Register Fri, Oct 23, 8:30a · in 10 days', 'regday states: a newer day on the server wins over an older one on the phone', { w: w.length, v });
+  await o.close();
+  /* a save the server refuses: kept on the phone, and the student is told */
+  const fail = (url, m) => /\/rest\/v1\/registration_days/.test(url.pathname) && m === 'POST' ? { status: 500, body: JSON.stringify({ code: 'XX000', message: 'internal error' }) } : null;
+  o = await regOpenPlanner({ hook: fail });
+  await o.page.evaluate(() => A.regDayOpen()); await tick(o.page, 200); await o.page.evaluate(() => A.regPickDay('2026-10-27')); await tick(o.page, 200);
+  await o.page.evaluate(() => A.regDaySave()); await tick(o.page, 200);
+  const t2 = await o.page.locator('#toast').textContent(); await tick(o.page, 500);
+  v = await regLine(o.page);
+  const st2 = await o.page.evaluate(() => JSON.parse(localStorage.getItem('tc-regday:' + TC.user.id + ':2274') || 'null'));
+  ok(/kept on this phone/.test(t2) && v.line === 'Register Tue, Oct 27 · in 14 days' && st2 && st2.pending, 'regday states: a refused save says it’s kept on this phone, and it is', { t2, v, st2 });
+  await o.close();
+  /* taking it away offline: never says done; goes through when the phone is back online */
+  let down = true;
+  const offline = (url, m) => down && /\/rest\/v1\/registration_days/.test(url.pathname) && m !== 'GET' ? { status: 503, body: JSON.stringify({ code: 'XX000', message: 'internal error' }) } : null;
+  o = await regOpenPlanner({ hook: offline, mine });
+  await o.page.evaluate(() => A.regDayOpen()); await tick(o.page, 200); await o.page.evaluate(() => A.regDayRemove()); await tick(o.page, 200);
+  const t3 = await o.page.locator('#toast').textContent(); await tick(o.page, 400);
+  ok(/friends can still see your day/.test(t3) && !/removed/i.test(t3), 'regday states: a Remove that didn’t go through says friends can still see it', t3);
+  await o.page.evaluate(() => A.regDayOpen()); await tick(o.page, 200);
+  down = false;
+  const n0 = o.log.writes.filter(x => x.table === 'registration_days' && x.m === 'DELETE').length;
+  await o.page.evaluate(() => window.dispatchEvent(new Event('online'))); await tick(o.page, 600);
+  const dels = o.log.writes.filter(x => x.table === 'registration_days' && x.m === 'DELETE');
+  const st3 = await o.page.evaluate(() => localStorage.getItem('tc-regday:' + TC.user.id + ':2274'));
+  ok(dels.length === n0 + 1 && st3 === null, 'regday states: back online, the Remove goes through and nothing is left pending', { n0, dels: dels.length, st3 });
+  await o.close();
+  down = true;
+  o = await regOpenPlanner({ hook: offline, mine });
+  await o.page.evaluate(() => A.regDayOpen()); await tick(o.page, 200); await o.page.evaluate(() => A.regShareToggle()); await tick(o.page, 100); await o.page.evaluate(() => A.regDaySave()); await tick(o.page, 200);
+  const t4 = await o.page.locator('#toast').textContent();
+  ok(/friends can still see your day/.test(t4), 'regday states: turning sharing off that didn’t go through says so too', t4);
+  await o.close();
+  /* a save while your day is still loading isn't undone when the load lands */
+  const slow = (url, m) => /\/rest\/v1\/registration_days/.test(url.pathname) && m === 'GET' ? new Promise(r => setTimeout(() => r({ status: 200, body: '[]' }), 2500)) : null;
+  o = await regOpenPlanner({ hook: slow });
+  await o.page.evaluate(() => { TC.regDay = null; window.__l = loadRegDay(); }); await tick(o.page, 100);
+  await o.page.evaluate(() => TC.saveRegDay({ day: '2026-10-30', time: '', shared: true })); await o.page.waitForTimeout(3200); await o.page.evaluate(() => window.__l); await o.page.evaluate(() => render(true)); await tick(o.page, 300);
+  v = await regLine(o.page);
+  ok(v.line === 'Register Fri, Oct 30 · in 17 days', 'regday states: a save made while your day was still loading stands when the load lands', v);
+  await o.close();
+  /* friends' days that failed to load: the list offers Try again; the Planner line simply has no friends */
+  o = await regOpenPlanner({ rpc: { friend_registration_days: { __error: { code: '57014', message: 'timeout' } } } });
+  v = await regLine(o.page);
+  await o.page.evaluate(() => A.openRegDays()); await tick(o.page, 500);
+  const e = await o.page.evaluate(() => ({ t: (document.querySelector('.regpg .empty') || {}).innerText || '', retry: !!document.querySelector('.regpg [data-a="regDaysRetry"]') }));
+  ok(v.fr === null && /Couldn’t load your friends’ days/.test(e.t) && e.retry, 'regday states: friends’ days failed — no line under yours, and the list says so with Try again', { v, e });
+  await o.close();
+  /* planning another term: no line, nothing asked */
+  o = await regOpenPlanner({ cfg: Object.assign({}, REG_CFG, { REGISTRATION_TERM: 'Summer 2027' }) });
+  v = await regLine(o.page);
+  ok(/^\d+ units · What matters most: /.test(v.line) && !v.units && !o.log.rpcs.some(r => r.fn === 'friend_registration_days') && !o.log.reads.some(r => /registration_days/.test(r)), 'regday states: planning a term registration isn’t for — just your units, and nothing is asked', v);
+  await o.close();
+};
+/* (2026-10-11) Tate: "i like how this is for plans do the same thing for my classes" · "bring back the anytime classes
+   at the bottom" · (the plan's "Friends can see · Plan A without …" row) "dont need this take away" */
+tests.mineAgenda = async () => {
+  let { page, close, log } = await openApp({ height: 1700 });
+  await page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 });
+  await click(page, '[data-a="tab"][data-x="schedule"]'); await click(page, '[data-a="schedTab"][data-x="mine"]'); await tick(page, 600);
+  /* the days fold: names and counts only; a tap opens that day, another closes it (Tate, 2026-10-11) */
+  const fold = () => page.evaluate(() => [...document.querySelectorAll('.mine-ag')].map(c => ({ k: c.querySelector('.ag-h').dataset.x, open: c.classList.contains('open'), exp: c.querySelector('.ag-h').getAttribute('aria-expanded'), n: c.querySelector('.ag-h em').textContent, rows: c.querySelectorAll('.arow').length })));
+  const f0 = await fold();
+  ok(f0.length > 0 && f0.every(c => !c.open && c.exp === 'false' && !c.rows && /^\d+ class(es)?$/.test(c.n)), 'my classes: the days start folded — each shows its name and how many classes', f0);
+  await click(page, `.mine-ag .ag-h[data-x="${f0[0].k}"]`); await tick(page, 200);
+  const f1 = await fold();
+  ok(f1[0].open && f1[0].exp === 'true' && f1[0].rows === +f1[0].n.split(' ')[0] && f1.slice(1).every(c => !c.open && !c.rows), 'my classes: a tap opens that day only', f1);
+  await click(page, `.mine-ag .ag-h[data-x="${f0[0].k}"]`); await tick(page, 200);
+  ok((await fold()).every(c => !c.open && !c.rows), 'my classes: a second tap closes it');
+  await page.evaluate(() => { UI.agOpen = UI.agOpen || {}; document.querySelectorAll('.ag-fold .ag-h').forEach(b => { UI.agOpen[b.dataset.x] = true; }); render(true); }); await tick(page, 200);
+  const v = await page.evaluate(() => {
+    const cards = [...document.querySelectorAll('.schpg > .card, .schpg > div > .card')].filter(e => e.offsetParent);
+    const ag = [...document.querySelectorAll('.mine-ag')].map(c => ({ day: c.querySelector('h4').firstChild.textContent, rows: [...c.querySelectorAll('.arow')].map(r => ({ code: r.dataset.x, act: r.dataset.a, tm: r.querySelector('.tm').firstChild.textContent, sub: r.querySelector('.muted').textContent })) }));
+    const any = document.querySelector('.mine-any'), cs = [...document.querySelectorAll('#scroll .card')].filter(e => e.offsetParent), wk = cs.findIndex(e => e.querySelector('.wk, [data-a="schedDay"]')), ai = cs.indexOf(any), d1 = cs.findIndex(e => e.classList.contains('mine-ag'));
+    const untimed = personSecs('me').filter(s => !onWeekSec(s)).map(s => s.code).concat((PEOPLE.me.unplaced || []).filter(c => !personSecs('me').some(s => s.code === c)));
+    return { ag, any: any && [...any.querySelectorAll('.any-c')].map(b => b.getAttribute('aria-label')), anyUp: !!any && wk >= 0 && ai === wk + 1 && d1 > ai, untimed, ccards: document.querySelectorAll('#scroll .ccard').length, grid: !!document.querySelector('#scroll .card .wk, #scroll .card [data-a="schedDay"]'),
+      want: DAYS.map(d => personSecs('me').filter(s => onWeekSec(s) && s.days.includes(d)).length).filter(Boolean).length };
+  });
+  ok(v.ccards === 0 && v.ag.length === v.want && v.ag.length > 0 && v.grid, 'my classes: the week, then a card per day like Plans — no card per class', v);
+  ok(v.ag.every(c => c.rows.length && c.rows.every(r => r.act === 'secSheet' && r.sub.trim().length)), 'my classes: an open day lists time · code · name · professor, each opening the section', v.ag);
+  ok(v.untimed.length > 0 && JSON.stringify(v.any) === JSON.stringify(v.untimed) && v.anyUp, 'my classes: classes with no set time are in an Anytime card right under the week, the days under it — like Plans (Tate 2026-10-11)', v);
+  /* Plans: no "Friends can see · Plan A without …" row */
+  await click(page, '[data-a="schedTab"][data-x="plans"]'); await tick(page, 400);
+  await page.evaluate(() => { TC.plans.A = personSecs('me').map(s => s.id); S.plan = 'A'; render(true); }); await tick(page, 300);
+  const pf = await page.evaluate(() => [...document.querySelectorAll('#scroll .ag-fold')].map(c => ({ k: c.querySelector('.ag-h').dataset.x, rows: c.querySelectorAll('.arow').length })));
+  ok(pf.length > 0 && pf.every(c => /^planA:/.test(c.k) && !c.rows), 'plans: the days fold the same way', pf);
+  await click(page, `#scroll .ag-h[data-x="${pf[0].k}"]`); await tick(page, 200);
+  ok(await page.locator('#scroll .ag-fold.open .arow').count() > 0 && await page.locator('#scroll .ag-fold.open').count() === 1, 'plans: a tap opens that day');
+  for (const k of ['A', 'B', 'C']) { await click(page, `.seg.plans [data-a="pickPlan"][data-x="${k}"]`); await tick(page, 200);
+    ok(!(await page.locator('#scroll .regbar.under, #scroll .pl-diff').count()), `plans: Plan ${k} has no “Friends can see · Plan A without …” row`); }
+  ok(log.errors.length === 0, 'my classes: no page errors', log.errors);
+  await close();
+  /* the term you're in (Fall, while Spring is the pick term): the same layout, and a class with no meeting time shows under Anytime */
+  ({ page, close, log } = await openApp({ terms: SPRING_CFG, tables: springTables(), height: 1700 }));
+  await page.waitForFunction(() => TC.ready && TC.seatsLoaded && TC.nowMineRows, null, { timeout: 10000 });
+  await click(page, '[data-a="tab"][data-x="schedule"]'); await click(page, '[data-a="schedTab"][data-x="mine"]'); await tick(page, 400);
+  await click(page, '.seg.terms [data-a="pickMineTerm"][data-x="Fall 2026"]'); await tick(page, 800);
+  await page.evaluate(() => { PEOPLE.me.nowUnplaced = (PEOPLE.me.nowUnplaced || []).concat(['UNIV 4401']); UI.agOpen = UI.agOpen || {}; render(true); document.querySelectorAll('.ag-fold .ag-h').forEach(b => { UI.agOpen[b.dataset.x] = true; }); render(true); }); await tick(page, 300);
+  const f = await page.evaluate(() => ({ ag: [...document.querySelectorAll('.mine-ag .arow')].map(r => r.dataset.a + '|' + r.dataset.y), any: [...document.querySelectorAll('.mine-any .any-c')].map(b => b.dataset.x + '|' + b.dataset.y), ccards: document.querySelectorAll('#scroll .ccard').length, want: nowSecs('me').filter(onWeekSec).length }));
+  ok(f.ccards === 0 && f.ag.length >= f.want && f.want > 0 && f.ag.every(x => /^secSheet\|n:/.test(x)), 'my classes, Fall 2026: a card per day, each class opening its section’s sheet first (Tate, 2026-10-12)', f);
+  ok(f.any.includes('UNIV 4401|now'), 'my classes, Fall 2026: a class with no meeting time is under Anytime at the bottom', f);
+  await page.screenshot({ path: '/tmp/claude-0/probe/mine-fall.png' });
+  ok(log.errors.length === 0, 'my classes, Fall 2026: no page errors', log.errors);
+  await close();
+};
+
+/* (2026-10-11) Tate: "change planner to be called builder … it just displays the recommended classes to take … recommended
+   for plan A, vs B, C … no classes in a Plan that we recommend overlap but classes can be at different times in different
+   plans … each Plan should be the best combination … but different" */
+tests.builderPlans = async () => {
+  const { page, close, log } = await openApp({ tables: NOPLANS(), height: 1500 });
+  await toPlanner(page, true);
+  const v = await page.evaluate(() => ({ tab: document.querySelector('.stabs .on').innerText.trim(), words: document.getElementById('scroll').innerText, card: document.querySelectorAll('#scroll .pl-card, #scroll .plr, #scroll .pla-tab').length, rows: document.querySelectorAll('#scroll .plo').length, profs: [...document.querySelectorAll('#scroll .plo .plo-p')].map(e => e.innerText) }));
+  ok(v.tab === 'Builder' && !/Planner|Best fit|Backup|Recommended for Plan/.test(v.words), 'builder: the tab reads Builder, and no “Planner”, “Best fit”, “Backup” or “Recommended for Plan” on it', v.tab);
+  ok(v.card === 0 && v.rows > 0 && v.profs.every(p => p && p.length < 24), 'builder: no plan card; each option row ends with the professor’s last name', { card: v.card, rows: v.rows, profs: v.profs.slice(0, 4) });
+  /* the drafting rules still hold for the Add sheet's "Draft it for me" and the plans a student keeps: every plan free of overlaps, another section where one fits */
+  const d = await page.evaluate(() => {
+    plSync(); const L = TCPL.ledger(), R0 = planRank(L), codes = R0.all.slice(0, 2).map(c => c.code); let nb = 99300;
+    const frees = [{ days: 'F', s: 7 * 60, e: 7 * 60 + 50 }, { days: 'F', s: 18 * 60, e: 18 * 60 + 50 }];
+    codes.forEach((code, i) => { const base = secsOf(code)[0]; addSection(Object.assign({}, base, { id: String(nb++), sec: '09', days: frees[i].days, s: frees[i].s, e: frees[i].e, status: 'open', seats: 20 })); });
+    const top = Object.keys(PROFS).filter(p => ratingOf(p) != null).sort((x, y) => ratingOf(y) - ratingOf(x))[0], b0 = secsOf(codes[0])[0], b1 = secsOf(codes[1])[0];
+    addSection(Object.assign({}, b1, { id: String(nb++), sec: '08', prof: top, days: b0.days, s: b0.s, e: b0.e, status: 'open', seats: 20 }));
+    const R = planRank(L), a = planDraft(R, 'A', L).ids, b = planDraft(R, 'B', L, [], [a]).ids, c = planDraft(R, 'C', L, [], [a, b]).ids;
+    const P = ids => ids.map(id => SEC[id]).filter(Boolean), clash = ids => { const s = P(ids); return s.some((x, i) => s.some((y, j) => j > i && secClash(x, y))); };
+    const sec = (ids, code) => (P(ids).find(s => s.code === code) || {}).id;
+    return { codes, clash: [a, b, c].map(clash), a: codes.map(x => sec(a, x)), b: codes.map(x => sec(b, x)), n: [a, b, c].map(x => x.length), same: a.length === c.length };
+  });
+  ok(d.clash.every(x => !x) && d.n.every(n => n > 0), 'draft: every plan is drafted, and nothing inside a plan overlaps', d);
+  ok(d.a.every(Boolean) && d.b.every(Boolean) && d.a.every((id, i) => String(id) !== String(d.b[i])), 'draft: a class with another section that fits is in a different section in Plan B — somewhere to switch to', d);
+  ok(!String(await page.evaluate(() => String(planDraft))).includes('friendsX') && d.same, 'draft: every plan has the same goal (no friends ×2.5 for C); C keeps as many classes as A', d);
+  ok(log.errors.length === 0, 'builder: no page errors', log.errors);
+  await close();
+};
+
+/* (2026-10-11) Work & activities: asked before the Builder drafts; one entry on My Classes and every plan; Busy to friends */
+tests.workActivities = async () => {
+  let { page, close, log } = await openApp({ tables: NOPLANS(), cmAsked: false, height: 1400 });
+  await toPlanner(page); await tick(page, 1500);
+  const a0 = await page.evaluate(() => ({ ask: !!document.querySelector('#scroll .cm-ask'), above: (() => { const a = document.querySelector('#scroll .cm-ask'), l = document.querySelector('#scroll .plq-list'); return !!(a && l && (a.compareDocumentPosition(l) & 4)); })(), wait: !!document.querySelector('#scroll .cm-wait'), drafted: !!plDrafted().at, plans: AT_PLANS.map(k => (TC.plans[k] || []).length).join(),
+    picks: [...document.querySelectorAll('#scroll .cm-ask [data-a="cmAdd"]')].map(b => b.dataset.x + ':' + b.textContent.trim()), skip: (document.querySelector('#scroll .cm-skip') || {}).textContent }));
+  ok(a0.ask && a0.above && !a0.wait && !a0.drafted && a0.plans === '0,0,0', 'work: the Builder asks about work and practice above the options (they depend on it); nothing is drafted into Plans', a0);
+  ok(a0.picks.join('|') === 'work:Work|practice:Practice|club:Club|other:Something else' && a0.skip === 'Skip', 'work: Work · Practice · Club, Something else, Skip', a0.picks);
+  const row3 = await page.evaluate(() => { const b = [...document.querySelectorAll('#scroll .cm-ask .cm-pick')].map(x => x.getBoundingClientRect()); return { same: Math.abs(b[0].top - b[1].top) < 1 && Math.abs(b[1].top - b[2].top) < 1, under: b[3].top > b[0].bottom, wide: b[3].width > b[0].width * 2.5 }; });
+  ok(row3.same && row3.under && row3.wide, 'work: Work, Practice and Club on one line; Something else across the card under them', row3);
+  await click(page, '#scroll [data-a="cmAdd"][data-x="work"]'); await tick(page, 300);
+  const sh = await page.evaluate(() => ({ t: document.querySelector('#sheet h3').textContent, kinds: /What is it|Every week/i.test(document.getElementById('sheet').innerText), name: document.getElementById('cm-name').value, on: !!document.querySelector('#sheet [data-a="cmBusy"].on') }));
+  ok(sh.t === 'Add work' && !sh.kinds && sh.name === 'Work' && sh.on, 'work: the sheet is “Add work” — the kind isn’t asked again, no “every week” line; Friends see you’re busy is on', sh);
+  await click(page, '#sheet [data-a="cmSave"]'); await tick(page, 200);
+  ok(/Pick at least one day/.test(await page.locator('#sheet').innerText()), 'work: Save with no day says what’s missing');
+  await page.fill('#cm-name', 'Barista shift');
+  await click(page, '#sheet [data-a="cmDay"][data-x="T"]'); await click(page, '#sheet [data-a="cmDay"][data-x="R"]');
+  /* the name typed survives the redraws the day taps make */
+  ok(await page.evaluate(() => document.getElementById('cm-name').value) === 'Barista shift', 'work: what you typed stays as you tap days');
+  await page.fill('#cm-from', '16:00'); await page.fill('#cm-to', '15:00'); await click(page, '#sheet [data-a="cmSave"]'); await tick(page, 200);
+  ok(/end after it starts/.test(await page.locator('#sheet').innerText()), 'work: an end before the start is caught');
+  await page.fill('#cm-to', '20:00'); await click(page, '#sheet [data-a="cmSave"]'); await tick(page, 2500);
+  const w = log.writes.filter(x => x.table === 'commitments');
+  ok(w.length === 1 && w[0].m === 'POST' && w[0].body.user_id === FX.ME.id && w[0].body.kind === 'work' && w[0].body.name === 'Barista shift' && w[0].body.days === 'TR' && w[0].body.start_min === 960 && w[0].body.end_min === 1200 && w[0].body.busy === true && /^[0-9a-f-]{36}$/.test(w[0].body.id), 'work: saved as one row — kind, name, days, start, end, Busy', w.map(x => x.body));
+  const toastT = await page.evaluate(() => document.getElementById('toast').textContent);
+  ok(toastT === 'Barista shift added to My Classes and Plans A, B and C', 'work: “Barista shift added to My Classes and Plans A, B and C”', toastT);
+  const d = await page.evaluate(() => { const P = k => [...document.querySelectorAll('#scroll .plo:not(.plo-no)')].map(e => SEC[e.dataset.y]).filter(Boolean);
+    return { drafted: !(TC.plans.A || []).length, n: AT_PLANS.map(k => P(k).length), clash: AT_PLANS.some(k => P(k).some(s => TC.commits.some(c => secClash(s, c)))), ask: !!document.querySelector('#scroll .cm-ask'), clear: (document.querySelector('#scroll .pl-clear') || {}).textContent || '' }; });
+  ok(d.drafted && d.n.every(n => n > 0) && !d.clash && !d.ask, 'work: then the options show, each in a section that isn’t over the shift (and nothing is written into your plans)', d);
+  ok(d.clear === 'Clear of your work', 'work: the Builder says “Clear of your work”', d.clear);
+  /* a new one over a drafted class: the plans still as drafted re-draft around it */
+  const s0 = await page.evaluate(() => { const s = [...document.querySelectorAll('#scroll .plo:not(.plo-no)')].map(e => SEC[e.dataset.y]).find(x => x && x.s != null && !x.async); return s && { days: s.days, s: s.s, e: s.e }; });
+  await click(page, '#scroll .pl-clear'); await tick(page, 300);
+  await click(page, '#sheet [data-a="cmAdd"][data-x="practice"]'); await tick(page, 300);
+  for (const dd of s0.days) { await click(page, `#sheet [data-a="cmDay"][data-x="${dd}"]`); }
+  const hm = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+  await page.fill('#cm-from', hm(s0.s)); await page.fill('#cm-to', hm(s0.e)); await click(page, '#sheet [data-a="cmSave"]'); await tick(page, 2500);
+  const rd = await page.evaluate(() => ({ n: TC.commits.length, clash: [...document.querySelectorAll('#scroll .plo:not(.plo-no)')].map(e => SEC[e.dataset.y]).filter(Boolean).some(s => TC.commits.some(c => secClash(s, c))), clear: (document.querySelector('#scroll .pl-clear') || {}).textContent || '' }));
+  ok(rd.n === 2 && !rd.clash && /^Clear of your (work and practice|practice and work)$/.test(rd.clear), 'work: a new one over an option’s section — the options move to sections around it (“Clear of your work and practice”)', rd);
+  /* a section over the shift is never drafted: give a pick only a Tue/Thu 4:10p section, redraft */
+  const cl = await page.evaluate(() => { plSync(); const L = TCPL.ledger(), R = planRank(L), c = R.all[0], base = secsOf(c.code)[0];
+    const only = Object.assign({}, base, { id: '99400', sec: '07', days: 'TR', s: 970, e: 1050 }); SECS_BY_CODE[c.code] = [only]; SEC[only.id] = only;
+    return { pick: plDraftSec(c.code, [], new Set()), code: c.code }; });
+  ok(cl.pick === undefined || cl.pick === null, 'work: a class whose only section is over your shift is never drafted', cl);
+  await page.evaluate(() => location.reload()); await page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 10000 });
+  /* My Classes */
+  await click(page, '[data-a="tab"][data-x="schedule"]'); await click(page, '[data-a="schedTab"][data-x="mine"]'); await tick(page, 600);
+  const m = await page.evaluate(() => ({ blocks: [...document.querySelectorAll('#scroll .g-cm')].map(b => b.textContent + '|' + b.dataset.a), tue: [...document.querySelectorAll('#scroll .mine-ag .ag-h')].map(h => h.innerText.replace(/\s+/g, ' ')) }));
+  ok(m.blocks.filter(b => b === 'Barista shift|cmOpen').length === 2 && m.blocks.every(b => /\|cmOpen$/.test(b)), 'work: My Classes draws it on Tuesday and Thursday, by name', m);
+  ok(m.tue.some(t => /^Tuesday.*Barista shift/.test(t)), 'work: the day card says so (“… · Barista shift”)', m.tue);
+  await page.evaluate(() => { UI.agOpen = UI.agOpen || {}; document.querySelectorAll('.ag-fold .ag-h').forEach(b => { UI.agOpen[b.dataset.x] = true; }); render(true); }); await tick(page, 200);
+  const rowT = await page.evaluate(() => { const r = [...document.querySelectorAll('#scroll .mine-ag .cm-row')].find(x => /Barista/.test(x.innerText)); return r && r.innerText.replace(/\s+/g, ' '); });
+  ok(/^4p 8p Barista shift Friends see Busy$/.test(rowT || ''), 'work: an open day lists it in time order', rowT);
+  /* every plan */
+  await click(page, '[data-a="schedTab"][data-x="plans"]');
+  const pl = [];
+  for (const k of ['A', 'B', 'C']) { await click(page, `.seg.plans [data-a="pickPlan"][data-x="${k}"]`); await tick(page, 200); pl.push(await page.locator('#scroll .g-cm').count()); }
+  ok(pl.every(n => n === m.blocks.length && n >= 2), 'work: every plan shows them too', pl);
+  /* edit it, then remove it */
+  await page.evaluate(() => [...document.querySelectorAll('#scroll .g-cm')].find(b => b.textContent === 'Barista shift').click()); await tick(page, 300);
+  ok(await page.evaluate(() => document.querySelector('#sheet h3').textContent) === 'Edit Barista shift', 'work: tapping it opens it to edit');
+  await click(page, '#sheet [data-a="cmDrop"]'); await tick(page, 600);
+  ok(log.writes.some(x => x.table === 'commitments' && x.m === 'DELETE') && await page.locator('#scroll .g-cm').count() < m.blocks.length, 'work: Remove takes it off');
+  ok(log.errors.length === 0, 'work: no page errors', log.errors);
+  await close();
+  /* Skip */
+  ({ page, close, log } = await openApp({ tables: NOPLANS(), cmAsked: false }));
+  await toPlanner(page); await tick(page, 1200);
+  await click(page, '#scroll [data-a="cmSkip"]'); await tick(page, 1500);
+  const sk = await page.evaluate(() => ({ ask: !!document.querySelector('#scroll .cm-ask'), drafted: document.querySelectorAll('#scroll .plq-card .plo').length > 0, clear: !!document.querySelector('#scroll .pl-clear') }));
+  ok(!sk.ask && sk.drafted && !sk.clear, 'work: Skip — the options show, nothing to keep clear', sk);
+  await close();
+  /* your ring, a friend's Busy (never the name), and before RUN 18 (no table) */
+  const fr = FX.FRIENDS[0].id;
+  ({ page, close, log } = await openApp({ rpc: Object.assign({}, FX.RPC, { friend_busy_blocks: [{ user_id: fr, days: 'MTWRF', start_min: 0, end_min: 1439 }] }),
+    hook: (url) => url.pathname.endsWith('/commitments') ? { status: 404, body: JSON.stringify({ code: 'PGRST205', message: "Could not find the table 'public.commitments' in the schema cache" }) } : null }));
+  await page.waitForFunction(() => TC.ready, null, { timeout: 8000 }); await tick(page, 600);
+  const st = await page.evaluate(async () => { const now = CLOCK.min;
+    const err = await TC.saveCommit({ id: 'c-1', kind: 'practice', name: '', days: 'MTWRF', s: Math.max(0, now - 10), e: Math.min(1440, now + 50), busy: true });
+    let kept = null; try { kept = JSON.parse(localStorage.getItem('tc-commits:' + TC.user.id)); } catch (e) {}
+    const me = status('me'); return { err, missing: TC.err.commits, kept: kept && kept.length, me: me.t, free: me.free }; });
+  ok(st.err === null && st.missing === 'missing' && st.kept === 1, 'work: before RUN 18 it’s kept on this phone, no error', st);
+  ok(/^Practice till /.test(st.me) && st.free === false, 'work: your ring says “Practice till …”, never free', st);
+  const fs = await page.evaluate(id => ({ t: status(id).t, free: status(id).free }), fr);
+  ok(/^Busy till /.test(fs.t) && fs.free === false, 'work: a friend in their Busy time is “Busy till …” — never what it is', fs);
+  ok(log.errors.length === 0, 'work: no page errors (friend and no-table)', log.errors);
+  await close();
+};
+
+/* (2026-10-11) Tate: "adding a class should show it intersecting and pose a question or express that it conflicts" ·
+   "Champ doesn't know about them" */
+tests.workAddChamp = async () => {
+  const { page, close, log } = await openApp({ height: 1400 });
+  await page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 });
+  /* an open section that fits your classes, and a shift over it */
+  const s = await page.evaluate(async () => {
+    const x = SECTIONS.find(y => y.s != null && !y.async && y.status === 'open' && /^[MTWRF]+$/.test(y.days) && !personSecs('me').some(z => z.code === y.code) && !clashWithMine(y).length);
+    await TC.saveCommit({ id: 'c-shift', kind: 'work', name: 'Barista shift', days: x.days, s: x.s - 30, e: x.e + 60, busy: true });
+    S.addDest = 'mine'; openAddTo(x.id); return { id: x.id, code: x.code, days: x.days, s: x.s, e: x.e };
+  });
+  await tick(page, 500);
+  const v = await page.evaluate(() => { const n = document.querySelector('#sheet .at-note'); return { note: n.textContent, cls: n.className, btn: document.querySelector('#sheet .at-go').textContent, alt: (document.querySelector('#sheet .at-alt') || {}).textContent || '',
+    hit: [...document.querySelectorAll('#sheet .g-cm.ro.hit')].map(b => b.textContent), ro: document.querySelectorAll('#sheet .g-cm.ro').length, btnCm: document.querySelectorAll('#sheet button.g-cm').length }; });
+  ok(/^Overlaps your Barista shift · .+\. Add it anyway\?$/.test(v.note) && /\bwarn\b/.test(v.cls) && v.btn === 'Add anyway' && v.alt === 'Edit Barista shift', 'add: a section over your shift says so and asks — “Add anyway”, or edit the shift', v);
+  ok(v.hit.length === s.days.length && v.hit.every(x => x === 'Barista shift') && !v.btnCm, 'add: the week shows the shift, outlined where the section crosses it (not tappable here)', v);
+  await page.evaluate(() => { S.addDest = 'A'; openAddTo(UI.sheet.id); }); await tick(page, 300);
+  ok(await page.evaluate(() => document.querySelector('#sheet .at-go').textContent) === 'Add to Plan A anyway', 'add: a plan asks the same — “Add to Plan A anyway”');
+  await page.evaluate(() => { S.addDest = 'mine'; openAddTo(UI.sheet.id); }); await tick(page, 300);
+  const before = log.writes.length;
+  await click(page, '#sheet .at-go'); await tick(page, 1500);
+  ok(log.writes.slice(before).some(w => /saved_classes|my_sections/.test(w.table)), 'add: Add anyway adds it');
+  /* Champ */
+  const c = await page.evaluate(sec => {
+    const work = chIntent('when do i work');
+    const freeQ = chIntent('When am I free ' + DAYL[sec.days[0]] + '?');
+    const dayCard = chDay({ d: sec.days[0] });
+    const fit = ansFit(sec.code, 'mine');
+    TC.commits = TC.commits.map(x => Object.assign({}, x, { days: 'MTWRF', s: 0, e: 1439 }));
+    const allOver = ansFit(SECTIONS.find(y => y.s != null && !y.async && y.code !== sec.code && !personSecs('me').some(z => z.code === y.code)).code, 'A');
+    const conf = chClashes().size;
+    return { work: work && work.t, free: freeQ && freeQ.t, day: /chd-cm/.test(dayCard) && /Barista shift/.test(dayCard), fit: fit && fit.t, allOver: allOver && allOver.t, conf };
+  }, s);
+  ok(/^Barista shift: .+–.+\.$/.test(c.work || ''), 'champ: “When do I work?” — your shift, from this phone', c.work);
+  ok(c.day, 'champ: your day card draws the shift', c);
+  ok(/^Free /.test(c.free || '') && !/all day/.test(c.free || ''), 'champ: free time goes around the shift', c.free);
+  ok(/already in|is in/.test(c.fit || ''), 'champ: (the section just added is in your classes)', c.fit);
+  ok(/^No — every .+ section overlaps your work\.$/.test(c.allOver || ''), 'champ: a class whose every section is over your work — “No — every … overlaps your work”', c.allOver);
+  ok(c.conf > 0, 'champ: “my conflicts” counts a class over your work', c);
+  ok(log.errors.length === 0, 'work add/champ: no page errors', log.errors);
+  await close();
+};
+
+/* (2026-10-11) Tate: "add in on Past classes where it says your Major and concentration then shows a simple version of
+   the Major classes GE classes and Concentration and elective classes that have been fulfilled" */
+tests.pastKinds = async () => {
+  const { page, close, log } = await openApp({ height: 1400 });
+  await page.waitForFunction(() => TC.ready, null, { timeout: 8000 });
+  const read = () => page.evaluate(() => { const c = (() => { const g = plGate(); if (g.html) return null; const L = g.L, X = auditLines(TC.audit, L), R = L ? planRank(L) : X ? { audit: true, X, all: [], bare: true } : null; if (!R || R.done) return null; const o = document.getElementById('__lc'); if (o) o.remove(); const d = document.createElement('div'); d.id = '__lc'; d.style.cssText = 'position:absolute;left:-10000px;top:0;width:390px'; const ro = UI.plReqOpen; UI.plReqOpen = new Proxy({}, { get: () => true, has: () => true }); try { d.innerHTML = plLeftCard(R, L, /^[ABC]$/.test(UI.plPlan) ? UI.plPlan : 'A'); } finally { UI.plReqOpen = ro; } document.body.appendChild(d); const c0 = d.firstElementChild; if (c0) [...d.children].slice(1).forEach(x => c0.appendChild(x)); return c0; })(); if (!c) return null; setTimeout(() => document.getElementById('__lc')?.remove()); const w = c.querySelector('.pll-info > span:first-child'), cr = { textContent: (() => { const d = document.createElement('div'); try { d.innerHTML = plannerView(); } catch (e) { return 'ERR ' + e.message; } return (d.querySelector('.pl-top .pl-cat') || {}).textContent || ''; })() }, dn = document.querySelector('#scroll .pc-done'), leg = {}; [...c.querySelectorAll('.pll-leg > span')].forEach(e => { leg[e.className] = +e.textContent.trim().split(' ')[0]; });
+    return { who: w ? w.textContent.split(' · ') : null, cat: (cr || {}).textContent || '', leg, n: +((((c.querySelector('.pll-bar') || { getAttribute: () => '' }).getAttribute('aria-label') || '').match(/of (\d+)$/) || [])[1] || '').split(' ')[0] || 0, num: `${leg.f || 0} of ${+((((c.querySelector('.pll-bar') || { getAttribute: () => '' }).getAttribute('aria-label') || '').match(/of (\d+)$/) || [])[1] || '').split(' ')[0] || 0}`, first: c.firstElementChild.className, left: ((c.querySelector('.pll-leg .l') || {}).innerText || '').replace(/\s+/g, ' ').trim(),
+      heads: dn ? [...dn.querySelectorAll('[data-a="pcGroup"]')].map(b => b.innerText.replace(/\s+/g, ' ').trim()) : [],
+      kinds: [...(dn || c).querySelectorAll('.pc-k')].map(k => ({ k: k.dataset.k, l: k.querySelector('.pc-kl').textContent, v: k.querySelector('.pc-kv').textContent, full: k.classList.contains('full'), tick: !!k.querySelector('.pc-kv svg'), w: k.querySelector('.pc-kb i').style.width, t: (k.querySelector('.pc-kt') || {}).textContent || '' })) }; });
+  await page.evaluate(() => { TC.prefs = TC.prefs || { priority: 'degree', units: 16 }; setTab('schedule'); S.schedTab = 'past'; render(true); }); await tick(page, 1200);
+  /* the flowchart, no concentration picked */
+  let v = await read();
+  const L = await page.evaluate(() => TCPL.ledger());
+  ok(await page.locator('#scroll .pc-terms[data-a="pcTerms"]').count() === 1 && !(await page.locator('#scroll .pc-hero').count()), 'past (flowchart only): Done, then Every class, by term as its own card — no answer card without a report');
+  ok(v && /^pll-info/.test(v.first) && JSON.stringify(v.who) === '["Business Administration"]' && /^\d+ left on your flowchart$/.test(v.left), 'past kinds: the card opens with the ledger (no big number; the legend says what’s left on your flowchart), your major on the meta line (no concentration yet — “Pick your concentration” asks)', v);
+  ok(v && v.kinds.map(k => k.l).join('|') === 'Major classes|GE classes|Electives' && v.kinds.map(k => k.k).join('|') === 'major|ge|el', 'past kinds: under Done — Major classes · GE classes · Electives, in that order', v && v.kinds);
+  const sumF = v ? v.kinds.reduce((a, k) => a + +k.v.split(' of ')[0], 0) : -1, sumN = v ? v.kinds.reduce((a, k) => a + +k.v.split(' of ')[1], 0) : -1;
+  ok(v && v.num === `${sumF} of ${sumN}` && v.num === `${L.F} of ${L.N}` && v.left === `${L.need.length + L.needU.length} left on your flowchart`, 'past kinds: the rows add up to the count, and what’s left is the flowchart’s spots to do', [v && v.num, sumF, sumN, v && v.left]);
+  ok(v && (v.leg.f || 0) + (v.leg.p || 0) + (v.leg.l || 0) === L.N && v.leg.p === L.T && v.left === `${v.leg.l} left on your flowchart`, 'past kinds (flowchart): the ledger adds up — filled + in progress (what you’re taking) + left = the flowchart’s spots, and “left” is the heading’s number', [v && v.leg, L.F, L.T, L.N]);
+  const ge = v && v.kinds.find(k => k.k === 'ge'), lg = L.rows.find(r => r.label === 'General education');
+  ok(ge && ge.v === `${lg.f} of ${lg.n}` && ge.w === Math.round(100 * lg.f / lg.n) + '%' && (lg.t ? ge.t === `+ ${lg.t} in progress` : !ge.t), 'past kinds: a row says finished of how many, its bar, and “+ N in progress” for classes you’re taking', [ge, lg]);
+  /* a concentration picked */
+  await page.evaluate(() => { TC.profile.concentration = 'Financial Management'; TCPL.set({ student: { major: TC.profile.major, conc: 'Financial Management', standing: '' } }); render(true); }); await tick(page, 600);
+  v = await read();
+  ok(v && JSON.stringify(v.who) === '["Business Administration","Financial Management"]' && v.kinds.map(k => k.l).join('|') === 'Major classes|GE classes|Concentration|Electives', 'past kinds: your major and concentration, then Major · GE · Concentration · Electives', v);
+  /* with a report: its lines by kind; degree-wide lines only in the big number; in progress counts as filled, like the big number */
+  await page.evaluate(() => { TC.audit = { catalog: '2026-2027', reqs: [
+    { label: 'BUS 2201', kind: 'major', status: 'satisfied', used: [{ c: 'BUS 2201', t: 'Fall 2025' }] },
+    { label: 'BUS 3306', kind: 'major', status: 'not', used: [] },
+    { label: 'Area 1A', kind: 'ge', status: 'satisfied', used: [{ c: 'ENGL 1133', t: 'Fall 2024' }] },
+    { label: 'Area 2', kind: 'ge', status: 'satisfied', used: [{ c: 'MATH 1221', t: 'Fall 2024' }] },
+    { label: 'Finance concentration', kind: 'conc', status: 'in_progress', used: [{ c: 'BUS 3431', t: 'Fall 2026', p: true }] },
+    { label: 'Free electives', kind: 'elective', status: 'not', used: [] },
+    { label: 'GWR', kind: 'gwr', status: 'satisfied', used: [] },
+    { label: 'Total units for the degree', kind: 'units', status: 'not', used: [] } ] }; render(true); }); await tick(page, 800);
+  v = await read();
+  const by = k => (v.kinds.find(x => x.k === k) || {});
+  const hz = await page.evaluate(() => [pcHero({ open: [], unknown: [{}], filled: [1, 2], live: [1, 2, 3] }), pcHero({ open: [], unknown: [], filled: [], live: [] })].map(h => { const d = document.createElement('div'); d.innerHTML = h; return d.innerText.replace(/\s+/g, ' ').trim(); }));
+  ok(/^\d+%\s*1 line we couldn’t read\s*2 of 3 filled/.test(hz[0]) && !/100%/.test(hz[0]) && hz[1] === '', 'past (report): lines the app couldn’t read are never “nothing left” (and no ring at 0 lines)', hz);
+  ok(v && v.left === '2 left to graduate' && v.cat === 'Semester catalog', 'past (report): “2 left to graduate” on top, and the kind of catalog your report judges you by, by name', v && [v.left, v.cat]);
+  ok(v && v.heads.join('|') === 'Major and support 1 of 3|Concentration ✓ Done|General education ✓ Both|Degree requirements ✓ Done', 'past (report): Done is the report’s groups, each “N of M” — a finished one only a check (option A, 2026-10-12) — a line in progress counts; Degree requirements lists the writing requirement, not the total-units check (2026-10-12)', v && v.heads);
+  ok(v && v.leg.f === 4 && v.leg.p === 1 && v.leg.l === 2 && v.n === 7 && !('u' in v.leg), 'past (report): the ledger is the report’s — 4 filled · 1 in progress · 2 left of 7 lines (GWR counted; the total-units line is the “units to go” note, not a requirement)', v && [v.leg, v.n]);
+  /* every class, by term: Year 1 from the first Cal Poly term, quarters and semesters tagged, what each counted for */
+  await page.evaluate(() => { TC.myHistory = [{ code: 'ENGL 1134', term: 'Fall', year: 2024, professor: '' }, { code: 'ECON 2040', term: 'Winter', year: 2025, professor: '' }, { code: 'BUS 2201', term: 'Spring', year: 2026, professor: '' }, { code: 'KINE 1109', term: 'Spring', year: 2025, professor: '' }, { code: 'ART 3TC1', term: 'Fall', year: 2025, professor: TCPL.abroadMark }, { code: 'HIST 1206', term: 'Summer', year: 2024, professor: TCPL.abroadMark }];
+    TC.audit.reqs.push({ label: 'A2: Written Communication Course', kind: 'ge', status: 'satisfied', used: [{ c: 'ENGL 134', n: 'ENGL 1134', t: 'Fall 2024' }] }, { label: 'C1: Arts Course', kind: 'ge', status: 'satisfied', used: [{ c: 'ART 3TC1', t: 'Fall 2025', x: true }] });
+    TC.audit.reqs[0].used = [{ c: 'BUS 201', n: 'BUS 2201', t: 'Spring 2026' }]; render(true); });
+  /* (2026-10-12, Tate's option B) a timeline, newest first: a dot and a card per term, the term being taken open */
+  await click(page, '[data-a="pcTerms"]'); await tick(page, 400);
+  const tl = () => page.evaluate(() => ({ h: (document.querySelector('.pc-tvh h2') || {}).textContent,
+    terms: [...document.querySelectorAll('.pc-tlh')].map(b => [b.dataset.x, b.getAttribute('aria-expanded'), b.innerText.replace(/\s+/g, ' ').trim()]),
+    dots: [...document.querySelectorAll('.pc-tld')].map(d => d.classList.contains('now')),
+    sw: document.querySelectorAll('.pc-tsw').length, swAfter: (() => { const s = document.querySelector('.pc-tsw'), p = s && s.previousElementSibling, b = p && p.querySelector('.pc-tlh'); return b ? b.dataset.x : null; })(),
+    old: ((document.querySelector('.pc-tlold') || {}).innerText || '').replace(/\s+/g, ' ').trim(),
+    rows: [...document.querySelectorAll('.pc-tls .pc-trow')].map(r => (r.querySelector('.pc-glb') ? '🌐 ' : '') + r.innerText.replace(/\s+/g, ' ').trim()),
+    x: [...document.querySelectorAll('.pc-tv .pc-ty .pc-tyh')].map(b => b.innerText.replace(/\s+/g, ' ').trim()),
+    head: document.querySelectorAll('.pc-tv [data-a="pcGroup"], .pc-tv .chip').length }));
+  let t1 = await tl();
+  ok(t1.h === 'Every class, by term' && t1.terms.map(x => x[0]).join() === 'Fall 2026,Spring 2026,Fall 2025,Spring 2025,Winter 2025,Fall 2024' && !t1.head,
+    'by term: one card per term, newest first — no group chips on top (Tate: “take out this”)', t1);
+  ok(t1.terms.filter(x => x[1] === 'true').map(x => x[0]).join() === 'Fall 2026' && /^Fall 2026 In progress \d+ classes$/.test(t1.terms[0][2]) && t1.dots[0] === true && t1.dots.slice(1).every(d => !d),
+    'by term: the term being taken is open, says In progress and wears the blue dot; the rest fold to one line', t1.terms);
+  ok(/^Spring 2026 quarter · 1 class$/.test(t1.terms[1][2]) && /^Fall 2025 quarter · 1 class · other school$/.test(t1.terms[2][2]), 'by term: a folded term says quarter or semester and how many — and “other school” when it holds credit from one', t1.terms);
+  ok(t1.sw === 1 && t1.swAfter === 'Fall 2026' && !t1.old, 'by term: “SWITCHED TO SEMESTERS” once, under the first semester; six terms all show', t1);
+  ok(t1.rows.length && t1.rows.every(r => !/In progress/.test(r)) && t1.rows.some(r => /^BUS 3431 Concentration$/.test(r)), 'by term: in the term being taken a class says what it counts for (the pill already says in progress)', t1.rows);
+  ok(t1.x.length === 1 && /^Credit from other schools 1 · before Cal Poly$/.test(t1.x[0]), 'by term: credit from before Cal Poly keeps its own card at the end', t1.x);
+  await page.evaluate(() => { UI.pcTermOpen = { 'Fall 2026': false, 'Spring 2026': true, 'Fall 2025': true, 'Spring 2025': true, 'Fall 2024': true }; UI.pcTermYr = { x: true }; render(true); }); await tick(page, 200);
+  const t2 = await tl();
+  ok(t2.rows.some(r => /^ENGL 1134 was ENGL 134 · GE A2$/.test(r)) && t2.rows.some(r => /^🌐 ART 3TC1 GE C1$/.test(r)) && t2.rows.some(r => /^KINE 1109 Extra · counted for nothing$/.test(r)) && t2.rows.some(r => /^BUS 2201 was BUS 201 · Major$/.test(r)),
+    'by term: each class reads “CODE  what it counted for” — the number it was taken as, a globe for another school, “Extra · counted for nothing”', t2.rows);
+  await click(page, '[data-a="pcTermOpen"][data-x="Spring 2026"]'); await tick(page, 200);
+  ok(await page.getAttribute('[data-a="pcTermOpen"][data-x="Spring 2026"]', 'aria-expanded') === 'false', 'by term: a tap folds a term');
+  /* past six terms, the oldest fold into one row */
+  await page.evaluate(() => { TC.myHistory.push({ code: 'ECON 2010', term: 'Winter', year: 2026, professor: '' }, { code: 'PSY 2010', term: 'Summer', year: 2025, professor: '' }); render(true); }); await tick(page, 200);
+  const t3 = await tl();
+  ok(t3.terms.length === 5 && t3.old === 'Fall 2024 – Spring 2025 · 3 quarters', 'by term: past six terms the oldest fold into one dashed row naming the span', t3);
+  await click(page, '[data-a="pcTermOld"]'); await tick(page, 200);
+  ok((await tl()).terms.length === 8, 'by term: a tap shows them all');
+  await click(page, '.pc-tvh [data-a="pcTerms"]'); await tick(page, 300);
+  ok(await page.locator('#scroll .pc-done').count() === 1 && await page.locator('.pc-tv').count() === 0, 'by term: back returns to Past classes');
+  ok(log.errors.length === 0, 'past kinds: no page errors', log.errors);
+  await close();
+};
+
+/* (2026-10-11) Tate: "the classes you have left … should be where Builder takes over and be at the top of builder (2 left to
+   graduate) then show the best feasable options that fulfil those classes." */
+tests.builderLeft = async () => {
+  const { page, close, log } = await openApp({ height: 1600 });
+  await toPlanner(page, true);
+  await page.evaluate(() => { TC.prefs = TC.prefs || { priority: 'degree', units: 16 }; UI.plPlan = 'A'; render(true); }); await tick(page, 400);
+  const read = () => page.evaluate(() => { const c = document.querySelector('#scroll .pll'); if (!c) return null; plSync(); const L = TCPL.ledger(), R = planRank(L);
+    return { h: c.querySelector('.pll-leg .l').innerText.replace(/\s+/g, ' ').trim(), n: L.need.length + L.needU.length, first: !!(c.compareDocumentPosition(document.querySelector('#scroll .plq-list')) & Node.DOCUMENT_POSITION_FOLLOWING),
+      cards: [...document.querySelectorAll('#scroll .plq-card')].map(q => ({ open: q.classList.contains('open'), label: q.querySelector('.plq-t b').childNodes[0].textContent.trim(), sub: (q.querySelector('.plq-t > span') || {}).innerText || '', opts: [...q.querySelectorAll('.plo')].map(o => ({ code: o.dataset.x, id: o.dataset.y, n: o.querySelector('.plo-n').innerText, c: o.querySelector('.plo-c').innerText, p: o.querySelector('.plo-p').innerText, no: o.classList.contains('plo-no') })), more: (q.querySelector('.plq-more') || {}).innerText || '', mark: !!q.querySelector('.plq-mark'), plus: q.querySelectorAll('.pll-add, .plus').length })),
+      order: R.all.map(x => x.code), all: !!document.querySelector('#scroll .pll-all'), picks: document.querySelectorAll('#scroll .pl-picks, #scroll .plr, #scroll .pl-card').length }; });
+  let v = await read();
+  ok(v && v.h === `${v.n} left on your flowchart` && v.first && !v.picks, 'builder: opens with what’s left (the flowchart’s count), then the requirement cards; no plan card', v && { h: v.h, n: v.n, first: v.first, picks: v.picks });
+  ok(v.cards.length === Math.min(6, v.n) && (v.n > 6 ? v.all : !v.all) && v.cards[0].open && v.cards.slice(1).every(q => !q.open), 'builder: six requirement cards (All N for the rest); the first starts open, the rest folded', { cards: v.cards.length, n: v.n, open: v.cards.map(q => q.open) });
+  const q0 = v.cards[0];
+  ok(q0.opts.length >= 1 && q0.opts.length <= 3 && q0.opts.every(o => /^[A-Z]{2,5} \d{4}/.test(o.code) && o.n && o.c === o.code && o.p) && q0.plus === 0 && !/★|seats|Open|Mon|Tue|Wed|Thu|Fri/.test(q0.opts.map(o => o.n + o.c + o.p).join('')), 'builder: plain rows — the name, the number under it, the professor’s last name — no +, no rating, time or seats', q0.opts);
+  const codes = q0.opts.filter(o => !o.no).map(o => o.code);
+  ok(JSON.stringify(codes) === JSON.stringify(v.order.filter(c => codes.includes(c))), 'builder: options in the Builder’s own order (your priorities)', { codes, order: v.order.slice(0, 12) });
+  ok(await page.evaluate(ids => ids.every(id => { const s = SEC[id]; return s && !planSecsOf('A').some(t => t.code !== s.code && secClash(s, t)) && !TC.commits.some(t => secClash(s, t)); }), q0.opts.filter(o => !o.no).map(o => o.id)), 'builder: every option’s section fits — no clash with Plan A or your work');
+  ok(v.cards.slice(1).every(q => !/\d+ offered this|pick one of|\d+ units?\b/.test(q.sub) && (/^nothing offered this term$/.test(q.sub) || q.sub === '')), 'builder: a folded requirement says nothing more (or that nothing is offered) — no “pick one of n · n offered” (Tate 2026-10-13)', v.cards.slice(1).map(q => q.sub));
+  /* open another; See all; fold */
+  await click(page, '#scroll .plq-card:nth-child(2) .plq'); await tick(page, 300);
+  v = await read();
+  ok(v.cards[1].open && v.cards[0].open, 'builder: a tap opens a second requirement under the first (both stay open)', v.cards.map(q => q.open));
+  const big = v.cards.find(q => q.open && /^See all \d+$/.test(q.more));
+  if (big) {
+    await click(page, `#scroll .plq-card:nth-child(${v.cards.indexOf(big) + 1}) .plq-more`); await tick(page, 300);
+    const v2 = await read(), q = v2.cards[v.cards.indexOf(big)];
+    ok(q.opts.length > 3 && q.more === 'See less', 'builder: See more lists every option, and offers See less', { n: q.opts.length, more: q.more });
+  } else ok(true, 'builder: (no requirement with more than 3 options in this fixture)');
+  await click(page, '#scroll .plq-card:nth-child(1) .plq'); await tick(page, 300);
+  v = await read();
+  ok(!v.cards[0].open, 'builder: a tap on an open requirement folds it', v.cards[0].open);
+  /* a Plan A class over an option's only section: the option says so, dimmed */
+  const cl = await page.evaluate(() => {
+    plSync(); const R = planRank(TCPL.ledger());
+    const c = R.all.find(x => !x.inPlan && secsOf(x.code).length && secsOf(x.code).every(s => s.s != null)); if (!c) return null;
+    const ss = secsOf(c.code), other = SECTIONS.find(s => s.code !== c.code && s.s != null && ss.every(t => secClash(s, t)) && !R.all.some(x => x.code === s.code));
+    if (!other) return { code: c.code, none: true };
+    TC.plans.A = [other.id]; UI.plReqOpen = null; UI.plLeftAll = true; render(true);
+    document.querySelectorAll('#scroll .plq-card:not(.open) .plq').forEach(b => A.plReqOpen(b.dataset.x));
+    document.querySelectorAll('#scroll .plq-more').forEach(b => A.plLeftOpen(b.dataset.x));
+    const o = [...document.querySelectorAll('#scroll .plo')].find(e => e.dataset.x === c.code);
+    return { code: c.code, other: other.code, no: !!o && o.classList.contains('plo-no'), c: o ? o.querySelector('.plo-c').innerText : null };
+  });
+  ok(cl && cl.no && /every section clashes with Plan A or your week$/.test(cl.c), 'builder: an option whose every section clashes with Plan A says so, dimmed', cl);
+  ok(log.errors.length === 0, 'builder left: no page errors', log.errors);
+  await close();
+};
+
+/* (2026-10-11) A friend's real report prints each GE line under a short heading ("B2", "C Elect LD", "F (ES)", "GE Elect:
+   Elective in Area B/c/d") over the verdict that names it. The synthetic reports, given the same short headings, must read
+   exactly as without them: the same names, the same GE areas. */
+tests.dprShortGeHeads = async () => {
+  const { page, close, log } = await openApp({});
+  await page.waitForFunction(() => TC.ready, null, { timeout: 8000 });
+  await page.evaluate(() => TC.loadPlanner()); await page.waitForFunction(() => !!window.TCPL, null, { timeout: 8000 });
+  for (const f of ['dpr-stress-quarter.pdf', 'dpr-stress-mixed.pdf']) {
+    const r = await page.evaluate(async b64 => {
+      const lib = await loadPdfJs(); const doc = await lib.getDocument({ data: Uint8Array.from(atob(b64), c => c.charCodeAt(0)), isOffscreenCanvasSupported: false }).promise; const t = await dprDocText(doc); doc.destroy();
+      let n = 0;
+      const t2 = t.split('\n').map(l => {
+        const m = /^(?:Not Satisfied|Satisfied|In Progress):\s*((?:[A-F](?:[1-5]| ?UD)?|[1-6][A-C]?))(?:\s*\(Qtr\))?:\s/.exec(l);
+        if (m) { n++; return m[1] + '\n' + l; }
+        if (/^(?:Not Satisfied|Satisfied|In Progress):\s*LOWER-DIVISION C ELECTIVE\b/i.test(l)) { n++; return 'C Elect LD\n' + l; }
+        if (/^(?:Not Satisfied|Satisfied|In Progress):\s*GE Elective:/i.test(l)) { n++; return 'GE Elect: Elective in Area B/c/d\n' + l; }
+        return l;
+      }).join('\n');
+      plSync();
+      const ge = p => p.audit.reqs.filter(b => b.kind === 'ge').map(b => [b.label, b.ge || '', plGeArea(b).join('/'), b.status].join(' | '));
+      return { n, a: ge(TCPL.dprParse(t)), b: ge(TCPL.dprParse(t2)) };
+    }, nodeFs.readFileSync(nodePath.join('files', f)).toString('base64'));
+    ok(r.n >= 8 && r.a.length >= 8 && JSON.stringify(r.b) === JSON.stringify(r.a), `reader (${f}): GE lines under short headings (“B2”, “C Elect LD”, “GE Elect: …”) read with the verdict’s name and their GE area`, { n: r.n, diff: r.b.filter(x => !r.a.includes(x)).slice(0, 6) });
+  }
+  ok(log.errors.length === 0, 'short GE headings: no page errors', log.errors);
+  await close();
+};
+
+/* (2026-10-11) Tate's account, as older imports left it: BUS 3431 under Fall 2025 (he's taking it now), BUS 3346 under the
+   wrong term, credit no report lists (BUS 4446, CHEM 1110), credit with no term (BUS 4401), a class in this term's My Classes
+   he isn't taking (BUS 3440). Re-reading the report lists each, checked, with why; what he unchecks stays; "See my plan" takes
+   the rest off before saving, so the account matches the report. */
+tests.dprReportWins = async () => {
+  const me = FX.ME.id, ab = '🌍';
+  const T = Object.assign({}, XFER_T('Business Administration', 'Senior'), {
+    class_history: [
+      { user_id: me, code: 'BUS 3431', term: 'Fall', year: 2025, professor: null },
+      { user_id: me, code: 'BUS 3346', term: 'Spring', year: 2024, professor: null },
+      { user_id: me, code: 'ECON 2040', term: 'Winter', year: 2024, professor: 'Lee' },
+      { user_id: me, code: 'BUS 4446', term: 'Fall', year: 2025, professor: ab },
+      { user_id: me, code: 'BUS 4401', term: null, year: null, professor: ab },
+      { user_id: me, code: 'CHEM 1110', term: null, year: null, professor: ab }],
+    saved_classes: FX.TABLES.saved_classes.filter(r => r.user_id !== me).concat([{ user_id: me, term: '2268', code: 'BUS 3431' }, { user_id: me, term: '2268', code: 'BUS 3440' }]) });
+  const { page, close, log } = await openApp({ tables: T, height: 2600 });
+  await page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 });
+  await click(page, '[data-a="tab"][data-x="schedule"]'); await toPastTab(page);
+  await page.locator('input[data-in="dprfile"]').first().setInputFiles('files/dpr-stress-quarter.pdf');
+  for (let i = 0; i < 30 && !(await page.locator('#sheet .dr-h1, #sheet .tc-err').count()); i++) await tick(page, 500);
+  const rc = await page.evaluate(() => (UI.dpr.rc || []).map(x => x.kind + ':' + x.code + ':' + x.why));
+  const has = (k, c, re) => rc.some(s => s.startsWith(k + ':' + c + ':') && re.test(s));
+  ok(rc.length === 6 && has('hist', 'BUS 3431', /as Fall 2025 · your report has it Fall 2026 \(this term\)/) && has('hist', 'BUS 3346', /as Spring 2024 · your report has it Fall 2024/) && has('hist', 'BUS 4446', /Credit on your account · not on your report/) && has('hist', 'BUS 4401', /with no term · your report has it Fall 2025/) && has('hist', 'CHEM 1110', /not on your report/) && has('now', 'BUS 3440', /My Classes for Fall 2026 · your report doesn’t show you taking it/),
+    'report wins: what’s on the account but not on the report — the wrong term (BUS 3431, BUS 3346), credit it doesn’t list (BUS 4446, CHEM 1110), credit it dates (BUS 4401), a class this term it doesn’t show (BUS 3440) — each with why; ECON 2040 (same term) isn’t', rc);
+  const pk = await page.evaluate(() => Object.fromEntries(UI.dpr.rows.filter(x => /BUS 3346|ECON 2040|BUS 3431/.test(x.cur)).map(x => [x.cur, [!!x.already, !!x.pick]])));
+  ok(JSON.stringify(pk['BUS 3346']) === '[false,true]' && JSON.stringify(pk['ECON 2040']) === '[true,false]', 'report wins: “already on your record” is the same class in the same term — BUS 3346 under another term is added, ECON 2040 isn’t added twice', pk);
+  const card = await page.evaluate(() => { const c = document.querySelector('#sheet .dr-rc'); return c && { h: c.querySelector('.dr-rch').innerText, on: c.querySelectorAll('.dr-rcr[aria-pressed="true"]').length, all: c.querySelectorAll('.dr-rcr').length, after: !!c.nextElementSibling && !!c.parentElement.querySelector('[data-a="dprSave"]') }; });
+  ok(card && card.h === '6 on your account, not on your report' && card.on === 6 && card.all === 6, 'report wins: the report-read sheet shows them, all checked', card);
+  await click(page, '#sheet .dr-rcr[data-x^="h:BUS 4446"]'); await click(page, '#sheet .dr-rcr[data-x^="h:CHEM 1110"]');
+  const on = await page.evaluate(() => [document.querySelectorAll('#sheet .dr-rcr[aria-pressed="true"]').length, document.querySelector('#sheet .dr-rcr[data-x^="h:BUS 4446"]').getAttribute('aria-pressed')]);
+  ok(on[0] === 4 && on[1] === 'false', 'report wins: a tap unchecks one to keep it', on);
+  await click(page, '[data-a="dprSave"]'); await tick(page, 2500);
+  const del = log.writes.filter(w => w.m === 'DELETE').map(w => w.table + ' ' + decodeURIComponent(w.query).replace(/^\?/, '').replace('user_id=eq.' + me + '&', 'ME&'));
+  ok(del.length === 5 && del.includes('class_history ME&code=eq.BUS+3431&term=eq.Fall&year=eq.2025') && del.includes('class_history ME&code=eq.BUS+3346&term=eq.Spring&year=eq.2024') && del.includes('class_history ME&code=eq.BUS+4401&term=is.null&year=is.null') && del.includes('saved_classes ME&term=eq.2268&code=eq.BUS+3440') && del.includes('my_sections ME&term=eq.2268&code=eq.BUS+3440'),
+    'report wins: saving takes the checked ones off — that row, that term, only that user — and leaves the unchecked', del);
+  const st = await page.evaluate(() => ({ h: (TC.myHistory || []).map(h => h.code + ' ' + (h.term || '-') + ' ' + (h.year || '-')), now: [...nowCodes()].sort(), toast: (document.getElementById('toast') || {}).textContent || '' }));
+  ok(st.h.includes('BUS 3346 Fall 2024') && !st.h.includes('BUS 3346 Spring 2024') && st.h.includes('BUS 4401 Fall 2025') && !st.h.includes('BUS 4401 - -') && !st.h.some(s => /^BUS 3431/.test(s)) && st.h.includes('BUS 4446 Fall 2025') && st.h.includes('CHEM 1110 - -') && st.h.filter(s => s === 'ECON 2040 Winter 2024').length === 1,
+    'report wins: the account then matches the report — BUS 3346 in Fall 2024, BUS 4401 dated Fall 2025, BUS 3431 not a past class; what was kept, kept', st.h);
+  ok(JSON.stringify(st.now) === '["BUS 3431","BUS 3438","BUS 4442","UNIV 4401"]', 'report wins: this term’s My Classes are what the report shows you taking (BUS 3440 off; BUS 3431 kept, BUS 3438 and BUS 4442 added)', st.now);
+  ok(/Took 4 off your account so it matches your report/.test(st.toast), 'report wins: it says what it took off', st.toast);
+  ok(await page.evaluate(() => { const r = UI.dpr || {}; return !(r.rc || []).length; }), 'report wins: nothing listed after saving');
+  /* every class, by term: credit earned abroad after the first term sits in its term; credit with no term sits apart */
+  await page.evaluate(() => { TC.prefs = TC.prefs || { priority: 'degree', units: 16 }; UI.sheet = null; render(true); }); await tick(page, 400); await toPastTab(page);
+  await page.evaluate(() => { UI.pcTerms = true; UI.pcTermOpen = { 'Fall 2025': true }; UI.pcTermYr = { x: true }; render(true); }); await tick(page, 600);
+  const tv = await page.evaluate(() => { const card = k => { const h = document.querySelector(`.pc-tlh[data-x="${k}"]`); return h && h.closest('.pc-tlc'); };
+    const yr = card('Fall 2025'), now = card('Fall 2026'), x = [...document.querySelectorAll('.pc-tv .pc-ty')].find(c => /Credit from other schools/.test(c.innerText));
+    const r4446 = yr && [...yr.querySelectorAll('.pc-trow')].find(b => /BUS 4446/.test(b.innerText));
+    return { y: !!r4446 && !!r4446.querySelector('.pc-glb'), x: x && x.innerText.replace(/\s+/g, ' '), now: now && [...now.querySelectorAll('.pc-cc')].map(e => e.innerText) }; });
+  ok(tv.y && tv.x && /1 · AP, test and transfer credit/.test(tv.x) && /CHEM 1110/.test(tv.x) && !/BUS 4446|BUS 4401/.test(tv.x), 'by term: credit earned after your first term (BUS 4446, Fall 2025) sits in that term with the other-school globe; credit with no term sits apart', tv);
+  ok(tv.now && tv.now.includes('BUS 3431'), 'by term: this term shows the class you’re taking', tv.now);
+  /* a report that doesn't show this term never touches this term's My Classes */
+  const noNow = await page.evaluate(() => { const r = { rows: (UI.dpr ? UI.dpr.rows : []).filter(x => !x._now) }; return dprStale(r).filter(x => x.kind === 'now').length; });
+  ok(noNow === 0, 'report wins: a report with nothing this term leaves this term’s My Classes alone', noNow);
+  ok(log.errors.length === 0, 'report wins: no page errors', log.errors);
+  await close();
+};
+
+/* (2026-10-12) Tate: "conjoin these together and place them under Builder. past classes should only show the stuff below";
+   Degree requirements' units and GPA lines: "is it even necessary to display these at all"; Units only: "make it compress
+   and expandable" and say what BUS 3TR / AP 300 are; a class page: a friend's face on their section, not the professor too. */
+tests.builderMerged = async () => {
+  const { page, close, log } = await openApp({ tables: XFER_T('Business Administration', 'Senior'), height: 2600 });
+  await toPlanner(page); await uploadFile(page, 'dpr-stress-quarter.pdf'); await saveReport(page);
+  await page.evaluate(() => { UI.plPlan = 'A'; S.schedTab = 'planner'; render(true); }); await tick(page, 1500);
+  const rd = () => page.evaluate(() => { const c = document.querySelector('#scroll .pll'); if (!c) return null; const t = e => e ? e.innerText.replace(/\s+/g, ' ').trim() : '';
+    return { order: [...c.children].map(e => e.className.split(' ')[0]), big: !!c.querySelector('.pll-hd, .pll-h b'), chip: t(document.querySelector('#scroll .pl-top .pl-cat')), meta: [...c.querySelectorAll('.pll-info > span')].map(t), h: t(c.querySelector('.pll-leg .l')), leg: [...c.querySelectorAll('.pll-leg > span')].map(t), bar: (c.querySelector('.pll-bar') || { getAttribute: () => '' }).getAttribute('aria-label'), old: c.querySelectorAll('.pll-who, .pll-cat, .pc-num, .pc-nrow, .pc-bar').length,
+      lines: [...document.querySelectorAll('#scroll .plq')].map(e => t(e.querySelector('.plq-t b'))), rows: [...document.querySelectorAll('#scroll .plq-card.open')].map(q => ({ row: t(q.querySelector('.plq-t b')), mark: !!q.querySelector('[data-a="plMarkAsk"]') })), opts: document.querySelectorAll('#scroll .plq-card .plo').length,
+      ip: !!document.querySelector('#scroll [data-a="pcInpOpen"]'), foot: !!c.querySelector('.pc-cat'), go: !!c.querySelector('.pc-go'), rec: !!(c.compareDocumentPosition(document.querySelector('#scroll .plq-list')) & Node.DOCUMENT_POSITION_FOLLOWING) }; });
+  let b = await rd();
+  const lg = b ? Object.fromEntries(b.leg.map(x => [x.split(' ').slice(1).join(' '), +x.split(' ')[0]])) : {};
+  const nq = b ? +((String(b.bar).match(/of (\d+)$/) || [])[1] || 0) : 0;
+  ok(b && b.order.slice(0, 3).join() === 'pll-info,pll-bar,pll-leg' && !b.big && b.h === '2 left to graduate' && lg['left to graduate'] === 2 && nq >= 38 && (lg.filled || 0) + (lg['in progress'] || 0) === nq - 2 && b.bar === b.leg.join(', ') + ' of ' + nq && b.meta.join('|') === 'Business Administration · Financial Management' && b.chip === 'Quarter catalog' && b.old === 0 && b.rec,
+    'builder: one card on top — no big number (Tate 2026-10-13: “repetitive”); the three-way bar and its legend ending “2 left to graduate” (filled · in progress · left add up to the requirements), then major · concentration, the catalog chip, the report date and “39 requirements” on one meta line (mockup 9, Tate 2026-10-13) — then TermChamp’s plan', b && { order: b.order, h: b.h, leg: b.leg, bar: b.bar, meta: b.meta, rec: b.rec });
+  ok(b && b.lines.length === 2 && b.lines.some(l => /^Career Readiness III/.test(l)) && b.lines.some(l => /Senior Project/.test(l)) && b.rows.length === 1 && b.rows[0].mark && !b.ip && !b.foot && !b.go, 'builder: each requirement is a card (the first open, with Mark done); no in-progress row, no catalog footnote, no “Best options” button', b && { lines: b.lines, rows: b.rows.length, ip: b.ip });
+  /* a report that names no concentration: the pick sits in the card, and a long name wraps inside it on a 320px phone */
+  await page.setViewportSize({ width: 320, height: 2600 });
+  await page.evaluate(() => { TC.audit.conc = null; TC.profile.concentration = null; TCPL.set({ student: { major: TC.profile.major, conc: '', standing: '' } }); render(true); }); await tick(page, 600);
+  const cc = await page.evaluate(() => { const c = document.querySelector('#scroll .pll'); if (!c) return null; const r = c.getBoundingClientRect(), pr = parseFloat(getComputedStyle(c).paddingRight), chips = [...c.querySelectorAll('.pc-conc .chip')]; return { n: chips.length, out: chips.filter(e => e.getBoundingClientRect().right > r.right - pr + 0.5 || e.scrollWidth > e.clientWidth + 1).map(e => e.textContent) }; });
+  ok(cc && cc.n > 0 && !cc.out.length, 'builder: with no concentration on the report, the pick is in the card — every name fits inside it at 320px', cc);
+  await page.setViewportSize({ width: 390, height: 2600 });
+  await page.evaluate(() => { TC.audit.conc = 'Financial Management'; render(true); }); await tick(page, 300);
+  /* Past classes: only what's below */
+  await toPastTab(page);
+  const p = await page.evaluate(() => ({ first: (document.querySelector('#scroll .pc-pg > *') || {}).className || '', top: document.querySelectorAll('#scroll .pc-sum, #scroll .pc-left, #scroll .pc-num, #scroll .pc-go, #scroll .pc-cat, #scroll .pc-catc, #scroll .pc-me, #scroll .pll').length,
+    degree: (() => { UI.pcGroups = { degree: true }; render(true); const g = [...document.querySelectorAll('.pc-done .pc-year')].find(e => e.dataset.x === 'degree'); const o = g && g.closest('.pc-open'); return { head: g ? g.innerText.replace(/\s+/g, ' ').trim() : '', rows: o ? [...o.querySelectorAll('.pc-row .pc-main')].map(e => e.innerText.trim()) : [] }; })() }));
+  ok(/pc-hero/.test(p.first) && p.top === 0, 'past: opens on the answer (Tate’s option A, 2026-10-12) — no Builder card, major or catalog chip', p);
+  const hero = await page.evaluate(() => { const h = document.querySelector('#scroll .pc-hero'); return h && { t: h.innerText.replace(/\s+/g, ' ').trim(), a: h.dataset.a, x: h.dataset.x, next: (h.nextElementSibling || {}).className }; });
+  ok(hero && hero.t === '95% 2 left to graduate 37 of 39 filled · Fall Quarter 2023 catalog See them in the Builder ›' && hero.a === 'schedTab' && hero.x === 'planner' && /pc-done/.test(hero.next), 'past: a ring and “2 left to graduate”, the count and your catalog — the card opens the Builder; Done follows', hero);
+  const links = await page.evaluate(() => [...document.querySelectorAll('#scroll .pc-links > .pc-lk')].map(b => b.innerText.replace(/\s+/g, ' ').trim()).concat([...document.querySelectorAll('#scroll .pc-qb .pc-btn')].map(b => b.innerText.trim())));
+  ok(/^Every class, by term \d+ classes · quarters, then semesters$/.test(links[0] || '') && /^Units only \d+ classes that counted for no requirement$/.test(links[1] || '') && links.slice(2).join('|') === '+ Log a class|Upload a new report', 'past: Every class, by term and Units only are two rows of one card; Log a class and Upload a new report are quiet links', links);
+  ok(/^Degree requirements\s*✓ Both/.test(p.degree.head) && p.degree.rows.length === 2 && !p.degree.rows.some(r => /Units|GPA/.test(r)), 'past: Degree requirements lists the writing requirement and USCP, not the report’s units and GPA checks', p.degree);
+  const u0 = await page.evaluate(() => { const c = document.querySelector('.pc-uo'); return c && { head: c.querySelector('.pc-uh').innerText.replace(/\s+/g, ' ').trim(), exp: c.querySelector('.pc-uh').getAttribute('aria-expanded'), rows: c.querySelectorAll('.pc-orow').length }; });
+  ok(u0 && /^Units only \d+ classes? that counted for no requirement$/.test(u0.head) && u0.exp === 'false' && u0.rows === 0, 'past: Units only starts folded — its name and how many', u0);
+  await click(page, '.pc-uo [data-a="pcUnits"]');
+  const u1 = await page.evaluate(() => { const c = document.querySelector('.pc-uo'); return { exp: c.querySelector('.pc-uh').getAttribute('aria-expanded'), rows: [...c.querySelectorAll('.pc-orow')].map(r => r.innerText.replace(/\s+/g, ' ').trim()) }; });
+  ok(u1.exp === 'true' && u1.rows.length === +u0.head.match(/\d+/)[0] && u1.rows.some(r => /^TRAN 302 Credit from another school · Fall 2025$/.test(r)), 'past: a tap opens every one; credit from another school with no name says so, and its term', u1);
+  await click(page, '.pc-uo [data-a="pcUnits"]');
+  ok(await page.locator('.pc-uo .pc-orow').count() === 0, 'past: and folds again');
+  ok(log.errors.length === 0, 'builder merged: no page errors', log.errors);
+  await close();
+  /* a class page: a friend's face on their section only */
+  const r = await openApp({});
+  await r.page.waitForFunction(() => TC.ready && TC.seatsLoaded, null, { timeout: 8000 });
+  const code = await r.page.evaluate(() => Object.keys(COURSES).find(c => secsOf(c).some(s => friendsInSec(s.id).length)));
+  await r.page.evaluate(c => A.openClass(c), code); await settle(r.page, 500);
+  const f = await r.page.evaluate(() => ({ prof: [...document.querySelectorAll('#scroll .profrow')].map(e => e.querySelectorAll('.av, img').length), secs: document.querySelectorAll('#scroll .secrow .av, #scroll .secrow img, #scroll [data-a="secSheet"] .av, #scroll [data-a="secSheet"] img').length, strip: /taking this/.test(document.getElementById('scroll').innerText) }));
+  ok(code && f.prof.length && f.prof.every(n => n <= 1) && f.secs > 0 && f.strip, 'class page: a friend’s face sits on their section, not the professor’s row; “… taking this” stays on top', { code, f });
+  ok(r.log.errors.length === 0, 'class page faces: no page errors', r.log.errors);
+  await r.close();
+};
+
+
+/* (2026-10-13) Tate: "the classes that you should take and under each one … the top options for that requirement … click
+   approved elective … see all the classes … highest rated professors and friends towards the top … bland until you click on
+   particular class and then it should show information like … when you click on someones schedule class." */
+tests.builderOptions = async () => {
+  const AE = { label: 'Approved Elective', status: 'not', kind: 'conc', ge: null, level: 'LN', code: 'R179-10', units: { req: 4, used: 0, need: 4 }, courses: null, options: [], oneOf: false };
+  const SP = { label: 'Business Major Senior Project', status: 'not', kind: 'major', ge: null, level: 'RQ', code: 'R-0037', units: null, courses: null, options: ['BUS 4461', 'BUS 4462', 'BUS 4464', 'BUS 4465', 'BUS 4466', 'BUS 4467'], oneOf: true };
+  const sec = (course_code, title, section, instructor, days, class_nbr) => ({ term: '2268', course_code, title, section, instructor, days, status: 'Open', capacity: 30, enrolled: 10, available: 20, waitlist_total: 0, waitlist_capacity: 0, class_nbr, instruction_mode: 'P', location: '' });
+  const T = Object.assign({}, NOPLANS(), { course_seats: FX.TABLES.course_seats.concat([sec('BUS 4448', 'Mergers and Acquisitions', '01', 'Rastad, Ali', 'MoWe 10:10AM - 11:30AM', '79448'), sec('BUS 4469', 'Fixed Income Securities', '01', 'Examplewood, Ada', 'TuTh 12:10PM - 1:30PM', '79469'), sec('BUS 4461', 'Senior Project I', '01', 'Ramezani, Cyrus', 'Mo 4:10PM - 5:50PM', '79461'), sec('BUS 4464', 'Applied Senior Project Seminar', '01', 'Birdsall, Kevin', 'MoWe 12:10PM - 1:30PM', '79464'), sec('BUS 4465', 'Senior Project: Building and Launching a Venture', '01', 'Katona, Jon', 'MoWe 6:10PM - 7:30PM', '79465'), sec('BUS 4462', 'Senior Project II', '01', 'Ramezani, Cyrus', 'We 4:10PM - 5:50PM', '79462')]),
+    profiles: FX.TABLES.profiles.map(p => p.id === FX.ME.id ? Object.assign({}, p, { major: 'Business Administration', concentration: 'Financial Management', class_standing: 'Senior' }) : p),
+    degree_audit: [{ user_id: FX.ME.id, printed_on: '2026-10-08', catalog: 'Fall Quarter 2023', major: 'BUS', concentration: 'Financial Management', units_used: 170, units_needed: 10, requirements: [AE, SP], read_at: '2026-10-08T00:00:00Z' }] });
+  const { page, close, log } = await openApp({ tables: T, height: 2200 });
+  await toPlanner(page, true);
+  await page.evaluate(() => { TC.prefs = TC.prefs || { priority: 'degree', units: 16 }; render(true); }); await tick(page, 600);
+  const rd = () => page.evaluate(() => { const t = e => e ? e.innerText.replace(/\s+/g, ' ').trim() : '';
+    return { who: t(document.querySelector('#scroll .pll-info > span:first-child')), cat: t(document.querySelector('#scroll .pl-top .pl-cat')), h: t(document.querySelector('#scroll .pll-leg .l')), plan: document.querySelectorAll('#scroll .pl-card, #scroll .plr, #scroll .pla-tab').length,
+      tags: [...document.querySelectorAll('#scroll .plq-card .pk-tag')].map(t),
+      cards: [...document.querySelectorAll('#scroll .plq-card')].map(q => ({ open: q.classList.contains('open'), label: t(q.querySelector('.plq-t b')), sub: t(q.querySelector('.plq-t > span')), span: !!q.querySelector('.plq-t > span'), lab: t(q.querySelector('.plq-lab')), opts: [...q.querySelectorAll('.plo')].map(o => [o.dataset.x, t(o.querySelector('.plo-n')), t(o.querySelector('.plo-c')), t(o.querySelector('.plo-p'))]), more: t(q.querySelector('.plq-more')), mark: !!q.querySelector('[data-a="plMarkAsk"]'), none: t(q.querySelector('.pll-none')) })) }; });
+  let v = await rd();
+  ok(v.who === 'Business Administration · Financial Management' && v.cat === 'Quarter catalog' && v.h === '2 left to graduate' && v.plan === 0, 'options: the top card — “2 left to graduate”, then major · concentration, the report’s catalog chip and date — and no plan card', v);
+  const lv = await pllLedger(page);
+  ok(ledgerAddsUp(lv) && lv.leg.l === 2 && lv.segs.join() === ['f', 'p', 'l', 'u'].filter(k => lv.leg[k]).join() && lv.legText[lv.legText.length - 1] === '2 left to graduate' && lv.first === 'pll-info' && lv.meta.length === 1, 'options: the ledger — filled, in progress, left add up to the requirements; one bar segment per non-zero part; “n requirements” ends the meta line', lv);
+  ok(v.cards.length === 2 && v.cards[0].open && !v.cards[1].open && v.cards.map(c => c.label).join('|') === 'Approved Elective Conc.|Business Major Senior Project' && !v.tags.includes('Pick 1') && !/pick one of/.test(v.cards[1].sub), 'options: one card per requirement, the first open; Conc. keeps its tag, a pick-one line has no “Pick 1” chip and no “pick one of n” (Tate 2026-10-13)', v.cards.map(c => [c.label, c.open, c.sub]));
+  const ae = v.cards[0], sp = v.cards[1];
+  ok(ae.sub === '' && !ae.span && ae.lab === 'BEST FOR YOU' && ae.opts.length === 2 && ae.opts.every(o => /^BUS 44(48|69)$/.test(o[0]) && o[1] && o[2] === o[0] && /^(Rastad|Examplewood rated 4\.5)$/.test(o[3]) && !/rating/.test(o[3])), 'options: Approved Elective (no classes named) lists the concentration’s electives offered — name, number, professor and their rating (never how many ratings, 2026-10-13); nothing else', ae);
+  const ring = await page.evaluate(() => [...document.querySelectorAll('#scroll .plq-card.open')].map(c => [getComputedStyle(c).boxShadow, getComputedStyle(c.parentElement.querySelector('.plq-card:not(.open)') || c).boxShadow]));
+  ok(ring.length > 0 && ring.every(([o, c]) => !/inset/.test(o) && o === c), 'options: an open requirement card has no blue ring round it — the same shadow as a closed one (Tate, 2026-10-13)', ring);
+  ok(sp.sub === '' && sp.opts.length === 0, 'options: a folded requirement is just its name (no “pick one of 6 · 4 offered”, no “best ★ 3.6 Birdsall”, Tate 2026-10-13)', sp.sub);
+  await click(page, '#scroll .plq-card:nth-child(2) .plq'); await tick(page, 300);
+  v = await rd(); const sp2 = v.cards[1];
+  ok(sp2.open && sp2.opts.length === 3 && sp2.more === 'See more' && sp2.mark && sp2.opts.every(o => /^BUS 446[1245]$/.test(o[0])), 'options: Senior Project opens down to its top three, See more, Mark done', sp2);
+  await click(page, '#scroll .plq-card:nth-child(2) .plq-more'); await tick(page, 300);
+  v = await rd();
+  ok(v.cards[1].opts.length === 4 && v.cards[1].more === 'See less', 'options: See more lists every one, then See less (Tate, 2026-10-13)', [v.cards[1].opts.length, v.cards[1].more]);
+  /* (2026-10-13) the foot: two text links of one size on one row — no pill (Tate: "rework how this looks") */
+  const ft = await page.evaluate(() => { const f = document.querySelector('#scroll .plq-card:nth-child(2) .plq-foot'), m = f.querySelector('.plq-more'), k = f.querySelector('.plq-mark'), cm = getComputedStyle(m), ck = getComputedStyle(k);
+    return { bg: cm.backgroundColor, size: [cm.fontSize, ck.fontSize], w: [cm.fontWeight, ck.fontWeight], chev: !!m.querySelector('svg'), exp: m.getAttribute('aria-expanded'), row: Math.abs(m.getBoundingClientRect().top - k.getBoundingClientRect().top) < 2, left: m.getBoundingClientRect().left < k.getBoundingClientRect().left, h: m.getBoundingClientRect().height }; });
+  ok(/rgba\(0, 0, 0, 0\)|transparent/.test(ft.bg) && ft.size[0] === ft.size[1] && ft.w[0] === ft.w[1] && ft.chev && ft.exp === 'true' && ft.row && ft.left && ft.h >= 44, 'options: the foot is “See less ⌃” and “Mark done” as two plain links of one size on one row, 44px tall', ft);
+  /* the order: best for you — the Builder's rank (a rated professor ahead of none) */
+  const ord = await page.evaluate(() => { const R = planRank(TCPL.ledger()); return [...document.querySelectorAll('#scroll .plq-card:nth-child(2) .plo')].map(e => R.all.findIndex(c => c.code === e.dataset.x)); });
+  ok(ord.every((x, i) => x >= 0 && (!i || ord[i - 1] <= x)), 'options: in the Builder’s order (your 1-2-3)', ord);
+  /* tap: the section sheet, as on a friend's schedule, with what it fills and Add to a plan */
+  await click(page, '#scroll .plq-card:nth-child(1) .plo'); await tick(page, 400);
+  const sh = await page.evaluate(() => { const s = document.getElementById('sheet'); return { type: UI.sheet && UI.sheet.type, t: s.innerText.replace(/\s+/g, ' '), prof: !!s.querySelector('.profrow'), fill: (s.querySelector('.sec-fill') || {}).innerText || '', add: !!s.querySelector('[data-a="addPlanSheet"]'), view: !!s.querySelector('[data-a="openClass"]'), watch: !!s.querySelector('[data-a="watch"]') }; });
+  ok(sh.type === 'sec' && /BUS 44(48|69)/.test(sh.t) && /(Mon\/Wed|Tue\/Thu)/.test(sh.t) && sh.prof && sh.add && sh.view && sh.watch, 'options: a tap opens the section sheet — time, seats, the professor’s row, View class, seat alerts — plus Add to a plan', sh);
+  ok(/^Fills Approved Elective · clear of Plan A$/.test(sh.fill), 'options: the sheet says what the class fills, and that it’s clear of your plan', sh.fill);
+  await click(page, '#sheet [data-a="addPlanSheet"]'); await tick(page, 400);
+  ok(await page.evaluate(() => UI.sheet && UI.sheet.type === 'addTo'), 'options: Add to a plan opens the Add sheet (plans change only there)');
+  await page.evaluate(() => { UI.sheet = null; render(true); });
+  ok(planWrites(log).length === 0, 'options: nothing is written into Plans by the Builder', planWrites(log).map(w => w.body.slot));
+  /* a shift over an option's only section: it's dimmed and says so; the sheet says so too */
+  const dim = await page.evaluate(() => { TC.commits = [{ id: 'cm1', kind: 'work', name: 'Shift', days: 'MW', s: 10 * 60, e: 11 * 60 + 30, busy: true }]; render(true);
+    const o = [...document.querySelectorAll('#scroll .plo')].find(e => e.dataset.x === 'BUS 4448'); const r = { no: !!o && o.classList.contains('plo-no'), c: o ? o.querySelector('.plo-c').innerText : '', clear: (document.querySelector('#scroll .pl-clear') || {}).innerText || '' };
+    if (o) { A.plOptSheet('BUS 4448', o.dataset.y, o); r.fill = (document.querySelector('#sheet .sec-fill') || {}).innerText || ''; } UI.sheet = null; TC.commits = []; render(true); return r; });
+  ok(dim.no && /every section clashes with Plan A or your week$/.test(dim.c) && dim.clear === 'Clear of your work' && /over a class in Plan A or your week$/.test(dim.fill), 'options: a class whose only section is over your shift is dimmed and says so; its sheet says so; the top card says “Clear of your work”', dim);
+  ok(log.errors.length === 0, 'options: no page errors', log.errors);
+  await close();
 };
 
 const names = Object.keys(tests).filter(n => !only || n === only);

@@ -5,6 +5,7 @@
    chosen, cream gone; the app's tabs in the app's order, on the right; Nunito; the app's cards, blocks,
    chips and rating scale; and every text colour readable on its ground in BOTH themes. */
 import { openApp } from './app-harness.mjs';
+import * as FX from './app-fixtures.mjs';
 
 const args = process.argv.slice(2);
 const ONLY = args.includes('--only') ? args[args.indexOf('--only') + 1] : null;
@@ -348,6 +349,59 @@ test('majors', async () => {
   ok(!r.coming.length, 'majors: ITP is no longer listed as “coming soon” next to its own plan', r.coming);
   ok(r.me === NEW, 'majors: a profile saved with the old EEM name loads as Experience & Event Management', r.me);
   ok(log.errors.length === 0, 'majors: no page errors', log.errors);
+  await close();
+});
+
+/* ============ The website's report import reads transfer students' reports (2026-10-11) ============
+   The same synthetic reports as check-app (files/make-dpr-transfer.py: invented people, classes and grades), through
+   Past Classes › upload: the review list's "This term" group, its note and button, and what the save sends. */
+const XDESK = () => Object.assign({}, FX.TABLES, { class_history: FX.TABLES.class_history.filter(r => r.user_id !== FX.ME.id) });
+async function deskImport(file) {
+  const app = await desk({ tables: XDESK() }); const { page } = app; await tick(page, 1500);
+  await page.locator('#transcriptFile').setInputFiles('files/' + file);
+  for (let i = 0; i < 60 && !(await page.locator('#tiModal .ti-row').count()); i++) await tick(page, 500);
+  app.r = await page.evaluate(() => { const m = document.getElementById('tiModal');
+    return { now: [...m.querySelectorAll('.ti-row.ti-now .hc')].map(e => e.innerText.trim()).sort(),
+      tagged: [...m.querySelectorAll('.ti-row')].filter(r => [...r.querySelectorAll('.fr-shared')].some(e => e.innerText.trim() === 'transfer')).map(r => r.querySelector('.hc').innerText.trim()).sort(), names: [...m.querySelectorAll('.ti-row .ti-nm')].map(e => e.innerText), text: m.innerText,
+      btn: (([...m.querySelectorAll('button')].find(b => /^Add \d+ to Past Classes/.test(b.innerText.trim())) || {}).innerText || '').trim() }; });
+  return app;
+}
+async function deskSave(page, log) {
+  await page.evaluate(() => [...document.querySelectorAll('#tiModal button')].find(b => /^Add \d+ to Past Classes/.test(b.innerText.trim())).click());
+  for (let i = 0; i < 20 && !log.writes.some(w => w.table === 'class_history'); i++) await tick(page, 400);
+  await tick(page, 600);
+  return log.writes.filter(w => w.table === 'class_history' && w.m === 'POST').map(w => w.body).flat();
+}
+
+test('deskTransferFirst', async () => {
+  const { page, close, log, r } = await deskImport('dpr-transfer-first.pdf');
+  ok(JSON.stringify(r.now) === '["ES 3350","NR 1142","NR 3308"]', 'website, first-term transfer: “This term” is only the 3 ungraded classes — never ENGL 1134, MATH 1267 or STAT 1210 (they printed “300”/“400”)', r.now);
+  ok(r.btn === 'Add 13 to Past Classes and 3 to My Classes' && /13 are transfer, AP or study-abroad credit/.test(r.text), 'website, first-term transfer: 13 classes to Past Classes, all of them transfer credit (the report’s icons)', { btn: r.btn });
+  ok(!r.names.some(n => /\b[1-7]00\b/.test(n)), 'website, first-term transfer: a “300” / “400” never shows as part of a class’s name', r.names);
+  const hist = await deskSave(page, log);
+  ok(hist.length === 13 && hist.every(x => x.professor === '🌍'), 'website, first-term transfer: the save marks every one as transfer credit', hist.map(x => [x.code, x.professor]));
+  ok(log.errors.length === 0, 'website, first-term transfer: no page errors', log.errors);
+  await close();
+});
+
+test('deskTransferIcons', async () => {
+  const { page, close, log, r } = await deskImport('dpr-transfer-continuing.pdf');
+  ok(JSON.stringify(r.now) === '["BUS 3431","BUS 3438","BUS 4401"]', 'website, a year on: “This term” is the 3 classes he’s taking — not this term’s study-abroad placeholder (AP 300)', r.now);
+  ok(r.btn === 'Add 14 to Past Classes and 3 to My Classes' && /8 are transfer, AP or study-abroad credit/.test(r.text) && !/catalog courses — \d+ are transfer/.test(r.text), 'website, a year on: 8 of the 14 are transfer credit — said on its own, not as part of the “not in the catalog” count', { btn: r.btn });
+  ok(JSON.stringify(r.tagged) === JSON.stringify(['AP 300', 'BUS 1TR', 'BUS 2201', 'COMS 1101', 'ECON 2030', 'ENGL 1134', 'MATH 1221', 'PHIL 1T1B']), 'website, a year on: each transfer row says “transfer” in the list', r.tagged);
+  const hist = await deskSave(page, log);
+  const x = hist.filter(h => h.professor === '🌍').map(h => h.code).sort(), cp = hist.filter(h => h.professor == null).map(h => h.code).sort();
+  ok(JSON.stringify(x) === JSON.stringify(['AP 300', 'BUS 1TR', 'BUS 2201', 'COMS 1101', 'ECON 2030', 'ENGL 1134', 'MATH 1221', 'PHIL 1T1B']) && JSON.stringify(cp) === JSON.stringify(['BUS 2207', 'BUS 2212', 'BUS 3346', 'BUS 3387', 'BUS 3391', 'STAT 2170']),
+    'website, a year on: transfer credit found by the report’s icons (BUS 2201, MATH 1221 the same term as his Cal Poly classes; ECON 2030 exam credit with no icon) — the Cal Poly classes stay his', { x, cp });
+  ok(log.errors.length === 0, 'website, a year on: no page errors', log.errors);
+  await close();
+});
+
+test('deskTransferNoIcons', async () => {
+  const { page, close, log, r } = await deskImport('dpr-transfer-noicons.pdf');
+  ok(JSON.stringify(r.now) === '["ES 3350","NR 1142","NR 3308"]' && r.btn === 'Add 14 to Past Classes and 3 to My Classes' && /14 are transfer, AP or study-abroad credit/.test(r.text),
+    'website, no pictures: the words alone find the 14 transfer classes (a grade in a term still running when printed; “300”/“400”; PHIL 1T1B) and the 3 he’s taking', { now: r.now, btn: r.btn });
+  ok(log.errors.length === 0, 'website, no pictures: no page errors', log.errors);
   await close();
 });
 

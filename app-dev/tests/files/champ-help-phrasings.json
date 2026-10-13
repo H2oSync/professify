@@ -1,0 +1,821 @@
+{
+"note": "2026-10-11. Ways students might ask about TermChamp itself (pos: [question, topic]) and everyday questions that share words (neg), written by two separate model runs that never saw the matcher. Set 1 was then used to widen the rules; set 2 scored 59/80 found, 0 wrong topic, 1/50 offered by mistake before any change for it. A regression floor, not a target.",
+"pos": [
+[
+"wait what even is this app",
+"what_is"
+],
+[
+"is termchamp an official cal poly thing or nah",
+"what_is"
+],
+[
+"who made this app lol",
+"what_is"
+],
+[
+"so what does termchamp do exactly",
+"what_is"
+],
+[
+"is this affiliated w/ the school or just some students",
+"what_is"
+],
+[
+"explain the app to me real quick, new here",
+"what_is"
+],
+[
+"do i have to pay for this",
+"free"
+],
+[
+"is termchamp free or is there a subscription",
+"free"
+],
+[
+"any ads in here?",
+"free"
+],
+[
+"r u gonna sell my info to advertisers",
+"free"
+],
+[
+"does it cost money to use all the features",
+"free"
+],
+[
+"is there a premium tier or paywall",
+"free"
+],
+[
+"can ppl see my schedule",
+"who_sees"
+],
+[
+"who can view what classes im taking",
+"who_sees"
+],
+[
+"is my schedule private or does everyone see it",
+"who_sees"
+],
+[
+"will my friends see my plans b and c too",
+"who_sees"
+],
+[
+"can random students look at my classes",
+"who_sees"
+],
+[
+"how do i control who sees my timetable",
+"who_sees"
+],
+[
+"if i leave a review can the prof see its me",
+"ratings_anonymous"
+],
+[
+"are my ratings anon",
+"ratings_anonymous"
+],
+[
+"will my friends know which review i wrote",
+"ratings_anonymous"
+],
+[
+"is it anonymous when i rate a professor",
+"ratings_anonymous"
+],
+[
+"does my name show up next to my review",
+"ratings_anonymous"
+],
+[
+"can someone figure out who posted a review",
+"ratings_anonymous"
+],
+[
+"where do the prof ratings come from",
+"ratings_source"
+],
+[
+"are the professor reviews legit or fake",
+"ratings_source"
+],
+[
+"who writes the ratings u see on here",
+"ratings_source"
+],
+[
+"is the rating data scraped from somewhere",
+"ratings_source"
+],
+[
+"how do u get the scores for each instructor",
+"ratings_source"
+],
+[
+"can i trust the professor ratings",
+"ratings_source"
+],
+[
+"where do u get the seat counts",
+"seats_source"
+],
+[
+"how up to date are the open seats numbers",
+"seats_source"
+],
+[
+"is the seat info live or delayed",
+"seats_source"
+],
+[
+"how accurate are the seats shown",
+"seats_source"
+],
+[
+"seat numbers wrong sometimes, where do they pull from",
+"seats_source"
+],
+[
+"how often do the available seats refresh",
+"seats_source"
+],
+[
+"how do i put a class on my schedule",
+"add_class"
+],
+[
+"how to add a course",
+"add_class"
+],
+[
+"where do i add classes to my week",
+"add_class"
+],
+[
+"pls show me how to put my classes in",
+"add_class"
+],
+[
+"adding my classes to the app, whats the process",
+"add_class"
+],
+[
+"idk how to enter my courses",
+"add_class"
+],
+[
+"what r plans a b and c",
+"plans"
+],
+[
+"whats the point of having multiple plans",
+"plans"
+],
+[
+"how do backup schedules work here",
+"plans"
+],
+[
+"can i make a plan b schedule",
+"plans"
+],
+[
+"what do the different plan tabs mean",
+"plans"
+],
+[
+"how do i switch between plan a and plan c",
+"plans"
+],
+[
+"can i get notified when a seat opens up",
+"seat_alerts"
+],
+[
+"how do seat alerts work",
+"seat_alerts"
+],
+[
+"how do i watch a full class",
+"seat_alerts"
+],
+[
+"will i get a push when someone drops a class",
+"seat_alerts"
+],
+[
+"set up a notification for a class that's full",
+"seat_alerts"
+],
+[
+"how do i turn off the seat notifications",
+"seat_alerts"
+],
+[
+"how do i upload my dpr",
+"degree_report"
+],
+[
+"where do i put my degree progress report",
+"degree_report"
+],
+[
+"can i import my degree audit",
+"degree_report"
+],
+[
+"what do i do with my dpr pdf",
+"degree_report"
+],
+[
+"does the app read my degree progress report",
+"degree_report"
+],
+[
+"how to add my degree requirements from the report",
+"degree_report"
+],
+[
+"how do i add my friends on here",
+"add_friends"
+],
+[
+"how to find friends in the app",
+"add_friends"
+],
+[
+"can i invite my roommate",
+"add_friends"
+],
+[
+"where do i search for people to friend",
+"add_friends"
+],
+[
+"send a friend request how",
+"add_friends"
+],
+[
+"how do friends get connected on termchamp",
+"add_friends"
+],
+[
+"how do i block someone",
+"block_report"
+],
+[
+"someone posted a rude review, how do i report it",
+"block_report"
+],
+[
+"report a user pls",
+"block_report"
+],
+[
+"can i block a person who is bugging me",
+"block_report"
+],
+[
+"how to flag an inappropriate review",
+"block_report"
+],
+[
+"theres a creepy user, what can i do",
+"block_report"
+],
+[
+"how do i delete my account",
+"delete_account"
+],
+[
+"i wanna quit the app and erase everything",
+"delete_account"
+],
+[
+"what happens to my data if i delete my account",
+"delete_account"
+],
+[
+"remove my profile permanently pls",
+"delete_account"
+],
+[
+"will my reviews disappear if i delete my account",
+"delete_account"
+],
+[
+"how to close my termchamp account",
+"delete_account"
+],
+[
+"what can champ do",
+"champ"
+],
+[
+"who is champ",
+"champ"
+],
+[
+"does champ see my schedule and stuff",
+"champ"
+],
+[
+"where do my questions to champ go",
+"champ"
+],
+[
+"is the ai reading my personal info",
+"champ"
+],
+[
+"is champ a real person or a bot",
+"champ"
+],
+[
+"is there dark mode",
+"dark_mode"
+],
+[
+"how do i make the app dark",
+"dark_mode"
+],
+[
+"can i change the theme to light",
+"dark_mode"
+],
+[
+"my eyes hurt at night, any dark setting",
+"dark_mode"
+],
+[
+"how to change how the app looks",
+"dark_mode"
+],
+[
+"switch to night mode pls",
+"dark_mode"
+],
+[
+"how do i contact support",
+"contact"
+],
+[
+"found a bug, who do i tell",
+"contact"
+],
+[
+"where can i send feedback",
+"contact"
+],
+[
+"app keeps crashing, need help from a human",
+"contact"
+],
+[
+"is there an email for the team",
+"contact"
+],
+[
+"how do i report a problem with the app",
+"contact"
+],
+[
+"so what even is this app",
+"what_is"
+],
+[
+"is termchamp made by cal poly?",
+"what_is"
+],
+[
+"who built this thing",
+"what_is"
+],
+[
+"whats termchamp",
+"what_is"
+],
+[
+"is this an official poly app or just some student project",
+"what_is"
+],
+[
+"cost?",
+"free"
+],
+[
+"do i have to pay for this",
+"free"
+],
+[
+"are there ads in here",
+"free"
+],
+[
+"u guys sell my info?",
+"free"
+],
+[
+"is there a premium version or is it all free",
+"free"
+],
+[
+"i dont want my ex seeing my classes",
+"who_sees"
+],
+[
+"can everyone see my schedule or just friends",
+"who_sees"
+],
+[
+"who can look at my plans",
+"who_sees"
+],
+[
+"is my schedule public",
+"who_sees"
+],
+[
+"can random people at poly see what im taking",
+"who_sees"
+],
+[
+"if i leave a review will the prof know its me",
+"ratings_anonymous"
+],
+[
+"are reviews anonymous?",
+"ratings_anonymous"
+],
+[
+"can my friends see which review is mine",
+"ratings_anonymous"
+],
+[
+"will my name show on a rating i post",
+"ratings_anonymous"
+],
+[
+"is it safe to write a bad review lol",
+"ratings_anonymous"
+],
+[
+"where do the prof ratings come from",
+"ratings_source"
+],
+[
+"are the ratings legit",
+"ratings_source"
+],
+[
+"who writes the reviews on professors",
+"ratings_source"
+],
+[
+"r these ratings real or scraped from somewhere",
+"ratings_source"
+],
+[
+"can i trust the stars on a professor",
+"ratings_source"
+],
+[
+"how do u know how many seats are left",
+"seats_source"
+],
+[
+"seat counts accurate?",
+"seats_source"
+],
+[
+"how often do the open seats update",
+"seats_source"
+],
+[
+"where does the seat info come from",
+"seats_source"
+],
+[
+"is the seat number live or like a day old",
+"seats_source"
+],
+[
+"how do i put a class on my schedule",
+"add_class"
+],
+[
+"adding classes?",
+"add_class"
+],
+[
+"i cant figure out how to add a class",
+"add_class"
+],
+[
+"how to get a course into my week",
+"add_class"
+],
+[
+"where do i tap to add a class",
+"add_class"
+],
+[
+"whats plan a b c",
+"plans"
+],
+[
+"what are the plans tabs for",
+"plans"
+],
+[
+"can i make a backup schedule",
+"plans"
+],
+[
+"how do i keep multiple versions of my schedule",
+"plans"
+],
+[
+"plan b?",
+"plans"
+],
+[
+"how do i get notified when a seat opens up",
+"seat_alerts"
+],
+[
+"seat alerts",
+"seat_alerts"
+],
+[
+"watch a full class for me",
+"seat_alerts"
+],
+[
+"will u text me if somebody drops the class",
+"seat_alerts"
+],
+[
+"how does watching a section work",
+"seat_alerts"
+],
+[
+"where do i upload my dpr",
+"degree_report"
+],
+[
+"how do i import my degree progress report",
+"degree_report"
+],
+[
+"dpr upload?",
+"degree_report"
+],
+[
+"can the app read my degree audit",
+"degree_report"
+],
+[
+"do i need to send my progress report in",
+"degree_report"
+],
+[
+"how do i find my friends on here",
+"add_friends"
+],
+[
+"add friend",
+"add_friends"
+],
+[
+"can i invite my roommate",
+"add_friends"
+],
+[
+"how do i see my buddies schedules",
+"add_friends"
+],
+[
+"where do i search for people to add",
+"add_friends"
+],
+[
+"how do i block someone",
+"block_report"
+],
+[
+"report a review",
+"block_report"
+],
+[
+"this person keeps bugging me how do i report them",
+"block_report"
+],
+[
+"theres a nasty review on a prof, can i flag it",
+"block_report"
+],
+[
+"block user?",
+"block_report"
+],
+[
+"how do i delete my account",
+"delete_account"
+],
+[
+"i want out, remove all my data",
+"delete_account"
+],
+[
+"deleting account?",
+"delete_account"
+],
+[
+"what happens to my stuff if i delete my profile",
+"delete_account"
+],
+[
+"how to quit termchamp and wipe everything",
+"delete_account"
+],
+[
+"what can champ do",
+"champ"
+],
+[
+"does the ai read my schedule",
+"champ"
+],
+[
+"where do my questions to champ go",
+"champ"
+],
+[
+"is champ a real person or a bot",
+"champ"
+],
+[
+"what does the ai helper see about me",
+"champ"
+],
+[
+"dark mode?",
+"dark_mode"
+],
+[
+"how do i make the app dark",
+"dark_mode"
+],
+[
+"change the theme",
+"dark_mode"
+],
+[
+"too bright at night, can i switch the look",
+"dark_mode"
+],
+[
+"light mode setting",
+"dark_mode"
+],
+[
+"how do i reach support",
+"contact"
+],
+[
+"found a bug",
+"contact"
+],
+[
+"who do i email about a problem",
+"contact"
+],
+[
+"how can i send feedback",
+"contact"
+],
+[
+"app keeps crashing who do i tell",
+"contact"
+]
+],
+"neg": [
+"who's free tuesday afternoon",
+"which of my friends are free at 2pm thursday",
+"how many seats are left in BUS 3431",
+"are there open seats in csc 1001",
+"is prof martinez a good teacher",
+"what's the rating for the stats professor",
+"what does jake have on monday",
+"what classes is my roommate taking this quarter",
+"plans for dinner tonight?",
+"what are my plans for cse 2305 this week",
+"i need to drop a class, which one should i drop",
+"how do i delete a class from my schedule",
+"add jordan to my group study session",
+"can you add sarah to the thursday lunch",
+"is it dark outside yet",
+"light or dark roast, which is better",
+"how do i contact a professor",
+"what's the email for my advisor",
+"what are support courses for the finance major",
+"what does ECON 2301 cover",
+"what's the difference between acct 2101 and acct 2102",
+"hi",
+"hey champ",
+"good morning",
+"thanks!",
+"lol ok",
+"what's the weather in slo today",
+"best burrito near campus",
+"where can i park on campus",
+"when does the library close",
+"how do i get to the rec center",
+"what time is finals week",
+"when is the last day to withdraw from a class",
+"is calc 2 hard",
+"should i take stats before finance",
+"which gen ed is the easiest",
+"how many units do i need to graduate",
+"how many units am i taking this quarter",
+"who teaches math 141",
+"what time is my first class tomorrow",
+"do i have any classes on friday",
+"what's a good elective for a business major",
+"tell me a joke",
+"how do i write a good cover letter",
+"how do i study for midterms",
+"recommend a podcast",
+"what should i eat for lunch",
+"which professor has the best reviews for ENGL 134",
+"is there a seat open in my friend's section",
+"can i swap sections with my friend",
+"what is a degree in financial management good for",
+"what's a dpr in general, like what is a degree progress report used for at cal poly",
+"how do i get my transcript",
+"how do i report a lost id card",
+"how do i delete my old emails",
+"are there any free tutoring services on campus",
+"where do i get free food on campus",
+"what's the cheapest way to get textbooks",
+"how do i make friends at cal poly",
+"what are some good ratings for restaurants in slo",
+"hey",
+"hi there",
+"thanks!",
+"what time does the library close",
+"is the gym free for students",
+"where is the rec center",
+"what's good to eat near campus",
+"is BUS 3431 hard",
+"how many seats are in CSC 1001 right now",
+"what's the rating for Dr. Smith in ECON 2301",
+"does csc 1001 have a lab",
+"my friend is free on tuesday afternoon, what should we do",
+"are my friends going to the game friday",
+"what are my friend's plans for spring break",
+"can I add MATH 1421 after the deadline",
+"should I add ACCT 2171 or ACCT 2181",
+"delete BUS 3431 from my plan",
+"drop FIN 3301 before add/drop ends",
+"how do I report card grades for my transcript",
+"who made the syllabus for ECON 2301",
+"contact my advisor",
+"how do I email Professor Johnson",
+"who is the best professor for STAT 2121",
+"are ads allowed on campus bulletin boards",
+"how much does a parking permit cost",
+"is the bookstore selling used textbooks for MKTG 3011",
+"what's the weather in SLO today",
+"can you explain depreciation",
+"explain NPV vs IRR",
+"what does csc 2103 cover",
+"who can see my grades on canvas",
+"how do I block off time in my google calendar",
+"what is the dark roast at Mustang coffee",
+"how do I change my major",
+"when does registration open for winter",
+"what are the prereqs for BUS 3431",
+"is there a waitlist for ARCH 2511",
+"tell me a joke",
+"what's the capital of France",
+"how do I get a refund on my meal plan",
+"can I take FIN 3301 and FIN 3302 together",
+"how do i delete a file off my laptop",
+"what's the best way to study for finals",
+"how long is the drive to Encinitas",
+"where do I upload my homework for MATH 1421",
+"how do I report a broken light on campus",
+"is the student health center free",
+"what does the A in plan A mean on my financial aid letter",
+"who is my academic advisor for finance",
+"what's a good intro commercial real estate book"
+]
+}
