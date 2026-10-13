@@ -263,10 +263,45 @@ export function calendarHorizon(calendar) {
   return ends.length ? ends[ends.length - 1] : null;
 }
 
-export function planFor(now = new Date(), calendar = loadCalendar()) {
+/* CATCH-UP (2026-10-13). Slots alone assume the cron fires on time. It does not: GitHub fired a
+   10-minute cron about every 5-6 hours from Oct 5 to Oct 13, so Spring 2027's 7:00 slot was never
+   hit and its rows sat at Oct 5. `lastPulls` maps a term code to the ISO time of its newest row
+   in course_seats (null = the term has no rows). A term whose newest row is at least one
+   interval old is due no matter what the clock says — so every firing, however late, pulls what
+   is stale, and a missed slot costs one firing instead of a day.
+   `lastPulls` undefined = not read (tests, or Supabase unreachable): slots only, as before. */
+/* Age in minutes of a term's newest row, or null when unknown / no rows. */
+export function ageMinutes(ageNow, last) {
+  if (last === null || last === undefined) return null;
+  const t = new Date(last).getTime();
+  return Number.isNaN(t) ? null : (ageNow.getTime() - t) / 60000;
+}
+
+/* Stale = newest row at least one interval old. A term with NO rows is not "stale" — it is pulled
+   on its clock slots only, because a term the scraper keeps finding empty (it exits on "Zero
+   sections" without writing) would otherwise be re-swept, 24 lanes, every ten minutes forever. */
+export function isStale(age, every) {
+  return every !== null && every !== undefined && age !== null && age >= every;
+}
+
+/* Fresh = pulled within the last half interval. Two clocks start this workflow (Supabase's and
+   GitHub's backup cron); without this, a GitHub firing that lands in the same slot right after a
+   finished sweep would start a second full sweep of numbers that are minutes old. */
+export function isFresh(age, every) {
+  return every !== null && every !== undefined && age !== null && age < every / 2;
+}
+
+/* `ageNow` is the real current time. `now` (the run's creation time) still picks the clock slot,
+   but a run released late from the concurrency queue must measure age against the present, or
+   rows written while it waited look newer than "now" and it never counts as stale. */
+export function planFor(now = new Date(), calendar = loadCalendar(), lastPulls = undefined, ageNow = now) {
   const pt = pacific(now);
   const terms = (calendar.terms || []).map(t => {
     const p = phaseForTerm(t, pt.date);
+    const last = lastPulls && t.term_code ? (lastPulls[t.term_code] ?? null) : undefined;
+    const age = last === undefined ? null : ageMinutes(ageNow, last);
+    const stale = !!t.term_code && isStale(age, p.every);
+    const fresh = !!t.term_code && isFresh(age, p.every);
     return {
       label: t.label,
       term_code: t.term_code || null,
@@ -274,7 +309,9 @@ export function planFor(now = new Date(), calendar = loadCalendar()) {
       every: p.every,
       mode: p.mode,
       why: p.why,
-      due: dueNow(pt, p.every),
+      due: (dueNow(pt, p.every) && !fresh) || stale,
+      stale,
+      last_pull: last === undefined ? undefined : last,
       source: t.source,
     };
   });
@@ -289,6 +326,8 @@ export function planFor(now = new Date(), calendar = loadCalendar()) {
   for (const t of dueTerms) if (!t.term_code) warnings.push(`${t.label} is due to be scraped (${t.phase}) but has no confirmed PeopleSoft term code.`);
 
   return {
+    now: now.getTime(),
+    ageNow: ageNow.getTime(),
     pacific: pt,
     verified_on: calendar.verified_on || null,
     horizon,
@@ -314,7 +353,9 @@ export function describe(plan) {
   const lines = [`Pacific ${plan.pacific.date} ${String(plan.pacific.hour).padStart(2, '0')}:${String(plan.pacific.minute).padStart(2, '0')}`];
   for (const t of plan.terms) {
     const cadence = t.every === null ? 'never' : t.every >= 1440 ? `daily @${DAILY_HOUR_PT}:00 PT` : `every ${t.every}m`;
-    lines.push(`  ${t.due ? '>>' : '  '} ${t.label.padEnd(12)} ${t.phase.padEnd(16)} ${cadence.padEnd(18)} ${t.mode || '-'}  — ${t.why}`);
+    const age = t.last_pull === undefined ? '' : t.last_pull === null ? ' [no rows yet]'
+      : ` [newest row ${Math.round((plan.ageNow - new Date(t.last_pull).getTime()) / 60000)}m old${t.stale ? ', STALE' : ''}]`;
+    lines.push(`  ${t.due ? '>>' : '  '} ${t.label.padEnd(12)} ${t.phase.padEnd(16)} ${cadence.padEnd(18)} ${t.mode || '-'}  — ${t.why}${age}`);
   }
   for (const w of (plan.warnings || [])) lines.push('  !! ' + w);
   lines.push(plan.scrape ? `  => SCRAPE: ${plan.due.map(t => `${t.label} (${t.mode})`).join(', ')}` : '  => skip this run');

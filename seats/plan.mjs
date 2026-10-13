@@ -23,7 +23,37 @@ if (Number.isNaN(now.getTime())) { console.error('--at needs an ISO timestamp');
    confirmed terms due at once, neither allowed to starve the other) is not reachable that way
    until Spring's code is committed in October. A bug that only becomes testable on the morning
    it fires is not tested. */
-const plan = planFor(now, process.env.CP_CALENDAR ? loadCalendar(process.env.CP_CALENDAR) : undefined);
+const calendar = process.env.CP_CALENDAR ? loadCalendar(process.env.CP_CALENDAR) : loadCalendar();
+
+/* HOW OLD EACH TERM'S DATA IS (2026-10-13) — see isStale in cadence.mjs. One query per term with
+   a confirmed code: the newest updated_at in course_seats. CP_LAST_PULLS (JSON: {code: iso|null})
+   replaces the query in tests. Anything going wrong means `undefined` = slots only, and a
+   warning, never a failed gate. */
+async function readLastPulls() {
+  if (process.env.CP_LAST_PULLS) return JSON.parse(process.env.CP_LAST_PULLS);
+  const url = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
+  const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || '';
+  if (!url || !key) return undefined;
+  const out = {};
+  for (const t of calendar.terms || []) {
+    if (!t.term_code) continue;
+    const r = await fetch(`${url}/rest/v1/course_seats?term=eq.${encodeURIComponent(t.term_code)}&select=updated_at&order=updated_at.desc.nullslast&limit=1`,
+      { headers: { apikey: key, Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(10000) });
+    if (!r.ok) throw new Error(`course_seats read for ${t.term_code}: HTTP ${r.status}`);
+    const rows = await r.json();
+    out[t.term_code] = rows.length && rows[0].updated_at ? rows[0].updated_at : null;
+  }
+  return out;
+}
+let lastPulls, pullWarning = '';
+try { lastPulls = await readLastPulls(); }
+catch (e) { lastPulls = undefined; pullWarning = `Could not read how old each term's seats are (${String(e.message || e).slice(0, 160)}) — pulling on clock slots only this run.`; }
+if (lastPulls === undefined && !pullWarning && !process.env.CP_CALENDAR) pullWarning = 'SUPABASE_URL / key not set for the plan job — pulling on clock slots only.';
+
+/* Age is measured against the real present unless a test pins the moment with CP_LAST_PULLS. */
+const ageNow = process.env.CP_LAST_PULLS ? now : new Date(Math.max(now.getTime(), Date.now()));
+const plan = planFor(now, calendar, lastPulls, ageNow);
+if (pullWarning) plan.warnings.push(pullWarning);
 console.log(describe(plan));
 
 /* WHICH TERMS THE LANES PULL — plural, and what happens when one of them cannot be known.
