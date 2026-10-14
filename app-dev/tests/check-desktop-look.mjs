@@ -45,7 +45,7 @@ test('themes', async () => {
     ok(await page.evaluate(() => document.documentElement.getAttribute('data-theme')) === 'light', 'a saved cream (retired) opens light'); await close(); }
   { const { page, close, log } = await desk({ init: withTheme('dark') }); await tick(page, 1500);
     const r = await page.evaluate(() => ({ t: document.documentElement.getAttribute('data-theme'), bg: getComputedStyle(document.body).backgroundColor, card: getComputedStyle(document.querySelector('.hm-card')).backgroundColor }));
-    ok(r.t === 'dark' && r.bg === 'rgb(11, 17, 32)' && r.card === 'rgb(21, 29, 46)', 'a saved dark opens dark, on the dark palette', r);
+    ok(r.t === 'dark' && r.bg === 'rgb(10, 15, 28)' && r.card === 'rgb(20, 27, 43)', 'a saved dark opens dark, on the dark palette', r);
     ok(log.errors.length === 0, 'no page errors (dark)', log.errors); await close(); }
 });
 
@@ -58,7 +58,7 @@ test('settingsTheme', async () => {
   ok(await page.evaluate(() => document.querySelector('#setTheme button.on').textContent.trim()) === 'Light', 'Light is the lit choice by default');
   await page.evaluate(() => { const b = [...document.querySelectorAll('#setTheme button')].find(x => x.textContent.trim() === 'Dark'); b.click(); }); await tick(page, 300);
   let r = await page.evaluate(() => ({ t: document.documentElement.getAttribute('data-theme'), s: localStorage.getItem('professify-theme'), on: document.querySelector('#setTheme button.on').textContent.trim(), bg: getComputedStyle(document.body).backgroundColor }));
-  ok(r.t === 'dark' && r.s === 'dark' && r.on === 'Dark' && r.bg === 'rgb(11, 17, 32)', 'Dark switches the page and is remembered', r);
+  ok(r.t === 'dark' && r.s === 'dark' && r.on === 'Dark' && r.bg === 'rgb(10, 15, 28)', 'Dark switches the page and is remembered', r);
   await page.evaluate(() => { document.documentElement.style.setProperty('--accent', '#4CAF82'); setTheme('light'); }); await tick(page, 200);
   ok(await page.evaluate(() => document.documentElement.style.getPropertyValue('--accent')) === '', 'switching theme never leaves the school\'s green painted inline');
   await page.evaluate(() => setTheme('cream')); await tick(page, 200);
@@ -73,11 +73,11 @@ test('topBar', async () => {
     const box = e => e.getBoundingClientRect();
     return { labels: bs.map(b => [...b.querySelectorAll(':scope > span:not(.tpill)')].filter(x => !/badge/.test(x.className) && !x.hidden).pop().textContent.trim()), tabsL: box(document.querySelector('nav.tabs')).left, brandR: box(document.querySelector('.brand')).right,
       bell: box(document.querySelector('.notif-wrap')).left, tabsR: box(document.querySelector('nav.tabs')).right, vw: innerWidth,
-      wm: (document.querySelector('.brand .brand-wm') || {}).textContent, aria: document.querySelector('.brand').getAttribute('aria-label') };
+      wm: (document.querySelector('.brand .brand-logo') ? 'TermChamp' : ''), aria: document.querySelector('.brand').getAttribute('aria-label') };
   });
   ok(JSON.stringify(r.labels) === '["Home","Explore","Rate","Schedule","Friends"]', 'the app\'s five tabs, in the app\'s order', r.labels);
   ok(r.tabsL - r.brandR > 120 && r.bell >= r.tabsR && r.bell - r.tabsR < 40, 'the tabs sit on the right, with the bell after them (Tate: keep the toolbar on the right)', r);
-  ok(r.wm === 'TermChamp' && r.aria === 'TermChamp — go to home', 'the wordmark beside the mark; the button still names the app', r);
+  ok(r.wm === 'TermChamp' && r.aria === 'TermChamp — go to home', 'the logo image sits in the header; the button still names the app', r);
   const act = await page.evaluate(() => { const b = document.getElementById('tab-home'), pl = b.querySelector('.tpill'); return { c: getComputedStyle(b).color, p: pl && getComputedStyle(pl).backgroundColor, other: getComputedStyle(document.getElementById('tab-explore').querySelector('.tpill')).backgroundColor }; });
   ok(act.c === 'rgb(29, 78, 216)' && act.p === 'rgb(227, 236, 255)' && act.other === 'rgba(0, 0, 0, 0)', 'the active tab is blue in a light-blue pill, the others plain', act);
   await page.evaluate(() => show('sched')); await tick(page, 300);

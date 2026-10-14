@@ -26,7 +26,7 @@ await tick(page, 2500);
 const lastTurn = () => page.evaluate(() => { const t = [...document.querySelectorAll('.hawk-turn')].pop(); return t ? { text: t.textContent, rows: [...t.querySelectorAll('.hawk-row')].map(r => r.textContent.trim()) } : null; });
 const askQ = async q => { await page.evaluate(q => HawkAsk.ask(q), q); await tick(page, 1500); return lastTurn(); };
 for (const [q, want] of [['how do i contact termchamp', 'How do I contact TermChamp?'], ['how do i contact you guys', 'How do I contact TermChamp?'],
-                         ['is hawk safe with my data', 'What does Hawk do and where does my information go?'], ['is this app free to use', 'Is TermChamp free?']]) {
+                         ['is hawk safe with my data', 'What does Champ do and where does my information go?'], ['is this app free to use', 'Is TermChamp free?']]) {
   const t = await askQ(q);
   ok(t && t.rows.some(r => r.includes(want)), `help chips: “${q}” is offered “${want}”`, t);
   if (q === 'how do i contact termchamp' && t && t.rows.some(r => r.includes(want))) {
