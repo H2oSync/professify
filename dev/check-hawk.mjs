@@ -42,9 +42,11 @@ for (const [w,h,label] of [[1280,900,'desktop'],[390,780,'phone']]) {
     return !scrim;
   }));
   ok(`${label}: the app behind is still clickable`, await p.evaluate(()=>{
-    const el=document.elementFromPoint(20, Math.round(window.innerHeight/2));
+    /* A point on the page ABOVE the box (the Champ sheet is taller than the old box, so the screen's midline can be under it). */
+    const y=Math.round(document.querySelector('.hawk-box').getBoundingClientRect().top/2);
+    const el=document.elementFromPoint(20, y);
     return !!el && !el.closest('.hawk-box');
-  }), await p.evaluate(()=>{const el=document.elementFromPoint(20,Math.round(window.innerHeight/2));return el?el.className||el.tagName:'none';}));
+  }), await p.evaluate(()=>{const y=Math.round(document.querySelector('.hawk-box').getBoundingClientRect().top/2);const el=document.elementFromPoint(20,y);return el?el.className||el.tagName:'none';}));
 
   /* SMALL IS THE FEATURE, so it is a number rather than an adjective. */
   const ceiling = label==='desktop' ? 0.16 : 0.42;
@@ -83,11 +85,11 @@ for (const [w,h,label] of [[1280,900,'desktop'],[390,780,'phone']]) {
   ok(`${label}: changing the profile's major moves the ledger with it`, led.skip || led.switched, JSON.stringify(led));
 
   /* ---- the privacy policy says what Hawk sends (apply-sep24) ---------------------------------- */
-  ok(`${label}: the privacy policy has a Hawk section and names Anthropic`, await p.evaluate(()=>{
+  ok(`${label}: the privacy policy has a Champ section and names Anthropic`, await p.evaluate(()=>{
     openLegal('privacy');
     const h = (document.getElementById('legalBody') || {}).innerHTML || '';
     try { closeLegal(); } catch (e) {}
-    return /Hawk, the assistant/.test(h) && /<b>Anthropic<\/b>/.test(h) && /30 days/.test(h) && /except the questions you ask Hawk/.test(h)
+    return /Champ, the assistant/.test(h) && /<b>Anthropic<\/b>/.test(h) && /30 days/.test(h) && /except the questions you ask Champ/.test(h)
       && /Last updated 2[45] September 2026/.test(h);
   }));
 
@@ -517,7 +519,7 @@ for (const [w,h,label] of [[1280,900,'desktop'],[390,780,'phone']]) {
   ok(`${label}: professor stats give the real rating and send you to the rest`, /4\.4 ★ from \d+ rating/.test(t) && /on their page/.test(t), t.slice(0,100));
 
   t = await askQ('what can you do');
-  ok(`${label}: help lists what Hawk can do`, await p.evaluate(()=>document.querySelectorAll('.hawk-log .hawk-row').length >= 6), t.slice(0,80));
+  ok(`${label}: help lists what Champ can do`, await p.evaluate(()=>document.querySelectorAll('.hawk-log .hawk-row').length >= 6), t.slice(0,80));
 
   t = await askQ('when does registration open');
   ok(`${label}: registration answers with a real date`, /October 19, 2026/.test(t), t.slice(0,80));
@@ -744,15 +746,15 @@ for (const [w,h,label] of [[1280,900,'desktop'],[390,780,'phone']]) {
     const b=document.querySelector('.hawk-box').getBoundingClientRect();
     return Math.round(b.bottom) <= Math.round(f.top) + 2;
   }));
-  ok(`${label}: it is round, in the bottom-right, and wears Hawk's face`, await p.evaluate(()=>{
-    const f=document.querySelector('.hawk-fab');
-    const r=f.getBoundingClientRect(), s=getComputedStyle(f);
-    return r.width <= 60 && r.width >= 40
-      && Math.abs(r.width - r.height) < 2
-      && parseFloat(s.borderRadius) >= r.width/2
+  /* 2026-10-14: the launcher is the phone's Champ (website-hawk-champ-icon): the bird, no circle, "Ask Me!" above it. */
+  ok(`${label}: it is in the bottom-right and is the phone's Champ`, await p.evaluate(()=>{
+    const f=document.querySelector('.hawk-fab'), bird=f.querySelector('.hawk-fab__bird'), bub=f.querySelector('.hawk-fab__bub');
+    const r=f.getBoundingClientRect(), b=bird&&bird.getBoundingClientRect();
+    return !!bird && !!bub && /Ask Me!/.test(bub.textContent)
+      && r.width <= 80 && r.width >= 44 && b.width >= 40 && b.height >= 50
       && (window.innerWidth - r.right) < 40
       && (window.innerHeight - r.bottom) < 140
-      && s.backgroundImage.includes('data:image');
+      && getComputedStyle(bird).backgroundImage.includes('data:image/webp');
   }));
   ok(`${label}: it says where it sent you`, await p.evaluate(()=>/Opened/.test(document.querySelector('.hawk-log').textContent)));
 
@@ -764,7 +766,7 @@ for (const [w,h,label] of [[1280,900,'desktop'],[390,780,'phone']]) {
      class page's "took it" friend chip (.fr-chip-took) runs 13px past a 390px screen when a friend
      has the class in their history. Reported to Tate 2026-09-23; not Hawk's file to change. */
   ok(`${label}: Hawk causes no sideways scroll`, await p.evaluate(()=>
-     ![...document.querySelectorAll('.hawk-box *, .hawk-fab')].some(e=>e.getBoundingClientRect().right>window.innerWidth+1)),
+     ![...document.querySelectorAll('.hawk-box *, .hawk-fab')].some(e=>!e.closest('.hawk-chips')&&e.getBoundingClientRect().right>window.innerWidth+1)) /* the slim chip row scrolls inside itself, by design */,
      await p.evaluate(()=>[...document.querySelectorAll('body *')].filter(e=>e.getBoundingClientRect().right>window.innerWidth+1)
          .slice(-3).map(e=>(e.className||e.tagName)+'@'+Math.round(e.getBoundingClientRect().right)).join(', ')));
 
