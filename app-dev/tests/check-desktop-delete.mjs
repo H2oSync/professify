@@ -57,9 +57,12 @@ const delHook = st => (url, m, body) => {
   const st = { at: PURGE }; let n = 0;
   const inner = delHook(st);
   const hook = (url, m, body) => (url.pathname === '/rest/v1/rpc/my_account_deletion' && ++n === 1) ? { status: 500, body: JSON.stringify({ code: 'XX000', message: 'down', details: null, hint: null }) } : inner(url, m, body);
-  const { page, close } = await desk({ hook });
-  await tick(page, 1500);
-  ok(await page.locator('#recBack.open').count() === 0, 'website: a failed check doesn’t show it yet');
+  /* the second ask comes 5s after the failed first one: look as soon as the first has failed, not after a fixed wait
+     (4s of desk wait + 1.5s of tick put this assertion right on the retry, and under load it lost) */
+  const { page, close } = await desk({ hook, wait: 600 });
+  for (let i = 0; i < 80 && n < 1; i++) await page.waitForTimeout(100);
+  await page.waitForTimeout(300);
+  ok(n === 1 && await page.locator('#recBack.open').count() === 0, 'website: a failed check doesn’t show it yet');
   await page.clock.runFor(6000); await page.waitForTimeout(600);
   ok(n >= 2 && await page.locator('#recBack.open').count() === 1, 'website: …and asks again, then shows Recover', n);
   const z = await page.evaluate(() => [getComputedStyle(document.getElementById('recBack')).zIndex, [...document.body.children].filter(e => e.id !== 'recBack' && !e.inert && e.tagName !== 'SCRIPT').length]);

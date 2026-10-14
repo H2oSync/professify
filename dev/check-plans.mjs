@@ -46,8 +46,25 @@ const FIXTURE = `(() => {
   return { HI, LO, MID };
 })()`;
 
+/* The Builder draws a class only when the report or the flowchart still needs it. Signed out, with no report, the
+   flowchart's rows are stood in for with the fixture's classes (the real rows are put back by FLOW_OFF). */
+const FLOW_ON = `(() => {
+  window.__was = window.__was || { major: student.major, rows: window.plFlowRows };
+  student.major = 'Business Administration';
+  window.plFlowRows = function () { return { blocked: [], eligible: [
+    { codes: ['ECON 2001'], year: 2, term: 'Fall', title: 'Economics' }, { codes: ['BUS 4442'], year: 2, term: 'Fall', title: 'Business' },
+    { codes: ['HIST 2230'], year: 2, term: 'Fall', title: 'History' }, { codes: ['PSY 2010'], year: 2, term: 'Fall', title: 'Psychology' },
+    { codes: ['CHEM 1110'], year: 1, term: 'Fall', title: 'Chemistry' }] }; };
+  TCBuilder.render();
+})()`;
+const FLOW_OFF = `(() => { if (window.__was) { student.major = window.__was.major; window.plFlowRows = window.__was.rows; window.__was = null; } TCBuilder.render(); })()`;
+
 for (const [w, h, label] of [[1280, 900, 'desktop'], [390, 800, 'phone']]) {
   const ctx = await b.newContext({ viewport: { width: w, height: h }, hasTouch: label === 'phone', isMobile: label === 'phone' });
+  /* The site ships on two terms since website-spring-wall (2026-10-14: TERM Spring 2027, now Fall 2026). These checks
+     are written on Fall 2026 while registering for Spring — the preview case below — so they pin that term; the
+     config is merged, so a page may set just the terms. The two-term site is check-desktop-terms'. */
+  await ctx.addInitScript(() => { window.PROFESSIFY_CONFIG = { TERM: '2268', TERM_LABEL: 'Fall 2026', NOW_TERM: '2268', NOW_LABEL: 'Fall 2026' }; });
   await ctx.route('**', (r) => r.request().url().startsWith('http://localhost:' + PORT) ? r.continue() : r.abort());
   const p = await ctx.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(e.message));
   await p.goto('http://localhost:' + PORT + '/', { waitUntil: 'domcontentloaded' });
@@ -58,13 +75,6 @@ for (const [w, h, label] of [[1280, 900, 'desktop'], [390, 800, 'phone']]) {
   ok(`${label}: the module loaded`, await p.evaluate(() => !!window.TCPlans && !!document.getElementById('plans-js')));
   ok(`${label}: tabs read My classes · Plans · Planner`, await p.evaluate(() =>
     document.getElementById('stab-watch').textContent.trim().startsWith('Plans') && document.getElementById('stab-plan').textContent.trim().startsWith('Planner')));
-
-  const HOVER = label === 'desktop';
-  const pick = async (code) => {                         // point at (desktop) or tap (phone) a class in Planner
-    const sel = `#plBuilderOut .pl3-need[data-code="${code}"]`;
-    if (HOVER) { await p.hover(sel); await p.waitForTimeout(330); } else { await p.tap(sel); await p.waitForTimeout(120); }
-  };
-  const ghosts = () => p.evaluate(() => [...new Set([...document.querySelectorAll('#pl3BWeek .pl3-ghost')].map((g) => g.getAttribute('data-crn')))].sort());
 
   /* ---- Plans: an empty plan is an empty week with one button ------------------------------------ */
   await p.evaluate(() => { show('sched'); setSchedTab('watch'); });
@@ -78,102 +88,82 @@ for (const [w, h, label] of [[1280, 900, 'desktop'], [390, 800, 'phone']]) {
     getComputedStyle(document.querySelector('#schedWatchWrap .wl-hdr')).display === 'none' && getComputedStyle(document.getElementById('watchClassSec')).display === 'none'));
   ok(`${label}: signed out, it says plans are kept on this device`, await p.evaluate(() => /kept on this device/.test(document.getElementById('plansOut').textContent)));
 
-  /* ---- Build Plan A → Planner --------------------------------------------------------------- */
+  /* ---- Build Plan A → the Builder (website-builder 2026-10-14: the Builder replaced "My planner") ---------
+     Tiles, not search rows and green blocks: a tile's + adds that class's best section to the plan being filled. The
+     Builder draws a class only when the report or the flowchart still needs it, so — signed out, with no report —
+     the flowchart's rows are stood in for here (plFlowRows, put back below) with the fixture's classes. */
   await p.click('#plansOut [data-pl-act="edit"]');
+  await p.waitForTimeout(250);
+  ok(`${label}: "Build Plan A" opens the Builder, filling Plan A, with Past classes tucked away`, await p.evaluate(() => {
+    const w = document.getElementById('schedPlanWrap'), bo = document.getElementById('plBuilderOut'), on = bo.querySelector('.bd-slot.on');
+    return w.style.display !== 'none' && !!on && /^Plan A\b/.test(on.textContent.trim()) && getComputedStyle(document.getElementById('plRecord')).display === 'none'
+      && !!bo.querySelector('.bd-past') && document.getElementById('stab-plan').classList.contains('on') && !bo.querySelector('.pl3-need');
+  }));
+  ok(`${label}: with no major and no report it asks for the Degree Progress Report, and draws no class`, await p.evaluate(() => {
+    const bo = document.getElementById('plBuilderOut'), u = bo.querySelector('.bd-upload');
+    return !!u && /Upload your Degree Progress Report/.test(u.textContent) && bo.querySelectorAll('.bd-tile').length === 0;
+  }));
+  await p.evaluate(FLOW_ON);
+  await p.waitForTimeout(250);
+  const tl = await p.evaluate(() => [...document.querySelectorAll('#plBuilderOut .bd-tile')].map((t) => t.dataset.code));
+  ok(`${label}: with a major, a tile for each class the flowchart still needs and the term offers`, ['ECON 2001', 'BUS 4442', 'HIST 2230', 'PSY 2010', 'CHEM 1110'].every((c) => tl.includes(c)) && tl.length === 5, JSON.stringify(tl));
+  ok(`${label}: a tile shows the best section's time, its professor and its seats; an online class says so`, await p.evaluate(() => {
+    const t = (c) => document.querySelector(`#plBuilderOut .bd-tile[data-code="${c}"]`).innerText;
+    return /TuTh 8:10AM–9:30AM/.test(t('ECON 2001')) && /Ada Hilltop/.test(t('ECON 2001')) && /10\/35 open/.test(t('ECON 2001')) && /No set meeting time/.test(t('PSY 2010'));
+  }));
+  await p.click('#plBuilderOut .bd-tile[data-code="ECON 2001"] .bd-add');
   await p.waitForTimeout(150);
-  ok(`${label}: "Build Plan A" opens Planner, building Plan A, degree tucked away`, await p.evaluate(() => {
-    const w = document.getElementById('schedPlanWrap'), bo = document.getElementById('plBuilderOut');
-    return w.style.display !== 'none' && /Building Plan A/.test(bo.textContent) && getComputedStyle(document.getElementById('plRecord')).display === 'none'
-      && /Classes you need/.test(bo.textContent) && document.getElementById('stab-plan').classList.contains('on');
-  }));
-  ok(`${label}: with no major it says how to fill the list, and search still works`, await p.evaluate(() => /Add your major in Settings/.test(document.getElementById('plBuilderOut').textContent)));
-  await p.fill('#plBuilderOut input[data-pl-act="q"]', 'econ');
-  await p.waitForTimeout(120);
-  ok(`${label}: searching "econ" lists ECON 2001, and the box keeps focus while typing`, await p.evaluate(() =>
-    !!document.querySelector('#plBuilderOut .pl3-need[data-code="ECON 2001"]') && document.activeElement && document.activeElement.getAttribute('data-pl-act') === 'q'));
-  await pick('ECON 2001');
-  ok(`${label}: ${HOVER ? 'hovering' : 'tapping'} a class draws every section that fits as a green block`, JSON.stringify(await ghosts()) === JSON.stringify(['22221', '22223', '22225']), JSON.stringify(await ghosts()));
-  ok(`${label}: ${HOVER ? 'pointing' : 'ONE tap'} is enough — the phone's first tap is not undone by focus`, (await ghosts()).length === 3);
-  if (HOVER) {
-    /* crossing another class on the way to a green block must not change the preview */
-    await p.fill('#plBuilderOut input[data-pl-act="q"]', '');
-    await p.waitForTimeout(100);
-    await p.fill('#plBuilderOut input[data-pl-act="q"]', 'e');
-    await p.waitForTimeout(100);
-    const codes = await p.evaluate(() => [...document.querySelectorAll('#plBuilderOut .pl3-need')].map((x) => x.getAttribute('data-code')));
-    const other = codes.find((c) => c !== 'ECON 2001');
-    await p.hover('#plBuilderOut .pl3-need[data-code="ECON 2001"]'); await p.waitForTimeout(330);
-    if (other) { await p.hover(`#plBuilderOut .pl3-need[data-code="${other}"]`); await p.waitForTimeout(60); }
-    await p.hover('#pl3BWeek .pl3-col:nth-of-type(3)'); await p.waitForTimeout(400);
-    /* the gap between the list and the week takes longer than the rest time: still no switch */
-    if (other) { await p.hover(`#plBuilderOut .pl3-need[data-code="${other}"]`); await p.waitForTimeout(60); await p.mouse.move(640, 5); await p.waitForTimeout(500); await p.hover('#pl3BWeek .pl3-col:nth-of-type(3)'); await p.waitForTimeout(100); }
-    ok(`${label}: sweeping past another class on the way to the week keeps the preview`, JSON.stringify(await ghosts()) === JSON.stringify(['22221', '22223', '22225']), JSON.stringify({ other, g: await ghosts() }));
-    await p.fill('#plBuilderOut input[data-pl-act="q"]', 'econ');
-    await p.waitForTimeout(100);
-    await pick('ECON 2001');
-  }
-  ok(`${label}: …and says so in one line`, await p.evaluate(() => /ECON 2001 fits in 3 spots/.test(document.querySelector('#plBuilderOut .pl3-hint').textContent)));
-  if (HOVER) {
-    /* the keyboard path: Enter on a class moves focus to its first green block; Enter adds it */
-    await p.focus('#plBuilderOut .pl3-need[data-code="ECON 2001"]');
-    await p.keyboard.press('Enter'); await p.waitForTimeout(120);
-    const kf = await p.evaluate(() => { const a = document.activeElement; return a && a.classList.contains('pl3-ghost') ? a.getAttribute('data-crn') : null; });
-    ok(`${label}: keyboard: Enter on a class moves focus to a green block`, !!kf, String(kf));
-    await p.evaluate(() => { const g = document.querySelector('#pl3BWeek .pl3-ghost[data-crn="22223"]'); g.focus(); });
-    await p.keyboard.press('Enter'); await p.waitForTimeout(150);
-    ok(`${label}: keyboard: Enter on the block adds it, and focus stays in the Planner`, await p.evaluate(() =>
-      TCPlans.get('A').sections.some((x) => x.class_nbr === '22223') && document.getElementById('plBuilderOut').contains(document.activeElement)));
-  } else {
-    await p.tap('#pl3BWeek .pl3-ghost[data-crn="22223"]');
-    await p.waitForTimeout(150);
-  }
-  ok(`${label}: clicking a green block adds that section to the plan, and watches it`, await p.evaluate(() =>
-    TCPlans.get('A').sections.some((x) => x.class_nbr === '22223') && isWatchedSec('ECON 2001', '22223') && document.querySelectorAll('#pl3BWeek .pl3-blk').length === 2));
-  await p.evaluate(() => { TCPlans.add('A', 'BUS 4442', '11111'); TCPlans.add('A', 'PSY 2010', '44445'); });
-  ok(`${label}: search still finds a class that's already in the plan, and says so`, await p.evaluate(() =>
-    /In Plan A/.test((document.querySelector('#plBuilderOut .pl3-need[data-code="ECON 2001"]') || {}).textContent || '')));
-  ok(`${label}: a class with no times posted says so — not "doesn't fit"`, await p.evaluate(() => {
-    SEAT_SECTIONS['ART 1010'] = [{ class_nbr: '77701', section: 'S01-LEC Regular', instructor: 'Cy Lowland', days: 'TBA', status: 'Open', capacity: 20, enrolled: 0, available: 20 }];
-    const q = document.querySelector('#plBuilderOut input[data-pl-act="q"]'); q.value = 'art 1010'; q.dispatchEvent(new Event('input', { bubbles: true }));
-    document.querySelector('#plBuilderOut .pl3-need[data-code="ART 1010"]').click();
-    const h = document.querySelector('#plBuilderOut .pl3-hint').textContent, row = document.querySelector('#plBuilderOut .pl3-need[data-code="ART 1010"]').textContent;
-    delete SEAT_SECTIONS['ART 1010'];
-    return /no meeting times posted yet/.test(h) && /no time yet/.test(row) && !/fits around/.test(h);
-  }));
-  ok(`${label}: sections at the very same time become one green block (the best-rated), not slivers`, await p.evaluate(() => {
-    SEAT_SECTIONS['ECON 2002'] = ['1', '2', '3', '4'].map((n) => ({ class_nbr: '8880' + n, section: 'S0' + n + '-LEC Regular', instructor: n === '3' ? 'Ada Hilltop' : 'Cy Lowland', days: 'Fr 9:10AM - 10:00AM', status: 'Open', capacity: 30, enrolled: 5, available: 25 }));
-    const q = document.querySelector('#plBuilderOut input[data-pl-act="q"]'); q.value = 'econ 2002'; q.dispatchEvent(new Event('input', { bubbles: true }));
-    document.querySelector('#plBuilderOut .pl3-need[data-code="ECON 2002"]').click();
-    const gs = [...document.querySelectorAll('#pl3BWeek .pl3-ghost')];
-    const r = gs.length === 1 && gs[0].getAttribute('data-crn') === '88803' && /\+3/.test(gs[0].textContent);
-    delete SEAT_SECTIONS['ECON 2002']; q.value = ''; q.dispatchEvent(new Event('input', { bubbles: true }));
-    return r;
-  }));
-  await p.fill('#plBuilderOut input[data-pl-act="q"]', 'hist');
-  await p.waitForTimeout(120);
-  await pick('HIST 2230');
-  ok(`${label}: a section that clashes with the plan, or is full, is never offered`, JSON.stringify(await ghosts()) === JSON.stringify(['33332']), JSON.stringify(await ghosts()));
-  await p.click('#pl3BWeek .pl3-ghost[data-crn="33332"]');
+  ok(`${label}: a tile's + adds its best section to Plan A and watches it, and the tile says it is in`, await p.evaluate(() =>
+    JSON.stringify(TCPlans.get('A').sections.map((x) => x.class_nbr)) === '["22221"]' && isWatchedSec('ECON 2001', '22221')
+    && document.querySelector('#plBuilderOut .bd-tile[data-code="ECON 2001"] .bd-add').classList.contains('in')));
+  await p.click('#plBuilderOut .bd-tile[data-code="ECON 2001"] .bd-add');
   await p.waitForTimeout(150);
-  await p.fill('#plBuilderOut input[data-pl-act="q"]', '');
+  ok(`${label}: + on a tile already in the plan takes it out again, and un-watches what the plan watched`, await p.evaluate(() =>
+    TCPlans.get('A').sections.length === 0 && !isWatchedSec('ECON 2001', '22221')
+    && !document.querySelector('#plBuilderOut .bd-tile[data-code="ECON 2001"] .bd-add').classList.contains('in')));
+  await p.click('#plBuilderOut .bd-tile[data-code="ECON 2001"] .bd-add');
   await p.waitForTimeout(100);
+  await p.evaluate(() => TCBuilder.add('ECON 2001', '22223'));      // the tile's own handler, for the section the rest of this suite is written on
+  await p.waitForTimeout(100);
+  ok(`${label}: + on another section of a class the plan holds swaps it — one section per class, the old one un-watched`, await p.evaluate(() =>
+    JSON.stringify(TCPlans.get('A').sections.map((x) => x.class_nbr)) === '["22223"]' && isWatchedSec('ECON 2001', '22223') && !isWatchedSec('ECON 2001', '22221')));
+  await p.click('#plBuilderOut .bd-tile[data-code="BUS 4442"] .bd-add');
+  await p.click('#plBuilderOut .bd-tile[data-code="PSY 2010"] .bd-add');
+  await p.click('#plBuilderOut .bd-tile[data-code="HIST 2230"] .bd-add');
+  await p.waitForTimeout(150);
+  ok(`${label}: each tile's + picked that class's best-rated section (BUS 11111 · PSY 44447 · HIST 33331)`, await p.evaluate(() =>
+    TCPlans.get('A').sections.map((x) => x.class_nbr).filter((n) => n !== '22223').sort().join() === '11111,33331,44447'));
+  await p.evaluate(() => { TCBuilder.add('PSY 2010', '44445'); TCBuilder.add('HIST 2230', '33332'); });
+  await p.waitForTimeout(100);
+  ok(`${label}: four classes in Plan A (BUS 11111 · ECON 22223 · PSY 44445 · HIST 33332), each watched, the Plan A button counting them`, await p.evaluate(() => {
+    const got = TCPlans.get('A').sections.map((x) => x.class_nbr).sort().join();
+    return got === '11111,22223,33332,44445'
+      && [['BUS 4442', '11111'], ['ECON 2001', '22223'], ['HIST 2230', '33332'], ['PSY 2010', '44445']].every(([c, n]) => isWatchedSec(c, n))
+      && /Plan A · 4/.test(document.querySelector('#plBuilderOut .bd-slot.on').textContent);
+  }));
 
-  /* ---- remove in Planner, and Undo ---------------------------------------------------------- */
-  await p.click('#pl3BWeek .pl3-rm[data-crn="33332"]');
+  /* ---- take one out of the plan from its tile, and put it back ------------------------------------ */
+  await p.click('#plBuilderOut .bd-tile[data-code="BUS 4442"] .bd-add');
   await p.waitForTimeout(120);
-  const rm = await p.evaluate(() => ({ n: TCPlans.get('A').sections.length, undo: !!document.querySelector('#plBuilderOut .pl3-note--undo'), w: isWatchedSec('HIST 2230', '33332') }));
-  ok(`${label}: × removes the section, offers Undo, and un-watches what the plan watched`, rm.n === 3 && rm.undo && !rm.w, JSON.stringify(rm));
-  await p.click('#plBuilderOut [data-pl-act="undo"]');
+  const rm = await p.evaluate(() => ({ n: TCPlans.get('A').sections.length, w: isWatchedSec('BUS 4442', '11111') }));
+  ok(`${label}: taking BUS 4442 out of the plan from its tile leaves three, and un-watches it`, rm.n === 3 && !rm.w, JSON.stringify(rm));
+  await p.click('#plBuilderOut .bd-tile[data-code="BUS 4442"] .bd-add');
   await p.waitForTimeout(120);
-  ok(`${label}: Undo puts it back, watched again`, await p.evaluate(() => TCPlans.get('A').sections.length === 4 && isWatchedSec('HIST 2230', '33332')));
+  ok(`${label}: …and + puts it back, watched again`, await p.evaluate(() => TCPlans.get('A').sections.length === 4 && isWatchedSec('BUS 4442', '11111')));
+  ok(`${label}: the Filling buttons switch the plan being filled without touching Plan A`, await p.evaluate(() => {
+    const before = JSON.stringify(TCPlans.get('A').sections), sl = () => [...document.querySelectorAll('#plBuilderOut .bd-slot')];
+    sl()[1].click();
+    const onB = TCPlans.cur() === 'B' && /^Plan B\b/.test(document.querySelector('#plBuilderOut .bd-slot.on').textContent.trim());
+    sl()[0].click();
+    return onB && TCPlans.cur() === 'A' && JSON.stringify(TCPlans.get('A').sections) === before;
+  }));
 
-  /* ---- the degree section, and Done ---------------------------------------------------------- */
-  await p.click('#plBuilderOut [data-pl-act="degree"]');
-  ok(`${label}: "Show your degree progress" brings the ledger back`, await p.evaluate(() => getComputedStyle(document.getElementById('plRecord')).display !== 'none'));
-  await p.click('#plBuilderOut [data-pl-act="degree"]');
+  /* ---- Past classes, and back to Plans ------------------------------------------------------------- */
+  await p.click('#plBuilderOut .bd-past');
+  ok(`${label}: "Past classes →" brings the record back`, await p.evaluate(() => getComputedStyle(document.getElementById('plRecord')).display !== 'none'));
   ok(`${label}: Past classes still lands on the record (degree opened)`, await p.evaluate(() => { setSchedTab('past'); const r = getComputedStyle(document.getElementById('plRecord')).display !== 'none'; plansOpenDegree(); return r; }));
-  await p.evaluate(() => { TCPlans.renderBuilder(); });
-  await p.click('#plBuilderOut [data-pl-act="done"]');
+  await p.evaluate(FLOW_OFF);   // the stand-in goes back
+  await p.click('#stab-watch');
   await p.waitForTimeout(150);
 
   /* ---- Plans: the plan is a week ------------------------------------------------------------- */
@@ -218,6 +208,7 @@ for (const [w, h, label] of [[1280, 900, 'desktop'], [390, 800, 'phone']]) {
   }));
 
   /* ---- CONTRAST AND SIZE, measured on the rendered screens, in all three themes (Tate) -------- */
+  await p.evaluate(FLOW_ON);
   const cr = await p.evaluate(() => {
     const parse = (c) => { const m = c.match(/rgba?\(([^)]+)\)/); if (!m) return null; const v = m[1].split(/[ ,\/]+/).filter(Boolean).map(Number); return [v[0], v[1], v[2], v.length > 3 ? v[3] : 1]; };
     const over = (f, b) => [0, 1, 2].map((i) => f[i] * f[3] + b[i] * (1 - f[3])).concat(1);
@@ -230,8 +221,8 @@ for (const [w, h, label] of [[1280, 900, 'desktop'], [390, 800, 'phone']]) {
     const was = document.documentElement.getAttribute('data-theme');
     for (const th of ['dark', 'light', 'cream']) {
       if (typeof setTheme === 'function') setTheme(th); else document.documentElement.setAttribute('data-theme', th);
-      show('sched'); setSchedTab('plan'); TCPlans.renderBuilder();
-      const sel = document.querySelector('#plBuilderOut .pl3-need'); if (sel) sel.click();
+      show('sched'); setSchedTab('plan'); TCBuilder.render();   /* render() is the synchronous one: tcBuilderRender waits 30ms */
+      const sel = document.querySelector('#plBuilderOut .bd-why'); if (sel) sel.click();           // the "Why it's #N" popover is drawn too
       const worst = {}; let small = [];
       const check = (root) => root.querySelectorAll('*').forEach((el) => {
         if (!el.childNodes.length || ![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) return;
@@ -253,11 +244,16 @@ for (const [w, h, label] of [[1280, 900, 'desktop'], [390, 800, 'phone']]) {
     ok(`${label}: nothing on Plans and Planner is smaller than 10.5px in ${th}`, cr[th].small.length === 0, JSON.stringify(cr[th].small));
   }
   ok(`${label}: every plan button, class row and main button is at least 44px tall`, await p.evaluate(() => {
-    setSchedTab('plan'); TCPlans.renderBuilder();
-    const els = [...document.querySelectorAll('#plBuilderOut .pl3-pill, #plBuilderOut .pl3-need, #plBuilderOut .btn, #plBuilderOut .pl3-degree, #plBuilderOut input')];
+    setSchedTab('plan'); TCBuilder.render();
+    const els = [...document.querySelectorAll('#plBuilderOut .bd-slot, #plBuilderOut .bd-add, #plBuilderOut .bd-why, #plBuilderOut .bd-go, #plBuilderOut .bd-mv, #plBuilderOut .bd-past, #plBuilderOut select')];
+    /* measured while the Builder is on screen; a small control may keep its look with an invisible ::after hit area, which counts */
+    const hit = (x) => { const a = getComputedStyle(x, '::after'), pad = (v) => Math.max(0, -(parseFloat(v) || 0)); const e = a.content !== 'none' && a.position === 'absolute' ? pad(a.top) + pad(a.bottom) : 0; return Math.round(x.getBoundingClientRect().height + e); };
+    const hs = els.map((x) => [x.className.split(' ')[0], x.offsetParent !== null ? hit(x) : -1]);
     setSchedTab('watch'); const e2 = [...document.querySelectorAll('#plansOut .pl3-pill, #plansOut .btn, #plansOut .pl3-share')];
-    return els.length > 4 && els.concat(e2).every((x) => x.getBoundingClientRect().height >= 44 || x.offsetParent === null);
+    window.__hs = hs.filter((h) => h[1] < 44).map((h) => h.join(':'));
+    return els.length > 4 && hs.every((h) => h[1] >= 44) && e2.every((x) => x.getBoundingClientRect().height >= 44 || x.offsetParent === null);
   }));
+  await p.evaluate(FLOW_OFF);
   await p.evaluate(() => { show('sched'); setSchedTab('watch'); });
 
   /* ---- the class page -------------------------------------------------------------------------- */

@@ -1393,6 +1393,7 @@
      comes back is a tool call, never prose — so the answer is rendered by the same code that
      renders a pre-routed one, and there is no second way for Hawk to be wrong.
      =============================================================================================== */
+  /* website-hawk-app-menu (2026-10-14) */
   var AI_TIMEOUT = 9000;
 
   function aiUrl() {
@@ -1429,7 +1430,7 @@
   /* Resolves to a route-shaped object, or null when this tier cannot answer for ANY reason.
      Null is not an error path — it is the ordinary case on a build with the tier switched off. */
   function askModel(q) {
-    return callAsk({ q: q }).then(function (j) {
+    return callAsk({ q: q, client: 'app' }).then(function (j) {   /* website-hawk-app-menu (2026-10-14): the app's menu of tools */
       if (!j || j.fallback || !j.tool) return null;
       /* `prerouted: true` because this question IS routed — by the model rather than in the
          browser, which is what `viaModel` records. Returning false here made `render` treat
@@ -1800,9 +1801,11 @@
     if (/\b(?:ge|g\.e\.)\b/.test(t)) add({ tool: 'search_sections', args: { scope: 'ge_unmet', sort: 'rating' } });
     if (/\b(?:schedule|term|semester|units?)\b/.test(t) && /\b(?:build|make|plan)\b/.test(t)) add({ tool: 'build_term', args: {} });
 
+    var hrows = (shown && shown.tool === 'app_help') ? [] : helpRows(q);
     var box = make('div', 'hawk-alts');
-    box.appendChild(make('div', 'hawk-alts__head', alts.length ? 'Did you mean' : (quiet ? 'Try a course code, a professor, or “open CSC labs after 6”.' : 'Sorry about that. Try it another way:')));
-    alts.slice(0, 3).forEach(function (r) {
+    box.appendChild(make('div', 'hawk-alts__head', (alts.length || hrows.length) ? 'Did you mean' : (quiet ? 'Try a course code, a professor, or “open CSC labs after 6”.' : 'Sorry about that. Try it another way:')));
+    hrows.forEach(function (r) { box.appendChild(rowEl(r)); });
+    alts.slice(0, Math.max(0, 3 - hrows.length)).forEach(function (r) {
       box.appendChild(rowEl({
         code: '', name: labelFor(r, cat), chip: null,
         go: function () {
@@ -1849,7 +1852,7 @@
     turn.appendChild(said);
 
     if (result.refused) {
-      turn.appendChild(make('div', 'hawk-note',
+      if (!helpChips(turn, q)) turn.appendChild(make('div', 'hawk-note',
         'I only find classes, sections and professors at Cal Poly.'));
     } else if (!result.prerouted) {
       turn.appendChild(make('div', 'hawk-note', result.leftovers && result.leftovers.length
@@ -1870,7 +1873,8 @@
         turn.appendChild(make('div', 'hawk-note',
           'I can’t see who’s in a class. Friends shows that, for people you’ve added.'));
       } else if (why === 'not_about_classes') {
-        turn.appendChild(make('div', 'hawk-note',
+        if (helpChips(turn, q)) why = 'shown';
+        else turn.appendChild(make('div', 'hawk-note',
           'I only find classes, sections and professors at Cal Poly.'));
       } else {
         /* MORE OPEN (Tate, 2026-09-23). A dead end with a search box helped nobody; offer the
@@ -2772,6 +2776,235 @@
   }
 
   /* One dispatcher for everything that is not a catalog search. Returns true when it rendered. */
+
+  /* ===============================================================================================
+     THE APP'S MENU — website-hawk-app-menu (2026-10-14). The five tools the phone's Champ adds to the menu, answered
+     here from what the page already holds, in Hawk's rows. Nothing is guessed: a friend with no timetable is counted
+     as such, a professor with no rating shows none, and a class that fits nowhere says so.
+     =============================================================================================== */
+  function appFriends() { var l = []; try { l = FRIENDS || []; } catch (_) {} return l; }
+  function freeState(f) {
+    try { if (has('avState') && has('avMeetsOf')) return global.avState(global.avMeetsOf(f), new Date()); } catch (_) {}
+    return { state: 'unknown' };
+  }
+  function freeLine(st) { try { return has('avLine') ? global.avLine(st) : ''; } catch (_) { return ''; } }
+  function friendRow(f, sub) {
+    return rowEl({ code: '', name: f.name || 'Friend', sub: sub || '', chip: null,
+      go: function () {
+        try { if (has('openFriendProfile')) { global.openFriendProfile(f.id, 'classes'); return 'Opened ' + f.name; } } catch (_) {}
+        return goPlace('friends');
+      } });
+  }
+  function noFriends(turn) {
+    turn.appendChild(make('div', 'hawk-note', 'You haven’t added any friends yet, so there’s nobody to look for.'));
+    turn.appendChild(rowEl({ code: '', name: 'Open Friends', chip: null, go: function () { return goPlace('friends'); } }));
+  }
+  /* friends_free_now: who has no class right now */
+  function renderFriendsFreeNow(turn) {
+    var list = appFriends();
+    if (!list.length) { noFriends(turn); return; }
+    var free = [], unknown = 0;
+    list.forEach(function (f) {
+      var st = freeState(f);
+      if (st.state === 'open') free.push({ f: f, st: st });
+      else if (st.state === 'unknown') unknown += 1;
+    });
+    if (!free.length) {
+      turn.appendChild(make('div', 'hawk-note', unknown === list.length
+        ? 'None of your friends’ classes have times I can read yet, so I can’t say who’s free.'
+        : 'Nobody’s free right now.' + (unknown ? ' ' + unknown + (unknown === 1 ? ' friend has' : ' friends have') + ' no times I can read, so I can’t say for them.' : '')));
+    } else {
+      turn.appendChild(make('div', 'hawk-note', free.length + (free.length === 1 ? ' friend is' : ' friends are') + ' free right now:'));
+      free.forEach(function (x) { turn.appendChild(friendRow(x.f, freeLine(x.st))); });
+    }
+    if (unknown && free.length) turn.appendChild(make('div', 'hawk-note', unknown + (unknown === 1 ? ' friend has' : ' friends have') + ' no times I can read, so they’re not counted.'));
+  }
+  /* free_with_friends: one friend, now (or a day, which their page shows), or everyone now */
+  function renderFreeWith(turn, result) {
+    var a = result.args || {};
+    var named = !!(a.rel || (a.days && a.days.length));
+    if (a.friend) {
+      var f = friendByName(a.friend);
+      if (!f) { notFound(turn, 'I couldn’t find one friend named “' + a.friend + '”.'); return; }
+      var first = String(f.name || '').split(' ')[0], st = freeState(f);
+      if (named) {
+        turn.appendChild(make('div', 'hawk-note', first + '’s week is on their page.'));
+        turn.appendChild(friendRow(f, ''));
+        return;
+      }
+      var line = freeLine(st);
+      turn.appendChild(make('div', 'hawk-note', line ? (first + ': ' + line + '.') : ('I don’t have times for ' + first + '’s classes, so I can’t say.')));
+      turn.appendChild(friendRow(f, ''));
+      return;
+    }
+    if (!named) { renderFriendsFreeNow(turn); return; }
+    turn.appendChild(make('div', 'hawk-note', 'Free time together is in Groups.'));
+    turn.appendChild(rowEl({ code: '', name: 'Open Groups', chip: null, go: function () { return goPlace('groups'); } }));
+  }
+  /* best_professor: who teaches the course, best-rated first */
+  function renderBestProf(turn, result) {
+    var code = (result.args || {}).course;
+    var rows = sectionsOf(code);
+    if (!code || !rows.length) { notFound(turn, (code || 'That class') + ' isn’t on this term’s schedule.'); return; }
+    var by = {}, order = [];
+    rows.forEach(function (r) {
+      var p = profOf(r); if (!p) return;
+      var k = p.id || p.raw;
+      if (!by[k]) { by[k] = { p: p, n: 0 }; order.push(k); }
+      by[k].n += 1;
+    });
+    if (!order.length) { notFound(turn, 'No professor is listed for ' + code + ' yet.'); return; }
+    order.sort(function (x, y) { var rx = by[x].p.rating, ry = by[y].p.rating; return (ry == null ? -1 : ry) - (rx == null ? -1 : rx); });
+    var any = order.some(function (k) { return by[k].p.rating != null; });
+    turn.appendChild(make('div', 'hawk-note', any ? ('Who teaches ' + code + ', best-rated first:') : ('Who teaches ' + code + ' — none of them has a rating yet:')));
+    order.forEach(function (k) {
+      var p = by[k].p;
+      turn.appendChild(rowEl({ code: '', name: p.name, sub: by[k].n + (by[k].n === 1 ? ' section' : ' sections'),
+        chip: p.rating != null ? ratingChip(p.rating) : null,
+        go: function () { return p.id ? goProfessor(p.name) : goClass(code); } }));
+    });
+  }
+  /* fits_plan: the sections of a course that fit Plan A/B/C, or your classes */
+  function renderFitsPlan(turn, result) {
+    var a = result.args || {}, code = a.course;
+    if (!code) { notFound(turn, 'I couldn’t tell which class.'); return; }
+    var slot = /^[ABC]$/.test(String(a.plan || '')) ? String(a.plan) : null, T = global.TCPlans, items = [], where = '';
+    if (!slot && a.plan !== 'mine' && T && T.cur) { try { slot = T.cur(); } catch (_) {} }
+    if (slot && T && T.fitFor) {
+      var fit = null; try { fit = T.fitFor(code, slot); } catch (_) {}
+      where = 'Plan ' + slot;
+      if (fit === null) { turn.appendChild(make('div', 'hawk-note', code + ' is already in Plan ' + slot + '.')); return; }
+      if (!fit || !fit.offered) { notFound(turn, code + ' isn’t on this term’s schedule.'); return; }
+      items = (fit.list || []).map(function (i) { return { crn: i.crn, label: i.label, when: i.when, prof: i.prof, rating: i.rating != null ? five(i.rating) : null }; });
+    } else {
+      where = 'your classes';
+      var rows = sectionsOf(code);
+      if (!rows.length) { notFound(turn, code + ' isn’t on this term’s schedule.'); return; }
+      var mine = []; try { mine = has('myClassMeets') ? global.myClassMeets(myCodes()) : []; } catch (_) {}
+      rows.forEach(function (r) {
+        var m = meetOf(r); if (!m) return;
+        var clash = mine.some(function (x) { return x.code !== code && x.meet && has('meetsOverlap') && global.meetsOverlap(m, x.meet); });
+        if (clash) return;
+        var p = profOf(r) || {}, crn = String(r.class_nbr || '');
+        items.push({ crn: crn, label: code + '-' + (secNumber(r) || crn), when: r.days, prof: p.name || '', rating: p.rating == null ? null : p.rating });
+      });
+    }
+    if (!items.length) { turn.appendChild(make('div', 'hawk-note', 'Nothing in ' + code + ' fits around ' + where + '.')); return; }
+    turn.appendChild(make('div', 'hawk-note', items.length + (items.length === 1 ? ' section of ' : ' sections of ') + code + ' fit' + (items.length === 1 ? 's' : '') + ' around ' + where + ':'));
+    items.slice(0, 8).forEach(function (i) {
+      turn.appendChild(rowEl({ code: i.label, name: i.prof || 'Staff', sub: i.when || '', chip: i.rating != null ? ratingChip(i.rating) : null,
+        go: function () { return goSection(code, i.crn, i.label); } }));
+    });
+  }
+  /* app_help: the sixteen questions about TermChamp, in a sentence or two, and where to go */
+  var APP_HELP = {
+    what_is: ['TermChamp helps Cal Poly students plan classes with friends: professor ratings, open seats, and which friends are in each class. It’s made by students — not a Cal Poly service.', 'Browse classes', 'explore'],
+    free: ['Yes — TermChamp is free. There are no ads, and your data is never sold.', 'Privacy policy', 'privacy policy'],
+    who_sees: ['Only friends you’ve accepted see your classes. Each plan has its own “Friends can see” switch — turn it off to keep that plan to yourself. Remove a friend and they stop seeing it.', 'Open Settings', 'privacy settings'],
+    ratings_anonymous: ['Yes. Your name is never shown on a review — professors and other students can’t tell it was you. You can choose to show your friends, one review at a time.', 'Your reviews', 'my reviews'],
+    ratings_source: ['From PolyRatings, plus the reviews TermChamp students write here. Open a professor to see their rating.', 'Find a professor', 'explore professors'],
+    seats_source: ['From Cal Poly’s public class search, refreshed about once a day — so they can be a day old, or wrong. Always check the Cal Poly Portal before you register.', 'Browse classes', 'explore'],
+    add_class: ['Find it in Explore, open the class and tap “I’m in this” on your section — or ＋ Plan to put it in Plan A, B or C. Classes you’ve already taken go in Schedule › Past classes.', 'Open Explore', 'explore'],
+    plans: ['Plans A, B and C are three versions of your next term, kept in Schedule › Plans. Add a section to one from any class page with ＋ Plan, or let the Planner draft all three, and change any of them. Ask me for your game plan to see what to register for first.', 'Open Plans', 'watchlist'],
+    seat_alerts: ['Tap Watch on a full section; sections you add to a plan are watched for you. With notifications on, the TermChamp iPhone app tells you when a seat opens.', 'Browse classes', 'explore'],
+    degree_report: ['In the Cal Poly Portal: Student Center › Academic Progress › Degree Progress Report › View PDF › Download. Then upload it in Schedule › Past classes. Your grades and student ID are never saved.', 'Open Past classes', 'past classes'],
+    add_friends: ['Open Friends and search by name or @username, or share your QR code or invite link. Once they accept, you see each other’s classes.', 'Add a friend', 'add friend'],
+    block_report: ['Open their profile or your chat with them and use Block or Report at the bottom — they aren’t told. To report a review, use the flag on it. A person looks at every report within 24 hours.', 'Open Friends', 'friends'],
+    delete_account: ['Settings › Delete account. It’s hidden right away and deleted after 30 days — sign back in before then to recover it. You choose whether your reviews stay up with no name.', 'Open Settings', 'account'],
+    champ: ['Hawk answers questions about classes, professors, your week, your friends and TermChamp. Each question you ask goes to Anthropic’s AI to work out what you mean — never your name or account, though a class or friend you name goes with it. TermChamp keeps questions about 30 days, not linked to you, and Anthropic doesn’t train on them.', 'Privacy policy', 'privacy policy'],
+    dark_mode: ['Yes — Settings › Appearance: Light or Dark.', 'Open Settings', 'appearance'],
+    contact: ['Email support@termchamp.com — for a bug, feedback, or anything else.', 'Email support', 'mailto']
+  };
+  /* The questions as the chips show them (the phone's HELP[k].q). */
+  var APP_HELP_Q = { what_is: 'What is TermChamp?', free: 'Is TermChamp free?', who_sees: 'Who can see my schedule?',
+    ratings_anonymous: 'Are my reviews anonymous?', ratings_source: 'Where do the ratings come from?',
+    seats_source: 'Where do the seat numbers come from?', add_class: 'How do I add a class?', plans: 'What are Plans A, B and C?',
+    seat_alerts: 'How do seat alerts work?', degree_report: 'How do I upload my degree report?', add_friends: 'How do I add friends?',
+    block_report: 'How do I block or report someone?', delete_account: 'How do I delete my account?',
+    champ: 'What does Hawk do and where does my information go?', dark_mode: 'Is there a dark mode?', contact: 'How do I contact TermChamp?' };
+  /* helpMatch — lifted verbatim from the phone (app/index.html, champ-help-2026-10-11). OFFERED, never answered on a guess. */
+  var HW = { app: /\b(termchamp|term champ|this app|the app|app|this site)\b/,
+    mine: /\b(my|im|i'm|i am) (schedule|classes|class list|plans?|week|timetable|courses)\b|\bclasses (im|i'm|i am) (taking|in)\b/,
+    ai: /\b(hawk|champ|ai|bot|chatbot|assistant|anthropic|claude)\b/, notClass: { not: /\b(class|classes|course|courses|lab|book|books|textbook|permit|parking|tuition|units?|housing|dorm|food|gym)\b/ } };
+  var HELP_RULES = {
+    what_is: [[3, /\b(what'?s|whats|what is|what does|what even is)\b/, /\b(termchamp|term champ|this app)\b/], [3, /\bwho\b/, /\b(made|built|makes|runs|created|owns|behind)\b/, /\b(termchamp|term champ|this app|the app|this site)\b|\b(it|this) ?$/],
+      [3, /\b(affiliated|endorsed)\b/], [3, /\bofficial\b/, /\b(app|termchamp|this|cal poly)\b/, { not: /\b(transcript|records?|grades?)\b/ }],
+      [2, /\b(explain|tell me about|how does|what can i do (on|with))\b/, /\b(this app|the app|termchamp)\b/]],
+    free: [[3, /\b(termchamp|term champ|this app|the app) (free|cost|costs)\b/], [3, /\b(is|was) (it|this) free( to use)? ?$|\bfree to use ?$/],
+      [3, /\bhow much (does|is) (it|this|termchamp|the app)\b/, HW.notClass], [3, /\b(have to|need to|do i) pay\b|\bpaywall\b|\bpremium\b|\bsubscription\b|\bcosts? money\b/, HW.notClass],
+      [3, /\b(cost|costs|price|pricing|pay for)\b/, HW.app], [3, /\b(ads|adverts?|advertising|advertisements?)\b/, HW.app], [3, /\bthere ads\b|\bany ads\b/],
+      [3, /\bsell\w*\b/, /\b(data|info|information)\b/]],
+    who_sees: [[3, /\b(see|sees|seeing|view|views|visible|look at|access)\b/, HW.mine, /\b(who|whom|ppl|people|someone|somebody|anyone|anybody|everyone|strangers|random|others|public|friends|students|professors?)\b/],
+      [3, /\b(private|public|hidden|hide|privacy)\b/, /\bmy (schedule|classes|class list|plans?|week|timetable|courses|profile|account)\b/]],
+    ratings_anonymous: [[3, /\b(anonymous|anonymously|anon)\b/],
+      [3, /\b(know|see|find out|figure out|tell)\b/, /\b(i|me|my)\b/, /\b(wrote|review|reviews|rated|rating|ratings)\b/, /\b(professors?|profs?|teachers?|people|ppl|friends|anyone|others|they|everyone)\b/],
+      [3, /\b(figure out|find out|know|tell|see) who (posted|wrote|left|made)\b/, /\b(review|reviews|rating|ratings)\b/], [3, /\bname\b/, /\b(review|reviews|rating|ratings)\b/]],
+    ratings_source: [[3, /\b(where|how)\b/, /\b(ratings?|reviews?|stars?|scores?)\b/, /\b(come from|from|calculated|work|made|get)\b/], [3, /\bpoly ?ratings\b/],
+      [3, /\bhow\b/, /\b(professors?|profs?|teachers?)\b/, /\b(rated|scored|ranked)\b/], [3, /\b(ratings?|reviews?)\b/, /\b(real|accurate|legit|fake|trust|reliable|scraped|sourced)\b/],
+      [3, /\bwho (writes|makes|leaves|does)\b/, /\b(the )?(ratings|reviews)\b/]],
+    seats_source: [[3, /\b(seats?|seat counts?|seat numbers?|enrollment numbers?)\b/, /\b(come from|from|live|accurate|up to date|updated|update|real|real time|realtime|wrong|correct|old|stale|refresh\w*|how often|reliable)\b/],
+      [3, /\bwhere (do|does) (you|u|they|termchamp|the app)\b/, /\bseats?|seat (counts?|numbers?)\b/]],
+    add_class: [[3, /\b(how|where)\b/, /\b(add|adding|put|enter|import)\b/, /\b(class|classes|course|courses|schedule)\b/],
+      [3, /^ (add|put in|enter) (a|my) (class|classes|course|courses)\b/], [3, /\badding (my )?classes\b/]],
+    plans: [[3, /\b(what|why|how)\b/, /\b(plans a|plans? a,? b|three plans|3 plans|a plan)\b/], [3, /\bwhat (is|are) plans?\b/],
+      [3, /\b(multiple|different|three|3|several|other|two) plans\b|\bplan tabs\b|\bbackup (plans?|schedules?)\b/], [3, /\b(make|switch|use|set up|create|between)\b/, /\bplans? ?[abc]\b/]],
+    seat_alerts: [[3, /\b(seat alerts?|alerts?|notifications?|notified|notify|push|watch|watching|watched|watchlist)\b/, /\b(how|what|does|do|will|work|works|mean|get|set up|setup|turn on|full)\b/]],
+    degree_report: [[3, /\b(dpr|degree progress report|degree progress|degree report|degree audit|academic progress)\b/, /\b(how|where|why|what|whats|what's|safe|upload|get|need|private|download|find|import|read|use|add)\b/]],
+    add_friends: [[3, /\b(how|where|can)\b/, /\b(add|find|invite|friend request|connect\w*|search)\b/, /\bfriends?\b/], [3, /\bhow do(es)? (friends?|friend requests?) work\b/],
+      [3, /\b(how|can i|where)\b/, /\binvite\b/, { not: /\blink\b/ }]],
+    block_report: [[3, /\b(block|blocking|harass\w*|bull(y|ying|ied)|stalk\w*|abusive|inappropriate|offensive|creepy|mean to me|threaten\w*)\b/, { not: /\bblock(ing)? (off|out)\b|\b(time|class) blocks?\b|\bblock schedul/ }],
+      [3, /\b(report|reporting|flag)\b/, /\b(someone|somebody|a user|user|person|people|review|reviews|message|messages|profile|group|account|him|her|them|abuse|post)\b/, { not: /\b(progress|degree|dpr|transfer)\b/ }]],
+    delete_account: [[3, /\b(delete|deleting|deleted|deactivate|close|cancel|erase|wipe|remove)\b/, /\b(account|termchamp|my data|everything|my profile|the app)\b/, { not: /\b(photo|picture|pic|class|classes|friend|friends|plan)\b/ }],
+      [3, /\b(recover|restore|get back|undelete)\b/, /\baccount\b/]],
+    champ: [[3, HW.ai, /\b(send|sends|sent|data|info|information|privacy|private|store|stores|stored|keep|keeps|save|saves|saved|track|tracks|tracking|train|training|safe|share|shares|shared|questions?|messages?|chats?)\b/],
+      [3, /\bwhat (does|is|can)\b/, /\b(?:champ|hawk)\b/], [3, /\bwho is (?:champ|hawk)\b|\bchamp\b.*\b(real person|a person|human|a bot|ai)\b/], [3, HW.ai, /\b(see|sees|read|reads|access|know|knows)\b/, /\bmy\b/],
+      [3, /\bwhere\b/, /\b(info|information|data|questions?)\b/, /\b(go|goes|going|sent|stored|kept)\b/]],
+    dark_mode: [[3, /\b(dark|night|light) ?(mode|theme)\b/], [3, /\b(change|switch|customi[sz]e)\b/, /\b(colou?rs?|theme|look|looks|appearance)\b/], [3, /\bdark\b/, /\b(app|setting|settings|screen|version)\b/]],
+    contact: [[3, /\b(contact|customer service|help desk|helpdesk)\b/, { not: /\b(professors?|profs?|teachers?|advisors?|instructors?|ta|department|registrar|counselor)\b/ }], [3, /\bsupport\b/, { not: /\b(class|classes|course|courses|requirements?|units|ge|major)\b/ }],
+      [3, /\b(bug|bugs|glitch|glitches|crash\w*|not working|doesn'?t work|isn'?t working)\b/], [3, /\b(broken|not loading|won'?t load|keeps freezing)\b/, /\b(app|termchamp|it)\b/],
+      [3, /\b(feedback|suggestion|feature request)\b/], [3, /\b(problem|issue)\b/, HW.app], [3, /\b(email|e-mail)\b/, /\b(team|termchamp|you guys|the devs?|developers?|creators?)\b/],
+      [3, /\b(talk to|reach|message|email) (a )?(human|person|someone|the team|the devs?|the developers?|the creators?|you guys)\b/]],
+  };
+  /* A question that is just a topic's name ("cost?", "seat alerts", "add friend"). */
+  var HELP_BARE = { free: /^ (cost|price|ads|is it free|free) $/, seat_alerts: /^ (seat alerts?|alerts|watching|notifications) $/, add_friends: /^ (add|adding|find) (a )?friends? $/,
+    plans: /^ (plans?|plans? [abc]|plan a b c) $/, degree_report: /^ (dpr|degree progress report|degree report) $/, dark_mode: /^ dark $/, contact: /^ (support|contact|feedback) $/ };
+  Object.keys(HELP_BARE).forEach(k => HELP_RULES[k].push([3, HELP_BARE[k]]));
+  function helpMatch(q) {
+    const t = ' ' + String(q || '').toLowerCase().replace(/[’‘]/g, "'").replace(/[^a-z0-9' ]+/g, ' ').replace(/\s+/g, ' ').trim() + ' ';
+    if (t.trim().length < 4 || /\b[a-z]{2,5} ?\d{3,4}[a-z]?\b/.test(t.replace(/\b(fall|winter|spring|summer|in|of|since|by|until|for|class of) (19|20)\d\d\b/g, ' '))) return [];
+    return Object.keys(HELP_RULES).map(k => ({ k, s: HELP_RULES[k].reduce((n, r) => {
+        const w = r[0], rs = r.slice(1), not = rs.find(x => x && x.not);
+        return rs.every(x => (x && x.not) ? true : x.test(t)) && !(not && not.not.test(t)) ? n + w : n; }, 0) }))
+      .filter(x => x.s >= 2).sort((x, y) => y.s - x.s).slice(0, 2).map(x => x.k);
+  }
+  /* Up to two "Did you mean" rows for TermChamp questions; a tap answers from APP_HELP on this page (nothing sent). */
+  function helpRows(q) {
+    var ks = []; try { ks = helpMatch(q).filter(function (k) { return APP_HELP_Q[k] && APP_HELP[k]; }); } catch (_) {}
+    return ks.map(function (k) {
+      return { code: '', name: APP_HELP_Q[k], chip: null, go: function () {
+        try { if (has('track')) global.track('hawk_help_chip', null, 'hawk', { topic: k }); } catch (_) {}
+        readings = { local: null, model: null };
+        render(APP_HELP_Q[k], { prerouted: true, confident: true, in_scope: true, tool: 'app_help', args: { topic: k },
+                                corrections: [], leftovers: [], signals: [] }, buildCatalog());
+        return 'Here’s that'; } };
+    });
+  }
+  function helpChips(turn, q) {
+    var rows = helpRows(q); if (!rows.length) return false;
+    var box = make('div', 'hawk-alts');
+    box.appendChild(make('div', 'hawk-alts__head', rows.length > 1 ? 'Did you mean one of these?' : 'Did you mean this?'));
+    rows.forEach(function (r) { box.appendChild(rowEl(r)); });
+    turn.appendChild(box);
+    return true;
+  }
+  function renderAppHelp(turn, result) {
+    var k = String((result.args || {}).topic || ''), h = Object.prototype.hasOwnProperty.call(APP_HELP, k) ? APP_HELP[k] : null;
+    if (!h) { turn.appendChild(make('div', 'hawk-note', 'I’m not sure which question you mean — try asking it another way.')); return; }
+    turn.appendChild(make('div', 'hawk-note', h[0]));
+    turn.appendChild(rowEl({ code: '', name: h[1], chip: null,
+      go: function () { if (h[2] === 'mailto') { try { global.location.href = 'mailto:support@termchamp.com'; } catch (_) {} return 'Opened your email'; } return goPlace(h[2]); } }));
+  }
+
   function renderTool(turn, result, cat, q) {
     if (result.tool === 'search_sections' && result.args
         && (result.args.scope || result.args.ge_area || (result.args.subject && (result.args.fits_my_schedule || result.args.sort)))) {
@@ -2803,6 +3036,11 @@
       case 'friends_took':     renderFriendsTook(turn, result, cat); return true;
       case 'fit_pair':         renderFitPair(turn, result, cat); return true;
       case 'swap_section':     renderSwap(turn, result, cat); return true;
+      case 'friends_free_now': renderFriendsFreeNow(turn); return true;
+      case 'free_with_friends': renderFreeWith(turn, result); return true;
+      case 'best_professor':   renderBestProf(turn, result); return true;
+      case 'fits_plan':        renderFitsPlan(turn, result); return true;
+      case 'app_help':         renderAppHelp(turn, result); return true;
       case 'my_conflicts':
       case 'my_free':          renderPersonal(turn, result); return true;
       default: return false;
