@@ -5093,7 +5093,7 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
    The flag is the whole switch — every gp* surface already gates on gpFlagOn(), so this is
    one word and the code stays in git. Turn it back on the same day the migration runs. */
 window.PROFESSIFY_FLAGS={groups:false,messages:true};
-window.PROFESSIFY_BUILD='2026-10-14 04:30';
+window.PROFESSIFY_BUILD='2026-10-14 10:29';
 /* Paint the build stamp everywhere it appears. */
 try{
   (function(){
@@ -17841,6 +17841,7 @@ function mcTermView(){
   if(window._mcTermOnce==='now'||window._mcTermOnce==='term')return window._mcTermOnce;
   var v=null; try{ v=localStorage.getItem(MC_TERMVIEW_KEY); }catch(e){}
   if(v==='now'||v==='term')return v;
+  if(typeof sbUser==='undefined'||!sbUser)return 'term';   /* signed out: Fall lives on an account, Spring on this device */
   return (typeof myClasses!=='undefined'&&myClasses.length)?'term':'now';
 }
 window.mcSetTermView=function(v){
@@ -17869,6 +17870,11 @@ function mcNowPeopleFor(code){
 function mcRenderNow(out){
   try{ schedWideSync(); }catch(e){}
   var N=NOW_MINE, codes=N.classes.slice(), chips=mcTermChipsHtml(), lab=escAcc(mcNowLabel()), next=escAcc(mcTermLabel());
+  if(!codes.length&&(typeof sbUser==='undefined'||!sbUser)){
+    out.innerHTML=chips+'<div class="wl-empty"><h3>Sign in to see your '+lab+' classes</h3>'
+      +'<p>'+lab+' is the term you’re in now, and it comes from your account. '+next+' is where you add classes — switch to it above.</p></div>';
+    return;
+  }
   if(!codes.length){
     out.innerHTML=chips+'<div class="wl-empty"><h3>'+(N.loaded?('No '+lab+' classes on your account'):('Loading your '+lab+' classes…'))+'</h3>'
       +(N.loaded?'<p>'+lab+' is the term you’re in now, and it’s read-only here. '+next+' is where you add classes — switch to it above.</p>':'')+'</div>';
