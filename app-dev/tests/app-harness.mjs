@@ -64,7 +64,7 @@ export async function openApp({ signedIn = true, width = 390, height = 844, tabl
     let u = decodeURIComponent(q.url.split('?')[0]); if (u.endsWith('/')) u += 'index.html';
     const f = path.join(dir, u);
     if (!f.startsWith(dir) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { r.writeHead(404); return r.end(); }
-    const CT = { '.html': 'text/html', '.js': 'text/javascript', '.webmanifest': 'application/manifest+json', '.png': 'image/png' };
+    const CT = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.webmanifest': 'application/manifest+json', '.png': 'image/png' };
     r.writeHead(200, { 'content-type': CT[path.extname(f)] || 'application/octet-stream' }); fs.createReadStream(f).pipe(r);
   });
   await new Promise(res => srv.listen(port, res));
