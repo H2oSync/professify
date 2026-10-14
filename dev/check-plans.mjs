@@ -73,8 +73,8 @@ for (const [w, h, label] of [[1280, 900, 'desktop'], [390, 800, 'phone']]) {
   await p.evaluate(() => { try { localStorage.removeItem('professify_plans_' + mcTerm()); } catch (e) {} });
 
   ok(`${label}: the module loaded`, await p.evaluate(() => !!window.TCPlans && !!document.getElementById('plans-js')));
-  ok(`${label}: tabs read My classes · Plans · Planner`, await p.evaluate(() =>
-    document.getElementById('stab-watch').textContent.trim().startsWith('Plans') && document.getElementById('stab-plan').textContent.trim().startsWith('Planner')));
+  ok(`${label}: tabs read My classes · Plans · Builder · Past classes`, await p.evaluate(() =>
+    document.getElementById('stab-watch').textContent.trim().startsWith('Plans') && document.getElementById('stab-plan').textContent.trim().startsWith('Builder') && document.getElementById('stab-past').textContent.trim().startsWith('Past classes')));
 
   /* ---- Plans: an empty plan is an empty week with one button ------------------------------------ */
   await p.evaluate(() => { show('sched'); setSchedTab('watch'); });

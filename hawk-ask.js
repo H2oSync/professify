@@ -1601,8 +1601,13 @@
      day AI-first shipped. What stays true either way: the student's classes, friends and ledger
      never leave; the model sees the question and, for an explanation, only public catalog rows. */
   function privacyLine() {
-    return aiUrl() ? 'Questions are read by AI · your classes stay on this device'
-                   : 'Nothing you type here leaves your browser';
+    /* Signed in, a question that needs the model goes to the `ask` function and on to Anthropic; many are answered
+       in the browser, hence "Some". Signed out nothing leaves (sessionToken() is null and callAsk stops). The phone's
+       line is "Questions go to Anthropic’s AI · your classes stay on this phone". */
+    var signedIn = false;
+    try { signedIn = typeof sbUser !== 'undefined' && !!(sbUser && sbUser.id); } catch (_) {}
+    return aiUrl() && signedIn ? 'Some questions go to Anthropic’s AI · your classes stay on this device'
+                               : 'Nothing you type here leaves your browser';
   }
 
   /* ---------------------------------------------------------------------------------------------
@@ -1704,7 +1709,7 @@
     game_plan: 'Your registration game plan',
     build_term: 'Build a whole term',
     friends_took: 'Classes your friends have taken',
-    help: 'What Hawk can do'
+    help: 'What Champ can do'
   };
 
   function labelFor(r, cat) {
@@ -1829,7 +1834,7 @@
     var links = make('div', 'hawk-alts__links');
     links.appendChild(again); links.appendChild(explore);
     box.appendChild(links);
-    if (!quiet) box.appendChild(make('div', 'hawk-alts__noted', 'Noted — this helps Hawk get better.'));
+    if (!quiet) box.appendChild(make('div', 'hawk-alts__noted', 'Noted — this helps Champ get better.'));
     turn.appendChild(box);
     try { box.scrollIntoView({ block: 'nearest' }); } catch (_) {}
   }
@@ -1951,7 +1956,7 @@
         }
       }
     } catch (_) {}
-    els.foot.textContent = when || privacyLine();
+    els.foot.textContent = when ? when + ' · ' + privacyLine() : privacyLine();   /* the as-of joins the privacy line; it never replaces it */
   }
 
   /* ---------------------------------------------------------------------------------------------
@@ -2911,7 +2916,7 @@
     add_friends: ['Open Friends and search by name or @username, or share your QR code or invite link. Once they accept, you see each other’s classes.', 'Add a friend', 'add friend'],
     block_report: ['Open their profile or your chat with them and use Block or Report at the bottom — they aren’t told. To report a review, use the flag on it. A person looks at every report within 24 hours.', 'Open Friends', 'friends'],
     delete_account: ['Settings › Delete account. It’s hidden right away and deleted after 30 days — sign back in before then to recover it. You choose whether your reviews stay up with no name.', 'Open Settings', 'account'],
-    champ: ['Hawk answers questions about classes, professors, your week, your friends and TermChamp. Each question you ask goes to Anthropic’s AI to work out what you mean — never your name or account, though a class or friend you name goes with it. TermChamp keeps questions about 30 days, not linked to you, and Anthropic doesn’t train on them.', 'Privacy policy', 'privacy policy'],
+    champ: ['Champ answers questions about classes, professors, your week, your friends and TermChamp. Each question you ask goes to Anthropic’s AI to work out what you mean — never your name or account, though a class or friend you name goes with it. TermChamp keeps questions about 30 days, not linked to you, and Anthropic doesn’t train on them.', 'Privacy policy', 'privacy policy'],
     dark_mode: ['Yes — Settings › Appearance: Light or Dark.', 'Open Settings', 'appearance'],
     contact: ['Email support@termchamp.com — for a bug, feedback, or anything else.', 'Email support', 'mailto']
   };
@@ -2921,7 +2926,7 @@
     seats_source: 'Where do the seat numbers come from?', add_class: 'How do I add a class?', plans: 'What are Plans A, B and C?',
     seat_alerts: 'How do seat alerts work?', degree_report: 'How do I upload my degree report?', add_friends: 'How do I add friends?',
     block_report: 'How do I block or report someone?', delete_account: 'How do I delete my account?',
-    champ: 'What does Hawk do and where does my information go?', dark_mode: 'Is there a dark mode?', contact: 'How do I contact TermChamp?' };
+    champ: 'What does Champ do and where does my information go?', dark_mode: 'Is there a dark mode?', contact: 'How do I contact TermChamp?' };
   /* helpMatch — lifted verbatim from the phone (app/index.html, champ-help-2026-10-11). OFFERED, never answered on a guess. */
   var HW = { app: /\b(termchamp|term champ|this app|the app|app|this site)\b/,
     mine: /\b(my|im|i'm|i am) (schedule|classes|class list|plans?|week|timetable|courses)\b|\bclasses (im|i'm|i am) (taking|in)\b/,
@@ -3238,16 +3243,34 @@
   /* The empty state. Hawk's own face, a greeting, and nothing else — Tate's mockup, 2026-09-21.
      The face is a background-image in the stylesheet rather than an <img>, so it is a data URI in
      one file the service worker already caches. No fourth file, no publish-list entry, no 404. */
+  /* The phone's four starter questions, word for word (app/index.html champView `sugg`). Each is asked through
+     answer(), the path a typed question takes. */
+  var STARTERS = [['cc1', 'When am I free this week?'], ['cc2', 'Who\'s free right now?'], ['cc3', 'What’s my day look like?'], ['cc4', 'My best professor']];
+  function startersEl(cls) {
+    var d = make('div', cls);
+    STARTERS.forEach(function (s) {
+      var b = make('button', 'hawk-cchip hawk-' + s[0], s[1]);
+      b.type = 'button';
+      b.addEventListener('click', function () { answer(s[1]); });
+      d.appendChild(b);
+    });
+    return d;
+  }
+  /* The sheet is "empty" while the greeting is up: then the big bird and the 2 x 2 chips show, and the slim chip row and
+     the header bird do not (and the other way round once there is an answer). */
+  function syncEmpty() {
+    var empty = !!els.log.querySelector('.hawk-hint');
+    els.box.classList.toggle('hawk-box--empty', empty);
+  }
   function hintEl() {
     var d = make('div', 'hawk-hint');
     var face = make('div', 'hawk-hint__face');
     face.setAttribute('role', 'img');
-    face.setAttribute('aria-label', 'Hawk');
+    face.setAttribute('aria-label', 'Champ');
     d.appendChild(face);
-    var words = make('div');
-    words.appendChild(make('div', 'hawk-hint__lead', 'Hawk is here!'));
-    words.appendChild(make('div', 'hawk-hint__sub', 'What can I assist you with?'));
-    d.appendChild(words);
+    d.appendChild(make('div', 'hawk-hint__lead', 'Hi, I\'m Champ.'));
+    d.appendChild(make('div', 'hawk-hint__sub', 'Ask about classes, professors, your week or your friends.'));
+    d.appendChild(startersEl('hawk-cgrid'));
     return d;
   }
 
@@ -3272,6 +3295,8 @@
     if (!moved) restorePos();
     document.addEventListener('keydown', onKey, true);
     if (!els.log.childNodes.length) { els.log.appendChild(hintEl()); stamp(); }
+    else stamp();
+    syncEmpty();
     els.input.focus();
   }
 
@@ -3407,19 +3432,22 @@
        one thing in that corner to press. */
     var fab = make('button', 'hawk-fab');
     fab.type = 'button';
-    fab.setAttribute('aria-label', 'Ask Hawk');
+    fab.setAttribute('aria-label', 'Ask Champ');
     fab.setAttribute('aria-expanded', 'false');
+    /* The phone's Champ (2026-10-14): "Ask Me!" over the bird. Decorative; the button's name is its label. */
+    var bub = make('span', 'hawk-fab__bub', 'Ask Me!'); bub.setAttribute('aria-hidden', 'true');
+    var bird = make('span', 'hawk-fab__bird'); bird.setAttribute('aria-hidden', 'true');
+    fab.appendChild(bub); fab.appendChild(bird);
 
     var box = make('aside', 'hawk-box');
-    box.setAttribute('aria-label', 'Hawk');
+    box.setAttribute('aria-label', 'Champ');
 
     /* A titled header band, so the box says what it is before it says anything else. */
     var head = make('div', 'hawk-head');
-    var headSpark = make('span', 'hawk-head__spark');
-    headSpark.appendChild(spark());
-    head.appendChild(headSpark);
-    head.appendChild(make('span', 'hawk-head__name', 'Hawk'));
-    head.appendChild(make('span', 'hawk-head__sub', 'AI assistant'));
+    var headBird = make('span', 'hawk-head__bird'); headBird.setAttribute('aria-hidden', 'true');
+    head.appendChild(headBird);
+    head.appendChild(make('span', 'hawk-head__name', 'Champ'));
+    head.appendChild(make('span', 'hawk-head__sub', 'From TermChamp’s real data'));
 
     var log = make('div', 'hawk-log');
     log.setAttribute('role', 'status');
@@ -3427,20 +3455,27 @@
 
     var x = make('button', 'hawk-x', '×');
     x.type = 'button';
-    x.setAttribute('aria-label', 'Close Hawk');
+    x.setAttribute('aria-label', 'Close Champ');
     head.appendChild(x);
 
     var ask = make('form', 'hawk-ask');
-    var label = make('label', 'hawk-sr', 'Ask Hawk');
+    var label = make('label', 'hawk-sr', 'Ask Champ');
     label.setAttribute('for', 'hawk-input');
     var input = make('input', 'hawk-input');
     input.type = 'text';
     input.id = 'hawk-input';
     input.autocomplete = 'off';
     input.maxLength = 300;
-    input.placeholder = 'Ask Hawk…';
-    var send = make('button', 'hawk-send', 'Ask');
+    input.placeholder = 'Ask Champ…';
+    var send = make('button', 'hawk-send');
     send.type = 'submit';
+    send.setAttribute('aria-label', 'Send');
+    var arrow = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    arrow.setAttribute('viewBox', '0 0 24 24'); arrow.setAttribute('width', '20'); arrow.setAttribute('height', '20');
+    arrow.setAttribute('aria-hidden', 'true'); arrow.setAttribute('fill', 'none'); arrow.setAttribute('stroke', 'currentColor');
+    arrow.setAttribute('stroke-width', '2.6'); arrow.setAttribute('stroke-linecap', 'round'); arrow.setAttribute('stroke-linejoin', 'round');
+    var ap = document.createElementNS('http://www.w3.org/2000/svg', 'path'); ap.setAttribute('d', 'M5 12h14M13 6l6 6-6 6');
+    arrow.appendChild(ap); send.appendChild(arrow);
     send.disabled = true;
     ask.appendChild(label);
     ask.appendChild(input);
@@ -3450,11 +3485,13 @@
 
     box.appendChild(head);
     box.appendChild(log);
-    box.appendChild(foot);
+    box.appendChild(startersEl('hawk-chips'));
     box.appendChild(ask);
+    box.appendChild(foot);
     document.body.appendChild(fab);
 
     els = { fab: fab, box: box, log: log, input: input, send: send, foot: foot };
+    try { new MutationObserver(syncEmpty).observe(log, { childList: true }); } catch (_) {}
 
     fab.addEventListener('click', toggle);
     makeDraggable(head);

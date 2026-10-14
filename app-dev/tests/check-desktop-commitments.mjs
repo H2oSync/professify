@@ -89,6 +89,8 @@ test('modal', async () => {
   await page.click('.cm-d[data-day="W"]'); await page.click('.cm-d[data-day="F"]');
   await page.click('.cm-tog'); await tick(page, 150);
   await page.click('[data-cm-act="save"]'); for (let k = 0; k < 10 && writes(log).length < 1; k++) await tick(page, 500);
+  /* wait for the effect (the sheet closing), not a fixed sleep: the reply to the upsert lands after the request is seen */
+  for (let k = 0; k < 10 && await page.evaluate(() => document.getElementById('cmBack').classList.contains('open')); k++) await tick(page, 300);
   const w = writes(log);
   ok(w.length === 1 && w[0].m === 'POST' && /on_conflict=id/.test(w[0].query), 'save: one upsert, on id', w.map(x => x.m + ' ' + x.query));
   const b = w[0] && w[0].body;
