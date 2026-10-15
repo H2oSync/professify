@@ -27,7 +27,7 @@
 
 /* Bumped by the deploy. The build stamp is written in by hand alongside window.PROFESSIFY_BUILD,
    so a new build gets a new cache and the old one is deleted on activate. */
-const BUILD = '2026-10-14 12:09';
+const BUILD = '2026-10-14 14:50';
 const SHELL = 'professify-shell-' + BUILD;
 
 /* ================================================================================================
@@ -206,6 +206,18 @@ self.addEventListener('fetch', (e) => {
    student never sees, and the browser shows its own "This site has been updated in the
    background" notice instead, which is worse than nothing.
    ------------------------------------------------------------------------------------------------ */
+/* security-client-hardening (2026-10-14). A push payload's url is data from outside this worker. "starts with /" also
+   accepts "//other.host" (and "/\\other.host", which URL parsing reads the same way), so resolve it against our own
+   origin and use it only when the origin is ours. Anything else, or anything that does not parse, is "/". */
+function safePushUrl(u) {
+  try {
+    if (typeof u !== 'string' || !u) return '/';
+    const x = new URL(u, self.location.origin);
+    if (x.origin !== self.location.origin) return '/';
+    return x.pathname + x.search + x.hash;
+  } catch (_) { return '/'; }
+}
+
 self.addEventListener('push', (e) => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch (_) {
@@ -218,13 +230,13 @@ self.addEventListener('push', (e) => {
     badge: '/icon-192.png',
     tag: String(d.tag || 'professify'),      /* same tag replaces, so ten seat changes are one row */
     renotify: !!d.renotify,
-    data: { url: typeof d.url === 'string' && d.url.charAt(0) === '/' ? d.url : '/' }
+    data: { url: safePushUrl(d.url) }
   }));
 });
 
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
-  const target = (e.notification.data && e.notification.data.url) || '/';
+  const target = safePushUrl(e.notification.data && e.notification.data.url);
   e.waitUntil((async () => {
     /* Focus the app if it is already open rather than stacking a second window — on Android a
        fresh openWindow() every time is how you end up with six copies of the app in the switcher. */
