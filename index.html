@@ -217,6 +217,88 @@ window.PROFESSIFY_CONFIG = Object.assign({
    can never reach Spring's. The seat cache moves to a per-term key; the old one is dropped. */
 window.MC_LS=function(k){ var t=String((window.PROFESSIFY_CONFIG||{}).TERM||'2268'); return t==='2268'?k:(k+':'+t); };
 (function(){ try{ localStorage.removeItem('professify_seats_cache'); }catch(e){} })();
+
+/* ---- security-pass2 (2026-10-15) --------------------------------------------------------------------------------
+   AVATARS. profiles.avatar_url is restricted in the database to this project's public avatars bucket. Old cached
+   values and every other path that draws a face go through here too, so a URL that is not ours never becomes an
+   <img src> (no request to someone else's server, no tracking pixel). The one other thing allowed is a data: image,
+   which makes no request: this device's own cached copy of YOUR photo is one (the bytes the profile editor uploaded). */
+var TC_AVA_BASE='https://rqkndeqbcahozidniesn.supabase.co/storage/v1/object/public/avatars/';
+function tcAva(u){
+  u=(u==null)?'':String(u);
+  if(!u)return '';
+  if(u.indexOf(TC_AVA_BASE)===0)return /[\s"'<>\\]|\.\./.test(u.slice(TC_AVA_BASE.length))?'':u;
+  /* data: images make no request and cannot run script inside an <img> (an SVG there is drawn as a static picture) */
+  if(/^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+\/=]+$/.test(u)||/^data:image\/svg\+xml[;,]/.test(u))return u;
+  return '';
+}
+
+/* SIGNING OUT CLEARS THIS BROWSER, and a different person signing in finds nothing of the last one.
+   Everything this site keeps about a person starts professify, tc- or tc_. These keys are about the DEVICE, not the
+   person, and stay: theme; the analytics pseudonym (random here, not derived from an account); the install-prompt
+   counters; the review-sound toggle; public caches (PolyRatings, catalog short names, seat counts); and the
+   remembered last user id itself. */
+var TC_KEEP={'professify-theme':1,'professify_ev_salt':1,'professify_visits':1,'professify_install_snooze':1,
+             'professify_ratesound':1,'professify_prof_cache':1,'professify_course_short':1,'professify_last_uid':1};
+function tcKeepKey(k,o){
+  if(TC_KEEP[k])return true;
+  if(k.indexOf('professify_seats_cache')===0)return true;
+  /* A different account signing in: the invite link it opened and a signup handle/phone it just typed are ITS, not
+     the last account's, so they survive that wipe (and only that one). */
+  if(o&&o.keepPending&&(k==='professify_pending_add'||k==='professify_pending_add_at'||k==='professify_pending_handle'||k==='professify_pending_phone'))return true;
+  return false;
+}
+/* The same lists as they sit in memory. Without this the next sign-in on this page would still see them and write
+   them back to storage (and loadMySavedClasses would upload them to the new account). Each line is its own try
+   because some of these are declared in later scripts. */
+function tcResetMemory(){
+  try{ myClasses=[]; }catch(e){}
+  try{ myClassMeta={}; }catch(e){}
+  try{ mcPending={}; }catch(e){}
+  try{ watchlist=[]; }catch(e){}
+  try{ watchSpMeta={}; }catch(e){}
+  try{ watchClasses=[]; }catch(e){}
+  try{ watchMeta={}; }catch(e){}
+  try{ gpList=[]; }catch(e){}
+  try{ gpMuted={}; }catch(e){}
+  try{ HM_SEEN={}; }catch(e){}
+  try{ window._mcDbCodes=[]; }catch(e){}
+  try{ if(typeof frSyncSaved==='function')frSyncSaved(); }catch(e){}
+  ['renderMyClasses','renderWatch','renderWatchClasses'].forEach(function(fn){ try{ if(typeof window[fn]==='function')window[fn](); }catch(e){} });
+}
+function tcWipeLocal(o){
+  o=o||{};
+  ['localStorage','sessionStorage'].forEach(function(n){
+    try{
+      var st=window[n], dead=[];
+      for(var i=0;i<st.length;i++){ var k=st.key(i); if(k&&/^(professify|tc-|tc_)/.test(k)&&!tcKeepKey(k,o))dead.push(k); }
+      dead.forEach(function(k){ try{ st.removeItem(k); }catch(e){} });
+    }catch(e){}
+  });
+  if(o.memory)tcResetMemory();
+}
+/* The signed-in user id as the stored session says it, read straight from storage (this runs before supabase-js). */
+function tcStoredUid(){
+  try{
+    var raw=null;
+    for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k&&/^sb-.*-auth-token$/.test(k)){ raw=localStorage.getItem(k); break; } }
+    if(!raw)return '';
+    var j=JSON.parse(raw), x=(j&&(j.currentSession||j.session))||j;
+    return (x&&x.user&&x.user.id)?String(x.user.id):'';
+  }catch(e){ return ''; }
+}
+/* Called with whoever is signed in now. A different account than the last one seen on this browser: wipe first, then
+   remember the new one. Returns true when it wiped. Storage that cannot be read cannot be compared, so it never wipes. */
+function tcSeeUser(uid,memory){
+  if(!uid)return false;
+  var last=null, wiped=false;
+  try{ last=localStorage.getItem('professify_last_uid'); }catch(e){ return false; }
+  if(last&&last!==uid){ tcWipeLocal({keepPending:true,memory:!!memory}); wiped=true; }
+  try{ localStorage.setItem('professify_last_uid',uid); }catch(e){}
+  return wiped;
+}
+/* At page load, before any later script reads a list from storage. */
+(function(){ try{ var u=tcStoredUid(); if(u)tcSeeUser(u,false); }catch(e){} })();
 </script>
 <script>
 /* Theme: set before paint to avoid a flash. Default dark; honors saved choice, else OS preference. */
@@ -2046,9 +2128,9 @@ window.toggleTheme = toggleTheme;
     .mc-card .mc-x{position:absolute;top:9px;right:8px}
   }
 </style>
-<link rel="stylesheet" href="hawk-ask.css?v=202610141450">
-<script defer src="hawk-router.js?v=202610141450"></script>
-<script defer src="hawk-ask.js?v=202610141450"></script>
+<link rel="stylesheet" href="hawk-ask.css?v=202610141919">
+<script defer src="hawk-router.js?v=202610141919"></script>
+<script defer src="hawk-ask.js?v=202610141919"></script>
 <style id="app-look-tokens">
 /* ================================================================================================
    APP-LOOK 2026-10-04 — the website in the phone app's design language, pass 1 (Tate: "the goal is
@@ -2237,12 +2319,13 @@ var NOPH_SVG="<svg class='nophoto' viewBox='0 0 24 24' aria-hidden='true'><circl
         var ac=JSON.parse(localStorage.getItem('professify_avatar_'+sess.user.id)||'null');
         if(ac&&typeof ac.data==='string'&&ac.data.slice(0,5)==='data:'&&(!av||ac.url===av))av=ac.data;
       }catch(_a){}
+      av=(typeof tcAva==='function')?tcAva(av):'';   /* only our own avatars bucket, or this device's cached bytes (security-pass2, 2026-10-15) */
       btn.className='auth-btn in';
       /* A photo that fails to load used to leave an empty circle that still claimed to be a
          photo — the "my picture disappeared" report. Fall back to initials on error. */
       var iniSafe=ini.replace(/[<&'"]/g,'');
       btn.innerHTML='<span class="auth-ava">'+(av
-        ? '<img class="ava-img" src="'+String(av).replace(/"/g,'&quot;')+'" alt=""'
+        ? '<img class="ava-img" src="'+String(av).replace(/"/g,'&quot;')+'" alt="" referrerpolicy="no-referrer"'
           +' onerror="this.parentNode.innerHTML=NOPH_SVG">'
         : NOPH_SVG)+'</span><span>'+nm.replace(/[<&>]/g,'')+'</span>';
     }
@@ -5099,7 +5182,7 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
    The flag is the whole switch — every gp* surface already gates on gpFlagOn(), so this is
    one word and the code stays in git. Turn it back on the same day the migration runs. */
 window.PROFESSIFY_FLAGS={groups:false,messages:true};
-window.PROFESSIFY_BUILD='2026-10-14 14:50';
+window.PROFESSIFY_BUILD='2026-10-14 19:19';
 /* Paint the build stamp everywhere it appears. */
 try{
   (function(){
@@ -5441,7 +5524,7 @@ function blobToDataUrl(blob){
 async function refreshAvatarCache(){
   try{
     if(typeof sbUser==='undefined'||!sbUser||!sbUser.id)return;
-    var url=(typeof myProfile!=='undefined'&&myProfile&&myProfile.avatar_url)?String(myProfile.avatar_url):'';
+    var url=tcAva((typeof myProfile!=='undefined'&&myProfile&&myProfile.avatar_url)?String(myProfile.avatar_url):'');   /* never fetch a URL that is not our bucket (security-pass2, 2026-10-15) */
     var have=cachedAvatar(sbUser.id);
     if(!url){ if(have)cacheAvatarData(sbUser.id,'',null); return; }
     if(have&&have.url===url)return;
@@ -5462,15 +5545,15 @@ function myAvatarUrl(){
        can go wrong between here and storage. */
     var c=uid?cachedAvatar(uid):null;
     if(c&&(!url||c.url===url))return c.data;
-    if(url)return url;
+    if(url)return tcAva(url);   /* a URL that is not our bucket draws the silhouette (security-pass2, 2026-10-15) */
     return c?c.data:'';
   }catch(e){ return ''; }
 }
 /* A real photo wins over initials; initials win over the neutral glyph. Same order everywhere,
    so the header, the rail card and Settings can't show three different things. */
 function myAvatarHtml(){
-  var url=myAvatarUrl();
-  if(url)return '<img class="ava-img" src="'+escapeHtml(url)+'" alt="" loading="lazy">';
+  var url=tcAva(myAvatarUrl());
+  if(url)return '<img class="ava-img" src="'+escapeHtml(url)+'" alt="" loading="lazy" referrerpolicy="no-referrer">';
   var n=myDisplayName();
   return NOPH_SVG;
 }
@@ -5480,7 +5563,8 @@ function myAvatarHtml(){
    app/index.html). The grey is the tile's background (colorForId() -> var(--nophoto)); the person is NOPH_SVG,
    defined in the first script on the page (the first-paint account pill needs it). */
 function avaHtml(url,name,cls){
-  if(url)return '<img class="ava-img'+(cls?' '+cls:'')+'" src="'+escapeHtml(url)+'" alt="" loading="lazy"'
+  url=tcAva(url);   /* only our own avatars bucket; anything else is the silhouette (security-pass2, 2026-10-15) */
+  if(url)return '<img class="ava-img'+(cls?' '+cls:'')+'" src="'+escapeHtml(url)+'" alt="" loading="lazy" referrerpolicy="no-referrer"'
     +' onerror="this.outerHTML=NOPH_SVG">';
   return NOPH_SVG;
 }
@@ -9155,7 +9239,9 @@ function realify(){
 const POLYRATINGS_API='https://api-prod.polyratings.org';
 const PR_LIVE_DEPT={};      // course prefix (= PolyRatings department) -> [professor ids, best first]
 let PR_LIVE_LOADED=false;
-function slugPR(uuid){return 'pr_'+String(uuid).replace(/-/g,'');}
+/* PolyRatings is a third party and this id is printed into handlers and attributes all over the page, so it keeps only
+   plain characters. A real uuid is unchanged. (security-pass2, 2026-10-15) */
+function slugPR(uuid){return 'pr_'+String(uuid).replace(/-/g,'').replace(/[^A-Za-z0-9_]/g,'');}
 /* Ratings were refetched from PolyRatings on every single load — ~2,600 professors over the
    network before a single score could render, which is the other half of "it takes time to
    cache again after ⌘R". The seat feed has been cached in localStorage for ages; this wasn't.
@@ -9174,14 +9260,19 @@ function hydrateProfsFromCache(){
 }
 /* One place that turns the PolyRatings payload into PROFESSORS, used by both the cache
    hydrate and the live fetch, so the two can never drift. */
+function prText(s,n){ return String(s==null?'':s).replace(/[<>"`\u0000-\u001f\u007f]/g,'').replace(/\s+/g,' ').trim().slice(0,n||80); }   /* security-pass2 (2026-10-15) */
 function applyPolyList(list,fromCache){
     for(const k in PR_LIVE_DEPT)delete PR_LIVE_DEPT[k];
     list.forEach(p=>{
       if(!p||typeof p.overallRating!=='number')return;
       const id=slugPR(p.id);
-      PROFESSORS[id]={name:((p.firstName||'')+' '+(p.lastName||'')).trim()||'Instructor',dept:p.department,field:p.department,
-        rating:+p.overallRating,evals:p.numEvals||0,live:true,courses:Array.isArray(p.courses)?p.courses:[],prId:p.id};
-      (PR_LIVE_DEPT[p.department]=PR_LIVE_DEPT[p.department]||[]).push(id);
+      /* security-pass2 (2026-10-15): a department, a name and a course are labels. PolyRatings is a third party, so they
+         lose markup characters (< > " ` and control characters) and are cut to a sane length here, once, before any
+         screen can print them; the evaluation count must be a number. */
+      const dep=prText(p.department,40), nm=prText((prText(p.firstName)+' '+prText(p.lastName)).trim(),80)||'Instructor';
+      PROFESSORS[id]={name:nm,dept:dep,field:dep,
+        rating:+p.overallRating,evals:(isFinite(+p.numEvals)?+p.numEvals:0)||0,live:true,courses:(Array.isArray(p.courses)?p.courses:[]).map(c=>prText(c,40)).filter(Boolean),prId:p.id};
+      (PR_LIVE_DEPT[dep]=PR_LIVE_DEPT[dep]||[]).push(id);
     });
     Object.values(PR_LIVE_DEPT).forEach(a=>a.sort((x,y)=>{
       const px=PROFESSORS[x],py=PROFESSORS[y];
@@ -10299,11 +10390,11 @@ function clsSecRowsFor(secs,code){
       profCell='<div class="cs-prof cs-multi">'+s.people.map(function(q){
         var qr=q.rating!=null?'<span class="rt" style="color:'+scoreColor(q.rating)+'">'+to5(q.rating).toFixed(1)+'</span>':'';
         return q.pid
-          ? '<span class="pn pn-link" onclick="event.stopPropagation();openProf(\''+q.pid+'\')">'+escapeHtml(q.name)+'</span>'+qr
+          ? '<span class="pn pn-link" onclick="event.stopPropagation();openProf(\''+jsAttr(q.pid)+'\')">'+escapeHtml(q.name)+'</span>'+qr
           : '<span class="pn">'+escapeHtml(q.name)+'</span>';
       }).join('<span class="cs-amp">+</span>')+'</div>';
     } else if(s.pid){
-      profCell='<div class="cs-prof" onclick="event.stopPropagation();openProf(\''+s.pid+'\')" style="cursor:pointer"><span class="pn">'+escapeHtml(s.name)+'</span>'+rt+'</div>';
+      profCell='<div class="cs-prof" onclick="event.stopPropagation();openProf(\''+jsAttr(s.pid)+'\')" style="cursor:pointer"><span class="pn">'+escapeHtml(s.name)+'</span>'+rt+'</div>';
     } else {
       profCell='<div class="cs-prof"><span class="pn">'+(s.name?escapeHtml(s.name):'Staff / TBA')+'</span></div>';
     }
@@ -11731,11 +11822,11 @@ if(!list.length && !scraped.length){
     // who simply don't have a score yet are shown together in the same grid, not in a
     // separate "unrated" section. A search covers everyone.
     const ratedCards=shown.map(([id,p])=>`
-      <div class="pcard" data-pk="${escapeHtml(profKey(p))}" data-surface="explore" onclick="openProf('${id}')">${watchBtn(id)}
+      <div class="pcard" data-pk="${escapeHtml(profKey(p))}" data-surface="explore" onclick="openProf('${jsAttr(id)}')">${watchBtn(id)}
         <div class="ini" style="${profTintStyle(p.rating)}">${initials(p.name)}</div>
         <div style="flex:1;min-width:0">
           <h3>${escapeHtml(p.name)}</h3>
-          <div class="pd">${profDeptLabel(p)}${p.reviews!=null?` · ${p.reviews} reviews`:''}</div>
+          <div class="pd">${escapeHtml(profDeptLabel(p))}${p.reviews!=null?` · ${p.reviews} reviews`:''}</div>
           <div class="pmeta">${rateHtmlBlend(p)}${(function(){const n=blendCount(p);if(!n)return '';const sn=profReviews(p).length;/* "1 ratings · PolyRatings" — the blended branch pluralised, this one didn't. Six of them
                  were on screen at once in a live Explore search on 2026-08-22. */
               const lbl=sn>0?`${n.toLocaleString()} rating${n===1?'':'s'}`:`${n.toLocaleString()} rating${n===1?'':'s'} · PolyRatings`;return `<span style="color:var(--faint);font-size:12.5px">${lbl}</span>`;})()}</div>
@@ -12289,8 +12380,8 @@ try{
 
 /* ---- naming a click --------------------------------------------------------------------------
    In preference order: an explicit data-ev label (stable across redesigns, which a CSS path is
-   not), then an id, then a role with its own short text. Text is trimmed hard — a label, never a
-   sentence, and never anything a student typed. */
+   not), then an id, then the element's tag name. NEVER its text, aria-label or value (security-pass2, 2026-10-15):
+   a button's label can be a friend's name and an input's value is whatever was typed. */
 function evTargetName(el){
   try{
     var n = el && el.closest ? el.closest('[data-ev]') : null;
@@ -12299,9 +12390,7 @@ function evTargetName(el){
     if(n && n.id && !/^:/.test(n.id)) return '#' + String(n.id).slice(0,60);
     n = el && el.closest ? el.closest('button,a,[role="button"],[role="tab"],summary,input,select,label') : null;
     if(n){
-      var kind = (n.tagName || '').toLowerCase();
-      var label = (n.getAttribute('aria-label') || n.value || n.textContent || '').replace(/\s+/g,' ').trim();
-      return (kind + (label ? ':' + label.slice(0,40) : '')).slice(0,60);
+      return (n.tagName || '').toLowerCase().slice(0,60);
     }
   }catch(e){}
   return null;
@@ -12639,9 +12728,8 @@ function gaView(v){
      · `subject` — the second argument of track(). That is the professor key on prof_view and
        prof_impression, and the scrubbed error text on error. It is the identifying half of every
        event this app records, and it is never passed here at all rather than filtered later.
-     · `target` and `last` — evTargetName() falls back to an element's own text, so a tap on a
-       professor card is legitimately "a:Jim Mueller" in our own table. Handing that to Google
-       would build the professor history by the back door, one button label at a time. GA gets
+     · `target` and `last` — evTargetName() names a click by data-ev, id or tag (it used to fall back to the
+       element's own text, 2026-10-15), and an id can still be specific, so these stay out of GA. GA gets
        the event and the surface it happened on, which is what the question "where do people rage
        click" actually needs.
    Only the enumerated keys below survive, and each is something this file chose rather than read
@@ -13366,15 +13454,15 @@ async function initBackend(){
         var ok=false;
         try{ localStorage.setItem(k,v); ok=true; }catch(e){}
         if(!ok){ try{
-          /* a year, refreshed on every write; Secure everywhere but a local file/http test page */
-          document.cookie=k+'='+encodeURIComponent(v)+'; path=/; max-age=31536000; SameSite=Lax'
-            +(location.protocol==='https:'?'; Secure':'');
+          /* a week (was a year), refreshed on every write; Secure and SameSite=Strict, so it is never sent in the clear
+             or with a request another site starts (security-pass2, 2026-10-15). Only used when localStorage throws. */
+          document.cookie=k+'='+encodeURIComponent(v)+'; path=/; max-age=604800; Secure; SameSite=Strict';
         }catch(e){} }
       },
       removeItem:function(k){
         delete _memStore[k];
         try{ localStorage.removeItem(k); }catch(e){}
-        try{ document.cookie=k+'=; path=/; max-age=0; SameSite=Lax'+(location.protocol==='https:'?'; Secure':''); }catch(e){}
+        try{ document.cookie=k+'=; path=/; max-age=0; Secure; SameSite=Strict'; }catch(e){}
       }
     };
     sb=window.supabase.createClient(c.SUPABASE_URL,c.SUPABASE_ANON_KEY,{
@@ -13441,6 +13529,9 @@ async function initBackend(){
     // skipped. Reload when the user changes OR whenever friends aren't loaded.
     let lastAuthUid=null;
     sb.auth.onAuthStateChange((_e,session)=>{
+      /* a DIFFERENT account than the last one on this browser: its predecessor's local lists go first, before
+         anything below can load or adopt them (security-pass2, 2026-10-15) */
+      try{ if(session&&session.user&&typeof tcSeeUser==='function')tcSeeUser(session.user.id,true); }catch(_w){}
       sbUser=session?session.user:null;
       /* eduVerified used to be "has a session", not "has a Cal Poly address" — the two were
          treated as the same thing while nothing checked the second. Check it. */
@@ -14066,7 +14157,7 @@ async function authSendCode(noPassword){
   }
 }
 function authCodeStep(email){
-  var esc=escapeHtml(email).replace(/'/g,"\\'");
+  var esc=jsAttr(email);   /* was escapeHtml(email).replace(/'/g,"\\'"): with ' now an entity that order breaks out of the string (security-pass2, 2026-10-15) */
   document.getElementById('authBody').innerHTML=
     '<div class="auth-k">Check your inbox</div><h2 class="auth-h">Enter your code</h2>'
     +'<p class="auth-sub">We emailed a verification code to <b>'+escapeHtml(email)+'</b>.</p>'
@@ -14430,14 +14521,24 @@ function authSignedInView(){
     +'<p class="auth-sub">Verified Cal Poly student. Your email is never shown publicly and reviews post anonymously.</p>'
     +'<button class="auth-submit" style="background:var(--panel-2);color:var(--text);border:1px solid var(--line)" onclick="authSignOut()">Sign out</button>';
 }
-async function authSignOut(){ try{ if(sb&&sb.auth)await sb.auth.signOut(); }catch(e){} sbUser=null; try{ NOW_MINE={classes:[],meta:{},loaded:false}; NOW_SEATS={}; _nowSeatAsked={}; }catch(e){} eduVerified=false; try{cacheMyProfile(null);}catch(e){} updateAuthUI(); if(typeof renderAccountSection==='function')renderAccountSection(); closeAuth(); }
+async function authSignOut(){
+  /* Push first, while the session can still delete its own subscription row: on a shared browser the last account's
+     notifications must stop. Capped at 2s and never fatal, so a slow push service cannot hold the sign-out (security-pass2, 2026-10-15). */
+  try{
+    if(typeof pushSupported==='function'&&pushSupported()&&Notification.permission==='granted'&&typeof pushDisable==='function')
+      await Promise.race([pushDisable(),new Promise(function(r){ setTimeout(r,2000); })]);
+  }catch(e){}
+  try{ if(sb&&sb.auth)await sb.auth.signOut(); }catch(e){} sbUser=null; try{ NOW_MINE={classes:[],meta:{},loaded:false}; NOW_SEATS={}; _nowSeatAsked={}; }catch(e){} eduVerified=false; try{cacheMyProfile(null);}catch(e){}
+  /* and everything else this browser kept about them (security-pass2, 2026-10-15) */
+  try{ tcWipeLocal({memory:true}); }catch(e){}
+  updateAuthUI(); if(typeof renderAccountSection==='function')renderAccountSection(); closeAuth(); }
 function updateAuthUI(){
   var btn=document.getElementById('authBtn'); if(!btn)return;
-  if(typeof sbUser!=='undefined'&&sbUser){ var nm=(typeof myDisplayName==='function')?myDisplayName():((sbUser.email||'').split('@')[0]); if(!nm)nm=(sbUser.email||'').split('@')[0]||'Account'; btn.className='auth-btn in'; var _av=(typeof myAvatarUrl==='function')?myAvatarUrl():'';
+  if(typeof sbUser!=='undefined'&&sbUser){ var nm=(typeof myDisplayName==='function')?myDisplayName():((sbUser.email||'').split('@')[0]); if(!nm)nm=(sbUser.email||'').split('@')[0]||'Account'; btn.className='auth-btn in'; var _av=tcAva((typeof myAvatarUrl==='function')?myAvatarUrl():'');
     var _ini=escapeHtml(((typeof initials==='function'?initials(nm):nm.slice(0,1))||'?').slice(0,1).toUpperCase());
     btn.innerHTML='<span class="auth-ava">'+(_av
       /* onerror: a photo that won't load must degrade to initials, never to a blank circle. */
-      ? '<img class="ava-img" src="'+escapeHtml(_av)+'" alt="" onerror="this.parentNode.innerHTML=NOPH_SVG">'
+      ? '<img class="ava-img" src="'+escapeHtml(_av)+'" alt="" referrerpolicy="no-referrer" onerror="this.parentNode.innerHTML=NOPH_SVG">'
       : NOPH_SVG)+'</span><span>'+escapeHtml(nm)+'</span>'; }
   else { btn.className='auth-btn'; btn.textContent='Log in \u00b7 Sign up'; closeProfMenu(); }
   /* The first-paint attribute is an assumption; this function is the truth. */
@@ -14476,7 +14577,7 @@ function renderRateForm(id){
   const courses=wlCourses(p);
   if(d.course&&courses.indexOf(d.course)<0)courses.unshift(d.course);
   const courseField=courses.length
-    ? `<select id="rfCourse" class="rf-sel">${courses.map(c=>`<option ${d.course===c?'selected':''}>${c}</option>`).join('')}<option value="__other" ${(d.course&&courses.indexOf(d.course)<0)?'selected':''}>Other / not listed</option></select>`
+    ? `<select id="rfCourse" class="rf-sel">${courses.map(c=>`<option ${d.course===c?'selected':''}>${escapeHtml(c)}</option>`).join('')}<option value="__other" ${(d.course&&courses.indexOf(d.course)<0)?'selected':''}>Other / not listed</option></select>`
     : `<input id="rfCourse" class="rf-sel" placeholder="e.g. CSC 2001" value="${escapeHtml(d.course)}">`;
   const HOURS=['1–3','3–6','6–9','9–12','12+'],FMT=['In person','Hybrid','Online'],WELL=['Explains concepts clearly','Gave timely, useful feedback','Ran engaging discussions','Graded fairly &amp; transparently'],STRUGGLE=['Explanations were unclear','Feedback was slow or unhelpful','Lectures were disengaging','Grading felt unfair or unclear'];
   // Show the optional-detail section pre-expanded only if the draft already carries any of it
@@ -14500,7 +14601,7 @@ function renderRateForm(id){
            headed "Rate <professor>" and nothing else: the same screen as writing a new one. The
            form tells you which job it is doing in the place you look first. -->
       <div class="rf-head"><h2 class="rate-h" style="margin:0">${(window.RATE_EDIT&&window.RATE_EDIT.id)?('Edit your review of '+escapeHtml(p.name)):('Rate '+escapeHtml(p.name))}</h2></div>
-      ${window._rfRestored?`<div class="rf-restored">Picked up where you left off. <button type="button" onclick="rfStartOver('${id}')">Start over</button></div>`:''}
+      ${window._rfRestored?`<div class="rf-restored">Picked up where you left off. <button type="button" onclick="rfStartOver('${jsAttr(id)}')">Start over</button></div>`:''}
       <div class="rf-blk"><label class="rf-lab">Which course? <span style="color:var(--low)" title="Required">*</span></label>${courseField}<div id="rfCourseHint" class="rf-hint" style="margin-top:6px;display:none;color:var(--accent)"></div></div>
       <div class="rf-blk"><label class="rf-lab">When did you take it? <span class="rf-opt">(optional \u2014 one tap, helps students judge how current this is)</span></label><div class="rf-seg rf-term" id="rf-term">${rateTermOptions(4).map(t=>`<button type="button" class="${d.term===t?'on':''}">${t}</button>`).join('')}<button type="button" class="${(d.term===''&&d._termTouched)?'on':''}">Earlier</button></div></div>
       <div class="rf-blk"><div class="rf-row"><span class="rf-rl rf-big">Overall rating</span><div class="rf-stars" id="rf-overall"></div><span class="rf-val empty" id="rfv-overall">–</span></div><div class="rf-hint">Tap a star — tap its <b>left half</b> for a half-star.</div></div>
@@ -14527,7 +14628,7 @@ function renderRateForm(id){
         <div class="rf-blk"><label class="rf-lab">Anything else? <span class="rf-opt">(optional)</span></label><textarea id="rfNote" class="rf-note" rows="3" maxlength="${RF_HARD_CHARS}" placeholder="One tip for the next student…">${escapeHtml(d.text)}</textarea><div class="rf-count" id="rfCount" aria-live="polite"></div></div>
       </div>
       <div id="rfErr" class="rate-err" style="min-height:0"></div>
-      <button id="rfSubmit" class="btn primary rf-submit" onclick="submitRate('${id}')">${(window.RATE_EDIT&&window.RATE_EDIT.id)?'Save changes':'Post review'}</button>
+      <button id="rfSubmit" class="btn primary rf-submit" onclick="submitRate('${jsAttr(id)}')">${(window.RATE_EDIT&&window.RATE_EDIT.id)?'Save changes':'Post review'}</button>
       <p class="rf-fast">${(window.RATE_EDIT&&window.RATE_EDIT.id)?('Editing the review you posted'+(window.RATE_EDIT.created_at?(' '+revDateLabel(window.RATE_EDIT.created_at)):'')+(rfWillMarkEdited()?' · it will show as edited':'')):'Takes about 15 seconds · add detail above only if you want'}</p>
       <!-- The fine print described the wrong job in edit mode — 2026-09-19. "Posts anonymously ·
            one review per class" is the rule for WRITING one; under a "Save changes" button it
@@ -15465,7 +15566,7 @@ function myrRowsHtml(list){
       : '';
     /* The row-wide click opens the professor; the two buttons stop propagation above so
        pressing one doesn't also navigate away from the thing you're working on. */
-    return '<div class="myr-row"'+(openable?' onclick="closeMyReviews();openProf(\''+id+'\')" style="cursor:pointer"':'')+'>'
+    return '<div class="myr-row"'+(openable?' onclick="closeMyReviews();openProf(\''+jsAttr(id)+'\')" style="cursor:pointer"':'')+'>'
       +'<div class="myr-top"><span class="myr-nm">'+escapeHtml(r.professor_name||'Professor')+'</span><span class="myr-score" style="color:'+col+'">'+sc+'<small>/5</small></span></div>'
       +(sub?'<div class="myr-sub">'+sub+'</div>':'')
       +note
@@ -15785,7 +15886,7 @@ function rlProfRowHtml(id,p,ctx,code){
   const rvd=MY_REVIEWED[profKeyName(p)];
   const unrated=(p.rating==null);
   const sub=ctx||pfCoursesTaught(p).map(c=>c.code).concat(wlCourses(p)).filter((v,i,a)=>a.indexOf(v)===i).slice(0,2).join(', ')||(typeof profDeptLabel==='function'?profDeptLabel(p):(p.dept||''));
-  return `<div onclick="rlOpenProf('${id}','${jsAttr(code||'')}')" style="display:flex;align-items:center;justify-content:space-between;background:${PFC.panel};border:1px solid ${rvd?PFC.line:(ctx?PFC.green+'55':PFC.line)};border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer">
+  return `<div onclick="rlOpenProf('${jsAttr(id)}','${jsAttr(code||'')}')" style="display:flex;align-items:center;justify-content:space-between;background:${PFC.panel};border:1px solid ${rvd?PFC.line:(ctx?PFC.green+'55':PFC.line)};border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer">
     <div style="display:flex;align-items:center;gap:10px;min-width:0">
       <!-- The rating rides the INITIALS, not the number (Tate, 2026-08-26) — the same rounded
            square that carries it on the Explore professor tiles, so the colour means one thing
@@ -16491,7 +16592,7 @@ function openWatchedProf(id){
   openProf(id);
 }
 function isWatched(id){return watchlist.indexOf(id)>=0;}
-function watchBtn(id){const on=isWatched(id);return `<button class="wl-btn ${on?'on':''}" title="${on?'On your watchlist':'Add to watchlist'}" aria-label="Watchlist toggle" onclick="toggleWatch('${id}',event)">${on?WL_ON:WL_OFF}</button>`;}
+function watchBtn(id){const on=isWatched(id);return `<button class="wl-btn ${on?'on':''}" title="${on?'On your watchlist':'Add to watchlist'}" aria-label="Watchlist toggle" onclick="toggleWatch('${jsAttr(id)}',event)">${on?WL_ON:WL_OFF}</button>`;}
 function toggleWatch(id,ev){if(ev){ev.stopPropagation();}const i=watchlist.indexOf(id);
   if(i>=0){watchlist.splice(i,1);if(/^sp:/.test(id)&&watchSpMeta[id]){delete watchSpMeta[id];saveWatchSp();}}
   else{watchlist.push(id);if(typeof watchLandOn==='function')watchLandOn('profs');}
@@ -16649,7 +16750,7 @@ function wpCompareTable(ids){
     const confLbl=five!=null?(s.cnt.toLocaleString()+' rating'+(s.cnt===1?'':'s')):'No rating yet';
     return '<div class="pcmp-card'+(isWin?' win':'')+'">'
       +'<div class="pcmp-rank">'+rankLbl+'</div>'
-      +'<div><div class="pcmp-nm" onclick="openProf(\''+s.id+'\')">'+escapeHtml(p.name)+'</div><div class="pcmp-dept">'+escapeHtml(pdept(p)||p.dept||'')+'</div></div>'
+      +'<div><div class="pcmp-nm" onclick="openProf(\''+jsAttr(s.id)+'\')">'+escapeHtml(p.name)+'</div><div class="pcmp-dept">'+escapeHtml(pdept(p)||p.dept||'')+'</div></div>'
       +'<div class="pcmp-big"><b style="color:'+col+'">'+(five!=null?five.toFixed(1):'—')+'</b><span>/ 5</span></div>'
       +'<div class="pcmp-conf">'+confLbl+'</div><div class="pcmp-bar"><i style="width:'+(five!=null?confW:0)+'%"></i></div>'
       /* A row of em-dashes reads as a broken card, not as "we don't know". Rows only render
@@ -16660,8 +16761,8 @@ function wpCompareTable(ids){
         +(anyReviews?'<div class="r"><span>Student reviews</span><span class="rv">'+reviewsVal+'</span></div>':'')
         +(anyTeaches?'<div class="r"><span>Teaches</span><span class="rv">'+(teachesVal||'<span style="color:var(--faint)">Not listed</span>')+'</span></div>':'')
       +'</div>'
-      +'<button class="pcmp-pick '+(isWin?'pri':'sec')+'" onclick="openProf(\''+s.id+'\')">View profile →</button>'
-      +'<button class="pcmp-rm" onclick="wpToggleCompare(\''+s.id+'\',event)">Remove from compare</button>'
+      +'<button class="pcmp-pick '+(isWin?'pri':'sec')+'" onclick="openProf(\''+jsAttr(s.id)+'\')">View profile →</button>'
+      +'<button class="pcmp-rm" onclick="wpToggleCompare(\''+jsAttr(s.id)+'\',event)">Remove from compare</button>'
     +'</div>';
   }).join('');
   return verdict+'<div class="pcmp-grid">'+cards+'</div><p class="wl-note">Ranked by rating, then how many ratings back it up. Tap a name or “View profile” for their full record.</p>';
@@ -16698,15 +16799,15 @@ function renderWatch(){
     /* Comparing a professor with no ratings against one with ratings is a table of blanks;
        the button is hidden rather than offered and then disappointing. */
     const cmpBtn=p.scraped?'<span class="wc-cmp" style="visibility:hidden"></span>'
-      :`<button class="wc-cmp${on?' on':''}" onclick="wpToggleCompare('${id}',event)">${on?'✓ In compare':'⇄ Compare'}</button>`;
-    return `<div class="mc-card wc-card${on?' incmp':''}"><div class="mc-main"><div class="mc-code" style="cursor:pointer" onclick="openWatchedProf('${id}')">${escapeHtml(p.name)}</div><div class="mc-name">${pdept(p)||p.dept||''}</div><div class="mc-sub">${nrev}</div></div>`
+      :`<button class="wc-cmp${on?' on':''}" onclick="wpToggleCompare('${jsAttr(id)}',event)">${on?'✓ In compare':'⇄ Compare'}</button>`;
+    return `<div class="mc-card wc-card${on?' incmp':''}"><div class="mc-main"><div class="mc-code" style="cursor:pointer" onclick="openWatchedProf('${jsAttr(id)}')">${escapeHtml(p.name)}</div><div class="mc-name">${escapeHtml(pdept(p)||p.dept||'')}</div><div class="mc-sub">${nrev}</div></div>`
       +cmpBtn
       +rate
-      +`<button class="mc-x" title="Remove from watchlist" onclick="toggleWatch('${id}',event)">&times;</button></div>`;
+      +`<button class="mc-x" title="Remove from watchlist" onclick="toggleWatch('${jsAttr(id)}',event)">&times;</button></div>`;
   }).join('');
   let tray='';
   if(wpCompareSet.length){
-    const chips=wpCompareSet.map(id=>{const p=PROFESSORS[id]||{};return `<span class="wc-chip">${(p.name||id).split(' ')[0]} ${(p.name||'').split(' ').slice(-1)[0]||''} <span class="rm" title="Remove from tray" onclick="wpToggleCompare('${id}',event)">✕</span></span>`;}).join('');
+    const chips=wpCompareSet.map(id=>{const p=PROFESSORS[id]||{};return `<span class="wc-chip">${(p.name||id).split(' ')[0]} ${(p.name||'').split(' ').slice(-1)[0]||''} <span class="rm" title="Remove from tray" onclick="wpToggleCompare('${jsAttr(id)}',event)">✕</span></span>`;}).join('');
     const ready=wpCompareSet.length>=2;
     tray=`<div class="wc-tray"><div class="wc-chips">${chips}</div><button class="wc-go" ${ready?'':'disabled'} onclick="wpOpenCompare()">Compare (${wpCompareSet.length}) →</button></div>`;
   }
@@ -18462,7 +18563,7 @@ function planningTerm(){ return mcTermLabel(); }   /* the term you choose in (wa
 function setPlanTerm(){const el=document.getElementById('planTerm');if(el)el.textContent=planningTerm();}
 /* Class standing -> the course level you're planning this year (Freshman=1000, etc.). */
 function standingLevel(){return ({Freshman:'1',Sophomore:'2',Junior:'3',Senior:'4'})[student.standing]||'1';}
-function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}   /* ' added 2026-10-15 (security-pass2): a single-quoted attribute can no longer be broken out of */
 function guessMajor(name){
   const n=name.toLowerCase();
   if(/anthro|geog/.test(n))return 'Anthropology & Geography';
@@ -18564,8 +18665,8 @@ function renderDetected(codes,major){
     const name=COURSE_NAME[code]||'';
     if(profs.length){const p=PROFESSORS[profs[0]];const planned=planSections[code]&&planSections[code].profId===profs[0];
       return `<div class="det-row"><div class="det-main"><div class="det-code">${code}${name?` · <span style="color:var(--muted);font-weight:500">${name}</span>`:''}</div>
-        <div class="pm sec" onclick="openProf('${profs[0]}')" style="margin-top:4px"><div class="ini">${initials(p.name)}</div><span class="nm">${escapeHtml(p.name)}</span>${rateHtmlBlend(p)}</div></div>
-        <button class="planbtn ${planned?'on':''}" onclick="togglePlanCourse('${jsAttr(code)}','${profs[0]}','Uploaded')">${planned?'✓ Planned':'+ Plan'}</button></div>`;
+        <div class="pm sec" onclick="openProf('${jsAttr(profs[0])}')" style="margin-top:4px"><div class="ini">${initials(p.name)}</div><span class="nm">${escapeHtml(p.name)}</span>${rateHtmlBlend(p)}</div></div>
+        <button class="planbtn ${planned?'on':''}" onclick="togglePlanCourse('${jsAttr(code)}','${jsAttr(profs[0])}','Uploaded')">${planned?'✓ Planned':'+ Plan'}</button></div>`;
     }
     return `<div class="det-row"><div class="det-main"><div class="det-code">${code}${name?` · <span style="color:var(--muted);font-weight:500">${name}</span>`:''}</div><div class="det-sub">Instructor not listed here yet</div></div></div>`;
   }).join('');
@@ -18605,7 +18706,7 @@ function miniProf(t){
   const r=resolveProf(t);
   if(r.tbd||!PROFESSORS[r.profId])return `<div class="tbd">Instructor not yet listed</div>`;
   const p=PROFESSORS[r.profId];
-  return `<div class="pm" onclick="openProf('${r.profId}')"><div class="ini">${initials(p.name)}</div><span class="nm">${escapeHtml(p.name)}${r.projected?' <span class="proj">projected</span>':''}</span>${rateHtmlBlend(p)}</div>`;
+  return `<div class="pm" onclick="openProf('${jsAttr(r.profId)}')"><div class="ini">${initials(p.name)}</div><span class="nm">${escapeHtml(p.name)}${r.projected?' <span class="proj">projected</span>':''}</span>${rateHtmlBlend(p)}</div>`;
 }
 function bestOpenOptions(n){
   return [...GE_COURSES].filter(c=>PROFESSORS[c.prof]).slice(0,n);
@@ -18615,12 +18716,12 @@ function profSectionRow(profId,isTop,code,term){
   const m=sectionMeta(code,profId);
   const planned=planSections[code]&&planSections[code].profId===profId;
   return `<div class="sec2">
-    <div class="pm sec" onclick="openProf('${profId}')">
+    <div class="pm sec" onclick="openProf('${jsAttr(profId)}')">
       <div class="ini">${initials(p.name)}</div>
       <span class="nm">${escapeHtml(p.name)}${isTop?' <span class="toppick">Top pick</span>':''}</span>
       ${rateHtmlBlend(p)}
     </div>
-    <div class="secmeta"><span>${realSectionTime(code,profId)||'Time TBA · check class schedule'}</span><button class="planbtn ${planned?'on':''}" onclick="togglePlanCourse('${jsAttr(code)}','${profId}','${term}')">${planned?'✓ Planned':'+ Plan'}</button></div>
+    <div class="secmeta"><span>${realSectionTime(code,profId)||'Time TBA · check class schedule'}</span><button class="planbtn ${planned?'on':''}" onclick="togglePlanCourse('${jsAttr(code)}','${jsAttr(profId)}','${jsAttr(term)}')">${planned?'✓ Planned':'+ Plan'}</button></div>
   </div>`;
 }
 function courseSlot(s,term,priorCodes){
@@ -18637,7 +18738,7 @@ function courseSlot(s,term,priorCodes){
 }
 function flexSlot(s,term){
   const rows=bestOpenOptions(2).map(o=>{const p=PROFESSORS[o.prof];const m=sectionMeta(o.code,o.prof);const planned=!!planSections[o.code];
-    return `<div class="sec2"><div class="pm sec" onclick="openProf('${o.prof}')"><div class="ini">${initials(p.name)}</div><span class="nm">${o.code} · ${escapeHtml(p.name)}</span>${rateHtmlBlend(p)}</div>
+    return `<div class="sec2"><div class="pm sec" onclick="openProf('${jsAttr(o.prof)}')"><div class="ini">${initials(p.name)}</div><span class="nm">${o.code} · ${escapeHtml(p.name)}</span>${rateHtmlBlend(p)}</div>
     <div class="secmeta"><span>${realSectionTime(o.code,o.prof)||'Time TBA · check class schedule'}</span><button class="planbtn ${planned?'on':''}" onclick="togglePlanFlex('${jsAttr(o.code)}','${term}')">${planned?'✓ Planned':'+ Plan'}</button></div></div>`;}).join('');
   return `<div class="course flex"><div class="code">${s.label}<span class="cu">${unitStr(s.units)}</span></div><div class="cn flexcn">You choose — options that fit this slot:</div>${rows}<a class="more" onclick="goGE()">Browse all options →</a></div>`;
 }
@@ -18731,7 +18832,7 @@ function renderGe(){
       <div class="ge-main">
         <div class="ge-title"><span class="code">${c.code}</span><span class="nm">${c.name}</span></div>
         <div class="ge-meta">
-          <span class="ge-prof" onclick="openProf('${c.prof}')"><span class="ini">${initials(p.name)}</span>${escapeHtml(p.name)}</span>
+          <span class="ge-prof" onclick="openProf('${jsAttr(c.prof)}')"><span class="ini">${initials(p.name)}</span>${escapeHtml(p.name)}</span>
           <span class="ge-tag"><span class="rd"></span>${c.workload} workload</span>
           <span class="ge-tag"><span class="rd"></span>${c.area}</span>
         </div>
@@ -18950,7 +19051,7 @@ async function syncProfileToBackend(){
 }
 
 /* ============ SETTINGS ============ */
-function escAcc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function escAcc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}   /* ' added 2026-10-15 (security-pass2) */
 /* Settings is a VIEW now, not an overlay (Tate, 2026-08-25). Everything that filled the modal
    still fills the page — same element ids — so nothing downstream had to change. */
 var stTab='account';
@@ -19063,9 +19164,9 @@ function renderAccountSection(){
     var em=sbUser.email||'';
     var nm=(typeof myDisplayName==='function'&&myDisplayName())||em.split('@')[0];
     var un=(myProfile&&myProfile.username)?('@'+myProfile.username):'';
-    var avu=(typeof myAvatarUrl==='function')?myAvatarUrl():'';
+    var avu=tcAva((typeof myAvatarUrl==='function')?myAvatarUrl():'');
     el.innerHTML='<div class="set-acct"><div class="who"><div class="set-ava">'
-      +(avu?'<img class="ava-img" src="'+escAcc(avu)+'" alt="">':escAcc(initials(nm||'?')))
+      +(avu?'<img class="ava-img" src="'+escAcc(avu)+'" alt="" referrerpolicy="no-referrer">':escAcc(initials(nm||'?')))
       +'</div><div><div style="font-weight:600">'+escAcc(nm)+(un?(' <span style="color:var(--muted);font-weight:500">'+escAcc(un)+'</span>'):'')+'</div>'
       +'<div style="color:var(--muted);font-size:13px">'+escAcc(em)+'</div></div></div>'
       +'<button class="set-btn" style="margin-top:12px" onclick="closeSettings();openEditProfile()">Edit profile</button>'
@@ -28601,7 +28702,9 @@ function schedCardFileSync(opts){
 var SC_BUCKET='schedule-cards';
 function scPreviewOn(){ try{ return !!cfg().SHARE_PREVIEW; }catch(e){ return false; } }
 /* A random name, not the account id. The image URL travels inside a link that gets forwarded, and
-   a user id in it would be an identifier handed to everyone down the chain for nothing. */
+   a user id in it would be an identifier handed to everyone down the chain for nothing.
+   (This is about the IMAGE'S NAME. The link itself still carries &add=<your id> on purpose: that is the invite token
+   the landing's "Add <name>" button needs, the same id the QR and /invite?add= links carry. Reviewed 2026-10-15, kept.) */
 function scToken(){
   var a=new Uint8Array(16);
   try{ (window.crypto||window.msCrypto).getRandomValues(a); }
@@ -30295,8 +30398,9 @@ function msgIni(n){
 }
 function msgAva(p,cls){
   var ini=msgIni(p.name);
+  p=Object.assign({},p,{avatar:tcAva(p.avatar)});   /* only our own avatars bucket (security-pass2, 2026-10-15) */
   return p.avatar
-    ? '<span class="msg-av '+(cls||'')+'"><img src="'+msgEsc(p.avatar)+'" alt="" loading="lazy"></span>'
+    ? '<span class="msg-av '+(cls||'')+'"><img src="'+msgEsc(p.avatar)+'" alt="" loading="lazy" referrerpolicy="no-referrer"></span>'
     : '<span class="msg-av '+(cls||'')+'">'+msgEsc(ini)+'</span>';
 }
 /* A direct thread is named by the person who isn't you. A group is named by its title, or by
@@ -31749,7 +31853,8 @@ function psugFaces(list){
   return '<span class="psug-faces">'+list.slice(0,3).map(function(x){
     var av=(typeof frAvatarFor==='function')?frAvatarFor(x):(x.avatar_url||'');
     var ini=msgIni(x.display_name);
-    return av?('<i><img src="'+msgEsc(av)+'" alt="" loading="lazy"></i>'):('<i>'+msgEsc(ini)+'</i>');
+    av=tcAva(av);   /* only our own avatars bucket (security-pass2, 2026-10-15) */
+    return av?('<i><img src="'+msgEsc(av)+'" alt="" loading="lazy" referrerpolicy="no-referrer"></i>'):('<i>'+msgEsc(ini)+'</i>');
   }).join('')+'</span>';
 }
 /* Rendered into the professor card. Returns '' when there is nothing true to say — no pill,
@@ -32261,7 +32366,7 @@ function pcHistRow(h){
   const ratingHtml=(r5!=null)?`<span class="pc-star" style="color:${scoreColor(raw)}">★ ${r5.toFixed(1)}</span>`:'';
   const meta=h.professor?escapeHtml(h.professor):'<span style="color:var(--faint)">Professor not set</span>';
   const action=pid
-    ? `<button class="pc-rate" onclick="startRate('${pid}','${jsAttr(h.code)}')">Rate ★</button>`
+    ? `<button class="pc-rate" onclick="startRate('${jsAttr(pid)}','${jsAttr(h.code)}')">Rate ★</button>`
     : `<button class="pc-rate ghost" onclick="openClassFromFeed('${jsAttr(h.code)}');frToast('Tap the professor who taught you to rate them.')">${h.professor?'Find professor →':'Add professor →'}</button>`;
   return `<div class="pc-row">
     <span class="pc-code">${escapeHtml(cur)}</span>
@@ -35835,7 +35940,7 @@ var _epPendingBlob=null, _epPendingUrl=null, _epRemove=false, _epUserTimer=null,
 
 function epAvatarUrlFor(prof){
   var u=prof&&prof.avatar_url;
-  return u?String(u):'';
+  return u?tcAva(String(u)):'';   /* security-pass2 (2026-10-15) */
 }
 function epPaintAva(){
   var el=document.getElementById('epAva'); if(!el)return;
@@ -35887,7 +35992,7 @@ async function epBucketExists(){
    it, the bucket is not public. Say so where the photo is, not in a toast that's gone. */
 async function epDiagnosePhoto(){
   var hint=document.getElementById('epPhotoHint'); if(!hint)return;
-  var url=(myProfile&&myProfile.avatar_url)?String(myProfile.avatar_url):'';
+  var url=tcAva((myProfile&&myProfile.avatar_url)?String(myProfile.avatar_url):'');   /* security-pass2 (2026-10-15) */
   if(!url)return;
   var ok=await epImgLoads(url);
   if(ok)return;
@@ -36067,7 +36172,7 @@ window.delRun=async function(){
     var keep={};
     try{ keep['professify-theme']=localStorage.getItem('professify-theme'); }catch(_t){}
     Object.keys(localStorage).forEach(function(k){
-      if(/^(professify|sb-)/.test(k))localStorage.removeItem(k);
+      if(/^(professify|sb-|tc-|tc_)/.test(k))localStorage.removeItem(k);   /* tc- and tc_ added 2026-10-15 */
     });
     if(keep['professify-theme'])localStorage.setItem('professify-theme',keep['professify-theme']);
   }catch(e){}
@@ -36127,6 +36232,7 @@ window.recoverAccount=async function(){
 };
 window.recoverSignOut=async function(){
   try{ await sb.auth.signOut({scope:'local'}); }catch(e){}   /* this browser only */
+  try{ tcWipeLocal({}); }catch(e){}   /* security-pass2 (2026-10-15): signing out here is signing out */
   location.replace(location.pathname);
 };
 try{
@@ -37232,7 +37338,8 @@ window.hmSetSeg=function(s){
 async function hmLoadRecents(){
   try{
     if(!backendReady())return;
-    var r=await sb.from('reviews').select('professor_key,professor_name,department,course,score,difficulty,would_again,tags,note,created_at').order('created_at',{ascending:false}).limit(24);
+    /* reviews_public, not the table: signed out, the anon role may read only the view (security-pass2, 2026-10-15) */
+    var r=await sb.from('reviews_public').select('professor_key,professor_name,department,course,score,difficulty,would_again,tags,note,created_at').order('created_at',{ascending:false}).limit(24);
     if(r&&r.data&&r.data.length){HM_RECENTS=r.data;hmRecentsLoaded=true;window._hmFeedTimedOut=false;}
   }catch(e){}
 }
@@ -37595,8 +37702,8 @@ function hmFaceRow(people){
   var FACE_MAX=4;                     // was 3 — "+N" was swallowing most of the answer
   var shown=people.slice(0,FACE_MAX);
   var html=shown.map(function(p){
-    var inner=p.img
-      ? '<img src="'+esc2(p.img)+'" alt="" loading="lazy">'
+    var inner=tcAva(p.img)
+      ? '<img src="'+esc2(tcAva(p.img))+'" alt="" loading="lazy" referrerpolicy="no-referrer">'
       : NOPH_SVG;
     return '<i class="qw-face'+(p.me?' me':'')+'" style="background:'+(p.img?esc2(p.bg||'#5E7A8A'):'var(--nophoto)')+'" title="'+esc2(p.name||'')+'">'+inner+'</i>';
   }).join('');
@@ -41288,7 +41395,8 @@ function friendsIn(code){
 function faceHtml(f){
   var n=(f.name||'?'), ini=n.split(/\s+/).map(function(w){return w[0]||'';}).join('').slice(0,2).toUpperCase();
   var url=''; try{ url=(typeof frAvatarFor==='function')?frAvatarFor(f):(f.avatar_url||''); }catch(e){}
-  if(url)return '<span class="pl-face"><img src="'+attr(url)+'" alt="" loading="lazy"></span>';
+  url=tcAva(url);   /* only our own avatars bucket (security-pass2, 2026-10-15) */
+  if(url)return '<span class="pl-face"><img src="'+attr(url)+'" alt="" loading="lazy" referrerpolicy="no-referrer"></span>';
   return '<span class="pl-face" style="background:var(--nophoto)">'+NOPH_SVG+'</span>';
 }
 function friendsHtml(list){
@@ -42875,8 +42983,9 @@ button.rg-more{border:0;background:none;font:inherit;font-size:12.5px;font-weigh
   function face(f) {
     var ini = ''; try { ini = (typeof hmIni === 'function') ? hmIni(f.name) : String(f.name || '?').slice(0, 2).toUpperCase(); } catch (_) { ini = '?'; }
     var bg = '#5E7A8A'; try { bg = hmFriendColor(f) || bg; } catch (_) {}
-    var img = f.avatar_url ? '<img src="' + esc(f.avatar_url) + '" alt="" loading="lazy" onerror="this.outerHTML=NOPH_SVG">' : NOPH_SVG;
-    return '<span class="rg-face" style="background:' + (f.avatar_url ? esc(bg) : 'var(--nophoto)') + '" aria-hidden="true">' + img + '</span>';
+    var _au = tcAva(f.avatar_url);   /* only our own avatars bucket (security-pass2, 2026-10-15) */
+    var img = _au ? '<img src="' + esc(_au) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.outerHTML=NOPH_SVG">' : NOPH_SVG;
+    return '<span class="rg-face" style="background:' + (_au ? esc(bg) : 'var(--nophoto)') + '" aria-hidden="true">' + img + '</span>';
   }
   /* head + sub for the card, from your day or from Round 1's dates */
   function lines() {
@@ -44174,7 +44283,7 @@ span.cal-cm{cursor:default}
     if (!list.length) return '';
     return '<span class="pl2-faces" title="' + esc(list.map(function (f) { return f.name; }).join(', ')) + '">' + list.slice(0, 3).map(function (f) {
       var ini = f.ini || (has('hmIni') ? hmIni(f.name) : String(f.name || '?').slice(0, 2).toUpperCase());
-      return '<span class="pl2-face" style="background:var(--nophoto)">' + (f.avatar_url ? '<img src="' + esc(f.avatar_url) + '" alt="" loading="lazy" onerror="this.outerHTML=NOPH_SVG" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block">' : NOPH_SVG) + '</span>';
+      return '<span class="pl2-face" style="background:var(--nophoto)">' + (tcAva(f.avatar_url) ? '<img src="' + esc(tcAva(f.avatar_url)) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.outerHTML=NOPH_SVG" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block">' : NOPH_SVG) + '</span>';
     }).join('') + '</span>';
   }
 
