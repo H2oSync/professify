@@ -1,0 +1,87 @@
+[1] anon UPDATE reviews_public (expect: denied after)
+ rewritten 
+-----------
+         1
+(1 row)
+[1b] anon SELECT reviews_public still works
+ reviews_visible 
+-----------------
+               1
+(1 row)
+[2] anon find_profile_by_username (expect: denied after)
+ got_profile 
+-------------
+ t
+(1 row)
+[3] sdsu student C suggest_classmates_v2 (expect: 0 rows after)
+ username |    codes    
+----------+-------------
+ ann      | {"BUS 212"}
+ bee      | {"BUS 212"}
+ dee      | {"BUS 212"}
+(3 rows)
+[3b] A suggest_classmates_v2 (expect: bee only after; dee blocked, cy other school)
+ username 
+----------
+ bee
+ cy
+ dee
+(3 rows)
+[4] anon sprint_progress (expect: denied after)
+ count 
+-------
+     1
+(1 row)
+[5] A re-points membership into conv2 (expect: denied after)
+ a_in_conv2 
+------------
+ t
+(1 row)
+[5b] A marks conv1 read (expect: 1 row both times)
+ marked 
+--------
+      1
+(1 row)
+[6] A backdated message + friend request + report + suggestion (expect: created_at = today after)
+           t           | now_stamped 
+-----------------------+-------------
+ messages              | f
+ friend_requests       | f
+ reports               | f
+ professor_suggestions | f
+(4 rows)
+ conv_last_at_today 
+--------------------
+ f
+(1 row)
+[7] A writes a review with helpful=999/removed_at, then bumps helpful on own review B? and on own
+ helpful |  note   | now_stamped 
+---------+---------+-------------
+     500 | great!! | f
+(1 row)
+[8] A sets edu_email to a victim address (expect: stays a@calpoly.edu after)
+     edu_email      | major 
+--------------------+-------
+ victim@calpoly.edu | Econ
+(1 row)
+[8b] service/editor update keeps what it writes
+    edu_email    
+-----------------
+ ops@calpoly.edu
+(1 row)
+[9] B asks blocked_between(A,D) (expect: f after); A asks (A,D) (t)
+ b_sees 
+--------
+ t
+(1 row)
+ a_sees 
+--------
+ t
+(1 row)
+[9b] D friend-requests A (expect: refused both times)
+ERROR:  new row violates row-level security policy for table "friend_requests"
+[10] A sends a normal message and B reads it (expect: works)
+ b_reads 
+---------
+       1
+(1 row)
