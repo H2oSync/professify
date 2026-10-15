@@ -1,0 +1,126 @@
+[T1] C sends 50 friend requests in ONE insert (after: refused past 40)
+ERROR:  You're doing that too fast. Try again a bit later.
+CONTEXT:  PL/pgSQL function sec_rate_limit() line 17 at RAISE
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+[T1b] A sends one normal friend request to C (expect ok both)
+ a_to_c 
+--------
+      1
+[T3] A upserts a suggestion with created_at=2000 on the update path (after: date kept)
+ kept_today 
+------------
+ t
+[T4] A pins a conversation (last_at=2099) (after: denied); renames (ok)
+ERROR:  permission denied for table conversations
+ renamed 
+---------
+       1
+[T5] sign-up with gmail (after: refused); with calpoly (ok)
+ERROR:  TermChamp is for students — sign in with your school email.
+CONTEXT:  PL/pgSQL function sec_auth_school_email() line 6 at RAISE
+         r         
+-------------------
+ calpoly signup ok
+[T6] demo account reads profiles (after: only itself) and friend-requests Ann (after: refused)
+ demo_sees_profiles 
+--------------------
+                  1
+ERROR:  new row violates row-level security policy for table "friend_requests"
+[T6b] Ann reads profiles (expect all real ones, not demo after)
+ ann_sees_profiles 
+-------------------
+                54
+[T7] D (blocked by Ann) searches "Ann" (after: 0) ; C searches "__" (after: 0)
+ d_finds_ann 
+-------------
+           0
+ wildcard_hits 
+---------------
+             0
+[T8] Ann blocks D again via block_user: D leaves their direct chat (after: 0)
+ block_user 
+------------
+ 
+ d_still_in_chat 
+-----------------
+               0
+[T9] Ann unfriends Bee, then Bee DMs Ann (after: refused); friends still can (T9b)
+ERROR:  new row violates row-level security policy for table "messages"
+[T9b] friends Ann -> Bee DM (expect ok)
+   r   
+-------
+ dm ok
+[T10] C plants a fake class (after: refused); a real class (ok)
+ERROR:  That isn't a class in the catalog.
+CONTEXT:  PL/pgSQL function sec_class_rows_guard() line 9 at RAISE
+       r       
+---------------
+ real class ok
+[T10b] C adds 61 sections (after: refused at 61)
+ERROR:  That's more classes than TermChamp keeps for one student.
+CONTEXT:  PL/pgSQL function sec_class_rows_guard() line 16 at RAISE
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+[T11] anon lists avatars (after: 0); C writes C/other.png (after: refused); C/avatar.jpg ok
+ anon_lists 
+------------
+          0
+ERROR:  new row violates row-level security policy for table "objects"
+     r     
+-----------
+ avatar ok
+[T12] avatar_url tracking pixel (after: refused); our URL ok; empty ok
+ERROR:  new row for relation "profiles" violates check constraint "profiles_avatar_url_ours"
+       r       
+---------------
+ avatar_url ok
+[T13] realtime publication
+               published                
+----------------------------------------
+ friend_requests,messages,saved_classes
+[T14] Ann votes on her own review (after: refused)
+ERROR:  new row violates row-level security policy "sec helpful vote" for table "review_helpful"
+[T14b] C votes on Bee review: counter (after: 1), C reads all votes (after: own only)
+ bee_helpful 
+-------------
+           2
+ c_sees_votes 
+--------------
+            1
+ bee_author_sees_votes 
+-----------------------
+                     2
+[T15] review difficulty 9 (after: refused)
+ERROR:  new row for relation "reviews" violates check constraint "reviews_ratings_range"
+[T16] C reports Bee review naming Ann as author (after: author = Bee); C reports a message in a chat they are not in (after: refused)
+ author_is_bee 
+---------------
+ t
+ERROR:  That message isn't in one of your chats.
+CONTEXT:  PL/pgSQL function sec_report_facts() line 13 at RAISE
+[T18] C asks is_suspended(Bee) (after: f); Bee asks own (t)
+ c_learns 
+----------
+ f
+ own 
+-----
+ t
+[T19] anon re-adds an email already on the waitlist (after: no error)
+       r        
+----------------
+ waitlist quiet
+[T20] privileges
+ anon_search | anon_pending | anon_log | auth_friends_of | auth_wf_hit | auth_truncate 
+-------------+--------------+----------+-----------------+-------------+---------------
+ f           | f            | t        | t               | t           | f
+[T21] regression: Ann saves a class, renames chat, searches Bee, suggests friends
+ ann_finds_bee 
+---------------
+             1
+ suggest_ok 
+------------
+ t
+ classmates_ok 
+---------------
+ t
