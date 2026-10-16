@@ -21,8 +21,18 @@ for (const [w,h,label] of [[1280,900,'desktop'],[390,780,'phone']]) {
     return (u.startsWith('http://localhost:8125')||u.startsWith('http://localhost:8787'))?r.continue():r.abort();
   });
   const p=await ctx.newPage(); const errs=[]; p.on('pageerror',e=>errs.push(e.message));
+  /* Champ is a chat now (website-champ-cards, 2026-10-15): turns stay on screen until the trash can clears them. These checks were
+     written for one answer at a time and read the whole log, so each question starts from an empty log, as the phone's tests do
+     with their own "Clear chat" — except where a check is about the chat itself (keepChat). */
+  let keepChat=false; const _press=p.press.bind(p);
+  p.press=async(...a)=>{ if(a[0]==='#hawk-input'&&a[1]==='Enter'&&!keepChat) await p.evaluate(()=>document.querySelectorAll('.hawk-turn').forEach(t=>t.remove())); return _press(...a); };
   await p.goto('http://localhost:8125/',{waitUntil:'domcontentloaded'});
   await p.waitForTimeout(4000);
+  /* These checks seed ONE list of classes (myClasses). The site now has two terms — the one you are IN and the one you are
+     choosing for — and Champ reads the first for free time and the second for plans (website-champ-cards, 2026-10-15). Setting
+     NOW_UNTIL in the past makes the two the same list (Spring has begun), which is the one-term case these checks were written
+     for; the two-term case is check-desktop-champ-cards. */
+  await p.evaluate(()=>{ PROFESSIFY_CONFIG.NOW_UNTIL='2000-01-01'; });
 
   ok(`${label}: the Hawk icon exists`, await p.evaluate(()=>!!document.querySelector('.hawk-fab')));
   await p.click('.hawk-fab'); await p.waitForTimeout(250);
@@ -259,7 +269,7 @@ for (const [w,h,label] of [[1280,900,'desktop'],[390,780,'phone']]) {
 
   await p.fill('#hawk-input','when am i free on tuesday'); await p.press('#hawk-input','Enter'); await p.waitForTimeout(350);
   ok(`${label}: "when am I free" answers from the real schedule`, await p.evaluate(()=>
-    /Tuesday.*free/i.test(document.querySelector('.hawk-log').innerText)),
+    /Free before 9:10a, 10a–11:10a and after 12p/.test(document.querySelector('.hawk-log').innerText)),
     await p.evaluate(()=>document.querySelector('.hawk-log').innerText.split('\n')[1]||''));
   /* A class it cannot place must be NAMED, not quietly excluded from the conclusion. */
   ok(`${label}: it says which class it could not place`, await p.evaluate(()=>
@@ -391,11 +401,12 @@ for (const [w,h,label] of [[1280,900,'desktop'],[390,780,'phone']]) {
   ok(`${label}: the section you are in says "yours", not "clashes"`, /yours/.test(t) && !/clashes with BUS 4442/.test(t));
 
   t = await askQ('can i take csc 2001');
-  ok(`${label}: prereqs name what is missing, as a choice`, /one of MATH 1410 \/ MATH 1420/.test(t), t.slice(0,90));
-  ok(`${label}: and credit what is in progress`, /In progress now: CSC 1001/.test(t));
+  ok(`${label}: prereqs name what is missing, as a choice`, /MATH 1410 or MATH 1420/.test(t), t.slice(0,90));
+  /* the phone's rule: with nothing logged in Past classes Champ cannot say what is done, so it marks nothing done */
+  ok(`${label}: with no past classes logged it says it cannot tell, and marks nothing done`, /can.t tell yet/i.test(t) && /Can.t check/.test(t) && !/On your record|Taking it now/.test(t), t.slice(0,160));
 
   t = await askQ('what do i have tuesday');
-  ok(`${label}: "my day" lists that day’s classes in order`, /CSC 1001.*9:10 am.*PHIL 3331.*11:10 am/.test(t), t.slice(0,90));
+  ok(`${label}: "my day" lists that day’s classes in order`, /2 classes Tuesday[\s\S]*CSC 1001[\s\S]*9:10a[\s\S]*PHIL 3331[\s\S]*11:10a/.test(t), t.slice(0,90));
 
   t = await askQ('how many units am i taking');
   ok(`${label}: units are summed from classInfo`, /\d+ units across 3 classes/.test(t), t.slice(0,60));
@@ -514,9 +525,9 @@ for (const [w,h,label] of [[1280,900,'desktop'],[390,780,'phone']]) {
   ok(`${label}: "BUS 4442-02" is that section`, /BUS 4442-02/.test(t) && !/BUS 4442-01/.test(t), t.slice(0,80));
 
   t = await askQ('compare ' + PA.toLowerCase() + ' and ' + PB.toLowerCase());
-  ok(`${label}: compare two professors says who is rated higher`, t.includes(PA + ' is rated higher'), t.slice(0,100));
+  ok(`${label}: compare two professors says who is rated higher`, t.includes(PA + ' ★ 4.4 · ' + PB + ' ★ 3.9') && !!(await p.evaluate(()=>document.querySelectorAll('.hawk-prow').length===2)), t.slice(0,100));
   t = await askQ('how hard is ' + PA.toLowerCase());
-  ok(`${label}: professor stats give the real rating and send you to the rest`, /4\.4 ★ from \d+ rating/.test(t) && /on their page/.test(t), t.slice(0,100));
+  ok(`${label}: professor stats give the real rating and send you to the rest`, /★ 4\.4 from \d+ rating/.test(t) && await p.evaluate(()=>!!document.querySelector('.hawk-card--prof .hawk-ptop')), t.slice(0,100));
 
   t = await askQ('what can you do');
   ok(`${label}: help lists what Champ can do`, await p.evaluate(()=>document.querySelectorAll('.hawk-log .hawk-row').length >= 6), t.slice(0,80));
@@ -630,8 +641,9 @@ for (const [w,h,label] of [[1280,900,'desktop'],[390,780,'phone']]) {
   });
   if (aiUp) {
     const askAI = async (q) => { await p.fill('#hawk-input', q); await p.press('#hawk-input','Enter'); await p.waitForTimeout(1300); return log(); };
+    /* (the stand-in names my_free with no day, so the answer is the week card: its Tue row, not the word "Tuesday") */
     t = await askAI('when am i free on tuesday');
-    ok(`${label}: AI-first — a confident personal question still goes to the model`, /\bAI\b/.test(t) && /Tuesday/.test(t), t.slice(0,90));
+    ok(`${label}: AI-first — a confident personal question still goes to the model`, /\bAI\b/.test(t) && /Tue/.test(t), t.slice(0,90));
     /* THE LIVE MISS, 2026-09-23. The model answered with go_to "my classes"; the router reads it as
        my_professors, and a model go_to never overrides a clean device reading. */
     await p.evaluate(()=>{
@@ -644,7 +656,7 @@ for (const [w,h,label] of [[1280,900,'desktop'],[390,780,'phone']]) {
     });
     t = await askAI('which professor of mine has the highest rating');
     const mp = await p.evaluate(()=>window.__myProfs);
-    ok(`${label}: "which professor of mine is highest rated" ranks YOUR professors`, t.includes('Highest rated: ' + mp.hi) && t.indexOf(mp.hi) < t.lastIndexOf(mp.lo) && !/My classes/.test(t), t.slice(0,160));
+    ok(`${label}: "which professor of mine is highest rated" ranks YOUR professors`, /best rated first/.test(t) && t.indexOf(mp.hi) < t.lastIndexOf(mp.lo) && !/My classes/.test(t), t.slice(0,160));
     const viewBefore = await p.evaluate(()=>{const v=document.querySelector('.view.active');return v?v.id:'';});
     await p.evaluate(()=>{ window.__rpc = []; sb.rpc = function(n, a){ window.__rpc.push([n, a]); return Promise.resolve({ data: true }); }; });
     await p.click('.hawk-notit'); await p.waitForTimeout(250);
@@ -704,14 +716,21 @@ for (const [w,h,label] of [[1280,900,'desktop'],[390,780,'phone']]) {
   ok(`${label}: an off-topic question is refused`, await p.evaluate(()=>/only find classes/i.test(document.querySelector('.hawk-log').textContent)));
   ok(`${label}: refusing shows no rows`, await p.evaluate(()=>document.querySelectorAll('.hawk-row').length===0));
 
-  /* ---- ONE ANSWER AT A TIME. The box must not grow into a log. ------------------------------ */
+  /* ---- THE CHAT. Turns stay, the newest is at the bottom and alone offers follow-ups; the box does not grow. ---- */
   const before = await p.evaluate(()=>document.querySelector('.hawk-box').getBoundingClientRect().height);
+  keepChat=true;
   await p.fill('#hawk-input','CSC 1001'); await p.press('#hawk-input','Enter'); await p.waitForTimeout(300);
-  ok(`${label}: only the newest answer is kept`, await p.evaluate(()=>
-    document.querySelectorAll('.hawk-turn').length===1),
-    await p.evaluate(()=>document.querySelectorAll('.hawk-turn').length+' turns on screen'));
-  ok(`${label}: asking again does not grow the box`, await p.evaluate((b)=>
-    document.querySelector('.hawk-box').getBoundingClientRect().height <= b+90, before));
+  await p.fill('#hawk-input','BUS 4442'); await p.press('#hawk-input','Enter'); await p.waitForTimeout(300);
+  keepChat=false;
+  ok(`${label}: the chat keeps both turns, newest last, and only the newest offers follow-ups`, await p.evaluate(()=>{
+    const t=[...document.querySelectorAll('.hawk-turn')];
+    return t.length>=2 && t.slice(0,-1).every(x=>!x.querySelector('.hawk-follow'));
+  }), await p.evaluate(()=>document.querySelectorAll('.hawk-turn').length+' turns on screen'));
+  /* A chat sheet fills as it is talked to; what must hold is that it stays on screen and does not push the page. */
+  ok(`${label}: asking again keeps the box inside the window`, await p.evaluate(()=>{
+    const r=document.querySelector('.hawk-box').getBoundingClientRect();
+    return r.top>=0 && r.bottom<=window.innerHeight+1 && r.left>=0 && r.right<=window.innerWidth+1;
+  }));
 
   /* ---- the point of the whole thing --------------------------------------------------------- */
   await p.evaluate(()=>document.querySelector('.hawk-row').click());

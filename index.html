@@ -217,6 +217,88 @@ window.PROFESSIFY_CONFIG = Object.assign({
    can never reach Spring's. The seat cache moves to a per-term key; the old one is dropped. */
 window.MC_LS=function(k){ var t=String((window.PROFESSIFY_CONFIG||{}).TERM||'2268'); return t==='2268'?k:(k+':'+t); };
 (function(){ try{ localStorage.removeItem('professify_seats_cache'); }catch(e){} })();
+
+/* ---- security-pass2 (2026-10-15) --------------------------------------------------------------------------------
+   AVATARS. profiles.avatar_url is restricted in the database to this project's public avatars bucket. Old cached
+   values and every other path that draws a face go through here too, so a URL that is not ours never becomes an
+   <img src> (no request to someone else's server, no tracking pixel). The one other thing allowed is a data: image,
+   which makes no request: this device's own cached copy of YOUR photo is one (the bytes the profile editor uploaded). */
+var TC_AVA_BASE='https://rqkndeqbcahozidniesn.supabase.co/storage/v1/object/public/avatars/';
+function tcAva(u){
+  u=(u==null)?'':String(u);
+  if(!u)return '';
+  if(u.indexOf(TC_AVA_BASE)===0)return /[\s"'<>\\]|\.\./.test(u.slice(TC_AVA_BASE.length))?'':u;
+  /* data: images make no request and cannot run script inside an <img> (an SVG there is drawn as a static picture) */
+  if(/^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+\/=]+$/.test(u)||/^data:image\/svg\+xml[;,]/.test(u))return u;
+  return '';
+}
+
+/* SIGNING OUT CLEARS THIS BROWSER, and a different person signing in finds nothing of the last one.
+   Everything this site keeps about a person starts professify, tc- or tc_. These keys are about the DEVICE, not the
+   person, and stay: theme; the analytics pseudonym (random here, not derived from an account); the install-prompt
+   counters; the review-sound toggle; public caches (PolyRatings, catalog short names, seat counts); and the
+   remembered last user id itself. */
+var TC_KEEP={'professify-theme':1,'professify_ev_salt':1,'professify_visits':1,'professify_install_snooze':1,
+             'professify_ratesound':1,'professify_prof_cache':1,'professify_course_short':1,'professify_last_uid':1};
+function tcKeepKey(k,o){
+  if(TC_KEEP[k])return true;
+  if(k.indexOf('professify_seats_cache')===0)return true;
+  /* A different account signing in: the invite link it opened and a signup handle/phone it just typed are ITS, not
+     the last account's, so they survive that wipe (and only that one). */
+  if(o&&o.keepPending&&(k==='professify_pending_add'||k==='professify_pending_add_at'||k==='professify_pending_handle'||k==='professify_pending_phone'))return true;
+  return false;
+}
+/* The same lists as they sit in memory. Without this the next sign-in on this page would still see them and write
+   them back to storage (and loadMySavedClasses would upload them to the new account). Each line is its own try
+   because some of these are declared in later scripts. */
+function tcResetMemory(){
+  try{ myClasses=[]; }catch(e){}
+  try{ myClassMeta={}; }catch(e){}
+  try{ mcPending={}; }catch(e){}
+  try{ watchlist=[]; }catch(e){}
+  try{ watchSpMeta={}; }catch(e){}
+  try{ watchClasses=[]; }catch(e){}
+  try{ watchMeta={}; }catch(e){}
+  try{ gpList=[]; }catch(e){}
+  try{ gpMuted={}; }catch(e){}
+  try{ HM_SEEN={}; }catch(e){}
+  try{ window._mcDbCodes=[]; }catch(e){}
+  try{ if(typeof frSyncSaved==='function')frSyncSaved(); }catch(e){}
+  ['renderMyClasses','renderWatch','renderWatchClasses'].forEach(function(fn){ try{ if(typeof window[fn]==='function')window[fn](); }catch(e){} });
+}
+function tcWipeLocal(o){
+  o=o||{};
+  ['localStorage','sessionStorage'].forEach(function(n){
+    try{
+      var st=window[n], dead=[];
+      for(var i=0;i<st.length;i++){ var k=st.key(i); if(k&&/^(professify|tc-|tc_)/.test(k)&&!tcKeepKey(k,o))dead.push(k); }
+      dead.forEach(function(k){ try{ st.removeItem(k); }catch(e){} });
+    }catch(e){}
+  });
+  if(o.memory)tcResetMemory();
+}
+/* The signed-in user id as the stored session says it, read straight from storage (this runs before supabase-js). */
+function tcStoredUid(){
+  try{
+    var raw=null;
+    for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k&&/^sb-.*-auth-token$/.test(k)){ raw=localStorage.getItem(k); break; } }
+    if(!raw)return '';
+    var j=JSON.parse(raw), x=(j&&(j.currentSession||j.session))||j;
+    return (x&&x.user&&x.user.id)?String(x.user.id):'';
+  }catch(e){ return ''; }
+}
+/* Called with whoever is signed in now. A different account than the last one seen on this browser: wipe first, then
+   remember the new one. Returns true when it wiped. Storage that cannot be read cannot be compared, so it never wipes. */
+function tcSeeUser(uid,memory){
+  if(!uid)return false;
+  var last=null, wiped=false;
+  try{ last=localStorage.getItem('professify_last_uid'); }catch(e){ return false; }
+  if(last&&last!==uid){ tcWipeLocal({keepPending:true,memory:!!memory}); wiped=true; }
+  try{ localStorage.setItem('professify_last_uid',uid); }catch(e){}
+  return wiped;
+}
+/* At page load, before any later script reads a list from storage. */
+(function(){ try{ var u=tcStoredUid(); if(u)tcSeeUser(u,false); }catch(e){} })();
 </script>
 <script>
 /* Theme: set before paint to avoid a flash. Default dark; honors saved choice, else OS preference. */
@@ -2046,9 +2128,9 @@ window.toggleTheme = toggleTheme;
     .mc-card .mc-x{position:absolute;top:9px;right:8px}
   }
 </style>
-<link rel="stylesheet" href="hawk-ask.css?v=202610141450">
-<script defer src="hawk-router.js?v=202610141450"></script>
-<script defer src="hawk-ask.js?v=202610141450"></script>
+<link rel="stylesheet" href="hawk-ask.css?v=202610151831">
+<script defer src="hawk-router.js?v=202610151831"></script>
+<script defer src="hawk-ask.js?v=202610151831"></script>
 <style id="app-look-tokens">
 /* ================================================================================================
    APP-LOOK 2026-10-04 — the website in the phone app's design language, pass 1 (Tate: "the goal is
@@ -2237,12 +2319,13 @@ var NOPH_SVG="<svg class='nophoto' viewBox='0 0 24 24' aria-hidden='true'><circl
         var ac=JSON.parse(localStorage.getItem('professify_avatar_'+sess.user.id)||'null');
         if(ac&&typeof ac.data==='string'&&ac.data.slice(0,5)==='data:'&&(!av||ac.url===av))av=ac.data;
       }catch(_a){}
+      av=(typeof tcAva==='function')?tcAva(av):'';   /* only our own avatars bucket, or this device's cached bytes (security-pass2, 2026-10-15) */
       btn.className='auth-btn in';
       /* A photo that fails to load used to leave an empty circle that still claimed to be a
          photo — the "my picture disappeared" report. Fall back to initials on error. */
       var iniSafe=ini.replace(/[<&'"]/g,'');
       btn.innerHTML='<span class="auth-ava">'+(av
-        ? '<img class="ava-img" src="'+String(av).replace(/"/g,'&quot;')+'" alt=""'
+        ? '<img class="ava-img" src="'+String(av).replace(/"/g,'&quot;')+'" alt="" referrerpolicy="no-referrer"'
           +' onerror="this.parentNode.innerHTML=NOPH_SVG">'
         : NOPH_SVG)+'</span><span>'+nm.replace(/[<&>]/g,'')+'</span>';
     }
@@ -2424,6 +2507,7 @@ var NOPH_SVG="<svg class='nophoto' viewBox='0 0 24 24' aria-hidden='true'><circl
              schedule nowhere. hmPlaceRail() moves the rail into this slot below 1140px and
              the Quad hides. The slot sits ABOVE the friends strip so mobile Home still
              opens on the day + greeting rather than on other people. -->
+        <div id="hmRegTop"></div>   <!-- website-sync (2026-10-15): the registration card where the rail is hidden (<1140px) -->
         <div id="hmRailSlot"></div>
         <div id="hmStripWrap"></div>
         <div id="hmQuadWrap">
@@ -4794,7 +4878,7 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
         <div class="ob-field full"><label>Major</label><div class="selwrap"><select id="obMajor" onchange="obMajorChange()"></select></div><div id="obMajorNote" class="ob-hint" style="margin-top:6px;display:none;color:var(--low)">Pick your major to continue.</div></div>
         <div class="ob-field full" id="obConcWrap" style="display:none"><label>Concentration <span class="ob-hint">optional</span></label><div class="selwrap"><select id="obConcSel"></select></div></div>
         <div class="ob-field full ob-hint" id="obConcNote" style="display:none;margin-top:-4px"></div>
-        <div class="ob-field full"><label>Class standing</label><div class="selwrap"><select id="obStanding"><option>Freshman</option><option>Sophomore</option><option>Junior</option><option>Senior</option></select></div></div>
+        <div class="ob-field full"><label>Class standing</label><div class="selwrap"><select id="obStanding"><option>Freshman</option><option>Sophomore</option><option>Junior</option><option>Senior</option><option>5th year +</option></select></div></div>
         <div class="ob-field full" id="obMinorWrap" style="display:none"><label>Minor <span class="ob-hint">optional</span></label><div class="selwrap"><select id="obMinor"></select></div></div>
       </div>
       <div class="ob-actions">
@@ -5099,7 +5183,7 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
    The flag is the whole switch — every gp* surface already gates on gpFlagOn(), so this is
    one word and the code stays in git. Turn it back on the same day the migration runs. */
 window.PROFESSIFY_FLAGS={groups:false,messages:true};
-window.PROFESSIFY_BUILD='2026-10-14 14:50';
+window.PROFESSIFY_BUILD='2026-10-15 18:31';
 /* Paint the build stamp everywhere it appears. */
 try{
   (function(){
@@ -5441,7 +5525,7 @@ function blobToDataUrl(blob){
 async function refreshAvatarCache(){
   try{
     if(typeof sbUser==='undefined'||!sbUser||!sbUser.id)return;
-    var url=(typeof myProfile!=='undefined'&&myProfile&&myProfile.avatar_url)?String(myProfile.avatar_url):'';
+    var url=tcAva((typeof myProfile!=='undefined'&&myProfile&&myProfile.avatar_url)?String(myProfile.avatar_url):'');   /* never fetch a URL that is not our bucket (security-pass2, 2026-10-15) */
     var have=cachedAvatar(sbUser.id);
     if(!url){ if(have)cacheAvatarData(sbUser.id,'',null); return; }
     if(have&&have.url===url)return;
@@ -5462,15 +5546,15 @@ function myAvatarUrl(){
        can go wrong between here and storage. */
     var c=uid?cachedAvatar(uid):null;
     if(c&&(!url||c.url===url))return c.data;
-    if(url)return url;
+    if(url)return tcAva(url);   /* a URL that is not our bucket draws the silhouette (security-pass2, 2026-10-15) */
     return c?c.data:'';
   }catch(e){ return ''; }
 }
 /* A real photo wins over initials; initials win over the neutral glyph. Same order everywhere,
    so the header, the rail card and Settings can't show three different things. */
 function myAvatarHtml(){
-  var url=myAvatarUrl();
-  if(url)return '<img class="ava-img" src="'+escapeHtml(url)+'" alt="" loading="lazy">';
+  var url=tcAva(myAvatarUrl());
+  if(url)return '<img class="ava-img" src="'+escapeHtml(url)+'" alt="" loading="lazy" referrerpolicy="no-referrer">';
   var n=myDisplayName();
   return NOPH_SVG;
 }
@@ -5480,7 +5564,8 @@ function myAvatarHtml(){
    app/index.html). The grey is the tile's background (colorForId() -> var(--nophoto)); the person is NOPH_SVG,
    defined in the first script on the page (the first-paint account pill needs it). */
 function avaHtml(url,name,cls){
-  if(url)return '<img class="ava-img'+(cls?' '+cls:'')+'" src="'+escapeHtml(url)+'" alt="" loading="lazy"'
+  url=tcAva(url);   /* only our own avatars bucket; anything else is the silhouette (security-pass2, 2026-10-15) */
+  if(url)return '<img class="ava-img'+(cls?' '+cls:'')+'" src="'+escapeHtml(url)+'" alt="" loading="lazy" referrerpolicy="no-referrer"'
     +' onerror="this.outerHTML=NOPH_SVG">';
   return NOPH_SVG;
 }
@@ -9155,7 +9240,9 @@ function realify(){
 const POLYRATINGS_API='https://api-prod.polyratings.org';
 const PR_LIVE_DEPT={};      // course prefix (= PolyRatings department) -> [professor ids, best first]
 let PR_LIVE_LOADED=false;
-function slugPR(uuid){return 'pr_'+String(uuid).replace(/-/g,'');}
+/* PolyRatings is a third party and this id is printed into handlers and attributes all over the page, so it keeps only
+   plain characters. A real uuid is unchanged. (security-pass2, 2026-10-15) */
+function slugPR(uuid){return 'pr_'+String(uuid).replace(/-/g,'').replace(/[^A-Za-z0-9_]/g,'');}
 /* Ratings were refetched from PolyRatings on every single load — ~2,600 professors over the
    network before a single score could render, which is the other half of "it takes time to
    cache again after ⌘R". The seat feed has been cached in localStorage for ages; this wasn't.
@@ -9174,14 +9261,19 @@ function hydrateProfsFromCache(){
 }
 /* One place that turns the PolyRatings payload into PROFESSORS, used by both the cache
    hydrate and the live fetch, so the two can never drift. */
+function prText(s,n){ return String(s==null?'':s).replace(/[<>"`\u0000-\u001f\u007f]/g,'').replace(/\s+/g,' ').trim().slice(0,n||80); }   /* security-pass2 (2026-10-15) */
 function applyPolyList(list,fromCache){
     for(const k in PR_LIVE_DEPT)delete PR_LIVE_DEPT[k];
     list.forEach(p=>{
       if(!p||typeof p.overallRating!=='number')return;
       const id=slugPR(p.id);
-      PROFESSORS[id]={name:((p.firstName||'')+' '+(p.lastName||'')).trim()||'Instructor',dept:p.department,field:p.department,
-        rating:+p.overallRating,evals:p.numEvals||0,live:true,courses:Array.isArray(p.courses)?p.courses:[],prId:p.id};
-      (PR_LIVE_DEPT[p.department]=PR_LIVE_DEPT[p.department]||[]).push(id);
+      /* security-pass2 (2026-10-15): a department, a name and a course are labels. PolyRatings is a third party, so they
+         lose markup characters (< > " ` and control characters) and are cut to a sane length here, once, before any
+         screen can print them; the evaluation count must be a number. */
+      const dep=prText(p.department,40), nm=prText((prText(p.firstName)+' '+prText(p.lastName)).trim(),80)||'Instructor';
+      PROFESSORS[id]={name:nm,dept:dep,field:dep,
+        rating:+p.overallRating,evals:(isFinite(+p.numEvals)?+p.numEvals:0)||0,live:true,courses:(Array.isArray(p.courses)?p.courses:[]).map(c=>prText(c,40)).filter(Boolean),prId:p.id};
+      (PR_LIVE_DEPT[dep]=PR_LIVE_DEPT[dep]||[]).push(id);
     });
     Object.values(PR_LIVE_DEPT).forEach(a=>a.sort((x,y)=>{
       const px=PROFESSORS[x],py=PROFESSORS[y];
@@ -10299,11 +10391,11 @@ function clsSecRowsFor(secs,code){
       profCell='<div class="cs-prof cs-multi">'+s.people.map(function(q){
         var qr=q.rating!=null?'<span class="rt" style="color:'+scoreColor(q.rating)+'">'+to5(q.rating).toFixed(1)+'</span>':'';
         return q.pid
-          ? '<span class="pn pn-link" onclick="event.stopPropagation();openProf(\''+q.pid+'\')">'+escapeHtml(q.name)+'</span>'+qr
+          ? '<span class="pn pn-link" onclick="event.stopPropagation();openProf(\''+jsAttr(q.pid)+'\')">'+escapeHtml(q.name)+'</span>'+qr
           : '<span class="pn">'+escapeHtml(q.name)+'</span>';
       }).join('<span class="cs-amp">+</span>')+'</div>';
     } else if(s.pid){
-      profCell='<div class="cs-prof" onclick="event.stopPropagation();openProf(\''+s.pid+'\')" style="cursor:pointer"><span class="pn">'+escapeHtml(s.name)+'</span>'+rt+'</div>';
+      profCell='<div class="cs-prof" onclick="event.stopPropagation();openProf(\''+jsAttr(s.pid)+'\')" style="cursor:pointer"><span class="pn">'+escapeHtml(s.name)+'</span>'+rt+'</div>';
     } else {
       profCell='<div class="cs-prof"><span class="pn">'+(s.name?escapeHtml(s.name):'Staff / TBA')+'</span></div>';
     }
@@ -11731,11 +11823,11 @@ if(!list.length && !scraped.length){
     // who simply don't have a score yet are shown together in the same grid, not in a
     // separate "unrated" section. A search covers everyone.
     const ratedCards=shown.map(([id,p])=>`
-      <div class="pcard" data-pk="${escapeHtml(profKey(p))}" data-surface="explore" onclick="openProf('${id}')">${watchBtn(id)}
+      <div class="pcard" data-pk="${escapeHtml(profKey(p))}" data-surface="explore" onclick="openProf('${jsAttr(id)}')">${watchBtn(id)}
         <div class="ini" style="${profTintStyle(p.rating)}">${initials(p.name)}</div>
         <div style="flex:1;min-width:0">
           <h3>${escapeHtml(p.name)}</h3>
-          <div class="pd">${profDeptLabel(p)}${p.reviews!=null?` · ${p.reviews} reviews`:''}</div>
+          <div class="pd">${escapeHtml(profDeptLabel(p))}${p.reviews!=null?` · ${p.reviews} reviews`:''}</div>
           <div class="pmeta">${rateHtmlBlend(p)}${(function(){const n=blendCount(p);if(!n)return '';const sn=profReviews(p).length;/* "1 ratings · PolyRatings" — the blended branch pluralised, this one didn't. Six of them
                  were on screen at once in a live Explore search on 2026-08-22. */
               const lbl=sn>0?`${n.toLocaleString()} rating${n===1?'':'s'}`:`${n.toLocaleString()} rating${n===1?'':'s'} · PolyRatings`;return `<span style="color:var(--faint);font-size:12.5px">${lbl}</span>`;})()}</div>
@@ -12289,8 +12381,8 @@ try{
 
 /* ---- naming a click --------------------------------------------------------------------------
    In preference order: an explicit data-ev label (stable across redesigns, which a CSS path is
-   not), then an id, then a role with its own short text. Text is trimmed hard — a label, never a
-   sentence, and never anything a student typed. */
+   not), then an id, then the element's tag name. NEVER its text, aria-label or value (security-pass2, 2026-10-15):
+   a button's label can be a friend's name and an input's value is whatever was typed. */
 function evTargetName(el){
   try{
     var n = el && el.closest ? el.closest('[data-ev]') : null;
@@ -12299,9 +12391,7 @@ function evTargetName(el){
     if(n && n.id && !/^:/.test(n.id)) return '#' + String(n.id).slice(0,60);
     n = el && el.closest ? el.closest('button,a,[role="button"],[role="tab"],summary,input,select,label') : null;
     if(n){
-      var kind = (n.tagName || '').toLowerCase();
-      var label = (n.getAttribute('aria-label') || n.value || n.textContent || '').replace(/\s+/g,' ').trim();
-      return (kind + (label ? ':' + label.slice(0,40) : '')).slice(0,60);
+      return (n.tagName || '').toLowerCase().slice(0,60);
     }
   }catch(e){}
   return null;
@@ -12639,9 +12729,8 @@ function gaView(v){
      · `subject` — the second argument of track(). That is the professor key on prof_view and
        prof_impression, and the scrubbed error text on error. It is the identifying half of every
        event this app records, and it is never passed here at all rather than filtered later.
-     · `target` and `last` — evTargetName() falls back to an element's own text, so a tap on a
-       professor card is legitimately "a:Jim Mueller" in our own table. Handing that to Google
-       would build the professor history by the back door, one button label at a time. GA gets
+     · `target` and `last` — evTargetName() names a click by data-ev, id or tag (it used to fall back to the
+       element's own text, 2026-10-15), and an id can still be specific, so these stay out of GA. GA gets
        the event and the surface it happened on, which is what the question "where do people rage
        click" actually needs.
    Only the enumerated keys below survive, and each is something this file chose rather than read
@@ -13366,15 +13455,15 @@ async function initBackend(){
         var ok=false;
         try{ localStorage.setItem(k,v); ok=true; }catch(e){}
         if(!ok){ try{
-          /* a year, refreshed on every write; Secure everywhere but a local file/http test page */
-          document.cookie=k+'='+encodeURIComponent(v)+'; path=/; max-age=31536000; SameSite=Lax'
-            +(location.protocol==='https:'?'; Secure':'');
+          /* a week (was a year), refreshed on every write; Secure and SameSite=Strict, so it is never sent in the clear
+             or with a request another site starts (security-pass2, 2026-10-15). Only used when localStorage throws. */
+          document.cookie=k+'='+encodeURIComponent(v)+'; path=/; max-age=604800; Secure; SameSite=Strict';
         }catch(e){} }
       },
       removeItem:function(k){
         delete _memStore[k];
         try{ localStorage.removeItem(k); }catch(e){}
-        try{ document.cookie=k+'=; path=/; max-age=0; SameSite=Lax'+(location.protocol==='https:'?'; Secure':''); }catch(e){}
+        try{ document.cookie=k+'=; path=/; max-age=0; Secure; SameSite=Strict'; }catch(e){}
       }
     };
     sb=window.supabase.createClient(c.SUPABASE_URL,c.SUPABASE_ANON_KEY,{
@@ -13441,6 +13530,9 @@ async function initBackend(){
     // skipped. Reload when the user changes OR whenever friends aren't loaded.
     let lastAuthUid=null;
     sb.auth.onAuthStateChange((_e,session)=>{
+      /* a DIFFERENT account than the last one on this browser: its predecessor's local lists go first, before
+         anything below can load or adopt them (security-pass2, 2026-10-15) */
+      try{ if(session&&session.user&&typeof tcSeeUser==='function')tcSeeUser(session.user.id,true); }catch(_w){}
       sbUser=session?session.user:null;
       /* eduVerified used to be "has a session", not "has a Cal Poly address" — the two were
          treated as the same thing while nothing checked the second. Check it. */
@@ -13639,6 +13731,7 @@ function rfRestoreDraft(id,course){
 }
 function rfStartOver(id){ rfClearDraft(); rateDraft=rfBlankDraft(pendingRateCourse||''); renderRateForm(id); }
 function startRate(id,course){
+  window._rfFav=null;                       /* website-sync (2026-10-15): a new form starts from what the account says about this professor */
   currentProf=id;rateErrMsg='';pendingRateCourse=course||'';
   var _mb=document.getElementById('mback');
   if(_mb&&!_mb.classList.contains('open')){_mb.classList.add('open');document.body.style.overflow='hidden';}
@@ -14066,7 +14159,7 @@ async function authSendCode(noPassword){
   }
 }
 function authCodeStep(email){
-  var esc=escapeHtml(email).replace(/'/g,"\\'");
+  var esc=jsAttr(email);   /* was escapeHtml(email).replace(/'/g,"\\'"): with ' now an entity that order breaks out of the string (security-pass2, 2026-10-15) */
   document.getElementById('authBody').innerHTML=
     '<div class="auth-k">Check your inbox</div><h2 class="auth-h">Enter your code</h2>'
     +'<p class="auth-sub">We emailed a verification code to <b>'+escapeHtml(email)+'</b>.</p>'
@@ -14348,16 +14441,35 @@ async function pushDisable(){
 async function pushPrefGet(){
   try{
     if(typeof sb==='undefined'||!sb||typeof sbUser==='undefined'||!sbUser)return null;
-    var r=await sb.from('push_prefs').select('seats,friends,quiet_from,quiet_to').eq('user_id',sbUser.id).maybeSingle();
+    /* website-sync (2026-10-15): prefs is the jsonb the phone writes one switch per kind into; a database without it answers with the columns only */
+    var r=await sb.from('push_prefs').select('seats,friends,quiet_from,quiet_to,prefs').eq('user_id',sbUser.id).maybeSingle();
+    if(r.error)r=await sb.from('push_prefs').select('seats,friends,quiet_from,quiet_to').eq('user_id',sbUser.id).maybeSingle();
     if(r.error)return null;
-    return r.data||{seats:true,friends:false,quiet_from:22,quiet_to:8};   /* the table's own defaults */
+    var d=r.data||{seats:true,friends:false,quiet_from:22,quiet_to:8};   /* the table's own defaults */
+    if(d.prefs&&typeof d.prefs==='object'&&d.prefs.seat_open===false)d=Object.assign({},d,{seats:false});   /* the phone's "A seat opens" switch is the same switch */
+    return d;
   }catch(e){ return null; }
 }
+/* seats -> prefs.seat_open (the phone's name for it), friends -> prefs.free (the server kind the "done for the day" push is sent as;
+   the phone has no switch for it), quiet hours -> prefs.quiet_from / quiet_to. true removes the key: a kind is on unless it says false. */
 async function pushPrefSet(patch){
   try{
     if(typeof sb==='undefined'||!sb||typeof sbUser==='undefined'||!sbUser)return false;
     var row=Object.assign({user_id:sbUser.id}, patch);
+    var prefs=null;
+    try{
+      var g=await sb.from('push_prefs').select('prefs').eq('user_id',sbUser.id).maybeSingle();
+      if(!g.error)prefs=(g.data&&g.data.prefs&&typeof g.data.prefs==='object'&&!Array.isArray(g.data.prefs))?Object.assign({},g.data.prefs):{};
+    }catch(e){}
+    if(prefs){
+      if('seats' in patch){ if(patch.seats)delete prefs.seat_open; else prefs.seat_open=false; }
+      if('friends' in patch){ if(patch.friends)delete prefs.free; else prefs.free=false; }
+      if('quiet_from' in patch)prefs.quiet_from=patch.quiet_from;
+      if('quiet_to' in patch)prefs.quiet_to=patch.quiet_to;
+      row.prefs=prefs;
+    }
     var r=await sb.from('push_prefs').upsert(row,{onConflict:'user_id'});
+    if(r.error&&row.prefs){ delete row.prefs; r=await sb.from('push_prefs').upsert(row,{onConflict:'user_id'}); }
     return !r.error;
   }catch(e){ return false; }
 }
@@ -14399,13 +14511,18 @@ async function renderPushCard(){
         ' onchange="pushPrefSet({friends:this.checked})">'
       +'<span><b>Starred friends finishing for the day</b><br><i>When their last class of the day ends. '
       +'Only friends you’ve starred, and only what their timetable already shows you.</i></span></label>'
-      +'<p class="st-note" style="margin:10px 0 8px">Nothing is sent between '
-      +pushHour(pf.quiet_from)+' and '+pushHour(pf.quiet_to)+'. Anything that happens overnight waits until morning.</p>'
+      +'<p class="st-note push-quiet" style="margin:10px 0 8px">Quiet hours: nothing is sent between '
+      +pushHourSel('quiet_from',pf.quiet_from)+' and '+pushHourSel('quiet_to',pf.quiet_to)+'. Anything that happens overnight waits until morning.</p>'
       +'<button class="set-btn ghost" onclick="pushCardDisable()">Turn off on this device</button>';
   }
   host.innerHTML='<p class="st-note">'+note+'</p>'+body+'<div id="pushErr" class="auth-err" style="margin-top:6px"></div>';
 }
 function pushHour(h){ h=parseInt(h,10)||0; var ap=h<12?'am':'pm'; var v=h%12; return (v===0?12:v)+ap; }
+function pushHourSel(key,cur){
+  cur=parseInt(cur,10); if(!(cur>=0&&cur<=23))cur=0;
+  var o=''; for(var h=0;h<24;h++)o+='<option value="'+h+'"'+(h===cur?' selected':'')+'>'+pushHour(h)+'</option>';
+  return '<select class="push-hr" aria-label="'+(key==='quiet_from'?'Quiet hours start':'Quiet hours end')+'" onchange="pushPrefSet({'+key+':parseInt(this.value,10)})">'+o+'</select>';
+}
 
 window.pushCardEnable=async function(){
   var b=document.getElementById('pushGo'); if(b){b.disabled=true;b.textContent='Asking…';}
@@ -14430,14 +14547,24 @@ function authSignedInView(){
     +'<p class="auth-sub">Verified Cal Poly student. Your email is never shown publicly and reviews post anonymously.</p>'
     +'<button class="auth-submit" style="background:var(--panel-2);color:var(--text);border:1px solid var(--line)" onclick="authSignOut()">Sign out</button>';
 }
-async function authSignOut(){ try{ if(sb&&sb.auth)await sb.auth.signOut(); }catch(e){} sbUser=null; try{ NOW_MINE={classes:[],meta:{},loaded:false}; NOW_SEATS={}; _nowSeatAsked={}; }catch(e){} eduVerified=false; try{cacheMyProfile(null);}catch(e){} updateAuthUI(); if(typeof renderAccountSection==='function')renderAccountSection(); closeAuth(); }
+async function authSignOut(){
+  /* Push first, while the session can still delete its own subscription row: on a shared browser the last account's
+     notifications must stop. Capped at 2s and never fatal, so a slow push service cannot hold the sign-out (security-pass2, 2026-10-15). */
+  try{
+    if(typeof pushSupported==='function'&&pushSupported()&&Notification.permission==='granted'&&typeof pushDisable==='function')
+      await Promise.race([pushDisable(),new Promise(function(r){ setTimeout(r,2000); })]);
+  }catch(e){}
+  try{ if(sb&&sb.auth)await sb.auth.signOut(); }catch(e){} sbUser=null; try{ NOW_MINE={classes:[],meta:{},loaded:false}; NOW_SEATS={}; _nowSeatAsked={}; }catch(e){} eduVerified=false; try{cacheMyProfile(null);}catch(e){}
+  /* and everything else this browser kept about them (security-pass2, 2026-10-15) */
+  try{ tcWipeLocal({memory:true}); }catch(e){}
+  updateAuthUI(); if(typeof renderAccountSection==='function')renderAccountSection(); closeAuth(); }
 function updateAuthUI(){
   var btn=document.getElementById('authBtn'); if(!btn)return;
-  if(typeof sbUser!=='undefined'&&sbUser){ var nm=(typeof myDisplayName==='function')?myDisplayName():((sbUser.email||'').split('@')[0]); if(!nm)nm=(sbUser.email||'').split('@')[0]||'Account'; btn.className='auth-btn in'; var _av=(typeof myAvatarUrl==='function')?myAvatarUrl():'';
+  if(typeof sbUser!=='undefined'&&sbUser){ var nm=(typeof myDisplayName==='function')?myDisplayName():((sbUser.email||'').split('@')[0]); if(!nm)nm=(sbUser.email||'').split('@')[0]||'Account'; btn.className='auth-btn in'; var _av=tcAva((typeof myAvatarUrl==='function')?myAvatarUrl():'');
     var _ini=escapeHtml(((typeof initials==='function'?initials(nm):nm.slice(0,1))||'?').slice(0,1).toUpperCase());
     btn.innerHTML='<span class="auth-ava">'+(_av
       /* onerror: a photo that won't load must degrade to initials, never to a blank circle. */
-      ? '<img class="ava-img" src="'+escapeHtml(_av)+'" alt="" onerror="this.parentNode.innerHTML=NOPH_SVG">'
+      ? '<img class="ava-img" src="'+escapeHtml(_av)+'" alt="" referrerpolicy="no-referrer" onerror="this.parentNode.innerHTML=NOPH_SVG">'
       : NOPH_SVG)+'</span><span>'+escapeHtml(nm)+'</span>'; }
   else { btn.className='auth-btn'; btn.textContent='Log in \u00b7 Sign up'; closeProfMenu(); }
   /* The first-paint attribute is an assumption; this function is the truth. */
@@ -14476,7 +14603,7 @@ function renderRateForm(id){
   const courses=wlCourses(p);
   if(d.course&&courses.indexOf(d.course)<0)courses.unshift(d.course);
   const courseField=courses.length
-    ? `<select id="rfCourse" class="rf-sel">${courses.map(c=>`<option ${d.course===c?'selected':''}>${c}</option>`).join('')}<option value="__other" ${(d.course&&courses.indexOf(d.course)<0)?'selected':''}>Other / not listed</option></select>`
+    ? `<select id="rfCourse" class="rf-sel">${courses.map(c=>`<option ${d.course===c?'selected':''}>${escapeHtml(c)}</option>`).join('')}<option value="__other" ${(d.course&&courses.indexOf(d.course)<0)?'selected':''}>Other / not listed</option></select>`
     : `<input id="rfCourse" class="rf-sel" placeholder="e.g. CSC 2001" value="${escapeHtml(d.course)}">`;
   const HOURS=['1–3','3–6','6–9','9–12','12+'],FMT=['In person','Hybrid','Online'],WELL=['Explains concepts clearly','Gave timely, useful feedback','Ran engaging discussions','Graded fairly &amp; transparently'],STRUGGLE=['Explanations were unclear','Feedback was slow or unhelpful','Lectures were disengaging','Grading felt unfair or unclear'];
   // Show the optional-detail section pre-expanded only if the draft already carries any of it
@@ -14500,7 +14627,7 @@ function renderRateForm(id){
            headed "Rate <professor>" and nothing else: the same screen as writing a new one. The
            form tells you which job it is doing in the place you look first. -->
       <div class="rf-head"><h2 class="rate-h" style="margin:0">${(window.RATE_EDIT&&window.RATE_EDIT.id)?('Edit your review of '+escapeHtml(p.name)):('Rate '+escapeHtml(p.name))}</h2></div>
-      ${window._rfRestored?`<div class="rf-restored">Picked up where you left off. <button type="button" onclick="rfStartOver('${id}')">Start over</button></div>`:''}
+      ${window._rfRestored?`<div class="rf-restored">Picked up where you left off. <button type="button" onclick="rfStartOver('${jsAttr(id)}')">Start over</button></div>`:''}
       <div class="rf-blk"><label class="rf-lab">Which course? <span style="color:var(--low)" title="Required">*</span></label>${courseField}<div id="rfCourseHint" class="rf-hint" style="margin-top:6px;display:none;color:var(--accent)"></div></div>
       <div class="rf-blk"><label class="rf-lab">When did you take it? <span class="rf-opt">(optional \u2014 one tap, helps students judge how current this is)</span></label><div class="rf-seg rf-term" id="rf-term">${rateTermOptions(4).map(t=>`<button type="button" class="${d.term===t?'on':''}">${t}</button>`).join('')}<button type="button" class="${(d.term===''&&d._termTouched)?'on':''}">Earlier</button></div></div>
       <div class="rf-blk"><div class="rf-row"><span class="rf-rl rf-big">Overall rating</span><div class="rf-stars" id="rf-overall"></div><span class="rf-val empty" id="rfv-overall">–</span></div><div class="rf-hint">Tap a star — tap its <b>left half</b> for a half-star.</div></div>
@@ -14510,6 +14637,7 @@ function renderRateForm(id){
            and it is the number RateMyProfessors never collects well — so it sits in the quick
            part with the two questions everybody answers. (Tate, 2026-09-04.) -->
       <div class="rf-blk"><div class="rf-row"><span class="rf-rl rf-big">Hours per week outside class</span></div><div class="rf-seg" id="rf-hours" style="margin-top:9px">${HOURS.map(h=>`<button type="button" class="${d.hours===h?'on':''}">${h}</button>`).join('')}</div></div>
+      ${(typeof tcFavRow==='function')?tcFavRow(id):''}
       <button type="button" class="rf-more-toggle" id="rfMoreToggle" onclick="rfToggleMore()" style="display:${moreOpen?'none':'block'}">+ Add more detail<br><span>difficulty · teaching · grade · what they did well (all optional)</span></button>
       <div id="rf-more" class="rf-more-wrap" style="display:${moreOpen?'block':'none'}">
         <div class="rf-blk"><div class="rf-row"><span class="rf-rl rf-big">Professor difficulty</span><div class="rf-stars" id="rf-diff"></div><span class="rf-val empty" id="rfv-diff">–</span></div><div class="rf-hint">1 = easy · 5 = hard</div></div>
@@ -14527,7 +14655,7 @@ function renderRateForm(id){
         <div class="rf-blk"><label class="rf-lab">Anything else? <span class="rf-opt">(optional)</span></label><textarea id="rfNote" class="rf-note" rows="3" maxlength="${RF_HARD_CHARS}" placeholder="One tip for the next student…">${escapeHtml(d.text)}</textarea><div class="rf-count" id="rfCount" aria-live="polite"></div></div>
       </div>
       <div id="rfErr" class="rate-err" style="min-height:0"></div>
-      <button id="rfSubmit" class="btn primary rf-submit" onclick="submitRate('${id}')">${(window.RATE_EDIT&&window.RATE_EDIT.id)?'Save changes':'Post review'}</button>
+      <button id="rfSubmit" class="btn primary rf-submit" onclick="submitRate('${jsAttr(id)}')">${(window.RATE_EDIT&&window.RATE_EDIT.id)?'Save changes':'Post review'}</button>
       <p class="rf-fast">${(window.RATE_EDIT&&window.RATE_EDIT.id)?('Editing the review you posted'+(window.RATE_EDIT.created_at?(' '+revDateLabel(window.RATE_EDIT.created_at)):'')+(rfWillMarkEdited()?' · it will show as edited':'')):'Takes about 15 seconds · add detail above only if you want'}</p>
       <!-- The fine print described the wrong job in edit mode — 2026-09-19. "Posts anonymously ·
            one review per class" is the rule for WRITING one; under a "Save changes" button it
@@ -15076,6 +15204,7 @@ async function submitRate(id){
       if(error&&/grade|column|schema/i.test(error.message||'')){ var _r=Object.assign({},row); delete _r.grade; var retry=await sb.from('reviews').insert(_r); error=retry.error; }
       if(error)throw error;
       (dbReviews[profKey(p)]=dbReviews[profKey(p)]||[]).unshift({...review,_db:true});
+      try{ if(typeof tcFavAfter==='function')tcFavAfter(p); }catch(_f){}      /* website-sync (2026-10-15): a favorite goes with the review, so after it lands */
       reviewsGiven++;sbBusy=false;try{rfClearDraft();}catch(e){}
       try{ _rlHits.push(Date.now()); localStorage.setItem('professify_rev_times',JSON.stringify(_rlHits)); }catch(_e){}
       try{ window.MY_REVIEWED=window.MY_REVIEWED||{}; MY_REVIEWED[profKeyName(p)]=1; }catch(_e){}
@@ -15465,7 +15594,7 @@ function myrRowsHtml(list){
       : '';
     /* The row-wide click opens the professor; the two buttons stop propagation above so
        pressing one doesn't also navigate away from the thing you're working on. */
-    return '<div class="myr-row"'+(openable?' onclick="closeMyReviews();openProf(\''+id+'\')" style="cursor:pointer"':'')+'>'
+    return '<div class="myr-row"'+(openable?' onclick="closeMyReviews();openProf(\''+jsAttr(id)+'\')" style="cursor:pointer"':'')+'>'
       +'<div class="myr-top"><span class="myr-nm">'+escapeHtml(r.professor_name||'Professor')+'</span><span class="myr-score" style="color:'+col+'">'+sc+'<small>/5</small></span></div>'
       +(sub?'<div class="myr-sub">'+sub+'</div>':'')
       +note
@@ -15567,7 +15696,9 @@ window.myrEdit=function(btn){
 async function rfSaveEdit(ed,id,p,v){
   var btn=document.getElementById('rfSubmit');
   sbBusy=true; if(btn){btn.disabled=true;btn.textContent='Saving…';}
-  var patch={course:v.course||null,course_key:v.courseKey||null,term:v.term||'',score:v.score,
+  /* website-sync (2026-10-15): NO `term`. reviews has no such column, so this update answered "column not found" and every edit failed
+     (the retry below only drops `grade`). The term a reviewer taps is not stored by the new-review insert either. */
+  var patch={course:v.course||null,course_key:v.courseKey||null,score:v.score,
     difficulty:v.difficulty||null,teach_ability:v.teach||null,hours:v.hours||null,
     format:v.format||null,grade:v.grade||null,would_again:v.again===true,
     tags:v.tags||[],note:(v.text||'').trim()||null};
@@ -15600,6 +15731,7 @@ async function rfSaveEdit(ed,id,p,v){
      the student had never submitted — an edit is a small, frequent act and must not take
      anything else with it. rfReadDraft returns null when the stored draft belongs elsewhere. */
   try{ if(typeof rfReadDraft!=='function'||rfReadDraft(id))rfClearDraft(); }catch(e){}
+  try{ if(typeof tcFavAfter==='function')tcFavAfter(p); }catch(_f){}      /* website-sync (2026-10-15) */
   /* The server's copy, including whether it stamped edited_at. */
   try{ await loadMyReviews(); }catch(e){}
   try{
@@ -15785,7 +15917,7 @@ function rlProfRowHtml(id,p,ctx,code){
   const rvd=MY_REVIEWED[profKeyName(p)];
   const unrated=(p.rating==null);
   const sub=ctx||pfCoursesTaught(p).map(c=>c.code).concat(wlCourses(p)).filter((v,i,a)=>a.indexOf(v)===i).slice(0,2).join(', ')||(typeof profDeptLabel==='function'?profDeptLabel(p):(p.dept||''));
-  return `<div onclick="rlOpenProf('${id}','${jsAttr(code||'')}')" style="display:flex;align-items:center;justify-content:space-between;background:${PFC.panel};border:1px solid ${rvd?PFC.line:(ctx?PFC.green+'55':PFC.line)};border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer">
+  return `<div onclick="rlOpenProf('${jsAttr(id)}','${jsAttr(code||'')}')" style="display:flex;align-items:center;justify-content:space-between;background:${PFC.panel};border:1px solid ${rvd?PFC.line:(ctx?PFC.green+'55':PFC.line)};border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer">
     <div style="display:flex;align-items:center;gap:10px;min-width:0">
       <!-- The rating rides the INITIALS, not the number (Tate, 2026-08-26) — the same rounded
            square that carries it on the Explore professor tiles, so the colour means one thing
@@ -16423,7 +16555,7 @@ const WL_ON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-w
 let watchlist=[];
 try{const _w=JSON.parse(localStorage.getItem('professify_watch')||'[]');if(Array.isArray(_w))watchlist=_w;}catch(e){}
 let wlDiffOnly=false;
-function saveWatch(){try{localStorage.setItem('professify_watch',JSON.stringify(watchlist));}catch(e){}}
+function saveWatch(){try{localStorage.setItem('professify_watch',JSON.stringify(watchlist));}catch(e){} try{ if(window.tcSavedChanged)tcSavedChanged(); }catch(e){}}
 /* An instructor with no PolyRatings score is exactly the person you most want to keep an eye
    on — there's nothing to read about them yet. They have no PROFESSORS record until someone
    watches or reviews them, so the watchlist stores their name alongside the id: rebuilding it
@@ -16491,7 +16623,7 @@ function openWatchedProf(id){
   openProf(id);
 }
 function isWatched(id){return watchlist.indexOf(id)>=0;}
-function watchBtn(id){const on=isWatched(id);return `<button class="wl-btn ${on?'on':''}" title="${on?'On your watchlist':'Add to watchlist'}" aria-label="Watchlist toggle" onclick="toggleWatch('${id}',event)">${on?WL_ON:WL_OFF}</button>`;}
+function watchBtn(id){const on=isWatched(id);return `<button class="wl-btn ${on?'on':''}" title="${on?'On your watchlist':'Add to watchlist'}" aria-label="Watchlist toggle" onclick="toggleWatch('${jsAttr(id)}',event)">${on?WL_ON:WL_OFF}</button>`;}
 function toggleWatch(id,ev){if(ev){ev.stopPropagation();}const i=watchlist.indexOf(id);
   if(i>=0){watchlist.splice(i,1);if(/^sp:/.test(id)&&watchSpMeta[id]){delete watchSpMeta[id];saveWatchSp();}}
   else{watchlist.push(id);if(typeof watchLandOn==='function')watchLandOn('profs');}
@@ -16649,7 +16781,7 @@ function wpCompareTable(ids){
     const confLbl=five!=null?(s.cnt.toLocaleString()+' rating'+(s.cnt===1?'':'s')):'No rating yet';
     return '<div class="pcmp-card'+(isWin?' win':'')+'">'
       +'<div class="pcmp-rank">'+rankLbl+'</div>'
-      +'<div><div class="pcmp-nm" onclick="openProf(\''+s.id+'\')">'+escapeHtml(p.name)+'</div><div class="pcmp-dept">'+escapeHtml(pdept(p)||p.dept||'')+'</div></div>'
+      +'<div><div class="pcmp-nm" onclick="openProf(\''+jsAttr(s.id)+'\')">'+escapeHtml(p.name)+'</div><div class="pcmp-dept">'+escapeHtml(pdept(p)||p.dept||'')+'</div></div>'
       +'<div class="pcmp-big"><b style="color:'+col+'">'+(five!=null?five.toFixed(1):'—')+'</b><span>/ 5</span></div>'
       +'<div class="pcmp-conf">'+confLbl+'</div><div class="pcmp-bar"><i style="width:'+(five!=null?confW:0)+'%"></i></div>'
       /* A row of em-dashes reads as a broken card, not as "we don't know". Rows only render
@@ -16660,8 +16792,8 @@ function wpCompareTable(ids){
         +(anyReviews?'<div class="r"><span>Student reviews</span><span class="rv">'+reviewsVal+'</span></div>':'')
         +(anyTeaches?'<div class="r"><span>Teaches</span><span class="rv">'+(teachesVal||'<span style="color:var(--faint)">Not listed</span>')+'</span></div>':'')
       +'</div>'
-      +'<button class="pcmp-pick '+(isWin?'pri':'sec')+'" onclick="openProf(\''+s.id+'\')">View profile →</button>'
-      +'<button class="pcmp-rm" onclick="wpToggleCompare(\''+s.id+'\',event)">Remove from compare</button>'
+      +'<button class="pcmp-pick '+(isWin?'pri':'sec')+'" onclick="openProf(\''+jsAttr(s.id)+'\')">View profile →</button>'
+      +'<button class="pcmp-rm" onclick="wpToggleCompare(\''+jsAttr(s.id)+'\',event)">Remove from compare</button>'
     +'</div>';
   }).join('');
   return verdict+'<div class="pcmp-grid">'+cards+'</div><p class="wl-note">Ranked by rating, then how many ratings back it up. Tap a name or “View profile” for their full record.</p>';
@@ -16698,15 +16830,15 @@ function renderWatch(){
     /* Comparing a professor with no ratings against one with ratings is a table of blanks;
        the button is hidden rather than offered and then disappointing. */
     const cmpBtn=p.scraped?'<span class="wc-cmp" style="visibility:hidden"></span>'
-      :`<button class="wc-cmp${on?' on':''}" onclick="wpToggleCompare('${id}',event)">${on?'✓ In compare':'⇄ Compare'}</button>`;
-    return `<div class="mc-card wc-card${on?' incmp':''}"><div class="mc-main"><div class="mc-code" style="cursor:pointer" onclick="openWatchedProf('${id}')">${escapeHtml(p.name)}</div><div class="mc-name">${pdept(p)||p.dept||''}</div><div class="mc-sub">${nrev}</div></div>`
+      :`<button class="wc-cmp${on?' on':''}" onclick="wpToggleCompare('${jsAttr(id)}',event)">${on?'✓ In compare':'⇄ Compare'}</button>`;
+    return `<div class="mc-card wc-card${on?' incmp':''}"><div class="mc-main"><div class="mc-code" style="cursor:pointer" onclick="openWatchedProf('${jsAttr(id)}')">${escapeHtml(p.name)}</div><div class="mc-name">${escapeHtml(pdept(p)||p.dept||'')}</div><div class="mc-sub">${nrev}</div></div>`
       +cmpBtn
       +rate
-      +`<button class="mc-x" title="Remove from watchlist" onclick="toggleWatch('${id}',event)">&times;</button></div>`;
+      +`<button class="mc-x" title="Remove from watchlist" onclick="toggleWatch('${jsAttr(id)}',event)">&times;</button></div>`;
   }).join('');
   let tray='';
   if(wpCompareSet.length){
-    const chips=wpCompareSet.map(id=>{const p=PROFESSORS[id]||{};return `<span class="wc-chip">${(p.name||id).split(' ')[0]} ${(p.name||'').split(' ').slice(-1)[0]||''} <span class="rm" title="Remove from tray" onclick="wpToggleCompare('${id}',event)">✕</span></span>`;}).join('');
+    const chips=wpCompareSet.map(id=>{const p=PROFESSORS[id]||{};return `<span class="wc-chip">${(p.name||id).split(' ')[0]} ${(p.name||'').split(' ').slice(-1)[0]||''} <span class="rm" title="Remove from tray" onclick="wpToggleCompare('${jsAttr(id)}',event)">✕</span></span>`;}).join('');
     const ready=wpCompareSet.length>=2;
     tray=`<div class="wc-tray"><div class="wc-chips">${chips}</div><button class="wc-go" ${ready?'':'disabled'} onclick="wpOpenCompare()">Compare (${wpCompareSet.length}) →</button></div>`;
   }
@@ -16731,7 +16863,7 @@ function saveWatchMeta(){try{localStorage.setItem(MC_LS('professify_watch_meta')
 /* Which half of the Watchlist you're looking at. Persisted so a student who lives in
    Professors during compare week isn't bounced back to Classes on every visit. */
 let watchTab=(function(){try{return localStorage.getItem('professify_watch_tab')==='profs'?'profs':'classes';}catch(e){return 'classes';}})();
-function saveWatchClasses(){try{localStorage.setItem(MC_LS('professify_watch_classes'),JSON.stringify(watchClasses));}catch(e){}}
+function saveWatchClasses(){try{localStorage.setItem(MC_LS('professify_watch_classes'),JSON.stringify(watchClasses));}catch(e){} try{ if(window.tcSavedChanged)tcSavedChanged(); }catch(e){}}
 function isWatchedClass(code){return watchClasses.indexOf(code)>=0;}
 /* Is this exact section (by CRN) being watched? */
 function isWatchedSec(code,crn){var m=watchMeta[code];return !!(m&&Array.isArray(m.secs)&&m.secs.some(function(s){return String(s.crn)===String(crn);}));}
@@ -18462,7 +18594,7 @@ function planningTerm(){ return mcTermLabel(); }   /* the term you choose in (wa
 function setPlanTerm(){const el=document.getElementById('planTerm');if(el)el.textContent=planningTerm();}
 /* Class standing -> the course level you're planning this year (Freshman=1000, etc.). */
 function standingLevel(){return ({Freshman:'1',Sophomore:'2',Junior:'3',Senior:'4'})[student.standing]||'1';}
-function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}   /* ' added 2026-10-15 (security-pass2): a single-quoted attribute can no longer be broken out of */
 function guessMajor(name){
   const n=name.toLowerCase();
   if(/anthro|geog/.test(n))return 'Anthropology & Geography';
@@ -18564,8 +18696,8 @@ function renderDetected(codes,major){
     const name=COURSE_NAME[code]||'';
     if(profs.length){const p=PROFESSORS[profs[0]];const planned=planSections[code]&&planSections[code].profId===profs[0];
       return `<div class="det-row"><div class="det-main"><div class="det-code">${code}${name?` · <span style="color:var(--muted);font-weight:500">${name}</span>`:''}</div>
-        <div class="pm sec" onclick="openProf('${profs[0]}')" style="margin-top:4px"><div class="ini">${initials(p.name)}</div><span class="nm">${escapeHtml(p.name)}</span>${rateHtmlBlend(p)}</div></div>
-        <button class="planbtn ${planned?'on':''}" onclick="togglePlanCourse('${jsAttr(code)}','${profs[0]}','Uploaded')">${planned?'✓ Planned':'+ Plan'}</button></div>`;
+        <div class="pm sec" onclick="openProf('${jsAttr(profs[0])}')" style="margin-top:4px"><div class="ini">${initials(p.name)}</div><span class="nm">${escapeHtml(p.name)}</span>${rateHtmlBlend(p)}</div></div>
+        <button class="planbtn ${planned?'on':''}" onclick="togglePlanCourse('${jsAttr(code)}','${jsAttr(profs[0])}','Uploaded')">${planned?'✓ Planned':'+ Plan'}</button></div>`;
     }
     return `<div class="det-row"><div class="det-main"><div class="det-code">${code}${name?` · <span style="color:var(--muted);font-weight:500">${name}</span>`:''}</div><div class="det-sub">Instructor not listed here yet</div></div></div>`;
   }).join('');
@@ -18605,7 +18737,7 @@ function miniProf(t){
   const r=resolveProf(t);
   if(r.tbd||!PROFESSORS[r.profId])return `<div class="tbd">Instructor not yet listed</div>`;
   const p=PROFESSORS[r.profId];
-  return `<div class="pm" onclick="openProf('${r.profId}')"><div class="ini">${initials(p.name)}</div><span class="nm">${escapeHtml(p.name)}${r.projected?' <span class="proj">projected</span>':''}</span>${rateHtmlBlend(p)}</div>`;
+  return `<div class="pm" onclick="openProf('${jsAttr(r.profId)}')"><div class="ini">${initials(p.name)}</div><span class="nm">${escapeHtml(p.name)}${r.projected?' <span class="proj">projected</span>':''}</span>${rateHtmlBlend(p)}</div>`;
 }
 function bestOpenOptions(n){
   return [...GE_COURSES].filter(c=>PROFESSORS[c.prof]).slice(0,n);
@@ -18615,12 +18747,12 @@ function profSectionRow(profId,isTop,code,term){
   const m=sectionMeta(code,profId);
   const planned=planSections[code]&&planSections[code].profId===profId;
   return `<div class="sec2">
-    <div class="pm sec" onclick="openProf('${profId}')">
+    <div class="pm sec" onclick="openProf('${jsAttr(profId)}')">
       <div class="ini">${initials(p.name)}</div>
       <span class="nm">${escapeHtml(p.name)}${isTop?' <span class="toppick">Top pick</span>':''}</span>
       ${rateHtmlBlend(p)}
     </div>
-    <div class="secmeta"><span>${realSectionTime(code,profId)||'Time TBA · check class schedule'}</span><button class="planbtn ${planned?'on':''}" onclick="togglePlanCourse('${jsAttr(code)}','${profId}','${term}')">${planned?'✓ Planned':'+ Plan'}</button></div>
+    <div class="secmeta"><span>${realSectionTime(code,profId)||'Time TBA · check class schedule'}</span><button class="planbtn ${planned?'on':''}" onclick="togglePlanCourse('${jsAttr(code)}','${jsAttr(profId)}','${jsAttr(term)}')">${planned?'✓ Planned':'+ Plan'}</button></div>
   </div>`;
 }
 function courseSlot(s,term,priorCodes){
@@ -18637,7 +18769,7 @@ function courseSlot(s,term,priorCodes){
 }
 function flexSlot(s,term){
   const rows=bestOpenOptions(2).map(o=>{const p=PROFESSORS[o.prof];const m=sectionMeta(o.code,o.prof);const planned=!!planSections[o.code];
-    return `<div class="sec2"><div class="pm sec" onclick="openProf('${o.prof}')"><div class="ini">${initials(p.name)}</div><span class="nm">${o.code} · ${escapeHtml(p.name)}</span>${rateHtmlBlend(p)}</div>
+    return `<div class="sec2"><div class="pm sec" onclick="openProf('${jsAttr(o.prof)}')"><div class="ini">${initials(p.name)}</div><span class="nm">${o.code} · ${escapeHtml(p.name)}</span>${rateHtmlBlend(p)}</div>
     <div class="secmeta"><span>${realSectionTime(o.code,o.prof)||'Time TBA · check class schedule'}</span><button class="planbtn ${planned?'on':''}" onclick="togglePlanFlex('${jsAttr(o.code)}','${term}')">${planned?'✓ Planned':'+ Plan'}</button></div></div>`;}).join('');
   return `<div class="course flex"><div class="code">${s.label}<span class="cu">${unitStr(s.units)}</span></div><div class="cn flexcn">You choose — options that fit this slot:</div>${rows}<a class="more" onclick="goGE()">Browse all options →</a></div>`;
 }
@@ -18731,7 +18863,7 @@ function renderGe(){
       <div class="ge-main">
         <div class="ge-title"><span class="code">${c.code}</span><span class="nm">${c.name}</span></div>
         <div class="ge-meta">
-          <span class="ge-prof" onclick="openProf('${c.prof}')"><span class="ini">${initials(p.name)}</span>${escapeHtml(p.name)}</span>
+          <span class="ge-prof" onclick="openProf('${jsAttr(c.prof)}')"><span class="ini">${initials(p.name)}</span>${escapeHtml(p.name)}</span>
           <span class="ge-tag"><span class="rd"></span>${c.workload} workload</span>
           <span class="ge-tag"><span class="rd"></span>${c.area}</span>
         </div>
@@ -18943,14 +19075,28 @@ function showPlanInviteCard(){
 /* Write major / concentration / class standing to the profiles row so it follows the
    student across devices. Every column is optional in the DB and the whole call is
    guarded — until the migration adds these columns it simply no-ops, nothing breaks. */
+/* website-sync (2026-10-15): written on EVERY change (Settings used to change this browser only), with the phone's conversions:
+   the renamed major, "General / Open" is no concentration (null). profile_pend marks a change the account has not taken yet, so
+   the next sign-in sends it instead of letting the account's older value overwrite it. */
+var TC_MAJOR_RENAMED={"Recreation, Parks & Tourism Administration / Experience Industry Management":"Experience & Event Management"};
+function tcMajorNow(m){ return (m&&TC_MAJOR_RENAMED[m])||m; }
+function tcConcClean(c){ return (c&&c!=='General / Open')?String(c):null; }
 async function syncProfileToBackend(){
   if(typeof backendReady!=='function'||!backendReady()||!sbUser)return;
-  var patch={major:student.major||null,concentration:student.conc||null,class_standing:student.standing||null};
-  try{ await sb.from('profiles').update(patch).eq('id',sbUser.id); if(myProfile)Object.assign(myProfile,patch); }catch(e){}
+  var patch={major:tcMajorNow(student.major)||null,concentration:tcConcClean(student.conc),class_standing:student.standing||null};
+  var uid=sbUser.id, pk='professify_prof_pend_'+uid;
+  try{ localStorage.setItem(pk,'1'); }catch(e){}
+  try{
+    var r=await sb.from('profiles').update(patch).eq('id',uid);
+    if(r.error&&/concentration|column|schema/i.test((r.error.message||'')+' '+(r.error.code||''))){ var p2=Object.assign({},patch); delete p2.concentration; r=await sb.from('profiles').update(p2).eq('id',uid); }
+    if(r.error){ console.warn('[professify] profile sync:',r.error.message); return; }
+    try{ localStorage.removeItem(pk); }catch(e){}
+    if(myProfile&&sbUser&&sbUser.id===uid)Object.assign(myProfile,patch);
+  }catch(e){}
 }
 
 /* ============ SETTINGS ============ */
-function escAcc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function escAcc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}   /* ' added 2026-10-15 (security-pass2) */
 /* Settings is a VIEW now, not an overlay (Tate, 2026-08-25). Everything that filled the modal
    still fills the page — same element ids — so nothing downstream had to change. */
 var stTab='account';
@@ -19032,9 +19178,9 @@ function applyStudentChange(){
 /* Changing major used to auto-assign Object.keys(...)[0] — usually the 'General / Open'
    placeholder — so the profile claimed a concentration the student never chose. Clear it and
    let them pick; an unset concentration is honest, a guessed one is not. */
-function setChangeMajor(v){ student.major=v; student.conc=null; renderSetConc(); applyStudentChange(); }
-function setChangeConc(v){ student.conc=v||null; applyStudentChange(); }
-function setChangeStanding(v){ student.standing=v; saveProfile(); try{if(window.schSyncToStudent)window.schSyncToStudent();}catch(e){} }
+function setChangeMajor(v){ student.major=v; student.conc=null; renderSetConc(); applyStudentChange(); try{syncProfileToBackend();}catch(e){} }
+function setChangeConc(v){ student.conc=v||null; applyStudentChange(); try{syncProfileToBackend();}catch(e){} }
+function setChangeStanding(v){ student.standing=v; saveProfile(); try{if(window.schSyncToStudent)window.schSyncToStudent();}catch(e){} try{syncProfileToBackend();}catch(e){} }
 function setTheme(t){
   if(t!=='dark')t='light';   /* cream retired 2026-10-04 */
   document.documentElement.setAttribute('data-theme',t);
@@ -19063,9 +19209,9 @@ function renderAccountSection(){
     var em=sbUser.email||'';
     var nm=(typeof myDisplayName==='function'&&myDisplayName())||em.split('@')[0];
     var un=(myProfile&&myProfile.username)?('@'+myProfile.username):'';
-    var avu=(typeof myAvatarUrl==='function')?myAvatarUrl():'';
+    var avu=tcAva((typeof myAvatarUrl==='function')?myAvatarUrl():'');
     el.innerHTML='<div class="set-acct"><div class="who"><div class="set-ava">'
-      +(avu?'<img class="ava-img" src="'+escAcc(avu)+'" alt="">':escAcc(initials(nm||'?')))
+      +(avu?'<img class="ava-img" src="'+escAcc(avu)+'" alt="" referrerpolicy="no-referrer">':escAcc(initials(nm||'?')))
       +'</div><div><div style="font-weight:600">'+escAcc(nm)+(un?(' <span style="color:var(--muted);font-weight:500">'+escAcc(un)+'</span>'):'')+'</div>'
       +'<div style="color:var(--muted);font-size:13px">'+escAcc(em)+'</div></div></div>'
       +'<button class="set-btn" style="margin-top:12px" onclick="closeSettings();openEditProfile()">Edit profile</button>'
@@ -19090,7 +19236,7 @@ function loadProfile(){
      (see onAuthStateChange) — this is only the memory of what it said last time. */
   try{ if(p&&p.school&&SCHOOLS[p.school]){ student.school=p.school; } }catch(e){}
   if(!p||!p.major)return false;
-  student.major=(p.major==="Recreation, Parks & Tourism Administration / Experience Industry Management")?"Experience & Event Management":p.major;   /* renamed 2026-10-06 */
+  student.major=tcMajorNow(p.major);   /* renamed 2026-10-06 (the one map, shared with the account sync) */
   /* 'General / Open' was a placeholder we invented, saved into real profiles by the old
      setChangeMajor. It is not a concentration anyone chose, so it does not survive a load. */
   student.conc=(p.conc&&p.conc!=='General / Open')?p.conc:null;
@@ -19129,7 +19275,7 @@ applySchoolTheme(student.school);realify();buildClassIndex();buildIndexes();buil
 /* Paint cached ratings before the network call starts, so a refresh shows scores at once
    instead of an empty leaderboard that fills in a second later. */
 try{ if(hydrateProfsFromCache()){ assignProfs(); renderRoadmap(); renderGe(); renderExContext(); renderExplore(); } }catch(e){}
-loadPolyRatings().then(ok=>{if(ok){window._ratingsStale=false;assignProfs();renderRoadmap();renderGe();renderExContext();renderExplore();}else{window._ratingsStale=true;}}).finally(()=>{
+loadPolyRatings().then(ok=>{ return (typeof jsAttr==='function')?ok:new Promise(function(res){ (function w(){ if(typeof jsAttr==='function')res(ok); else setTimeout(w,25); })(); }); }).then(ok=>{if(ok){window._ratingsStale=false;assignProfs();renderRoadmap();renderGe();renderExContext();renderExplore();}else{window._ratingsStale=true;}}).finally(()=>{
   // Tell the truth about what happened. We only claim to be "showing cached ratings" when
   // real cached ratings are actually on screen; otherwise we say the fetch failed. The
   // landing card re-renders so its badge matches this message instead of contradicting it.
@@ -27731,6 +27877,9 @@ async function ensureProfile(){
      by definition because the function filters on auth.uid() inside a SECURITY DEFINER body.
      (This edit was written on 09-05 and silently lost — the patch that made it aborted on a later
      assertion before writing the file, so the fix shipped in name only. Verified present now.) */
+  /* website-sync (2026-10-15): major, class_standing and concentration are SELECT-granted and are the account's own — they are read
+     back now (they never were; the website kept them in this browser only). pinned_friends is NOT selectable by `authenticated`
+     (the pins come from my_pinned_friends()), so it is not asked for here any more: asking was a 42501 on every sign-in. */
   const PROFILE_COLS='id,display_name,username,avatar_url,instagram_handle,major,class_standing';
   /* pinned_friends is asked for SEPARATELY, and that is not fussiness. The comment above records
      what happened the last time a column joined this list and the column was not on the deploy:
@@ -27739,7 +27888,7 @@ async function ensureProfile(){
      losing it is a feature not working, and it must never be able to take the profile with it.
      Retried without it on any schema gap, which is also what makes the client safe to ship
      before professify-missing-bits.sql has run. */
-  let {data}=await sb.from('profiles').select(PROFILE_COLS+',pinned_friends').eq('id',sbUser.id).maybeSingle();
+  let {data}=await sb.from('profiles').select(PROFILE_COLS+',concentration').eq('id',sbUser.id).maybeSingle();
   if(!data){
     const retry=await sb.from('profiles').select(PROFILE_COLS).eq('id',sbUser.id).maybeSingle();
     data=retry.data;
@@ -27753,7 +27902,11 @@ async function ensureProfile(){
        in with, so nothing on screen has to go blank over it. */
     if(!data.edu_email)data.edu_email=(sbUser&&sbUser.email)||'';
   }
-  if(data){myProfile=data;cacheMyProfile(data);try{refreshAvatarCache();}catch(_a){}return;}
+  if(data){
+    myProfile=data;cacheMyProfile(data);try{refreshAvatarCache();}catch(_a){}
+    try{ if(typeof tcApplyAccountProfile==='function')tcApplyAccountProfile(data); }catch(_a){}   /* website-sync (2026-10-15): the account's major/year/concentration */
+    return;
+  }
   let name=(sbUser.email||'').split('@')[0].replace(/[._]/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
   /* This name is DERIVED, not chosen — it comes out of the email address. So the word filter can
      refuse a name the student never typed: r.dick@calpoly.edu becomes "R Dick", and the trigger
@@ -27855,6 +28008,10 @@ async function frOnSignedIn(){
     const profileP=withTimeout(ensureProfile(),6000,'ensureProfile')
       .then(()=>withTimeout(applyPendingContactInfo(),6000,'applyPendingContactInfo'))
       .then(()=>{renderFriends();maybeOnboardAfterSignup();});   // fills in name/handle; new accounts get one-step setup
+    /* website-sync (2026-10-15): your pins (my_pinned_friends) and your favourite teachers, once the profile row exists; neither gates a render */
+    const syncP=profileP.then(function(){ return Promise.all([
+      withTimeout((typeof tcPinsLoad==='function'?tcPinsLoad():Promise.resolve()),6000,'tcPinsLoad'),
+      withTimeout((typeof tcFavsLoad==='function'?tcFavsLoad():Promise.resolve()),6000,'tcFavsLoad')]); }).catch(function(){});
     const historyP=withTimeout(loadMyHistory(),6000,'loadMyHistory')
       .then(function(){ try{ if(typeof renderMyHistory==='function')renderMyHistory(); }catch(e){} })
       .finally(function(){ try{ pfSyncDone('Past classes'); }catch(e){} });
@@ -27870,7 +28027,8 @@ async function frOnSignedIn(){
     });
     /* Your now-term classes, read-only, beside this term's — website-spring-wall (2026-10-14). */
     const nowP=withTimeout(loadNowMine(),8000,'loadNowMine');
-    const watchP=withTimeout(loadWatchSectionsFromDb(),8000,'loadWatchSectionsFromDb')
+    /* website-sync (2026-10-15): the saved list first (saved_items), then the section watches that sit on it */
+    const watchP=withTimeout(Promise.resolve().then(function(){ return (typeof tcSavedLoad==='function')?tcSavedLoad():null; }).catch(function(){}).then(function(){ return loadWatchSectionsFromDb(); }),14000,'loadWatchSectionsFromDb')
       .finally(function(){ try{ pfSyncDone('Watchlist'); }catch(e){} });
     /* AFTER THE BACKFILL, NOT IN THE BATCH — review, 2026-09-12, and the first version of this
        was wrong in a way that mattered. I moved this into tier 1 on the belief that
@@ -27908,13 +28066,13 @@ async function frOnSignedIn(){
        in any one of those skipped every line below, so a single bad render meant no realtime, no
        notification badge and no campus banner for the rest of the session. That is the failure
        this is for: one broken render must not silence the rest of the sign-in. */
-    await Promise.allSettled([friendsP,profileP,historyP,classesP,watchP,safetyP,pendingP,nowP]);
+    await Promise.allSettled([friendsP,profileP,historyP,classesP,watchP,safetyP,pendingP,nowP,syncP]);
     /* EACH ON ITS OWN — review, 2026-09-12. These were eight bare calls in a row, which is the
        identical hazard the allSettled above exists to close, left live on the hotter path: one
        throw in renderExplore() skipped realtime, the notification badge and the campus banner,
        which is verbatim the failure this whole change claims to fix. Worse, it also skipped the
        backfill await below and released the lock while a write was in flight. */
-    [hmFreeChanged,renderExplore,renderFriends,renderCampusBanner,startFriendRealtime,
+    [hmFreeChanged,function(){ if(document.getElementById('hmStripWrap'))hmRenderStrip(); },renderExplore,renderFriends,renderCampusBanner,startFriendRealtime,
      renderNotifs,updateNotifBadge,loadClassmateEvents,
      function(){ if(classAlertsOn())scanFriendSections(); }
     ].forEach(function(fn){ try{ fn(); }catch(e){ try{ console.error('[professify] sign-in render:',e); }catch(_c){} } });
@@ -28601,7 +28759,9 @@ function schedCardFileSync(opts){
 var SC_BUCKET='schedule-cards';
 function scPreviewOn(){ try{ return !!cfg().SHARE_PREVIEW; }catch(e){ return false; } }
 /* A random name, not the account id. The image URL travels inside a link that gets forwarded, and
-   a user id in it would be an identifier handed to everyone down the chain for nothing. */
+   a user id in it would be an identifier handed to everyone down the chain for nothing.
+   (This is about the IMAGE'S NAME. The link itself still carries &add=<your id> on purpose: that is the invite token
+   the landing's "Add <name>" button needs, the same id the QR and /invite?add= links carry. Reviewed 2026-10-15, kept.) */
 function scToken(){
   var a=new Uint8Array(16);
   try{ (window.crypto||window.msCrypto).getRandomValues(a); }
@@ -30245,7 +30405,12 @@ var MSG_DB={
   myMemberships: function(uid){ return sb.from('conversation_members').select('conversation_id,last_read_at').eq('user_id',uid); },
   membersOf:     function(ids){ return sb.from('conversation_members').select('conversation_id,user_id').in('conversation_id',ids); },
   conversations: function(ids){ return sb.from('conversations').select('id,kind,title,created_by,last_at').in('id',ids); },
-  latestMessages:function(ids){ return sb.from('messages').select('conversation_id,sender,kind,body,created_at').in('conversation_id',ids).order('created_at',{ascending:false}).limit(300); },
+  latestMessages:function(ids){ return sb.from('messages').select('id,conversation_id,sender,kind,body,created_at').in('conversation_id',ids).order('created_at',{ascending:false}).limit(300); },
+  /* website-sync (2026-10-15): what the phone already honours — chats you deleted, messages you deleted for yourself, chats you muted, likes */
+  clears:        function(){ return sb.from('conversation_clears').select('conversation_id,cleared_at'); },
+  hides:         function(){ return sb.from('message_hides').select('message_id').limit(5000); },
+  mutes:         function(){ return sb.from('conversation_mutes').select('conversation_id'); },
+  likes:         function(ids){ return sb.from('message_likes').select('message_id,user_id').in('message_id',ids); },
   messagesIn:    function(cid){ return sb.from('messages').select('*').eq('conversation_id',cid).order('created_at',{ascending:true}).limit(400); },
   markRead:      function(cid,uid,at){ return sb.from('conversation_members').update({last_read_at:at}).eq('conversation_id',cid).eq('user_id',uid); },
   insertMessage: function(row){ return sb.from('messages').insert(row).select().single(); },
@@ -30267,6 +30432,32 @@ var MSG_DB={
   setShare:      function(id,uid,v){ return sb.from('reviews').update({share_with_friends:v}).eq('id',id); }
 };
 function msgDb(){ return window.msgDbOverride||MSG_DB; }
+/* website-sync (2026-10-15): the phone's msgVisible / chatCleared (P:5318-5330). A table that is not there is "nothing hidden", not a failure. */
+var msgX={clears:{},hidden:{},mutes:{},likes:{}};
+function msgVisible(m){
+  if(!m)return false;
+  if(msgX.hidden[String(m.id)])return false;                                    /* deleted for me */
+  try{ if(typeof isBlocked==='function'&&isBlocked(m.sender))return false; }catch(e){}     /* a blocked sender's words, old ones too */
+  var c=msgX.clears[m.conversation_id];
+  return !c||new Date(m.created_at)>new Date(c);                               /* not from before I deleted the chat */
+}
+function msgCleared(t){ var c=t&&msgX.clears[t.id]; return !!c&&new Date(t.last_at)<=new Date(c); }
+async function msgLoadHides(){
+  var db=msgDb(); if(!db||typeof db.clears!=='function')return;
+  var r; try{ r=await Promise.all([db.clears(),db.hides(),db.mutes()]); }catch(e){ return; }
+  var clr=r[0], hid=r[1], mut=r[2];
+  if(clr&&!clr.error&&Array.isArray(clr.data)){ var c={}; clr.data.forEach(function(x){ c[x.conversation_id]=x.cleared_at; }); msgX.clears=c; }
+  if(hid&&!hid.error&&Array.isArray(hid.data)){ var h={}; hid.data.forEach(function(x){ h[String(x.message_id)]=1; }); msgX.hidden=h; }
+  if(mut&&!mut.error&&Array.isArray(mut.data)){ var u={}; mut.data.forEach(function(x){ u[String(x.conversation_id)]=1; }); msgX.mutes=u; }
+}
+async function msgLoadLikes(cid){
+  var db=msgDb(); if(!db||typeof db.likes!=='function')return;
+  var ids=(msgRows[cid]||[]).slice(-100).map(function(m){ return m.id; }); if(!ids.length)return;
+  var r; try{ r=await db.likes(ids); }catch(e){ return; }
+  if(!r||r.error||!Array.isArray(r.data))return;
+  var L={}; r.data.forEach(function(x){ (L[String(x.message_id)]=L[String(x.message_id)]||[]).push(x.user_id); });
+  msgX.likes=Object.assign({},msgX.likes,L);
+}
 
 /* ---- people ---------------------------------------------------------------------------------- */
 function msgPerson(uid){
@@ -30295,8 +30486,9 @@ function msgIni(n){
 }
 function msgAva(p,cls){
   var ini=msgIni(p.name);
+  p=Object.assign({},p,{avatar:tcAva(p.avatar)});   /* only our own avatars bucket (security-pass2, 2026-10-15) */
   return p.avatar
-    ? '<span class="msg-av '+(cls||'')+'"><img src="'+msgEsc(p.avatar)+'" alt="" loading="lazy"></span>'
+    ? '<span class="msg-av '+(cls||'')+'"><img src="'+msgEsc(p.avatar)+'" alt="" loading="lazy" referrerpolicy="no-referrer"></span>'
     : '<span class="msg-av '+(cls||'')+'">'+msgEsc(ini)+'</span>';
 }
 /* A direct thread is named by the person who isn't you. A group is named by its title, or by
@@ -30449,6 +30641,7 @@ async function msgLoadThreads(){
     var ids=(mine.data||[]).map(function(r){return r.conversation_id;});
     if(!ids.length){ msgReady=true; msgThreads=[]; return; }
     var readAt={}; (mine.data||[]).forEach(function(r){readAt[r.conversation_id]=r.last_read_at;});
+    await msgLoadHides();           /* website-sync (2026-10-15): before the previews, which must not show a hidden message */
 
     var convs=await msgDb().conversations(ids);
     if(convs.error){ msgFail(convs.error,'conversations'); msgThreads=[]; return; }
@@ -30460,7 +30653,7 @@ async function msgLoadThreads(){
     var last=await msgDb().latestMessages(ids);
     var lastOf={}, spoke={};
     ((last&&last.data)||[]).forEach(function(m){
-      if(!lastOf[m.conversation_id])lastOf[m.conversation_id]=m;
+      if(!lastOf[m.conversation_id]&&msgVisible(m))lastOf[m.conversation_id]=m;      /* the newest message you can still see */
       /* Everyone who has SENT something, member or not. When the member list has shrunk to
          just you, this is how the thread still knows who it was with. */
       if(!msgIsMe(m.sender))(spoke[m.conversation_id]=spoke[m.conversation_id]||{})[m.sender]=1;
@@ -30484,6 +30677,7 @@ async function msgLoadRows(cid){
   var res=await msgDb().messagesIn(cid);
   if(res.error){ msgFail(res.error,'rows'); return []; }
   msgRows[cid]=res.data||[];
+  try{ await msgLoadLikes(cid); }catch(e){}
   return msgRows[cid];
 }
 
@@ -30846,7 +31040,9 @@ function msgRowHtml(t,m,prev){
   var showWho=!mine&&t.kind==='group'&&(!prev||prev.sender!==m.sender);
   return '<div class="msg-row'+(mine?' me':'')+(card?' card':'')+'">'
     +(showWho?('<div class="msg-who">'+msgEsc(msgPerson(m.sender).first)+'</div>'):'')
-    +msgBodyHtml(t,m)+'</div>';
+    +msgBodyHtml(t,m)
+    +((msgX.likes[String(m.id)]||[]).length?('<span class="msg-lk" title="'+(msgX.likes[String(m.id)].length)+' like'+(msgX.likes[String(m.id)].length===1?'':'s')+'">♥ '+(msgX.likes[String(m.id)].length)+'</span>'):'')
+    +'</div>';
 }
 
 /* ================================================================================================
@@ -31009,6 +31205,7 @@ function msgRenderList(){
      has to be able to highlight the chat you are in, even a brand-new empty one). An empty
      thread is not lost — search finds that person and reopens it, marked "Open". */
   var shown=msgThreads.filter(function(t){
+    if(msgCleared(t)&&!(typeof msgOpenId!=='undefined'&&t.id===msgOpenId))return false;      /* website-sync (2026-10-15): a chat you deleted on the phone */
     return t.kind==='group'||!!t.last||(typeof msgOpenId!=='undefined'&&t.id===msgOpenId);
   });
   if(!shown.length){
@@ -31044,6 +31241,7 @@ function msgRenderList(){
       +av+'<span class="msg-tmain"><span class="msg-tname">'+msgEsc(msgTitle(t))+'</span>'
       +'<span class="msg-tprev">'+msgEsc(pv)+'</span></span>'
       +'<span class="msg-twhen">'+msgEsc(msgAgo(t.last_at))+'</span>'
+      +(msgX.mutes[String(t.id)]?'<span class="msg-tmute" title="You muted this chat">Muted</span>':'')
       +(un?'<span class="msg-tdot"></span>':'')+'</div>';
   }).join('');
 }
@@ -31052,7 +31250,7 @@ function msgRenderThread(){
   var pane=document.getElementById('frThreadPane'); if(!pane)return;
   var t=msgThreads.filter(function(x){return x.id===msgOpenId;})[0];
   if(!t){ msgClose(); return; }
-  var rows=msgRows[t.id]||[];
+  var rows=(msgRows[t.id]||[]).filter(msgVisible);          /* website-sync (2026-10-15): not hidden, not from before a cleared chat, not a blocked sender's */
   var body=rows.length
     ? rows.map(function(m,i){return msgRowHtml(t,m,rows[i-1]);}).join('')
     : '<div class="msg-empty">No messages yet. Suggest a class, or just say hi.</div>';
@@ -31749,7 +31947,8 @@ function psugFaces(list){
   return '<span class="psug-faces">'+list.slice(0,3).map(function(x){
     var av=(typeof frAvatarFor==='function')?frAvatarFor(x):(x.avatar_url||'');
     var ini=msgIni(x.display_name);
-    return av?('<i><img src="'+msgEsc(av)+'" alt="" loading="lazy"></i>'):('<i>'+msgEsc(ini)+'</i>');
+    av=tcAva(av);   /* only our own avatars bucket (security-pass2, 2026-10-15) */
+    return av?('<i><img src="'+msgEsc(av)+'" alt="" loading="lazy" referrerpolicy="no-referrer"></i>'):('<i>'+msgEsc(ini)+'</i>');
   }).join('')+'</span>';
 }
 /* Rendered into the professor card. Returns '' when there is nothing true to say — no pill,
@@ -32261,7 +32460,7 @@ function pcHistRow(h){
   const ratingHtml=(r5!=null)?`<span class="pc-star" style="color:${scoreColor(raw)}">★ ${r5.toFixed(1)}</span>`:'';
   const meta=h.professor?escapeHtml(h.professor):'<span style="color:var(--faint)">Professor not set</span>';
   const action=pid
-    ? `<button class="pc-rate" onclick="startRate('${pid}','${jsAttr(h.code)}')">Rate ★</button>`
+    ? `<button class="pc-rate" onclick="startRate('${jsAttr(pid)}','${jsAttr(h.code)}')">Rate ★</button>`
     : `<button class="pc-rate ghost" onclick="openClassFromFeed('${jsAttr(h.code)}');frToast('Tap the professor who taught you to rate them.')">${h.professor?'Find professor →':'Add professor →'}</button>`;
   return `<div class="pc-row">
     <span class="pc-code">${escapeHtml(cur)}</span>
@@ -32635,16 +32834,11 @@ async function processPendingAdd(){
 function renderCampusBanner(){
   const el=document.getElementById('campusBanner');if(!el)return;
   const c=cfg();
-  const regIn=(typeof regPacificGap==='function'&&c.REGISTRATION_OPENS)?regPacificGap(c.REGISTRATION_OPENS):daysUntil(c.REGISTRATION_OPENS);   /* regday-fixes (2026-10-14): Pacific, like the card */
+  /* website-sync (2026-10-15): the "Round 1 registration opens in N days" banner is not in this strip any more. It is a card
+     on Home's right rail, under the greeting (hmRegCardHtml below). Only the finals-week banner is left here. */
   const qtrIn=daysUntil(c.QUARTER_END);
   let html='';
-  if(regIn!=null&&regIn>=0&&regIn<=7){
-    const key='reg_'+c.REGISTRATION_OPENS;
-    if(!campusBannerDismissed(key)){
-      const when=regIn===0?'today':regIn===1?'tomorrow':`in ${regIn} days`;
-      html=`<div class="campus-banner"><span>📅</span><span><b>Round 1 registration opens ${when}.</b> Your game plan says what to register for first, with a backup for each class.</span><button class="btn primary" style="flex:none" onclick="if(window.TCPlans)TCPlans.fromBanner();else show('sched')">Your game plan</button>${(typeof regDayLabel==='function'&&regDayLabel())?'<button class="btn" style="flex:none" onclick="regDayOpen(&quot;banner&quot;)">'+regDayLabel()+'</button>':''}<button class="cb-x" title="Dismiss" onclick="dismissCampusBanner('${key}')">&times;</button></div>`;
-    }
-  }else if(qtrIn!=null&&qtrIn<=7&&qtrIn>=-7){
+  if(qtrIn!=null&&qtrIn<=7&&qtrIn>=-7){
     const key='qtr_'+c.QUARTER_END;
     if(!campusBannerDismissed(key)&&backendReady()&&sbUser){
       html=`<div class="campus-banner"><span>✍️</span><span><b>Finals week — rate this quarter's professors.</b> Takes 20 seconds and helps next quarter's students pick well.</span><button class="btn primary" style="flex:none" onclick="openRate()">Rate a professor</button><button class="cb-x" title="Dismiss" onclick="dismissCampusBanner('${key}')">&times;</button></div>`;
@@ -32653,6 +32847,63 @@ function renderCampusBanner(){
   el.innerHTML=html;
 }
 function dismissCampusBanner(key){try{localStorage.setItem('professify_dismiss_'+key,'1');}catch(e){}var el=document.getElementById('campusBanner');if(el)el.innerHTML='';}
+/* website-sync (2026-10-15): the registration banner as a compact card on Home's right rail (Tate: "Card on Home's right side").
+   Shown from 7 days before Round 1 opens until it opens, like the banner was; x dismisses it for good (the banner's own
+   dismissal key, so a student who closed the banner does not see the card). The two buttons stack to fit the 300px rail. */
+/* ONE registration card on Home: while this one shows, the rail's own "Set your registration day / Opens Oct 19" card is not drawn (its
+   info is folded in here: the day line and the same button, same sheet); dismiss it, or leave the 7-day window, and that one is back.
+   Below 1140px the rail is hidden, so the same card is drawn at the top of Home's main column (#hmRegTop) instead. */
+function hmRegCardKey(){
+  try{
+    if(typeof sbUser==='undefined'||!sbUser)return null;
+    var c=cfg(); if(!c||!c.REGISTRATION_OPENS)return null;
+    var regIn=(typeof regPacificGap==='function')?regPacificGap(c.REGISTRATION_OPENS):daysUntil(c.REGISTRATION_OPENS);
+    if(regIn==null||regIn<0||regIn>7)return null;
+    var key='reg_'+c.REGISTRATION_OPENS;
+    if(campusBannerDismissed(key))return null;
+    return {key:key,regIn:regIn};
+  }catch(e){ return null; }
+}
+function hmRegCardOn(){ return !!hmRegCardKey(); }
+function hmRegCardHtml(where){
+  var k=hmRegCardKey(); if(!k)return '';
+  var top=(where==='top');
+  var when=k.regIn===0?'today':k.regIn===1?'tomorrow':'in '+k.regIn+' days';
+  var lab=(typeof regDayLabel==='function')?regDayLabel():'';
+  var info=null; try{ info=(typeof regDayInfo==='function')?regDayInfo():null; }catch(e){}
+  var dayLine='';
+  if(info&&info.set){ var m=/^Register (.+)$/.exec(String(info.head||'')); dayLine=m?('Your day: '+m[1]+(info.sub?' · '+info.sub:'')):String(info.head||''); }
+  return '<section id="'+(top?'hmRegCardN':'hmRegCard')+'" class="hm-card hm-regcard'+(top?' hm-regtop':'')+'" aria-label="Registration opens">'
+    +'<button type="button" class="cb-x hm-regx" title="Dismiss" aria-label="Dismiss" onclick="dismissRegCard(\''+k.key+'\')">&times;</button>'
+    +'<div class="hm-reg-h"><span class="hm-reg-ic" aria-hidden="true">📅</span><b>Round 1 registration opens '+when+'</b></div>'
+    +'<p class="hm-reg-s">Your game plan says what to register for first, with a backup for each class.</p>'
+    +(dayLine?'<div class="hm-reg-day">'+escAcc(dayLine)+'</div>':'')
+    +'<div class="hm-reg-acts"><button type="button" class="btn primary" onclick="if(window.TCPlans)TCPlans.fromBanner();else show(\'sched\')">Your game plan</button>'
+    +(lab?'<button type="button" class="btn" onclick="regDayOpen(&quot;banner&quot;)">'+lab+'</button>':'')+'</div></section>';
+}
+function hmRegTopPaint(){
+  var t=document.getElementById('hmRegTop'); if(!t)return;
+  var h=''; try{ h=hmRegCardHtml('top'); }catch(e){}
+  if(t.innerHTML!==h)t.innerHTML=h;
+}
+function hmRegCardPaint(){
+  var rail=document.getElementById('hmRailR');
+  if(rail){
+    var old=document.getElementById('hmRegCard'), html='';
+    try{ html=hmRegCardHtml('rail'); }catch(e){}
+    if(old&&html)old.outerHTML=html;
+    else if(old)old.remove();
+    else if(html){ var td=rail.querySelector('.hm-td'); if(td)td.insertAdjacentHTML('afterend',html); }
+  }
+  hmRegTopPaint();
+}
+function dismissRegCard(key){
+  try{localStorage.setItem('professify_dismiss_'+key,'1');}catch(e){}
+  ['hmRegCard','hmRegCardN'].forEach(function(id){ var el=document.getElementById(id); if(el)el.remove(); });
+  try{ if(typeof regDayRepaint==='function')regDayRepaint(); else hmRegCardPaint(); }catch(e){}   /* the rail's own day card comes back */
+  try{ hmPlaceRail(); }catch(e){}
+}
+try{ window.hmRegCardHtml=hmRegCardHtml; window.hmRegCardOn=hmRegCardOn; window.hmRegCardPaint=hmRegCardPaint; window.dismissRegCard=dismissRegCard; }catch(e){}
 function campusBannerDismissed(key){try{return localStorage.getItem('professify_dismiss_'+key)==='1';}catch(e){return false;}}
 function daysUntil(dateStr){
   if(!dateStr)return null;
@@ -32673,7 +32924,10 @@ async function loadMySavedClasses(){
   /* A failed read is not "the server has nothing". Treating it as such is how a whole
      schedule disappears; bail and leave local state exactly as it is. */
   if(error){ console.error('[professify] saved_classes read failed, leaving local state alone:',error.message); return; }
-  const dbCodes=(data||[]).map(r=>r.code);
+  /* website-sync (2026-10-15): rows may hold an unspaced legacy code (the CHECK allows it); read them the way the rest of the page names a class.
+     _mcRawCode remembers the spelling the server has, so removing the class deletes THAT row. */
+  window._mcRawCode={};
+  const dbCodes=(data||[]).map(r=>{ const n=normCode(r.code); if(n!==r.code)window._mcRawCode[n]=r.code; return n; });
   /* What the ACCOUNT holds, kept so a device showing nothing can tell the difference between
      "you have no classes" and "this device failed to load the ones you have". */
   window._mcDbCodes=dbCodes.slice();
@@ -32754,7 +33008,7 @@ async function pushMyClassToDb(code,add){
   try{
     const {error}= add
       ? await sb.from('saved_classes').upsert({user_id:sbUser.id,term:mcTerm(),code})
-      : await sb.from('saved_classes').delete().eq('user_id',sbUser.id).eq('code',code).eq('term',mcTerm());
+      : await sb.from('saved_classes').delete().eq('user_id',sbUser.id).in('code',[code].concat((window._mcRawCode&&window._mcRawCode[code])?[window._mcRawCode[code]]:[])).eq('term',mcTerm());
     return !error;
   }catch(e){ return false; }
 }
@@ -32773,20 +33027,41 @@ async function syncSavedSection(code){
 /* ============ SECTION SYNC (my_sections + watch_sections) ============
    Section-aware My Classes + Watchlist follow the student across devices.
    All guarded: if the tables aren't there yet, these no-op silently. */
+/* website-sync (2026-10-15): the queue of section ADDS this device has not landed yet (per account and term), the one thing the
+   server's list may lack and still be right. A section the server lacks that is NOT queued was removed somewhere else (the phone's
+   remove / swap), and the website must not put it back — see loadMySectionsFromDb / backfillMySectionsToDb / loadWatchSectionsFromDb. */
+function secPendKey(kind){ return 'professify_secpend_'+kind+'_'+((typeof sbUser!=='undefined'&&sbUser)?sbUser.id:'')+'_'+mcTerm(); }
+function secPendGet(kind){ try{ var a=JSON.parse(localStorage.getItem(secPendKey(kind))||'[]'); return Array.isArray(a)?a.map(String):[]; }catch(e){ return []; } }
+function secPendSet(kind,a){ try{ localStorage.setItem(secPendKey(kind),JSON.stringify(a)); }catch(e){} }
+function secPendMark(kind,crn){ crn=String(crn); var a=secPendGet(kind); if(a.indexOf(crn)<0){ a.push(crn); secPendSet(kind,a); } }
+function secPendClear(kind,crn){ crn=String(crn); var a=secPendGet(kind), i=a.indexOf(crn); if(i>=0){ a.splice(i,1); secPendSet(kind,a); } }
+/* once per account and term: sections that were on this device before the queue existed are adopted (pushed), then the rule is strict */
+function secAdoptedKey(kind){ return 'professify_secadopt_'+kind+'_'+((typeof sbUser!=='undefined'&&sbUser)?sbUser.id:'')+'_'+mcTerm(); }
+function secAdopted(kind){ try{ return localStorage.getItem(secAdoptedKey(kind))==='1'; }catch(e){ return false; } }
+function secAdoptSet(kind){ try{ localStorage.setItem(secAdoptedKey(kind),'1'); }catch(e){} }
 async function pushMySecToDb(code,rec){
   if(!backendReady()||typeof sbUser==='undefined'||!sbUser||!rec||!rec.crn)return;
-  try{ await sb.from('my_sections').upsert({user_id:sbUser.id,term:mcTerm(),code:code,class_nbr:String(rec.crn),section:rec.section||null,instructor:rec.prof||null,days:rec.days||null,status:(rec.status==='waitlisted'?'waitlisted':'enrolled'),wl_pos:(rec.status==='waitlisted'?(rec.wlPos||null):null)}); }
+  secPendMark('my',rec.crn);
+  try{
+    var r=await sb.from('my_sections').upsert({user_id:sbUser.id,term:mcTerm(),code:code,class_nbr:String(rec.crn),section:rec.section||null,instructor:rec.prof||null,days:rec.days||null,status:(rec.status==='waitlisted'?'waitlisted':'enrolled'),wl_pos:(rec.status==='waitlisted'?(rec.wlPos||null):null)});
+    if(r&&!r.error)secPendClear('my',rec.crn);
+  }
   catch(e){ /* table may not exist yet */ }
 }
 async function deleteMySecFromDb(crn){
   if(!backendReady()||typeof sbUser==='undefined'||!sbUser||!crn)return;
+  secPendClear('my',crn);          /* a removal cancels an add that was still queued */
   try{ await sb.from('my_sections').delete().eq('user_id',sbUser.id).eq('class_nbr',String(crn)).eq('term',mcTerm()); }catch(e){}
 }
 async function pushWatchSecToDb(code,s,added){
   if(!backendReady()||typeof sbUser==='undefined'||!sbUser||!s||!s.class_nbr)return;
   try{
-    if(added){ await sb.from('watch_sections').upsert({user_id:sbUser.id,term:mcTerm(),code:code,class_nbr:String(s.class_nbr),section:s.section||null,instructor:s.name||null,days:(typeof _secTime==='function'?_secTime(s):s.days)||null}); }
-    else{ await sb.from('watch_sections').delete().eq('user_id',sbUser.id).eq('class_nbr',String(s.class_nbr)).eq('term',mcTerm()); }
+    if(added){
+      secPendMark('watch',s.class_nbr);
+      var r=await sb.from('watch_sections').upsert({user_id:sbUser.id,term:mcTerm(),code:code,class_nbr:String(s.class_nbr),section:s.section||null,instructor:s.name||null,days:(typeof _secTime==='function'?_secTime(s):s.days)||null});
+      if(r&&!r.error)secPendClear('watch',s.class_nbr);
+    }
+    else{ secPendClear('watch',s.class_nbr); await sb.from('watch_sections').delete().eq('user_id',sbUser.id).eq('class_nbr',String(s.class_nbr)).eq('term',mcTerm()); }
   }catch(e){}
 }
 /* Pull the student's saved sections from the DB on sign-in and merge into local state,
@@ -32853,6 +33128,24 @@ async function loadMySectionsFromDb(){
        whose course is still in myClasses. They cost one row in a select and nothing else, which is
        the right price for not being able to destroy a schedule. `_orphans` is still collected, and
        said out loud once, because a rising count is a real signal that the 08-30 fix regressed. */
+    /* website-sync (2026-10-15): the server's list REPLACES this term's local sections. A section only this device has is kept
+       only when it is a queued add (or, once per account and term, adopted by the backfill that runs next); anything else was
+       removed or swapped on another device (the phone), and putting it back is exactly what the backfill used to do. */
+    try{
+      var _srv={}; data.forEach(function(r){ if(r&&r.class_nbr!=null)_srv[String(r.class_nbr)]=1; });
+      var _pend=secPendGet('my'), _ad=secAdopted('my');
+      if(_ad){
+        Object.keys(myClassMeta||{}).forEach(function(code){
+          var m=myClassMeta[code]; if(!m||!Array.isArray(m.secs)||myClasses.indexOf(code)<0)return;
+          var before=m.secs.length;
+          m.secs=m.secs.filter(function(x){ return !x||!x.crn||_srv[String(x.crn)]||_pend.indexOf(String(x.crn))>=0; });
+          if(m.secs.length!==before){
+            var f0=m.secs[0]; if(f0){ m.prof=f0.prof||m.prof; if(f0.days)m.time=f0.days; }
+            try{ mcSyncWaitlist(code); }catch(e){}
+          }
+        });
+      }
+    }catch(e){}
     var _ok=Object.keys(_orphans);
     if(_ok.length){
       console.warn('[professify] '+_ok.length+' section row(s) have no matching class and were left '
@@ -32884,7 +33177,10 @@ async function backfillMySectionsToDb(){
          outlive a removal (stale tab, a device that hasn't reconciled yet), and pushing it
          would put the class back in my_sections — the exact loop this repair sits next to. */
       if(myClasses.indexOf(code)<0||mcPendingDeleted(code))return;
-      m.secs.forEach(function(rec){ if(rec&&rec.crn)pending.push({code:code,rec:rec}); });
+      /* website-sync (2026-10-15): only a queued add, or (once) a section from before the queue existed; never "everything local the
+         server lacks" — that put back sections the phone had removed */
+      var _q=secPendGet('my'), _adopt=!secAdopted('my');
+      m.secs.forEach(function(rec){ if(rec&&rec.crn&&(_adopt||_q.indexOf(String(rec.crn))>=0))pending.push({code:code,rec:rec}); });
     });
   }catch(e){ return 0; }
   if(!pending.length)return 0;
@@ -32897,6 +33193,8 @@ async function backfillMySectionsToDb(){
     else if(r.error)return 0;                      // can't read: don't guess, don't spam writes
   }catch(e){ return 0; }
   var missing=pending.filter(function(p){return !have[String(p.rec.crn)];});
+  secAdoptSet('my');                               /* the adoption pass is done once the server has been read */
+  pending.forEach(function(p){ if(have[String(p.rec.crn)])secPendClear('my',p.rec.crn); });
   if(!missing.length)return 0;
   for(var i=0;i<missing.length;i++){
     try{ await pushMySecToDb(missing[i].code,missing[i].rec); }catch(e){}
@@ -32910,6 +33208,21 @@ async function loadWatchSectionsFromDb(){
   try{
     const {data,error}=await sb.from('watch_sections').select('code,class_nbr,section,instructor,days').eq('user_id',sbUser.id).eq('term',mcTerm());
     if(error||!Array.isArray(data))return;
+    /* website-sync (2026-10-15): what the server's list does not hold is dropped unless it is a queued add (or, once per account and
+       term, adopted: pushed now). A watch the phone removed stays removed. */
+    var _srvW={}; data.forEach(function(r){ if(r&&r.class_nbr!=null)_srvW[String(r.class_nbr)]=1; });
+    var _pendW=secPendGet('watch'), _adW=secAdopted('watch');
+    if(!_adW){
+      Object.keys(watchMeta||{}).forEach(function(code){ var m=watchMeta[code]; if(m&&Array.isArray(m.secs))m.secs.forEach(function(x){ if(x&&x.crn&&!_srvW[String(x.crn)]){ secPendMark('watch',x.crn); _pendW.push(String(x.crn));
+        try{ pushWatchSecToDb(code,{class_nbr:x.crn,section:x.section,name:x.prof,days:x.days},true); }catch(e){} } }); });
+      secAdoptSet('watch');
+    }else{
+      Object.keys(watchMeta||{}).forEach(function(code){
+        var m=watchMeta[code]; if(!m||!Array.isArray(m.secs)||!m.secs.length)return;
+        m.secs=m.secs.filter(function(x){ return !x||!x.crn||_srvW[String(x.crn)]||_pendW.indexOf(String(x.crn))>=0; });
+        if(!m.secs.length){ delete watchMeta[code]; var wi=watchClasses.indexOf(code); if(wi>=0)watchClasses.splice(wi,1); }   /* the last watched section went: the same as wcWatchSec */
+      });
+    }
     data.forEach(function(r){
       var code=(r.code||'').trim(); if(!code)return;
       if(watchClasses.indexOf(code)<0)watchClasses.push(code);
@@ -32935,7 +33248,8 @@ async function loadWatchSectionsFromDb(){
    not a constant anybody can read. */
 function normCode(s){
   // Accept "bus2050", "BUS 2050", "bus-2050" → "BUS 2050"
-  const m=String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'').match(/^([A-Z]{2,5})(\d{3,4})$/);
+  /* website-sync (2026-10-15): the phone's canonCode — "&" in the subject (A&B 1234) and a suffix letter (CHEM 1210L) are codes too */
+  const m=String(s||'').toUpperCase().replace(/[^A-Z0-9&]/g,'').match(/^([A-Z&]{2,5})(\d{3,4}[A-Z]?)$/);
   return m?`${m[1]} ${m[2]}`:String(s||'').toUpperCase().trim();
 }
 function tookLabel(t){return [t&&t.term,t&&t.year].filter(Boolean).join(' ');}   /* callers escape it — security-escaping (2026-10-14) */
@@ -35835,7 +36149,7 @@ var _epPendingBlob=null, _epPendingUrl=null, _epRemove=false, _epUserTimer=null,
 
 function epAvatarUrlFor(prof){
   var u=prof&&prof.avatar_url;
-  return u?String(u):'';
+  return u?tcAva(String(u)):'';   /* security-pass2 (2026-10-15) */
 }
 function epPaintAva(){
   var el=document.getElementById('epAva'); if(!el)return;
@@ -35887,7 +36201,7 @@ async function epBucketExists(){
    it, the bucket is not public. Say so where the photo is, not in a toast that's gone. */
 async function epDiagnosePhoto(){
   var hint=document.getElementById('epPhotoHint'); if(!hint)return;
-  var url=(myProfile&&myProfile.avatar_url)?String(myProfile.avatar_url):'';
+  var url=tcAva((myProfile&&myProfile.avatar_url)?String(myProfile.avatar_url):'');   /* security-pass2 (2026-10-15) */
   if(!url)return;
   var ok=await epImgLoads(url);
   if(ok)return;
@@ -36067,7 +36381,7 @@ window.delRun=async function(){
     var keep={};
     try{ keep['professify-theme']=localStorage.getItem('professify-theme'); }catch(_t){}
     Object.keys(localStorage).forEach(function(k){
-      if(/^(professify|sb-)/.test(k))localStorage.removeItem(k);
+      if(/^(professify|sb-|tc-|tc_)/.test(k))localStorage.removeItem(k);   /* tc- and tc_ added 2026-10-15 */
     });
     if(keep['professify-theme'])localStorage.setItem('professify-theme',keep['professify-theme']);
   }catch(e){}
@@ -36127,6 +36441,7 @@ window.recoverAccount=async function(){
 };
 window.recoverSignOut=async function(){
   try{ await sb.auth.signOut({scope:'local'}); }catch(e){}   /* this browser only */
+  try{ tcWipeLocal({}); }catch(e){}   /* security-pass2 (2026-10-15): signing out here is signing out */
   location.replace(location.pathname);
 };
 try{
@@ -37232,7 +37547,8 @@ window.hmSetSeg=function(s){
 async function hmLoadRecents(){
   try{
     if(!backendReady())return;
-    var r=await sb.from('reviews').select('professor_key,professor_name,department,course,score,difficulty,would_again,tags,note,created_at').order('created_at',{ascending:false}).limit(24);
+    /* reviews_public, not the table: signed out, the anon role may read only the view (security-pass2, 2026-10-15) */
+    var r=await sb.from('reviews_public').select('professor_key,professor_name,department,course,score,difficulty,would_again,tags,note,created_at').order('created_at',{ascending:false}).limit(24);
     if(r&&r.data&&r.data.length){HM_RECENTS=r.data;hmRecentsLoaded=true;window._hmFeedTimedOut=false;}
   }catch(e){}
 }
@@ -37348,10 +37664,15 @@ function hmRenderStrip(){
   /* THE ORDER IS THE FEATURE. Free now, longest first; then about to be free, longest first;
      then everybody else in the order they already came in. sort() is stable, so the tail keeps
      whatever order FRIENDS arrived in rather than being reshuffled every render. */
-  var W=hmFreeWindow();
-  /* website-home-catchup (2026-10-14): the phone's order (stories-freeness) — see hmStoryState. Outside the window: as it was. */
-  var ranked=fr.map(function(f){ return {f:f, fs:W?hmStoryState(f,W):null}; });
-  if(W)ranked.sort(hmStoryCmp);
+  /* website-sync (2026-10-15): the phone's order at every hour — see hmStoryState. It used to apply only inside the 7am-11pm
+     weekday window ("outside the window: as it was"); the phone has no window (a weekend is "no classes today"), so neither has this. */
+  var W=hmStoryWindow();
+  var ranked=fr.map(function(f){ return {f:f, fs:hmStoryState(f,W)}; });
+  ranked.sort(hmStoryCmp);
+  /* pinned friends first, in the order they were pinned (up to 3), then everyone else in the freeness order (the phone's storyOrder) */
+  var _pins=[]; try{ _pins=myPins(); }catch(e){}
+  var _pinned=[]; _pins.forEach(function(id){ for(var i=0;i<ranked.length;i++){ if(ranked[i].f.id===id){ _pinned.push(ranked.splice(i,1)[0]); break; } } });
+  ranked=_pinned.concat(ranked);
 
   var items=ranked.slice(0,12).map(function(x){
     var f=x.f, fs=x.fs;
@@ -37364,14 +37685,19 @@ function hmRenderStrip(){
        card two inches below states properly. The tile is a face and a name. */
     var ev='';
     var fcls=fs?(fs.state==='none'?' hm-unset':' hm-free hm-'+fs.state):'';
-    return '<button class="hm-fitem'+fcls+'" onclick="openFriendProfile(\''+jsAttr(f.id)+'\')"'
-      +' title="'+esc((f.name||'')+(fs&&fs.label!=null?fs.label:hmFreeLabel(fs)))+'">'
+    var pin=false; try{ pin=isPinned(f.id); }catch(e){}
+    var pinSvg='<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6l-1 6 3 3v2H7v-2l3-3z"/><path d="M12 14v7"/></svg>';
+    return '<span class="hm-fw'+(pin?' pinned':'')+'" data-fid="'+esc(f.id)+'"><button class="hm-fitem'+fcls+(pin?' pinned':'')+'" data-fid="'+esc(f.id)+'" onclick="openFriendProfile(\''+jsAttr(f.id)+'\')"'
+      +' title="'+esc((f.name||'')+(fs&&fs.label!=null?fs.label:hmFreeLabel(fs))+(pin?' — pinned to the front':''))+'">'
       /* Friends have photos — the Friends tab has shown them all along while this strip and
          the Quad card heads rendered initials only, so the same person looked like two
          different people on two screens. */
       +'<span class="ring"><span class="fav" style="background:'+hmFriendColor(f)+'">'
-        +((typeof avaHtml==='function')?avaHtml(f.avatar_url,f.name):esc(f.ini||hmIni(f.name)))+'</span></span>'
-      +'<span class="nm">'+esc(f.name||'Friend')+'</span></button>';
+        +((typeof avaHtml==='function')?avaHtml(f.avatar_url,f.name):esc(f.ini||hmIni(f.name)))+'</span>'
+        +(pin?'<i class="hm-pinbadge" aria-hidden="true">'+pinSvg+'</i>':'')+'</span>'
+      +'<span class="nm">'+esc(f.name||'Friend')+'</span></button>'
+      +'<button type="button" class="hm-spin'+(pin?' on':'')+'" aria-pressed="'+(pin?'true':'false')+'" aria-label="'+(pin?'Unpin ':'Pin ')+escAcc(f.name||'friend')+(pin?'':' to the front of your stories')+'" '
+      +'onclick="togglePin(\''+jsAttr(f.id)+'\',event)">'+pinSvg+'</button></span>';
   }).join('');
   /* The cap is now an action. A row of faces that ends in a dashed one reads as "and you
      could add another" without a caption saying so, and it's the same 74px tile, so the row
@@ -37595,8 +37921,8 @@ function hmFaceRow(people){
   var FACE_MAX=4;                     // was 3 — "+N" was swallowing most of the answer
   var shown=people.slice(0,FACE_MAX);
   var html=shown.map(function(p){
-    var inner=p.img
-      ? '<img src="'+esc2(p.img)+'" alt="" loading="lazy">'
+    var inner=tcAva(p.img)
+      ? '<img src="'+esc2(tcAva(p.img))+'" alt="" loading="lazy" referrerpolicy="no-referrer">'
       : NOPH_SVG;
     return '<i class="qw-face'+(p.me?' me':'')+'" style="background:'+(p.img?esc2(p.bg||'#5E7A8A'):'var(--nophoto)')+'" title="'+esc2(p.name||'')+'">'+inner+'</i>';
   }).join('');
@@ -38337,37 +38663,60 @@ function avSharedOpen(mineMeets,theirMeets,now,horizonMin){
    arrives with the profile and needs no second request.
    TWO is the whole feature. A pin list that grows is just the friends list again in a different
    order; the cap is what makes the top of the feed mean something. */
-var PIN_MAX=2;
+var PIN_MAX=3;   /* website-sync (2026-10-15): the phone's three. Until set_pinned_friends is installed the column's own check (2) still applies: see pinMax() */
+function pinMax(){ try{ return (window.TCSYNC&&TCSYNC.pinsRpc===true)?PIN_MAX:2; }catch(e){ return 2; } }
+function pinOrList(a){ return a.length<2?a.join(''):a.slice(0,-1).join(', ')+' or '+a[a.length-1]; }
+/* a pin is a friend: once the friend list has loaded, an id that is not on it (unfriended) is not a pin and does not count */
 function myPins(){
-  try{ return (myProfile&&Array.isArray(myProfile.pinned_friends))?myProfile.pinned_friends.slice(0,PIN_MAX):[]; }catch(e){ return []; }
+  try{
+    var a=(myProfile&&Array.isArray(myProfile.pinned_friends))?myProfile.pinned_friends.slice():[];
+    if(typeof friendsLoaded!=='undefined'&&friendsLoaded&&typeof friendsList!=='undefined')a=a.filter(function(id){ return friendsList.some(function(f){ return f.id===id; }); });
+    return a.slice(0,PIN_MAX);
+  }catch(e){ return []; }
 }
 function isPinned(id){ return myPins().indexOf(id)>=0; }
 async function togglePin(id,ev){
   if(ev&&ev.stopPropagation)ev.stopPropagation();
   if(!(typeof sbUser!=='undefined'&&sbUser)||!myProfile)return false;
-  var cur=myPins(), next;
-  if(cur.indexOf(id)>=0)next=cur.filter(function(x){ return x!==id; });
-  else if(cur.length>=PIN_MAX){
-    /* Silently dropping someone's pin to make room would be a change the student did not ask for
-       and cannot see. Say which two are already up there and let them choose. */
-    var names=cur.map(function(x){ var f=(typeof findFriend==='function')?findFriend(x):null; return (f&&f.name)||'someone'; });
-    try{ frToast('You can pin two friends. Unpin '+names.join(' or ')+' first.'); }catch(e){}
+  if(!(typeof findFriend==='function'&&findFriend(id)))return false;               /* only a friend can be pinned (the phone: TC.friends.indexOf) */
+  if(window._pinBusy)return false;
+  var cur=myPins(), next, max=pinMax(), on=cur.indexOf(id)>=0;
+  var first=function(x){ var f=(typeof findFriend==='function')?findFriend(x):null; return String((f&&f.name)||'someone').split(/\s+/)[0]; };
+  if(on)next=cur.filter(function(x){ return x!==id; });
+  else if(cur.length>=max){
+    /* Silently dropping someone's pin to make room would be a change the student did not ask for and cannot see. The phone's words. */
+    try{ frToast(max+' pinned already — unpin '+pinOrList(cur.map(first))+' first'); }catch(e){}
     return false;
   }
   else next=cur.concat([id]);
   var was=myProfile.pinned_friends;
   myProfile.pinned_friends=next;
-  try{ hmFreeChanged(); }catch(e){}
-  try{ if(typeof renderFriends==='function')renderFriends(); }catch(e){}
+  try{ frToast(on?('Unpinned '+first(id)):('Pinned '+first(id)+' to the front')); }catch(e){}
+  var paint=function(){
+    try{ hmFreeChanged(); }catch(e){}
+    try{ if(document.getElementById('hmStripWrap'))hmRenderStrip(); }catch(e){}
+    try{ if(typeof renderFriends==='function')renderFriends(); }catch(e){}
+  };
+  paint();
+  window._pinBusy=true;
   try{
-    var r=await sb.from('profiles').update({pinned_friends:next}).eq('id',sbUser.id);
-    if(r.error)throw r.error;
+    var viaRpc=!!(window.TCSYNC&&TCSYNC.pinsRpc===true), kept=null;
+    if(viaRpc){
+      var r=await sb.rpc('set_pinned_friends',{p_ids:next});
+      if(r.error)throw r.error;
+      kept=Array.isArray(r.data)?r.data.filter(function(x){ return typeof x==='string'; }):null;     /* what the server kept: friends only, max 3 */
+    }else{
+      var r2=await sb.from('profiles').update({pinned_friends:next}).eq('id',sbUser.id);
+      if(r2.error)throw r2.error;
+    }
+    window._pinBusy=false;
+    if(kept&&JSON.stringify(kept)!==JSON.stringify(next)){ myProfile.pinned_friends=kept; paint(); }
     return true;
   }catch(e){
+    window._pinBusy=false;
     myProfile.pinned_friends=was;
-    try{ hmFreeChanged(); }catch(_e){}
-    try{ if(typeof renderFriends==='function')renderFriends(); }catch(_e){}
-    try{ frToast('Could not save that pin — the column may not be installed yet.'); }catch(_e){}
+    paint();
+    try{ frToast((window.TCSYNC&&TCSYNC.pinsRpc===true)?'Couldn’t save that — try again.':'Could not save that pin — the column may not be installed yet.'); }catch(_e){}
     return false;
   }
 }
@@ -38656,6 +39005,14 @@ function hmStoryState(f,W){
     return {rank:[3,t],state:'in',label:' — in class till '+fm(t)};
   }catch(e){ return null; }
 }
+/* website-sync (2026-10-15): the phone's CLOCK.day / CLOCK.min — no window. Mo-Fr index GP_DAYS; a weekend is -1, which no class
+   matches, so a friend with a schedule is "no classes today" exactly as on the phone. hmNowOverride is the same seam as hmFreeWindow's. */
+function hmStoryWindow(d){
+  d=d||(typeof window!=='undefined'&&window.hmNowOverride)||new Date();
+  var di=(typeof GP_DAYS!=='undefined')?GP_DAYS.indexOf(HM_JSDAY[d.getDay()]):-1;
+  return {di:di,now:d.getHours()*60+d.getMinutes()};
+}
+try{ window.hmStoryWindow=hmStoryWindow; }catch(e){}
 function hmStoryCmp(a,b){
   var ra=a.fs?a.fs.rank:[4,0], rb=b.fs?b.fs.rank:[4,0];
   if(ra[0]!==rb[0])return ra[0]-rb[0];
@@ -39925,6 +40282,8 @@ function hmRenderRailR(){
         +'<div class="hm-td-d">'+WD[d.getDay()]+', '+MO[d.getMonth()]+' '+d.getDate()+'</div>'
         +'<h1 class="hm-tdg" id="hmGreeting">'+esc(hmGreetText().title)+'</h1></div>';
   }catch(e){}
+  /* website-sync (2026-10-15): the registration banner, as a card, directly under the greeting */
+  try{ out+=hmRegCardHtml('rail'); }catch(e){}
   /* Your registration day — from 14 days before Round 1 until its last day (website-registration-day, 2026-10-14) */
   try{ if(typeof regSlotHtml==='function')out+=regSlotHtml('rail'); }catch(e){}
   /* the supply verb — right above Highest rated (Tate's placement) */
@@ -39945,6 +40304,7 @@ function hmRenderRailR(){
      says it a third time, per friend, with more detail. Three surfaces for one fact. */
   try{ out+=hmRatedCardsHtml('hm-desk'); }catch(e){}
   host.innerHTML=out;
+  try{ hmRegTopPaint(); }catch(e){}   /* website-sync (2026-10-15) */
 }
 /* ---------- LOGGED-OUT LANDING (shown in Home when there's no account) ---------- */
 function hmRenderLanding(){
@@ -41288,7 +41648,8 @@ function friendsIn(code){
 function faceHtml(f){
   var n=(f.name||'?'), ini=n.split(/\s+/).map(function(w){return w[0]||'';}).join('').slice(0,2).toUpperCase();
   var url=''; try{ url=(typeof frAvatarFor==='function')?frAvatarFor(f):(f.avatar_url||''); }catch(e){}
-  if(url)return '<span class="pl-face"><img src="'+attr(url)+'" alt="" loading="lazy"></span>';
+  url=tcAva(url);   /* only our own avatars bucket (security-pass2, 2026-10-15) */
+  if(url)return '<span class="pl-face"><img src="'+attr(url)+'" alt="" loading="lazy" referrerpolicy="no-referrer"></span>';
   return '<span class="pl-face" style="background:var(--nophoto)">'+NOPH_SVG+'</span>';
 }
 function friendsHtml(list){
@@ -42875,8 +43236,9 @@ button.rg-more{border:0;background:none;font:inherit;font-size:12.5px;font-weigh
   function face(f) {
     var ini = ''; try { ini = (typeof hmIni === 'function') ? hmIni(f.name) : String(f.name || '?').slice(0, 2).toUpperCase(); } catch (_) { ini = '?'; }
     var bg = '#5E7A8A'; try { bg = hmFriendColor(f) || bg; } catch (_) {}
-    var img = f.avatar_url ? '<img src="' + esc(f.avatar_url) + '" alt="" loading="lazy" onerror="this.outerHTML=NOPH_SVG">' : NOPH_SVG;
-    return '<span class="rg-face" style="background:' + (f.avatar_url ? esc(bg) : 'var(--nophoto)') + '" aria-hidden="true">' + img + '</span>';
+    var _au = tcAva(f.avatar_url);   /* only our own avatars bucket (security-pass2, 2026-10-15) */
+    var img = _au ? '<img src="' + esc(_au) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.outerHTML=NOPH_SVG">' : NOPH_SVG;
+    return '<span class="rg-face" style="background:' + (_au ? esc(bg) : 'var(--nophoto)') + '" aria-hidden="true">' + img + '</span>';
   }
   /* head + sub for the card, from your day or from Round 1's dates */
   function lines() {
@@ -42905,6 +43267,8 @@ button.rg-more{border:0;background:none;font:inherit;font-size:12.5px;font-weigh
   function headHtml(h) { var m = /^(Register |Your registration opened at )(.+)$/.exec(h); return m ? esc(m[1]) + '<span class="rg-nw">' + esc(m[2]) + '</span>' : esc(h); }
   function cardHtml(where) {
     if (!active() || (where === 'rail' && !railOn())) return '';
+    /* website-sync (2026-10-15): one card on Home — the compact "Round 1 registration opens" card carries the day and the button, so this one waits */
+    if (where === 'rail' && typeof hmRegCardOn === 'function' && hmRegCardOn()) return '';
     var L = lines(); if (!L) return '';
     if (!RG.frBusy) setTimeout(function () { loadFriends(); }, 0);
     var td = today(), up = frRows().filter(function (x) { return x.day >= td; });
@@ -42942,19 +43306,21 @@ button.rg-more{border:0;background:none;font:inherit;font-size:12.5px;font-weigh
   function focusKey() {
     var a = document.activeElement; if (!a || !a.closest) return null;
     var sl = a.closest('.rg-slot'); if (sl) return { slot: sl.getAttribute('data-rg'), act: a.getAttribute('data-rg-act'), id: a.getAttribute('data-id') };
-    if (a.closest('#campusBanner') && /^regDayOpen/.test(a.getAttribute('onclick') || '')) return { banner: 1 };
+    if (a.closest('.hm-regcard') && /^regDayOpen/.test(a.getAttribute('onclick') || '')) return { banner: 1 };   /* website-sync (2026-10-15): the card on Home's rail, not the top banner */
     return null;
   }
   function refocus(k) {
     if (!k) return;
-    var all = k.banner ? document.querySelectorAll('#campusBanner button[onclick^="regDayOpen"]') : document.querySelectorAll('.rg-slot[data-rg="' + k.slot + '"] [data-rg-act="' + k.act + '"]');
-    for (var i = 0; i < all.length; i++) if (k.banner || (all[i].getAttribute('data-id') || null) === (k.id || null)) { try { all[i].focus({ preventScroll: true }); } catch (_) {} return; }
+    var all = k.banner ? document.querySelectorAll('.hm-regcard button[onclick^="regDayOpen"]') : document.querySelectorAll('.rg-slot[data-rg="' + k.slot + '"] [data-rg-act="' + k.act + '"]');
+    for (var i = 0; i < all.length; i++) if (k.banner ? all[i].offsetParent !== null : (all[i].getAttribute('data-id') || null) === (k.id || null)) { try { all[i].focus({ preventScroll: true }); } catch (_) {} return; }   /* website-sync: the card has a rail copy and a narrow-screen copy; the visible one */
   }
   function repaint() {
     var fk = focusKey();
     try { var els = document.querySelectorAll('.rg-slot'); for (var i = 0; i < els.length; i++) els[i].innerHTML = cardHtml(els[i].getAttribute('data-rg')); } catch (_) {}
     try { var fr = document.querySelectorAll('.rg-frrow'); for (var j = 0; j < fr.length; j++) fr[j].innerHTML = friendRowInner(fr[j].getAttribute('data-rg-fr')); } catch (_) {}   /* website-friend-regday (2026-10-14) */
     try { if (typeof renderCampusBanner === 'function') renderCampusBanner(); } catch (_) {}
+    try { if (typeof hmRegCardPaint === 'function') hmRegCardPaint(); } catch (_) {}      /* website-sync (2026-10-15): the card on Home's rail */
+    try { if (window.TCPlans && TCPlans.refreshGamePlan) TCPlans.refreshGamePlan(); } catch (_) {}   /* the Game Plan shows your day too */
     try { if (M) paintModal(); } catch (_) {}
     refocus(fk);
     try { loadFriends(); } catch (_) {}
@@ -43041,7 +43407,7 @@ button.rg-more{border:0;background:none;font:inherit;font-size:12.5px;font-weigh
   function restoreFocus(from) {
     try {
       var a = document.activeElement; if (a && a !== document.body && a.isConnected) return;
-      var sel = from === 'banner' ? '#campusBanner button[onclick^="regDayOpen"]' : from ? '.rg-slot[data-rg="' + from + '"] [data-rg-act="open"]' : '[data-rg-act="open"]';
+      var sel = from === 'banner' ? '.hm-regcard button[onclick^="regDayOpen"]' : from === 'gp' ? '#plGpBack [data-rg-act="open"]' : from ? '.rg-slot[data-rg="' + from + '"] [data-rg-act="open"]' : '[data-rg-act="open"]';
       var all = document.querySelectorAll(sel);
       for (var i = 0; i < all.length; i++) if (all[i].offsetParent !== null) { all[i].focus({ preventScroll: true }); return; }
     } catch (_) {}
@@ -43050,7 +43416,7 @@ button.rg-more{border:0;background:none;font:inherit;font-size:12.5px;font-weigh
   document.addEventListener('click', function (e) {
     var t = e.target && e.target.closest ? e.target.closest('[data-rg-act]') : null; if (!t) return;
     var a = t.getAttribute('data-rg-act');
-    if (a === 'open') { var sl = t.closest('.rg-slot'); openModal(sl ? sl.getAttribute('data-rg') : ''); }
+    if (a === 'open') { var sl = t.closest('.rg-slot'); openModal(sl ? sl.getAttribute('data-rg') : (t.closest('#plGpBack') ? 'gp' : '')); }
     else if (a === 'close') closeModal();
     else if (a === 'day') { if (!M) return; readTime(); var d = t.getAttribute('data-day'); if (roundDays().indexOf(d) < 0 || d < today()) return; M.day = d; M.err = ''; paintModal(); }
     else if (a === 'share') { if (!M) return; readTime(); M.shared = !M.shared; paintModal(); }
@@ -43091,6 +43457,9 @@ button.rg-more{border:0;background:none;font:inherit;font-size:12.5px;font-weigh
   window.regSlotHtml = slotHtml;
   window.regDayOpen = openModal;
   /* the campus banner's link: "Set your registration day", or "Change your registration day" once you have one */
+  window.regDayRepaint = repaint;
+  /* website-sync (2026-10-15): what the Game Plan shows in place of the device-only "appointment time" */
+  window.regDayInfo = function () { if (!active()) return null; var L = lines(); return L ? { set: !!L.set, head: L.head, sub: L.sub, full: L.full || '' } : null; };
   window.regDayLabel = function () { return !active() ? '' : (RG.day && RG.day.day >= today()) ? 'Change your registration day' : (RG.day ? '' : 'Set your registration day'); };
   window.regPacificGap = function (d) { return gap(today(), d); };
   window.regDayBoot = boot;
@@ -44174,7 +44543,7 @@ span.cal-cm{cursor:default}
     if (!list.length) return '';
     return '<span class="pl2-faces" title="' + esc(list.map(function (f) { return f.name; }).join(', ')) + '">' + list.slice(0, 3).map(function (f) {
       var ini = f.ini || (has('hmIni') ? hmIni(f.name) : String(f.name || '?').slice(0, 2).toUpperCase());
-      return '<span class="pl2-face" style="background:var(--nophoto)">' + (f.avatar_url ? '<img src="' + esc(f.avatar_url) + '" alt="" loading="lazy" onerror="this.outerHTML=NOPH_SVG" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block">' : NOPH_SVG) + '</span>';
+      return '<span class="pl2-face" style="background:var(--nophoto)">' + (tcAva(f.avatar_url) ? '<img src="' + esc(tcAva(f.avatar_url)) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.outerHTML=NOPH_SVG" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block">' : NOPH_SVG) + '</span>';
     }).join('') + '</span>';
   }
 
@@ -44763,7 +45132,6 @@ span.cal-cm{cursor:default}
   function renderGamePlan() {
     var el = document.getElementById('plGpModal'); if (!el) return;
     var g = gamePlan(gpSlot);
-    var a = appt();
     var pills = '<div class="pl2-pills pl2-pills--sm">' + SLOTS.map(function (s) {
       var q = planInfo(s);
       return '<button type="button" class="pl2-pill' + (s === gpSlot ? ' on' : '') + '" data-pl-act="gpslot" data-slot="' + s + '"' + (q.items.length ? '' : ' disabled') + '><b>' + s + '</b><span>' + (q.items.length ? unitsLabel(q) : 'empty') + '</span></button>';
@@ -44775,9 +45143,11 @@ span.cal-cm{cursor:default}
       h += '<div class="pl2-callout">This plan uses ' + esc(g.termLabel) + ' sections, so treat it as a preview. Plans made once ' + esc(g.regTerm)
         + ' classes are in TermChamp are the ones to register with.</div>';
     }
-    h += '<label class="pl2-appt"><span>Your appointment time <em>(from the Portal)</em></span>'
-      + '<input type="datetime-local" data-pl-act="appt" value="' + (a && !isNaN(a) ? esc(new Date(a.getTime() - a.getTimezoneOffset() * 60000).toISOString().slice(0, 16)) : '') + '">'
-      + (a && !isNaN(a) ? '<b>' + esc(countdown(a)) + '</b>' : '') + '</label>';
+    /* website-sync (2026-10-15): your registration day is the account's (registration_days, the phone's), set through the same sheet as the
+       cards; this used to be a device-only "appointment time" (professify_appt_2274) that nothing else ever read. */
+    var rdi = null; try { rdi = (typeof regDayInfo === 'function') ? regDayInfo() : null; } catch (_) {}
+    if (rdi) h += '<div class="pl2-appt" data-gp-regday="' + (rdi.set ? 'set' : 'none') + '"><span>Your registration day</span> <b>' + esc(rdi.head + (rdi.sub ? ' · ' + rdi.sub : '')) + '</b>'
+      + '<button type="button" class="rg-btn' + (rdi.set ? '' : ' pri') + '" data-rg-act="open">' + (rdi.set ? 'Change' : 'Set day') + '</button></div>';
     if (!g.steps.length) {
       h += '<p class="pl2-note">Plan ' + g.slot + ' has no sections yet.</p></div>';
       el.innerHTML = h; return;
@@ -45055,10 +45425,7 @@ span.cal-cm{cursor:default}
     var t = e.target; if (!t || !t.getAttribute) return;
     var act = t.getAttribute('data-pl-act');
     if (act === 'share') { setShared(t.getAttribute('data-slot'), t.checked); return; }
-    if (act === 'appt') {
-      try { if (t.value) localStorage.setItem(apptKey(), new Date(t.value).toISOString()); else localStorage.removeItem(apptKey()); } catch (_) {}
-      renderGamePlan();
-    }
+    /* (the "appt" field is gone: website-sync, 2026-10-15 — the registration day replaces it) */
   }
 
   /* ---------------------------------------------------------------------------------------------
@@ -45193,6 +45560,7 @@ span.cal-cm{cursor:default}
     render: render, renderBuilder: renderBuilder, openDegree: openDegree, fitFor: fitFor, needGroups: needGroups, load: load, loadFriendPlans: loadFriendPlans, friendPlansOf: friendPlansOf, friendPlansReady: function () { return friendPlans !== null; }, askInterest: askInterest, interestOf: interestOf,
     planBtnHtml: planBtnHtml, interestChip: interestChip, friendTabHtml: friendTabHtml, friendBodyHtml: friendBodyHtml,
     saveFromBuild: saveFromBuild, server: function () { return S.server; },
+    refreshGamePlan: function () { var gp = document.getElementById('plGpBack'); if (gp && gp.classList.contains('open')) renderGamePlan(); },
     fromBanner: function () {
       ensure();
       if (SLOTS.some(function (s) { return plan(s).sections.length; })) { openGamePlan(); return; }
@@ -46304,5 +46672,305 @@ button.cps-row{cursor:pointer}
 .mc-now-note{margin:0 0 12px;color:var(--muted);font-size:var(--t-body,12.5px)}
 .hm-termtag{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;background:var(--panel-2);color:var(--text-2);font-size:var(--t-label,10.5px);font-weight:700;vertical-align:middle}
 </style>
+<!-- website-sync (2026-10-15): pins, saved items, favourite teachers, account profile, tab-return refresh. Read by app-dev/patches/website-sync-2026-10-15.py -->
+<style id="sync-css">
+/* Registration day as a card on Home's right rail, under the greeting (it was a full-width banner on every page) */
+.hm-regcard{padding:14px 16px 16px;display:flex;flex-direction:column;gap:8px;border-color:rgba(var(--accent-rgb),.35)}
+.hm-regcard .hm-regx{position:absolute;top:6px;right:6px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;padding:0;border-radius:8px;color:var(--faint);font-size:20px;line-height:1;background:none;border:0;cursor:pointer}
+@media (hover:hover){.hm-regcard .hm-regx:hover{color:var(--text);background:rgba(var(--accent-rgb),.10)}}
+.hm-regcard .hm-regx:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.hm-regcard .hm-reg-h{display:flex;align-items:flex-start;gap:8px;padding-right:26px;font-size:var(--t-body);line-height:1.3;color:var(--text)}
+.hm-regcard .hm-reg-s{margin:0;font-size:var(--t-label);line-height:1.4;color:var(--text-2)}
+.hm-regcard .hm-reg-acts{display:flex;flex-direction:column;gap:8px;margin-top:2px}
+.hm-regcard .hm-reg-acts .btn{width:100%;justify-content:center;min-height:40px;white-space:normal;text-align:center}
+/* the one card: the day line, and below 1140px (rail hidden) the card is drawn at the top of the main column instead of on the rail */
+.hm-regcard .hm-reg-day{font-size:var(--t-label);font-weight:700;color:var(--good,#15803d)}
+#hmRegTop{display:none}
+@media (max-width:1139px){
+  #hmRegTop{display:block;margin:0 0 14px}
+  #hmRailR #hmRegCard{display:none}
+  .hm-regtop .hm-reg-acts{flex-direction:row;flex-wrap:wrap}
+  .hm-regtop .hm-reg-acts .btn{width:auto;flex:1 1 160px}
+}
+/* Stories: a pin button on every tile (hover / focus; always there for a pinned one), the phone's pin badge on the ring */
+.hm-fw{position:relative;display:flex;flex:none}
+.hm-fitem .ring{position:relative}
+.hm-pinbadge{position:absolute;right:-4px;bottom:-4px;width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;border:2px solid var(--panel,#fff);font-style:normal;pointer-events:none}
+.hm-spin{position:absolute;top:-4px;right:-2px;z-index:2;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;
+  background:var(--panel,#fff);color:var(--muted);border:1px solid var(--line);opacity:0;transition:opacity .12s}
+.hm-fw:hover .hm-spin,.hm-fw:focus-within .hm-spin{opacity:1}
+.hm-spin.on{color:var(--accent);border-color:var(--accent)}
+.hm-spin:focus-visible{outline:2px solid var(--accent);outline-offset:1px;opacity:1}
+@media (hover:none){.hm-spin{display:none}}   /* touch: a half-second hold on the story pins it */
+/* Explore's GE / CONC tags were the dark theme's pastels on the light theme's cards: 2.2:1 (check-desktop-look "rendered" saw it as soon
+   as a major was set, which the account sync now does) */
+:root:not([data-theme="dark"]) .exm-tag.ge{color:#2d5f93}
+:root:not([data-theme="dark"]) .exm-tag.conc{color:#6a49a6}
+/* Chat */
+.msg-lk{display:inline-block;margin-left:6px;font-size:12px;color:var(--accent)}
+.msg-tmute{font-size:11px;color:var(--faint);margin-left:6px}
+/* Push quiet hours */
+.push-hr{font:inherit;font-size:var(--t-label);background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:4px 6px;min-height:32px}
+/* Favorite teacher row in the rating form */
+.rf-fav{display:flex;align-items:flex-start;gap:10px;margin:2px 0 12px;font-size:var(--t-body);color:var(--text-2);cursor:pointer}
+.rf-fav input{margin-top:3px;flex:none}
+.rf-fav em{font-style:normal;color:var(--muted)}
+/* the registration sheet opens over the Game Plan sheet */
+#rgBack{z-index:110}
+.pl2-appt .rg-btn{margin-left:auto}
+</style>
+<script id="sync-js">
+/* ================================================================================================
+   WEBSITE SYNC — 2026-10-15. One account, the same data on the phone and the website (sync-audit.md).
+   Everything here talks to server objects from sql/professify-sync-2026-10-15.sql that may not be live yet:
+   "not installed" (PGRST202 / 42883 / 42P01 / PGRST205 / does not exist) turns the feature off quietly and the
+   page behaves as it did. Nothing in here is allowed to stop a sign-in: every call is caught.
+   ================================================================================================ */
+var TCSYNC={pinsRpc:null,favsOk:null,savedOk:null,favs:{}};
+function tcMissing(err){
+  if(!err)return false;
+  try{ if(typeof rpcMissing==='function'&&rpcMissing(err))return true; }catch(e){}
+  var c=String(err.code||''), m=String(err.message||'');
+  return c==='PGRST202'||c==='42883'||c==='42P01'||c==='PGRST205'||/does not exist|could not find|schema cache/i.test(m);
+}
+
+/* ---------- pins: my_pinned_friends() ---------- */
+async function tcPinsLoad(){
+  if(typeof sb==='undefined'||!sb||typeof sbUser==='undefined'||!sbUser||typeof myProfile==='undefined'||!myProfile)return;
+  var uid=sbUser.id, ids=null;
+  try{
+    var r=await sb.rpc('my_pinned_friends');
+    if(r.error){
+      /* not installed: profiles.pinned_friends is not selectable (INSERT/UPDATE only), so the pins cannot be read; they are still written to the column */
+      if(tcMissing(r.error))TCSYNC.pinsRpc=false;
+    }else{
+      TCSYNC.pinsRpc=true;
+      ids=Array.isArray(r.data)?r.data:[];
+    }
+  }catch(e){ return; }
+  if(ids==null||window._pinBusy||!sbUser||sbUser.id!==uid||!myProfile)return;
+  ids=ids.filter(function(x){ return typeof x==='string'; });
+  if(JSON.stringify(ids)===JSON.stringify(myProfile.pinned_friends||[]))return;
+  myProfile.pinned_friends=ids;
+  try{ hmFreeChanged(); }catch(e){}
+  try{ if(document.getElementById('hmStripWrap'))hmRenderStrip(); }catch(e){}
+  try{ if(typeof renderFriends==='function')renderFriends(); }catch(e){}
+}
+
+/* right-click or a half-second hold on a story pins / unpins it (the phone: long-press) */
+(function(){
+  var timer=0, sx=0, sy=0, held=0;
+  function tile(t){ return t&&t.closest?t.closest('#hmStripWrap .hm-fitem[data-fid]'):null; }
+  function fire(id){ held=Date.now(); try{ togglePin(id); }catch(e){} }
+  document.addEventListener('pointerdown',function(e){
+    if(e.button>0)return;
+    var t=tile(e.target); if(!t)return;
+    clearTimeout(timer); sx=e.clientX; sy=e.clientY;
+    var id=t.getAttribute('data-fid');
+    timer=setTimeout(function(){ timer=0; fire(id); },500);
+  },true);
+  ['pointerup','pointercancel','pointerleave'].forEach(function(n){ document.addEventListener(n,function(){ clearTimeout(timer); timer=0; },true); });
+  document.addEventListener('pointermove',function(e){ if(timer&&(Math.abs(e.clientX-sx)>8||Math.abs(e.clientY-sy)>8)){ clearTimeout(timer); timer=0; } },true);
+  document.addEventListener('contextmenu',function(e){
+    var t=tile(e.target); if(!t)return;
+    e.preventDefault();
+    if(Date.now()-held<1500)return;                    /* the hold already did it */
+    fire(t.getAttribute('data-fid'));
+  },true);
+  document.addEventListener('click',function(e){
+    if(Date.now()-held<800&&tile(e.target)){ e.preventDefault(); e.stopPropagation(); held=0; }   /* the click that ends a hold is not an "open this profile" */
+  },true);
+})();
+
+/* ---------- major / standing / concentration from the account ---------- */
+function tcApplyAccountProfile(d){
+  try{
+    if(!d||typeof student==='undefined'||!sbUser)return;
+    var pk='professify_prof_pend_'+sbUser.id, pend=false;
+    try{ pend=localStorage.getItem(pk)==='1'; }catch(e){}
+    if(pend){ try{ syncProfileToBackend(); }catch(e){} return; }       /* a change made here that the account has not taken yet wins, and is sent */
+    var changed=false;
+    var m=d.major?tcMajorNow(d.major):null;
+    if(m&&m!==student.major){ student.major=m; student.conc=null; changed=true; }
+    if(d.class_standing&&d.class_standing!==student.standing){ student.standing=d.class_standing; changed=true; }
+    if(m){
+      var c=('concentration' in d)?tcConcClean(d.concentration):undefined;
+      if(c!==undefined&&c!==student.conc){ student.conc=c; changed=true; }
+    }
+    if(!changed)return;
+    try{ var ms=document.getElementById('majorSel'); if(ms&&student.major)ms.value=student.major; }catch(e){}
+    try{ exMajor=student.major; if(student.conc)exConc=student.conc; }catch(e){}
+    try{ saveProfile(); }catch(e){}
+    try{ renderRoadmap(); }catch(e){} try{ renderExContext(); }catch(e){} try{ renderExplore(); }catch(e){}
+    try{ if(window.schSyncToStudent)window.schSyncToStudent(); }catch(e){}
+    try{ if(document.getElementById('view-settings')&&document.getElementById('view-settings').classList.contains('active')&&typeof renderSettingsPage==='function')renderSettingsPage(); }catch(e){}
+  }catch(e){}
+}
+
+/* ---------- favorite teachers: my_favorite_teachers / set_favorite_teacher ---------- */
+async function tcFavsLoad(){
+  if(typeof sb==='undefined'||!sb||typeof sbUser==='undefined'||!sbUser)return;
+  try{
+    var r=await sb.rpc('my_favorite_teachers');
+    if(r.error){ if(tcMissing(r.error))TCSYNC.favsOk=false; return; }
+    TCSYNC.favsOk=true;
+    var o={}; (Array.isArray(r.data)?r.data:[]).forEach(function(k){ if(typeof k==='string')o[k]=1; });
+    TCSYNC.favs=o;
+  }catch(e){}
+}
+function tcFavCount(){ return Object.keys(TCSYNC.favs||{}).length; }
+function tcFavRow(id){
+  try{
+    if(TCSYNC.favsOk!==true)return '';
+    var p=PROFESSORS[id]; if(!p)return '';
+    var k=profKey(p), on=!!TCSYNC.favs[k], full=!on&&tcFavCount()>=3;
+    return '<label class="rf-fav" id="rfFavRow"><input type="checkbox" id="rfFav"'+(on?' checked':'')+(full?' disabled':'')+' onchange="window._rfFav=this.checked">'
+      +'<span>Favorite teacher <em>'+(full?'(you already have 3 — unstar one on your profile first)':'(up to 3 — the same list as on your phone)')+'</em></span></label>';
+  }catch(e){ return ''; }
+}
+async function tcFavAfter(p){
+  try{
+    var want=window._rfFav; window._rfFav=null;
+    if(want==null||TCSYNC.favsOk!==true||!p||typeof sb==='undefined'||!sb||!sbUser)return;
+    var k=profKey(p);
+    if(!!TCSYNC.favs[k]===want)return;
+    var r=await sb.rpc('set_favorite_teacher',{p_key:k,p_on:want});
+    if(r.error){ try{ frToast(tcMissing(r.error)?'Favorite teachers aren’t available yet.':'Couldn’t update your favorite teachers — '+(String(r.error.message||'').slice(0,80)||'try again')); }catch(e){} return; }
+    if(want)TCSYNC.favs[k]=1; else delete TCSYNC.favs[k];
+    try{ frToast(want?'Added to your favorite teachers':'Removed from your favorite teachers'); }catch(e){}
+  }catch(e){}
+}
+
+/* ---------- saved classes and professors: public.saved_items (kind 'class' | 'prof'; key = canonical code | name|dept lowercased) ----------
+   The website's local watch lists are the cache. A three-way merge against the last state this browser saw (the "base") tells
+   "added on the other device" from "removed here": first sync per account and term = union; after that the account is the authority
+   and changes made offline are queued (they are simply the difference from the base, so nothing needs a separate queue). */
+var TCS={busy:false,again:false,timer:0,applying:false};
+function tcsBaseKey(){ return 'professify_saved_base_'+(sbUser?sbUser.id:'')+'_'+(typeof mcTerm==='function'?mcTerm():''); }
+function tcsBaseGet(){ try{ var b=JSON.parse(localStorage.getItem(tcsBaseKey())||'null'); return (b&&Array.isArray(b.c)&&Array.isArray(b.p))?b:null; }catch(e){ return null; } }
+function tcsBaseSet(b){ try{ localStorage.setItem(tcsBaseKey(),JSON.stringify(b)); }catch(e){} }
+function tcsLocalClasses(){
+  var o={}; (typeof watchClasses!=='undefined'?watchClasses:[]).forEach(function(c){ var n=normCode(c); if(n)o[n]=c; }); return o;   /* canonical -> as stored */
+}
+function tcsProfIndex(){
+  var ix={}; try{ Object.keys(PROFESSORS||{}).forEach(function(id){ var k=profKey(PROFESSORS[id]); if(k&&!ix[k])ix[k]=id; }); }catch(e){}
+  return ix;
+}
+function tcsLocalProfs(){
+  var o={};   /* key -> id (only ids that have a name; an id with no record cannot be named, so it is neither pushed nor treated as removed) */
+  (typeof watchlist!=='undefined'?watchlist:[]).forEach(function(id){
+    var p=(PROFESSORS&&PROFESSORS[id])||(watchSpMeta&&watchSpMeta[id]); if(!p||!p.name)return;
+    var k=profKey(p); if(k&&!o[k])o[k]=id;
+  });
+  return o;
+}
+function tcsTitle(s){ return String(s||'').replace(/\b([a-z])/g,function(m){ return m.toUpperCase(); }); }
+function tcsAddProf(key,ix){
+  var id=ix[key];
+  if(!id){
+    var parts=key.split('|'), nm=tcsTitle(parts[0]), dp=parts[1]||'';
+    id='sp:k:'+key;
+    try{ spRegister(id,nm,dp.length<=5?dp.toUpperCase():tcsTitle(dp)); watchSpMeta[id]={name:nm,dept:dp.length<=5?dp.toUpperCase():tcsTitle(dp)}; saveWatchSp(); }catch(e){}
+  }
+  if(watchlist.indexOf(id)<0)watchlist.push(id);
+}
+function tcsRemoveProf(id){
+  var i=watchlist.indexOf(id); if(i>=0)watchlist.splice(i,1);
+  try{ if(watchSpMeta&&watchSpMeta[id]){ delete watchSpMeta[id]; saveWatchSp(); } }catch(e){}
+}
+async function tcsRun(fetchServer){
+  if(TCS.busy){ TCS.again=true; return; }
+  if(typeof sb==='undefined'||!sb||typeof sbUser==='undefined'||!sbUser||TCSYNC.savedOk===false)return;
+  if(typeof FALL!=='undefined'&&FALL.on)return;
+  if(!fetchServer&&TCSYNC.savedOk!==true)return;           /* never push before the account has been read once */
+  TCS.busy=true; var uid=sbUser.id, term=mcTerm();
+  try{
+    var base=tcsBaseGet();
+    var srvC=null, srvP=null;
+    if(fetchServer){
+      var r=await sb.from('saved_items').select('kind,key');
+      if(r.error){ if(tcMissing(r.error))TCSYNC.savedOk=false; return; }
+      TCSYNC.savedOk=true;
+      srvC={}; srvP={};
+      (r.data||[]).forEach(function(x){ if(x.kind==='class')srvC[x.key]=1; else if(x.kind==='prof')srvP[x.key]=1; });
+    }else{
+      /* a change: the server state is the base plus what we pushed before; "inserts" and "deletes" are the difference alone */
+      srvC={}; srvP={};
+      if(base){ base.c.forEach(function(k){ srvC[k]=1; }); base.p.forEach(function(k){ srvP[k]=1; }); }
+    }
+    if(typeof sbUser==='undefined'||!sbUser||sbUser.id!==uid||mcTerm()!==term)return;
+    var lc=tcsLocalClasses(), lp=tcsLocalProfs();
+    var bc={}, bp={}; if(base){ base.c.forEach(function(k){ bc[k]=1; }); base.p.forEach(function(k){ bp[k]=1; }); }
+    var insC=[], delC=[], addLC=[], remLC=[], insP=[], delP=[], addLP=[], remLP=[];
+    Object.keys(lc).forEach(function(k){ if(!srvC[k]){ if(base&&bc[k]&&fetchServer)remLC.push(k); else insC.push(k); } });
+    Object.keys(srvC).forEach(function(k){ if(!lc[k]){ if(base&&bc[k])delC.push(k); else if(fetchServer)addLC.push(k); } });
+    Object.keys(lp).forEach(function(k){ if(!srvP[k]){ if(base&&bp[k]&&fetchServer)remLP.push(k); else insP.push(k); } });
+    Object.keys(srvP).forEach(function(k){ if(!lp[k]){ if(base&&bp[k])delP.push(k); else if(fetchServer)addLP.push(k); } });
+    /* 1. apply what the account says to the local lists */
+    if(addLC.length||remLC.length||addLP.length||remLP.length){
+      TCS.applying=true;
+      try{
+        addLC.forEach(function(k){ if(watchClasses.indexOf(k)<0)watchClasses.push(k); });
+        remLC.forEach(function(k){ var raw=lc[k]; var i=watchClasses.indexOf(raw); if(i>=0)watchClasses.splice(i,1); try{ if(watchMeta&&watchMeta[raw])delete watchMeta[raw]; }catch(e){} });
+        if(addLC.length||remLC.length){ try{ saveWatchClasses(); saveWatchMeta(); }catch(e){} }
+        var ix=tcsProfIndex();
+        addLP.forEach(function(k){ tcsAddProf(k,ix); });
+        remLP.forEach(function(k){ tcsRemoveProf(lp[k]); });
+        if(addLP.length||remLP.length){ try{ saveWatch(); }catch(e){} }
+      }finally{ TCS.applying=false; }
+      try{ updateWatchUI(); }catch(e){}
+    }
+    /* 2. push what only this browser changed */
+    var failedIns={c:{},p:{}}, failedDel={c:{},p:{}};
+    if(insC.length||insP.length){
+      var rows=insC.map(function(k){ return {user_id:uid,kind:'class',key:k}; }).concat(insP.map(function(k){ return {user_id:uid,kind:'prof',key:k}; }));
+      var w=await sb.from('saved_items').upsert(rows,{onConflict:'user_id,kind,key',ignoreDuplicates:true});
+      if(w.error){ if(tcMissing(w.error)){ TCSYNC.savedOk=false; return; } insC.forEach(function(k){ failedIns.c[k]=1; }); insP.forEach(function(k){ failedIns.p[k]=1; }); }
+    }
+    for(var i=0;i<delC.length;i++){
+      var d1=await sb.from('saved_items').delete().eq('user_id',uid).eq('kind','class').eq('key',delC[i]);
+      if(d1.error)failedDel.c[delC[i]]=1;
+    }
+    for(var j=0;j<delP.length;j++){
+      var d2=await sb.from('saved_items').delete().eq('user_id',uid).eq('kind','prof').eq('key',delP[j]);
+      if(d2.error)failedDel.p[delP[j]]=1;
+    }
+    /* 3. the new base = what the account holds now */
+    var nc={}, np={};
+    Object.keys(srvC).forEach(function(k){ nc[k]=1; });
+    Object.keys(srvP).forEach(function(k){ np[k]=1; });
+    insC.forEach(function(k){ if(!failedIns.c[k])nc[k]=1; }); insP.forEach(function(k){ if(!failedIns.p[k])np[k]=1; });
+    addLC.forEach(function(k){ nc[k]=1; }); addLP.forEach(function(k){ np[k]=1; });
+    delC.forEach(function(k){ if(!failedDel.c[k])delete nc[k]; }); delP.forEach(function(k){ if(!failedDel.p[k])delete np[k]; });
+    remLC.forEach(function(k){ delete nc[k]; }); remLP.forEach(function(k){ delete np[k]; });
+    /* ids that cannot be named keep their old base entry: they are neither new nor removed */
+    tcsBaseSet({c:Object.keys(nc),p:Object.keys(np)});
+  }catch(e){ try{ console.warn('[professify] saved_items sync:',e&&e.message); }catch(_){} }
+  finally{
+    TCS.busy=false;
+    if(TCS.again){ TCS.again=false; tcSavedChanged(); }
+  }
+}
+function tcSavedLoad(){ return tcsRun(true); }
+function tcSavedChanged(){
+  if(TCS.applying)return;
+  try{ if(typeof FALL!=='undefined'&&FALL.on)return; }catch(e){}
+  clearTimeout(TCS.timer);
+  TCS.timer=setTimeout(function(){ TCS.timer=0; tcsRun(false); },600);
+}
+window.tcSavedChanged=tcSavedChanged; window.tcSavedLoad=tcSavedLoad;
+
+/* ---------- a tab that was hidden for more than 2 minutes catches up when it is shown again (the phone: P:7562) ---------- */
+(function(){
+  var hiddenAt=0;
+  document.addEventListener('visibilitychange',function(){
+    if(document.visibilityState==='hidden'){ hiddenAt=Date.now(); return; }
+    var was=hiddenAt; hiddenAt=0;
+    if(!was||Date.now()-was<=120000)return;
+    try{ if(typeof sbUser!=='undefined'&&sbUser&&typeof frOnSignedIn==='function')frOnSignedIn(); }catch(e){}
+  });
+})();
+try{ window.TCSYNC=TCSYNC; window.tcPinsLoad=tcPinsLoad; window.tcFavsLoad=tcFavsLoad; window.tcApplyAccountProfile=tcApplyAccountProfile; }catch(e){}
+</script>
 </body>
 </html>

@@ -216,7 +216,8 @@ test('single', async () => {
   /* website-identity (2026-10-14): a person with no photo is the grey person now, not initials; read both sides alike */
   const NF = h => h.replace(/<svg class="nophoto"[\s\S]*?<\/svg>/g, '@@NOPH@@').replace(/background:var\(--nophoto\)/g, 'background:#CBCBD0')
     .replace(/onerror="this\.(replaceWith\(document\.createTextNode\('[A-Z?]*'\)\)|outerHTML=NOPH_SVG)"/g, 'onerror="@@"')
-    .replace(/(style="background:#CBCBD0">)[A-Z?]{1,3}(<\/)/g, '$1@@NOPH@@$2');
+    .replace(/(style="background:#CBCBD0">)[A-Z?]{1,3}(<\/)/g, '$1@@NOPH@@$2')
+    .replace(/ referrerpolicy="no-referrer"/g, '');   /* security-pass2 (2026-10-15): every avatar <img> is no-referrer now; the base commit's has no such attribute */
   b.feed = NF(b.feed); p.feed = NF(p.feed);
   ok(!p.two && !p.recs && p.feed.length > 500, 'single term: one term, no “friends are planning” row', { two: p.two, recs: p.recs, n: p.feed.length });
   ok(b.feed === p.feed, 'single term: #hmFeed HTML is identical to the base commit’s', b.feed === p.feed ? '' : { base: b.feed.length, now: p.feed.length, at: [...b.feed].findIndex((c, i) => c !== p.feed[i]) });

@@ -85,6 +85,11 @@ export const RPC = {
   why_cant_i_review: [{ check_name: 'signed in', ok: true, detail: '' }, { check_name: 'email claim ends in .edu', ok: true, detail: '' }, { check_name: 'account not suspended', ok: true, detail: '' }, { check_name: 'under the hourly limit', ok: true, detail: '' }],
   my_blocks: [{ id: '33333333-3333-4333-8333-333333333339', display_name: 'Blocked Fixture', username: 'bfix', avatar_url: null, created_at: '2026-09-01T00:00:00Z' }],
   unblock_user: null, username_taken: false,
+  /* websync (2026-10-15): not installed yet, as on production today; check-desktop-sync.mjs installs them */
+  my_pinned_friends: { __error: { code: 'PGRST202', message: 'Could not find the function public.my_pinned_friends without parameters in the schema cache' } },
+  set_pinned_friends: { __error: { code: 'PGRST202', message: 'Could not find the function public.set_pinned_friends(p_ids) in the schema cache' } },
+  my_favorite_teachers: { __error: { code: 'PGRST202', message: 'Could not find the function public.my_favorite_teachers without parameters in the schema cache' } },
+  set_favorite_teacher: { __error: { code: 'PGRST202', message: 'Could not find the function public.set_favorite_teacher(p_key, p_on) in the schema cache' } },
 };
 export const MY_REVIEW = { id: 77, professor_key: 'faro dummelow|bus', professor_name: 'Faro Dummelow', course: 'BUS 4445', score: 4, difficulty: 3, would_again: true, grade: null, format: 'In person', note: 'Fixture review I wrote.', created_at: '2026-09-20T00:00:00Z', share_with_friends: false };
 export const PREREQS = [{ course_code: 'STAT 1210', prereq_json: { req: [['MATH 1000']] } }, { course_code: 'BUS 1100', prereq_json: { req: [] } }];

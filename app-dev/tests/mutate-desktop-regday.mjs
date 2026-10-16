@@ -24,7 +24,8 @@ const M = [
   ["regday: Home's rail is there all term", "function railOn() { return active() && today() >= isoAdd(cfgv('REGISTRATION_OPENS'), -14); }", "function railOn() { return active(); }", 'window'],
   ["regday: another term shows the card too", "    try { if (String(mcTerm()) !== code()) return false; } catch (_) { return false; }\n", "", 'window'],
   ["regday: your day is still there the day after", "    if (mine) return null;", "    if (mine) return { set: true, head: 'Register', sub: '' };", 'cards'],
-  ["regday: the banner has no link", "?'<button class=\"btn\" style=\"flex:none\" onclick=\"regDayOpen(&quot;banner&quot;)\">'+regDayLabel()+'</button>':''", "?'':''", 'banner'],
+  /* websync (2026-10-15): the banner is the #hmRegCard on Home's rail now, so the mutants break its code */
+  ["regday: the banner card has no link", "(lab?'<button type=\"button\" class=\"btn\" onclick=\"regDayOpen(&quot;banner&quot;)\">'+lab+'</button>':'')", "('')", 'banner'],
   // ---- friends' days
   ["regday: the RPC is asked for another term", "rpc('friend_registration_days', { p_term: code() })", "rpc('friend_registration_days', { p_term: '2268' })", 'friends'],
   ["regday: friends sort by time, not day", "return a.day.localeCompare(b.day) || (a.time || '99')", "return (a.time || '99').localeCompare(b.time || '99') || (a.time || '99')", 'friends'],
@@ -56,7 +57,7 @@ const M = [
   ["regday: a policy refusal on a write is a missing table", "if (writeGap(q.error)) { RG.gap = true; return null; }\n      /* taking it away", "if (schemaGap(q.error)) { RG.gap = true; return null; }\n      /* taking it away", 'permission'],
   ["regday: the sheet is a dialog inside the dialog", "id=\"rgModal\"></div>';", "id=\"rgModal\" role=\"dialog\"></div>';", 'save'],
   ["regday: the time error is not tied to the field", "' aria-invalid=\"true\" aria-describedby=\"rgErr\"'", "''", 'a11y'],
-  ["regday: the banner counts days on the browser's clock", "(typeof regPacificGap==='function'&&c.REGISTRATION_OPENS)?regPacificGap(c.REGISTRATION_OPENS):daysUntil(c.REGISTRATION_OPENS)", "daysUntil(c.REGISTRATION_OPENS)", 'a11y'],
+  ["regday: the banner card counts days on the browser's clock", "var regIn=(typeof regPacificGap==='function')?regPacificGap(c.REGISTRATION_OPENS):daysUntil(c.REGISTRATION_OPENS);", "var regIn=daysUntil(c.REGISTRATION_OPENS);", 'a11y'],
 ];
 const html = fs.readFileSync(path.join(SRC, 'index.html'), 'utf8');
 const tmp = fs.mkdtempSync('/tmp/claude-0/mutr-');

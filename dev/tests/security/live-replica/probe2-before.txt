@@ -1,0 +1,111 @@
+[T1] C sends 50 friend requests in ONE insert (after: refused past 40)
+ c_requests 
+------------
+         50
+[T1b] A sends one normal friend request to C (expect ok both)
+ a_to_c 
+--------
+      1
+[T3] A upserts a suggestion with created_at=2000 on the update path (after: date kept)
+ kept_today 
+------------
+ f
+[T4] A pins a conversation (last_at=2099) (after: denied); renames (ok)
+ renamed 
+---------
+       1
+[T5] sign-up with gmail (after: refused); with calpoly (ok)
+         r         
+-------------------
+ calpoly signup ok
+[T6] demo account reads profiles (after: only itself) and friend-requests Ann (after: refused)
+ demo_sees_profiles 
+--------------------
+                 55
+[T6b] Ann reads profiles (expect all real ones, not demo after)
+ ann_sees_profiles 
+-------------------
+                55
+[T7] D (blocked by Ann) searches "Ann" (after: 0) ; C searches "__" (after: 0)
+ d_finds_ann 
+-------------
+           1
+ wildcard_hits 
+---------------
+            15
+[T8] Ann blocks D again via block_user: D leaves their direct chat (after: 0)
+ block_user 
+------------
+ 
+ d_still_in_chat 
+-----------------
+               1
+[T9] Ann unfriends Bee, then Bee DMs Ann (after: refused); friends still can (T9b)
+ERROR:  new row violates row-level security policy for table "messages"
+[T9b] friends Ann -> Bee DM (expect ok)
+   r   
+-------
+ dm ok
+[T10] C plants a fake class (after: refused); a real class (ok)
+       r       
+---------------
+ real class ok
+[T10b] C adds 61 sections (after: refused at 61)
+ c_sections 
+------------
+         61
+[T11] anon lists avatars (after: 0); C writes C/other.png (after: refused); C/avatar.jpg ok
+ anon_lists 
+------------
+          1
+     r     
+-----------
+ avatar ok
+[T12] avatar_url tracking pixel (after: refused); our URL ok; empty ok
+       r       
+---------------
+ avatar_url ok
+[T13] realtime publication
+                                         published                                         
+-------------------------------------------------------------------------------------------
+ class_history,friend_requests,group_members,groups,messages,saved_classes,sprint_progress
+[T14] Ann votes on her own review (after: refused)
+[T14b] C votes on Bee review: counter (after: 1), C reads all votes (after: own only)
+ bee_helpful 
+-------------
+           0
+ c_sees_votes 
+--------------
+            2
+ bee_author_sees_votes 
+-----------------------
+                     2
+[T15] review difficulty 9 (after: refused)
+[T16] C reports Bee review naming Ann as author (after: author = Bee); C reports a message in a chat they are not in (after: refused)
+ author_is_bee 
+---------------
+ f
+[T18] C asks is_suspended(Bee) (after: f); Bee asks own (t)
+ c_learns 
+----------
+ t
+ own 
+-----
+ t
+[T19] anon re-adds an email already on the waitlist (after: no error)
+ERROR:  duplicate key value violates unique constraint "school_waitlist_pkey"
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+[T20] privileges
+ anon_search | anon_pending | anon_log | auth_friends_of | auth_wf_hit | auth_truncate 
+-------------+--------------+----------+-----------------+-------------+---------------
+ t           | t            | t        | t               | t           | t
+[T21] regression: Ann saves a class, renames chat, searches Bee, suggests friends
+ ann_finds_bee 
+---------------
+             1
+ suggest_ok 
+------------
+ t
+ classmates_ok 
+---------------
+ t

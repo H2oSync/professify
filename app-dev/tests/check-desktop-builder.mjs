@@ -42,6 +42,11 @@ const REQS = [
 ];
 const tables = (o = {}) => {
   const t = JSON.parse(JSON.stringify(FX.TABLES));
+  /* websync (2026-10-15): the account's major and class standing are read now. These tests were written for a page with no major
+     chosen and the default year (the website never read them), where the Builder ranks from the degree report alone; with the
+     fixture's Business Administration / Junior the roadmap's year gate and urgency points reorder the picks. An account with neither
+     is the page they were written against. */
+  Object.assign(t.profiles.find(p => p.id === ME), { major: null, class_standing: null });
   t.course_seats = t.course_seats.concat(SPRING);
   t.degree_audit = o.reqs === null ? [] : [{ user_id: ME, printed_on: '2026-09-20', catalog: 'Fall Semester 2025', major: 'BUS', concentration: null, units_used: 40, units_needed: 120, read_at: '2026-09-20T00:00:00Z', overrides: [], requirements: o.reqs || REQS }];
   if (o.prefs !== undefined) t.planner_prefs = o.prefs;
