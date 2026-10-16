@@ -64,6 +64,7 @@ test('sheet: the greeting, the bird, the four chips, each asks its question', as
   ok(g && JSON.stringify(g.chips) === JSON.stringify(CHIPS), 'the phone\'s four chips, same words', g && g.chips);
   ok(g && g.small === 'none', 'the slim chip row is hidden while the big chips show', g && g.small);
   /* the first from the big grid, the rest from the slim row that replaces it once there is an answer */
+  const callsBefore = CALLS.length;
   for (const [i, c] of CHIPS.entries()) {
     await page.evaluate(([c, i]) => { const sel = i === 0 ? '.hawk-cgrid .hawk-cchip' : '.hawk-chips .hawk-cchip'; [...document.querySelectorAll(sel)].find(x => x.textContent === c).click(); }, [c, i]);
     await tick(page, 1500);
@@ -71,6 +72,8 @@ test('sheet: the greeting, the bird, the four chips, each asks its question', as
     const said = await page.evaluate(() => { const q = document.querySelectorAll('.hawk-said__q'); return (q[q.length - 1] || {}).textContent; });
     ok(said === c, 'tapping "' + c + '" asks exactly that', said);
   }
+  /* AI-first (owner 2026-10-15, "send to ai every time"): each starter chip goes to the function, with its own words, before its answer */
+  ok(JSON.stringify(CALLS.slice(callsBefore)) === JSON.stringify(CHIPS), 'each starter chip asks the `ask` function once, in its own words', CALLS.slice(callsBefore));
   const after = await page.evaluate(() => ({ strip: getComputedStyle(document.querySelector('.hawk-chips')).display, big: !!document.querySelector('.hawk-hint') }));
   ok(after.strip !== 'none' && !after.big, 'after an answer the slim chip row shows and the greeting is gone', after);
   await close();

@@ -10,6 +10,8 @@
       search results with the filters it understood, prerequisites, the game plan, your clashes, your professors: each drawn from
       live site data, with the right words, and every part opens the real screen (class page, professor page, friend page, Schedule > Plans,
       the add-to-plan chooser) or asks the next question.
+    - AI FIRST (owner 2026-10-15, "send to ai every time"). Every question — typed, a chip, a day tap — asks the function once before its card shows; the
+      model only names the tool; the device answers only when the function cannot be used (signed out, a failure, fallback:'search').
     - THE CHAT. The question is a bubble, the answer a bubble, turns stay until the trash can clears them, only the newest answer offers follow-ups.
     - Everything printed is text: hostile names and codes never become markup. Both themes: every text >= 4.5:1. Nothing overflows 340px or a phone. */
 import { openApp } from './app-harness.mjs';
@@ -72,7 +74,30 @@ const TOOLS = {
   'open bus sections monday': ['search_sections', { subject: 'BUS', open_only: true, days: ['Mo'] }],
   'hostile code prof': ['best_professor', { course: HOSTILE_CODE }], 'hostile code fit': ['fits_plan', { course: HOSTILE_CODE, plan: 'A' }],
 };
-const ask = b => (TOOLS[String(b.q).toLowerCase()] ? { tool: TOOLS[String(b.q).toLowerCase()][0], args: TOOLS[String(b.q).toLowerCase()][1] } : { tool: 'cant_answer', args: { reason: 'not_about_classes' } });
+/* The model, stood in for (AI-FIRST, owner 2026-10-15: every question goes to the function first). It only NAMES a tool, the way the
+   real one does; what the card shows still comes from the page's own data. Unknown questions get cant_answer, as a real "no" does. */
+const DAYN = { monday: 'Mo', tuesday: 'Tu', wednesday: 'We', thursday: 'Th', friday: 'Fr' };
+function aiTool(q) {
+  const t = String(q).toLowerCase().replace(/[’‘]/g, "'"), dn = Object.keys(DAYN).find(d => t.includes(d)), days = dn ? [DAYN[dn]] : [];
+  const rel = /\btoday\b/.test(t) ? 'today' : /\btomorrow\b/.test(t) ? 'tomorrow' : null, code = (/\b([a-z]{2,4}) ?(\d{4})\b/.exec(t) || []).slice(1).join(' ').toUpperCase() || null;
+  let m;
+  if (/^when am i free this week\??$|^which of my days are free\??$/.test(t)) return ['my_free', {}];
+  if (/free with me|\band i free\b/.test(t) && (m = /(?:is |^)(avery|sky|rowan|quinn) /.exec(t) || /^(avery) and i/.exec(t))) return ['free_with_friends', Object.assign({ friend: m[1][0].toUpperCase() + m[1].slice(1) }, days.length ? { days } : { week: true })];
+  if (/free with me/.test(t)) return ['free_with_friends', { days }];
+  if (/^who's free right now\??$|^who is out of class\??$/.test(t)) return ['friends_free_now', {}];
+  if (/^is (avery) free right now/.test(t)) return ['free_with_friends', { friend: 'Avery' }];
+  if (/when am i free|am i free/.test(t)) return ['my_free', Object.assign({}, days.length ? { days } : {}, rel ? { rel } : {})];
+  if (/^(monday|tuesday|wednesday|thursday|friday)$|what do i have|my day/.test(t)) return ['my_day', days.length ? { days } : {}];
+  if (code && /best.*prof/.test(t)) return ['best_professor', { course: code }];
+  if (code && /fit/.test(t)) { const pl = /plan ([abc])/.exec(t); return ['fits_plan', { course: code, plan: pl ? pl[1].toUpperCase() : 'mine' }]; }
+  if (code && t === code.toLowerCase()) return ['open_class', { course: code }];
+  if (/^compare (.+) and (.+)$/.test(t)) { const c = /^compare (.+) and (.+)$/.exec(t); const cap = x => x.replace(/\b\w/g, l => l.toUpperCase()); return ['compare_professors', { a: cap(c[1]), b: cap(c[2]) }]; }
+  return null;
+}
+const ask = b => {
+  const k = String(b.q).toLowerCase(), t = TOOLS[k] || aiTool(b.q);
+  return t ? { tool: t[0], args: t[1] } : { tool: 'cant_answer', args: { reason: 'not_about_classes' } };
+};
 const open = async (o = {}) => {
   const x = await openApp(Object.assign({ path: '/', width: 1440, height: 900, wait: 4000, ask, terms: SPRING_CFG, tables: fallOnly() }, o));
   LIVE.push(x); await tick(x.page, 2500); await x.page.evaluate(() => loadFriendsData()); await tick(x.page, 1500);
@@ -103,7 +128,7 @@ test('week: a student with Fall classes and no Spring classes', async () => {
   const pre = await page.evaluate(() => ({ spring: myClasses.length, fall: nowMine().classes.slice().sort(), two: mcTwoTerms(), now: mcNowLabel() }));
   ok(pre.spring === 0 && pre.fall.length >= 4 && pre.two, 'the fixture student has Fall classes and no Spring classes', pre);
   const r = await say(page, 'When am I free this week?');
-  ok(log.asks.length === 0, 'the question is answered in the browser — nothing is asked of the model', log.asks);
+  ok(log.asks.length === 1 && log.asks[0].q === 'When am I free this week?' && log.asks[0].client === 'app', 'AI first: the question went to the function once, and the model named the tool', log.asks);
   ok(r.bubble[0] === 'Your free time, day by day. Tap a day to see it.' && !/saved for you|haven.t added/.test(r.text), 'it says the week is shown — not "I don\'t have any classes saved for you yet"', r);
   ok(r.cards[0] === 'Your free time' && /Fall 2026/.test(r.text), 'the week card, labelled with the term you are in', r.cards);
   const rows = await texts(page, '.hawk-wrow');
@@ -237,7 +262,7 @@ test('now: who is free right now, a friend, the message button', async () => {
   const { page, close, log } = await open();
   await page.evaluate(() => { window.__msg = []; const o = window.msgWith; window.msgWith = function (id) { window.__msg.push(id); return o.apply(this, arguments); }; });
   let r = await say(page, 'Who’s free right now?');
-  ok(log.asks.length === 0 && r.bubble[0] === '1 friend is free · Tue 10:30a', 'answered in the browser: "1 friend is free · Tue 10:30a"', r);
+  ok(log.asks.length === 1 && r.bubble[0] === '1 friend is free · Tue 10:30a', 'asked once, then drawn from the page: "1 friend is free · Tue 10:30a"', r);
   const truth = await page.evaluate(() => friendsList.map(f => ({ n: f.name.split(' ')[0], st: avState(avMeetsOf(f), new Date()).state })));
   const free = await texts(page, '.hawk-fr--free'), all = await texts(page, '.hawk-fr');
   ok(free.length === 1 && /^SP Sky No class till 12:10pm|^Sky No class till 12:10pm/.test(free[0]) && truth.filter(x => x.st === 'open').length === 1, 'one free friend, with when their next class is', { free, truth });
@@ -259,7 +284,7 @@ test('professors: best professor for a class — big card, Also teaching, sectio
   const { page, close, log } = await open();
   const want = await page.evaluate(() => { const by = {}; (SEAT_SECTIONS['BUS 3431'] || []).forEach(x => { const id = matchProfId(x.instructor); if (id) by[id] = PROFESSORS[id]; }); return Object.keys(by).map(id => ({ id, name: by[id].name, r: to5(by[id].rating), n: by[id].evals })).sort((a, b) => b.r - a.r); });
   const r = await say(page, 'Best professor for BUS 3431');
-  ok(log.asks.length === 0 && r.bubble[0] === `${want[0].name} — top rated of ${want.length}.`, 'answered in the browser: "<best> — top rated of N."', r.bubble);
+  ok(log.asks.length === 1 && r.bubble[0] === `${want[0].name} — top rated of ${want.length}.`, 'asked once, then drawn from the page: "<best> — top rated of N."', r.bubble);
   const big = await page.evaluate(LAST => { const c = document.querySelector(LAST + ' .hawk-card--prof'); if (!c) return null; const t = e => (e.innerText || '').replace(/\s+/g, ' ').trim(); return { top: t(c.querySelector('.hawk-ptop')), tiles: [...c.querySelectorAll('.hawk-tiles div')].map(t), secs: c.querySelectorAll('.hawk-psecs .hawk-row').length, adds: c.querySelectorAll('.hawk-psecs .hawk-sec__add').length }; }, LAST);
   ok(big && big.top.includes(want[0].name) && big.top.includes(want[0].r.toFixed(1)) && big.tiles[0].startsWith(String(want[0].n)) && big.secs >= 1 && big.adds === big.secs, 'the big card: name, average, ratings count, their sections each with a +', big);
   ok(/ALSO TEACHING BUS 3431|Also teaching BUS 3431/i.test(r.text), 'then "Also teaching BUS 3431"', r.text);
@@ -364,6 +389,94 @@ test('clashes: your Fall week, overlaps outlined', async () => {
 });
 
 /* ================================================================================================================ the chat */
+/* ================================================================================================================ AI first */
+/* A page open with a hook that notes how many cards are on screen at the moment the function is called, so "asked BEFORE the card shows" is
+   something seen, not assumed. `mode`: 'ok' answers through `ask`; 'fail' makes the function a 500; 'null' is fallback:'search'. */
+async function openAI(mode = 'ok', o = {}) {
+  const seen = { cardsAtAsk: [] }; let P = null;
+  const hook = async (url) => {
+    if (!url.pathname.startsWith('/functions/v1/ask')) return null;
+    try { seen.cardsAtAsk.push(await P.evaluate(() => document.querySelectorAll('.hawk-log .hawk-card').length)); } catch (_) {}
+    return mode === 'fail' ? { status: 500, body: '{"error":"boom"}' } : null;
+  };
+  const x = await open(Object.assign({ hook, ask: mode === 'null' ? () => null : ask }, o));
+  P = x.page; x.seen = seen; return x;
+}
+test('ai first: a typed question, a card chip and a day tap each ask the function once, before the card shows', async () => {
+  const { page, close, log, seen } = await openAI();
+  const r = await say(page, 'When am I free this week?');
+  ok(log.asks.length === 1 && log.asks[0].q === 'When am I free this week?' && seen.cardsAtAsk[0] === 0, 'typed: exactly one ask, made before any card was on screen', { asks: log.asks.length, seen });
+  ok(r.cards[0] === 'Your free time' && r.bubble[0] === 'Your free time, day by day. Tap a day to see it.', 'and the model’s tool choice drew the week card from the page’s data', r);
+  await click(page, `${LAST} .hawk-wrow`, 1);
+  let d = await look(page);
+  ok(log.asks.length === 2 && log.asks[1].q === 'When am I free Tuesday?' && seen.cardsAtAsk[1] === 1 && d.cards[0] === 'Your Tuesday', 'a day tap: one more ask ("When am I free Tuesday?"), then the day card', { asks: log.asks.map(a => a.q), seen, cards: d.cards });
+  const chip = d.follow[0];
+  await click(page, `${LAST} .hawk-follow .hawk-fq`, 0);
+  d = await look(page);
+  ok(log.asks.length === 3 && log.asks[2].q === chip && d.q === chip && d.cards.length === 1, 'a follow-up chip: one more ask with the chip’s own words, then its card', { chip, asks: log.asks.map(a => a.q), d });
+  await say(page, 'Who’s free right now?');
+  ok(log.asks.length === 4 && log.asks[3].client === 'app', 'a friends question also asks first', log.asks.map(a => a.q));
+  noErrors(log, 'ai first');
+  await close();
+});
+test('ai first: the model names the tool, even for a phrasing the device cannot read', async () => {
+  const { page, close, log } = await openAI();
+  let r = await say(page, 'which of my days are free');
+  ok(log.asks.length === 1 && r.cards[0] === 'Your free time', 'a phrasing with no device reading still draws the week card, from the tool the model named', r);
+  r = await say(page, 'who is out of class');
+  ok(log.asks.length === 2 && r.cards[0] === 'Who is free', 'and the friends card', r);
+  noErrors(log, 'ai first (phrasing)');
+  await close();
+});
+test('ai first: a model that cannot answer does not beat the device’s clean reading', async () => {
+  const { page, close, log } = await open({ ask: () => ({ tool: 'cant_answer', args: { reason: 'ambiguous' } }) });
+  const r = await say(page, 'When am I free this week?');
+  ok(log.asks.length === 1 && r.cards[0] === 'Your free time', 'asked, said it could not, and the week card is the device’s reading', { asks: log.asks.length, r });
+  noErrors(log, 'ai first (cant_answer)');
+  await close();
+});
+test('ai first: when the function fails the device answers, and every card still shows', async () => {
+  for (const mode of ['fail', 'null']) {
+    const { page, close, log, seen } = await openAI(mode);
+    let r = await say(page, 'When am I free this week?');
+    ok(seen.cardsAtAsk.length === 1 && seen.cardsAtAsk[0] === 0 && r.cards[0] === 'Your free time' && /Fall 2026/.test(r.text), mode + ': it asked first, then the week card came from the device (Fall classes)', { asks: seen.cardsAtAsk.length, r });
+    await click(page, `${LAST} .hawk-wrow`, 0);
+    let d = await look(page);
+    ok(seen.cardsAtAsk.length === 2 && d.cards[0] === 'Your Monday' && d.bubble[0] === 'Free before 10:10a and after 6p.', mode + ': a day tap asks, then the day card is the device’s', { asks: seen.cardsAtAsk.length, d });
+    await click(page, `${LAST} .hawk-follow .hawk-fq`, 0);
+    d = await look(page);
+    ok(seen.cardsAtAsk.length === 3 && d.cards.length === 1, mode + ': a chip asks, then its card is the device’s', { asks: seen.cardsAtAsk.length, d });
+    r = await say(page, 'Who’s free right now?');
+    ok(r.cards[0] === 'Who is free' && r.bubble[0] === '1 friend is free · Tue 10:30a', mode + ': who is free now', r);
+    r = await say(page, 'Friday');
+    ok(r.cards[0] === 'Your Friday', mode + ': a bare day name is a day card', r);
+    r = await say(page, 'Best professor for BUS 3431');
+    ok(r.cards[0] === 'Ada Examplewood' && /top rated of 2/.test(r.bubble[0]), mode + ': best professor', r);
+    r = await say(page, 'Does BUS 3431 fit my Plan A?');
+    ok(/^Yes — Section 02 fits Plan A/.test(r.bubble[0]), mode + ': fit', r);
+    noErrors(log, 'ai first (' + mode + ')');
+    await close();
+  }
+});
+test('ai first: signed out nothing is sent, and the device answers', async () => {
+  const { page, close, log } = await open({ signedIn: false, tables: fallOnly() });
+  const r = await say(page, 'When am I free this week?');
+  ok(log.asks.length === 0 && r.n === 1 && r.bubble.length >= 1 && !/Working that out/.test(r.text), 'no call is made without a session; the device answers', { asks: log.asks.length, r });
+  const r2 = await say(page, 'Who’s free right now?');
+  ok(log.asks.length === 0 && r2.n === 2 && r2.bubble.length >= 1, 'a friends question too', r2);
+  noErrors(log, 'ai first (signed out)');
+  await close();
+});
+test('ai first: a follow-up that narrows the last search stays on the device, as before', async () => {
+  const { page, close, log } = await open();
+  await say(page, 'open BUS sections monday');
+  const n = log.asks.length;
+  const r = await say(page, 'what about tuesday');
+  ok(n === 1 && log.asks.length === 1 && /BUS section/.test(r.text) && r.cards[0] !== 'Your Tuesday', 'asked once for the search, then "what about tuesday" narrows it with no second ask', { asks: log.asks.map(a => a.q), r });
+  noErrors(log, 'ai first (follow-up)');
+  await close();
+});
+
 test('chat: turns stay, the newest offers follow-ups, the trash can clears, the header says what it is', async () => {
   const { page, close, log } = await open({ open: false });
   await page.click('.hawk-fab'); await tick(page, 300);

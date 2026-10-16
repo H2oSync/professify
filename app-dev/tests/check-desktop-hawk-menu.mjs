@@ -25,13 +25,13 @@ const TOOLS = {};
 const ask = body => (TOOLS[body.q] ? { tool: TOOLS[body.q][0], args: TOOLS[body.q][1] } : { tool: 'cant_answer', args: { reason: 'not_about_classes' } });
 const open = async o => { const x = await openApp(Object.assign({ path: '/', width: 1440, height: 900, wait: 4000, ask }, o)); await tick(x.page, 2500); await x.page.evaluate(() => loadFriendsData()); await tick(x.page, 1500); return x; };
 /* 2026-10-15 (website-champ-cards): Champ is a chat now and the five tools answer as cards. `say` reads the NEWEST turn only: the
-   bubble's notes, the section/class rows, and the card parts (friend rows, professor rows). The first two tools are asked with
-   phrasings the in-browser questions do not catch, so they still travel to the function and prove client:'app'. */
+   bubble's notes, the section/class rows, and the card parts (friend rows, professor rows). Every question goes to the function
+   first (AI-first, owner 2026-10-15), which is what proves client:'app' for all five tools. */
 const say = async (page, q) => { await page.evaluate(q => HawkAsk.ask(q), q); await tick(page, 1500); return page.evaluate(() => { const t = [...document.querySelectorAll('.hawk-log > .hawk-turn')].pop(); const tx = e => (e.innerText || '').replace(/\s+/g, ' ').trim(); return { notes: [...t.querySelectorAll('.hawk-bubble .hawk-note')].map(n => n.textContent), rows: [...t.querySelectorAll('.hawk-row')].map(r => ({ name: (r.querySelector('.hawk-row__name') || {}).textContent, sub: (r.querySelector('.hawk-row__sub') || {}).textContent || '', code: (r.querySelector('.hawk-row__code') || {}).textContent || '', chip: (r.querySelector('.hawk-chip') || {}).textContent || '' })), friends: [...t.querySelectorAll('.hawk-fr')].map(f => ({ name: tx(f.querySelector('.hawk-fr__tx b')), sub: tx(f.querySelector('.hawk-fr__tx span')), free: f.classList.contains('hawk-fr--free') })), profs: [...t.querySelectorAll('.hawk-ptop, .hawk-prow')].map(p => ({ name: tx(p.querySelector('b')), pill: tx(p.querySelector('.hawk-pill, .hawk-ptop__avg b')) })), card: (t.querySelector('.hawk-card') || { getAttribute: () => null }).getAttribute('aria-label'), acts: [...t.querySelectorAll('.hawk-act')].map(tx), text: tx(t) }; }); };
 const clickRow = async (page, i) => { await page.evaluate(i => document.querySelectorAll('.hawk-log > .hawk-turn:last-child .hawk-row')[i].click(), i); await tick(page, 700); };
 const clickSel = async (page, sel, i = 0) => { await page.evaluate(([s, i]) => document.querySelectorAll('.hawk-log > .hawk-turn:last-child ' + s)[i].click(), [sel, i]); await tick(page, 800); };
 
-TOOLS['which of my buddies are out of class'] = ['friends_free_now', {}];
+TOOLS['who is free right now'] = ['friends_free_now', {}];
 TOOLS['is avery free right now'] = ['free_with_friends', { friend: 'Avery' }];
 TOOLS['best prof for bus 3431'] = ['best_professor', { course: 'BUS3431' }];
 TOOLS['does bus 4401 fit plan a'] = ['fits_plan', { course: 'BUS4401', plan: 'A' }];
@@ -42,7 +42,7 @@ TOOLS['what does termchamp do about stuff'] = ['app_help', { topic: 'made_up_top
 
 test('freeNow', async () => {
   const { page, close, log } = await open();
-  const r = await say(page, 'which of my buddies are out of class');
+  const r = await say(page, 'who is free right now');
   ok(log.asks.length >= 1 && log.asks.every(a => a.client === 'app'), 'the question goes to the function as client:"app"', log.asks.map(a => a.client));
   const truth = await page.evaluate(() => friendsList.map(f => ({ name: f.name, st: avState(avMeetsOf(f), new Date()).state })));
   const freeNames = truth.filter(x => x.st === 'open').map(x => x.name.split(' ')[0]).sort(), unk = truth.filter(x => x.st === 'unknown').length;

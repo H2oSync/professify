@@ -15,11 +15,16 @@ const M = [
   ['the week card says something else', 'hawk-ask.js', "'Your free time, day by day. Tap a day to see it.'", "'Here is your week.'", 'week'],
   ['tapping a day asks the next day', 'hawk-ask.js', "row.addEventListener('click', function () { answer('When am I free ' + DAY_FULL[d] + '?'); });", "row.addEventListener('click', function () { answer('When am I free ' + DAY_FULL[nextDay(d)] + '?'); });", 'week'],
   ['a class with no meeting time is silently dropped', 'hawk-ask.js', "    return u.length ? ['Not counted — no meeting time on ' + u.join(', ') + '.'] : [];", "    return [];", 'week'],
-  ['a bare day name is not understood', 'hawk-ask.js', "&& daysIn(t).length === 1 && !(lastSearch", "&& false && !(lastSearch", 'day'],
+  ['a bare day name is not understood', 'hawk-ask.js', "&& daysIn(t).length === 1 && !(lastSearch", "&& false && !(lastSearch", 'ai first'],
   ['"next" is read from the wrong end of the day', 'hawk-ask.js', "next = today && l.filter(function (s) { return s.s > nm; })[0]", "next = today && l.filter(function (s) { return s.s > nm; }).pop()", 'day'],
   ['the free stretches vanish from the day card', 'hawk-ask.js', "    gapsIn(l, a, b).forEach(function (g) {\n      var open = g[1] >= b && l.length", "    [].forEach(function (g) {\n      var open = g[1] >= b && l.length", 'week'],
   ['an empty week still draws a card', 'hawk-ask.js', "    var meets = nowMeetsAll(); if (!meets.length) return emptyWeek();\n    var ds =", "    var meets = nowMeetsAll();\n    var ds =", 'the student with'],
-  ['the week/day questions are asked of the model, not answered here', 'hawk-ask.js', "    var near = localIntent(q, cat);", "    var near = null;", 'week'],
+  // ---- AI first: every question asks the function first; the device is only the fallback
+  ['a lookup is answered on the device without asking (the cards patch\'s old order)', 'hawk-ask.js', "var toModel = near ? true : !(skipsModel(result) || !result.in_scope);", "var toModel = near ? false : !(skipsModel(result) || !result.in_scope);", 'ai first'],
+  ['the device\'s reading is dropped when the function fails', 'hawk-ask.js', "    var device = near || result;\n", "    var device = result;\n", 'ai first'],
+  ['a model that cannot answer beats the device\'s clean reading', 'hawk-ask.js', "render(q, pickAnswer(viaModel, device), cat, thinking);", "render(q, viaModel || device, cat, thinking);", 'ai first'],
+  ['a follow-up that narrows the last search is sent to the model', 'hawk-ask.js', "    if (near) fu = null;\n    if (fu) result = fu;\n", "    fu = null;\n    if (fu) result = fu;\n", 'ai first'],
+  ['no question is ever sent: everything is answered on the device', 'hawk-ask.js', "if (!toModel || !aiUrl()) {", "if (true) {", 'ai first'],
   // ---- friends
   ['free together sorts the shortest first', 'hawk-ask.js', "return (q.best[1] - q.best[0]) - (p.best[1] - p.best[0]) || p.best[0] - q.best[0]; });", "return (p.best[1] - p.best[0]) - (q.best[1] - q.best[0]) || p.best[0] - q.best[0]; });", 'together'],
   ['who is free now counts the busy as free', 'hawk-ask.js', "if (st.state === 'open') free++; else if (st.state === 'class') busy++;", "if (st.state === 'open' || st.state === 'class') free++; else if (st.state === 'class') busy++;", 'now'],
@@ -52,7 +57,7 @@ const M = [
   ['a new answer replaces the chat instead of joining it', 'hawk-ask.js', "    if (replace && replace.parentNode === els.log) els.log.replaceChild(turn, replace); else els.log.appendChild(turn);", "    if (replace && replace.parentNode === els.log) els.log.replaceChild(turn, replace); else { els.log.textContent = ''; els.log.appendChild(turn); }", 'chat'],
   ['the question bubble is on the left', 'hawk-ask.css', ".hawk-said { align-self: flex-end;", ".hawk-said { align-self: flex-start;", 'chat'],
   ['the header sub-line is the old one', 'hawk-ask.js', "'Answers from TermChamp’s real data'", "'From TermChamp’s real data'", 'chat'],
-  ['the thinking line stays after the answer', 'hawk-ask.js', "render(q, pickAnswer(viaModel, result), cat, thinking);", "render(q, pickAnswer(viaModel, result), cat);", 'model path'],
+  ['the thinking line stays after the answer', 'hawk-ask.js', "render(q, pickAnswer(viaModel, device), cat, thinking);", "render(q, pickAnswer(viaModel, device), cat);", 'model path'],
   // ---- escaping
   ['a friend\'s name goes in as markup', 'hawk-ask.js', "tx.appendChild(make('b', '', firstName(f.name))); tx.appendChild(make('span', '', sub));", "var nb = make('b'); nb.innerHTML = firstName(f.name); tx.appendChild(nb); tx.appendChild(make('span', '', sub));", 'escaping'],
   ['a professor\'s name goes in as markup', 'hawk-ask.js', "var tx = make('span', 'hawk-ptop__tx'); tx.appendChild(make('b', '', p.name));", "var tx = make('span', 'hawk-ptop__tx'); var nb = make('b'); nb.innerHTML = p.name; tx.appendChild(nb);", 'escaping'],
