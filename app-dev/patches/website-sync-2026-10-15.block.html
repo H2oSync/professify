@@ -1,0 +1,300 @@
+<!-- website-sync (2026-10-15): pins, saved items, favourite teachers, account profile, tab-return refresh. Read by app-dev/patches/website-sync-2026-10-15.py -->
+<style id="sync-css">
+/* Registration day as a card on Home's right rail, under the greeting (it was a full-width banner on every page) */
+.hm-regcard{padding:14px 16px 16px;display:flex;flex-direction:column;gap:8px;border-color:rgba(var(--accent-rgb),.35)}
+.hm-regcard .hm-regx{position:absolute;top:6px;right:6px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;padding:0;border-radius:8px;color:var(--faint);font-size:20px;line-height:1;background:none;border:0;cursor:pointer}
+@media (hover:hover){.hm-regcard .hm-regx:hover{color:var(--text);background:rgba(var(--accent-rgb),.10)}}
+.hm-regcard .hm-regx:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.hm-regcard .hm-reg-h{display:flex;align-items:flex-start;gap:8px;padding-right:26px;font-size:var(--t-body);line-height:1.3;color:var(--text)}
+.hm-regcard .hm-reg-s{margin:0;font-size:var(--t-label);line-height:1.4;color:var(--text-2)}
+.hm-regcard .hm-reg-acts{display:flex;flex-direction:column;gap:8px;margin-top:2px}
+.hm-regcard .hm-reg-acts .btn{width:100%;justify-content:center;min-height:40px;white-space:normal;text-align:center}
+/* the one card: the day line, and below 1140px (rail hidden) the card is drawn at the top of the main column instead of on the rail */
+.hm-regcard .hm-reg-day{font-size:var(--t-label);font-weight:700;color:var(--good,#15803d)}
+#hmRegTop{display:none}
+@media (max-width:1139px){
+  #hmRegTop{display:block;margin:0 0 14px}
+  #hmRailR #hmRegCard{display:none}
+  .hm-regtop .hm-reg-acts{flex-direction:row;flex-wrap:wrap}
+  .hm-regtop .hm-reg-acts .btn{width:auto;flex:1 1 160px}
+}
+/* Stories: a pin button on every tile (hover / focus; always there for a pinned one), the phone's pin badge on the ring */
+.hm-fw{position:relative;display:flex;flex:none}
+.hm-fitem .ring{position:relative}
+.hm-pinbadge{position:absolute;right:-4px;bottom:-4px;width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;border:2px solid var(--panel,#fff);font-style:normal;pointer-events:none}
+.hm-spin{position:absolute;top:-4px;right:-2px;z-index:2;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;
+  background:var(--panel,#fff);color:var(--muted);border:1px solid var(--line);opacity:0;transition:opacity .12s}
+.hm-fw:hover .hm-spin,.hm-fw:focus-within .hm-spin{opacity:1}
+.hm-spin.on{color:var(--accent);border-color:var(--accent)}
+.hm-spin:focus-visible{outline:2px solid var(--accent);outline-offset:1px;opacity:1}
+@media (hover:none){.hm-spin{display:none}}   /* touch: a half-second hold on the story pins it */
+/* Explore's GE / CONC tags were the dark theme's pastels on the light theme's cards: 2.2:1 (check-desktop-look "rendered" saw it as soon
+   as a major was set, which the account sync now does) */
+:root:not([data-theme="dark"]) .exm-tag.ge{color:#2d5f93}
+:root:not([data-theme="dark"]) .exm-tag.conc{color:#6a49a6}
+/* Chat */
+.msg-lk{display:inline-block;margin-left:6px;font-size:12px;color:var(--accent)}
+.msg-tmute{font-size:11px;color:var(--faint);margin-left:6px}
+/* Push quiet hours */
+.push-hr{font:inherit;font-size:var(--t-label);background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:4px 6px;min-height:32px}
+/* Favorite teacher row in the rating form */
+.rf-fav{display:flex;align-items:flex-start;gap:10px;margin:2px 0 12px;font-size:var(--t-body);color:var(--text-2);cursor:pointer}
+.rf-fav input{margin-top:3px;flex:none}
+.rf-fav em{font-style:normal;color:var(--muted)}
+/* the registration sheet opens over the Game Plan sheet */
+#rgBack{z-index:110}
+.pl2-appt .rg-btn{margin-left:auto}
+</style>
+<script id="sync-js">
+/* ================================================================================================
+   WEBSITE SYNC — 2026-10-15. One account, the same data on the phone and the website (sync-audit.md).
+   Everything here talks to server objects from sql/professify-sync-2026-10-15.sql that may not be live yet:
+   "not installed" (PGRST202 / 42883 / 42P01 / PGRST205 / does not exist) turns the feature off quietly and the
+   page behaves as it did. Nothing in here is allowed to stop a sign-in: every call is caught.
+   ================================================================================================ */
+var TCSYNC={pinsRpc:null,favsOk:null,savedOk:null,favs:{}};
+function tcMissing(err){
+  if(!err)return false;
+  try{ if(typeof rpcMissing==='function'&&rpcMissing(err))return true; }catch(e){}
+  var c=String(err.code||''), m=String(err.message||'');
+  return c==='PGRST202'||c==='42883'||c==='42P01'||c==='PGRST205'||/does not exist|could not find|schema cache/i.test(m);
+}
+
+/* ---------- pins: my_pinned_friends() ---------- */
+async function tcPinsLoad(){
+  if(typeof sb==='undefined'||!sb||typeof sbUser==='undefined'||!sbUser||typeof myProfile==='undefined'||!myProfile)return;
+  var uid=sbUser.id, ids=null;
+  try{
+    var r=await sb.rpc('my_pinned_friends');
+    if(r.error){
+      /* not installed: profiles.pinned_friends is not selectable (INSERT/UPDATE only), so the pins cannot be read; they are still written to the column */
+      if(tcMissing(r.error))TCSYNC.pinsRpc=false;
+    }else{
+      TCSYNC.pinsRpc=true;
+      ids=Array.isArray(r.data)?r.data:[];
+    }
+  }catch(e){ return; }
+  if(ids==null||window._pinBusy||!sbUser||sbUser.id!==uid||!myProfile)return;
+  ids=ids.filter(function(x){ return typeof x==='string'; });
+  if(JSON.stringify(ids)===JSON.stringify(myProfile.pinned_friends||[]))return;
+  myProfile.pinned_friends=ids;
+  try{ hmFreeChanged(); }catch(e){}
+  try{ if(document.getElementById('hmStripWrap'))hmRenderStrip(); }catch(e){}
+  try{ if(typeof renderFriends==='function')renderFriends(); }catch(e){}
+}
+
+/* right-click or a half-second hold on a story pins / unpins it (the phone: long-press) */
+(function(){
+  var timer=0, sx=0, sy=0, held=0;
+  function tile(t){ return t&&t.closest?t.closest('#hmStripWrap .hm-fitem[data-fid]'):null; }
+  function fire(id){ held=Date.now(); try{ togglePin(id); }catch(e){} }
+  document.addEventListener('pointerdown',function(e){
+    if(e.button>0)return;
+    var t=tile(e.target); if(!t)return;
+    clearTimeout(timer); sx=e.clientX; sy=e.clientY;
+    var id=t.getAttribute('data-fid');
+    timer=setTimeout(function(){ timer=0; fire(id); },500);
+  },true);
+  ['pointerup','pointercancel','pointerleave'].forEach(function(n){ document.addEventListener(n,function(){ clearTimeout(timer); timer=0; },true); });
+  document.addEventListener('pointermove',function(e){ if(timer&&(Math.abs(e.clientX-sx)>8||Math.abs(e.clientY-sy)>8)){ clearTimeout(timer); timer=0; } },true);
+  document.addEventListener('contextmenu',function(e){
+    var t=tile(e.target); if(!t)return;
+    e.preventDefault();
+    if(Date.now()-held<1500)return;                    /* the hold already did it */
+    fire(t.getAttribute('data-fid'));
+  },true);
+  document.addEventListener('click',function(e){
+    if(Date.now()-held<800&&tile(e.target)){ e.preventDefault(); e.stopPropagation(); held=0; }   /* the click that ends a hold is not an "open this profile" */
+  },true);
+})();
+
+/* ---------- major / standing / concentration from the account ---------- */
+function tcApplyAccountProfile(d){
+  try{
+    if(!d||typeof student==='undefined'||!sbUser)return;
+    var pk='professify_prof_pend_'+sbUser.id, pend=false;
+    try{ pend=localStorage.getItem(pk)==='1'; }catch(e){}
+    if(pend){ try{ syncProfileToBackend(); }catch(e){} return; }       /* a change made here that the account has not taken yet wins, and is sent */
+    var changed=false;
+    var m=d.major?tcMajorNow(d.major):null;
+    if(m&&m!==student.major){ student.major=m; student.conc=null; changed=true; }
+    if(d.class_standing&&d.class_standing!==student.standing){ student.standing=d.class_standing; changed=true; }
+    if(m){
+      var c=('concentration' in d)?tcConcClean(d.concentration):undefined;
+      if(c!==undefined&&c!==student.conc){ student.conc=c; changed=true; }
+    }
+    if(!changed)return;
+    try{ var ms=document.getElementById('majorSel'); if(ms&&student.major)ms.value=student.major; }catch(e){}
+    try{ exMajor=student.major; if(student.conc)exConc=student.conc; }catch(e){}
+    try{ saveProfile(); }catch(e){}
+    try{ renderRoadmap(); }catch(e){} try{ renderExContext(); }catch(e){} try{ renderExplore(); }catch(e){}
+    try{ if(window.schSyncToStudent)window.schSyncToStudent(); }catch(e){}
+    try{ if(document.getElementById('view-settings')&&document.getElementById('view-settings').classList.contains('active')&&typeof renderSettingsPage==='function')renderSettingsPage(); }catch(e){}
+  }catch(e){}
+}
+
+/* ---------- favorite teachers: my_favorite_teachers / set_favorite_teacher ---------- */
+async function tcFavsLoad(){
+  if(typeof sb==='undefined'||!sb||typeof sbUser==='undefined'||!sbUser)return;
+  try{
+    var r=await sb.rpc('my_favorite_teachers');
+    if(r.error){ if(tcMissing(r.error))TCSYNC.favsOk=false; return; }
+    TCSYNC.favsOk=true;
+    var o={}; (Array.isArray(r.data)?r.data:[]).forEach(function(k){ if(typeof k==='string')o[k]=1; });
+    TCSYNC.favs=o;
+  }catch(e){}
+}
+function tcFavCount(){ return Object.keys(TCSYNC.favs||{}).length; }
+function tcFavRow(id){
+  try{
+    if(TCSYNC.favsOk!==true)return '';
+    var p=PROFESSORS[id]; if(!p)return '';
+    var k=profKey(p), on=!!TCSYNC.favs[k], full=!on&&tcFavCount()>=3;
+    return '<label class="rf-fav" id="rfFavRow"><input type="checkbox" id="rfFav"'+(on?' checked':'')+(full?' disabled':'')+' onchange="window._rfFav=this.checked">'
+      +'<span>Favorite teacher <em>'+(full?'(you already have 3 — unstar one on your profile first)':'(up to 3 — the same list as on your phone)')+'</em></span></label>';
+  }catch(e){ return ''; }
+}
+async function tcFavAfter(p){
+  try{
+    var want=window._rfFav; window._rfFav=null;
+    if(want==null||TCSYNC.favsOk!==true||!p||typeof sb==='undefined'||!sb||!sbUser)return;
+    var k=profKey(p);
+    if(!!TCSYNC.favs[k]===want)return;
+    var r=await sb.rpc('set_favorite_teacher',{p_key:k,p_on:want});
+    if(r.error){ try{ frToast(tcMissing(r.error)?'Favorite teachers aren’t available yet.':'Couldn’t update your favorite teachers — '+(String(r.error.message||'').slice(0,80)||'try again')); }catch(e){} return; }
+    if(want)TCSYNC.favs[k]=1; else delete TCSYNC.favs[k];
+    try{ frToast(want?'Added to your favorite teachers':'Removed from your favorite teachers'); }catch(e){}
+  }catch(e){}
+}
+
+/* ---------- saved classes and professors: public.saved_items (kind 'class' | 'prof'; key = canonical code | name|dept lowercased) ----------
+   The website's local watch lists are the cache. A three-way merge against the last state this browser saw (the "base") tells
+   "added on the other device" from "removed here": first sync per account and term = union; after that the account is the authority
+   and changes made offline are queued (they are simply the difference from the base, so nothing needs a separate queue). */
+var TCS={busy:false,again:false,timer:0,applying:false};
+function tcsBaseKey(){ return 'professify_saved_base_'+(sbUser?sbUser.id:'')+'_'+(typeof mcTerm==='function'?mcTerm():''); }
+function tcsBaseGet(){ try{ var b=JSON.parse(localStorage.getItem(tcsBaseKey())||'null'); return (b&&Array.isArray(b.c)&&Array.isArray(b.p))?b:null; }catch(e){ return null; } }
+function tcsBaseSet(b){ try{ localStorage.setItem(tcsBaseKey(),JSON.stringify(b)); }catch(e){} }
+function tcsLocalClasses(){
+  var o={}; (typeof watchClasses!=='undefined'?watchClasses:[]).forEach(function(c){ var n=normCode(c); if(n)o[n]=c; }); return o;   /* canonical -> as stored */
+}
+function tcsProfIndex(){
+  var ix={}; try{ Object.keys(PROFESSORS||{}).forEach(function(id){ var k=profKey(PROFESSORS[id]); if(k&&!ix[k])ix[k]=id; }); }catch(e){}
+  return ix;
+}
+function tcsLocalProfs(){
+  var o={};   /* key -> id (only ids that have a name; an id with no record cannot be named, so it is neither pushed nor treated as removed) */
+  (typeof watchlist!=='undefined'?watchlist:[]).forEach(function(id){
+    var p=(PROFESSORS&&PROFESSORS[id])||(watchSpMeta&&watchSpMeta[id]); if(!p||!p.name)return;
+    var k=profKey(p); if(k&&!o[k])o[k]=id;
+  });
+  return o;
+}
+function tcsTitle(s){ return String(s||'').replace(/\b([a-z])/g,function(m){ return m.toUpperCase(); }); }
+function tcsAddProf(key,ix){
+  var id=ix[key];
+  if(!id){
+    var parts=key.split('|'), nm=tcsTitle(parts[0]), dp=parts[1]||'';
+    id='sp:k:'+key;
+    try{ spRegister(id,nm,dp.length<=5?dp.toUpperCase():tcsTitle(dp)); watchSpMeta[id]={name:nm,dept:dp.length<=5?dp.toUpperCase():tcsTitle(dp)}; saveWatchSp(); }catch(e){}
+  }
+  if(watchlist.indexOf(id)<0)watchlist.push(id);
+}
+function tcsRemoveProf(id){
+  var i=watchlist.indexOf(id); if(i>=0)watchlist.splice(i,1);
+  try{ if(watchSpMeta&&watchSpMeta[id]){ delete watchSpMeta[id]; saveWatchSp(); } }catch(e){}
+}
+async function tcsRun(fetchServer){
+  if(TCS.busy){ TCS.again=true; return; }
+  if(typeof sb==='undefined'||!sb||typeof sbUser==='undefined'||!sbUser||TCSYNC.savedOk===false)return;
+  if(typeof FALL!=='undefined'&&FALL.on)return;
+  if(!fetchServer&&TCSYNC.savedOk!==true)return;           /* never push before the account has been read once */
+  TCS.busy=true; var uid=sbUser.id, term=mcTerm();
+  try{
+    var base=tcsBaseGet();
+    var srvC=null, srvP=null;
+    if(fetchServer){
+      var r=await sb.from('saved_items').select('kind,key');
+      if(r.error){ if(tcMissing(r.error))TCSYNC.savedOk=false; return; }
+      TCSYNC.savedOk=true;
+      srvC={}; srvP={};
+      (r.data||[]).forEach(function(x){ if(x.kind==='class')srvC[x.key]=1; else if(x.kind==='prof')srvP[x.key]=1; });
+    }else{
+      /* a change: the server state is the base plus what we pushed before; "inserts" and "deletes" are the difference alone */
+      srvC={}; srvP={};
+      if(base){ base.c.forEach(function(k){ srvC[k]=1; }); base.p.forEach(function(k){ srvP[k]=1; }); }
+    }
+    if(typeof sbUser==='undefined'||!sbUser||sbUser.id!==uid||mcTerm()!==term)return;
+    var lc=tcsLocalClasses(), lp=tcsLocalProfs();
+    var bc={}, bp={}; if(base){ base.c.forEach(function(k){ bc[k]=1; }); base.p.forEach(function(k){ bp[k]=1; }); }
+    var insC=[], delC=[], addLC=[], remLC=[], insP=[], delP=[], addLP=[], remLP=[];
+    Object.keys(lc).forEach(function(k){ if(!srvC[k]){ if(base&&bc[k]&&fetchServer)remLC.push(k); else insC.push(k); } });
+    Object.keys(srvC).forEach(function(k){ if(!lc[k]){ if(base&&bc[k])delC.push(k); else if(fetchServer)addLC.push(k); } });
+    Object.keys(lp).forEach(function(k){ if(!srvP[k]){ if(base&&bp[k]&&fetchServer)remLP.push(k); else insP.push(k); } });
+    Object.keys(srvP).forEach(function(k){ if(!lp[k]){ if(base&&bp[k])delP.push(k); else if(fetchServer)addLP.push(k); } });
+    /* 1. apply what the account says to the local lists */
+    if(addLC.length||remLC.length||addLP.length||remLP.length){
+      TCS.applying=true;
+      try{
+        addLC.forEach(function(k){ if(watchClasses.indexOf(k)<0)watchClasses.push(k); });
+        remLC.forEach(function(k){ var raw=lc[k]; var i=watchClasses.indexOf(raw); if(i>=0)watchClasses.splice(i,1); try{ if(watchMeta&&watchMeta[raw])delete watchMeta[raw]; }catch(e){} });
+        if(addLC.length||remLC.length){ try{ saveWatchClasses(); saveWatchMeta(); }catch(e){} }
+        var ix=tcsProfIndex();
+        addLP.forEach(function(k){ tcsAddProf(k,ix); });
+        remLP.forEach(function(k){ tcsRemoveProf(lp[k]); });
+        if(addLP.length||remLP.length){ try{ saveWatch(); }catch(e){} }
+      }finally{ TCS.applying=false; }
+      try{ updateWatchUI(); }catch(e){}
+    }
+    /* 2. push what only this browser changed */
+    var failedIns={c:{},p:{}}, failedDel={c:{},p:{}};
+    if(insC.length||insP.length){
+      var rows=insC.map(function(k){ return {user_id:uid,kind:'class',key:k}; }).concat(insP.map(function(k){ return {user_id:uid,kind:'prof',key:k}; }));
+      var w=await sb.from('saved_items').upsert(rows,{onConflict:'user_id,kind,key',ignoreDuplicates:true});
+      if(w.error){ if(tcMissing(w.error)){ TCSYNC.savedOk=false; return; } insC.forEach(function(k){ failedIns.c[k]=1; }); insP.forEach(function(k){ failedIns.p[k]=1; }); }
+    }
+    for(var i=0;i<delC.length;i++){
+      var d1=await sb.from('saved_items').delete().eq('user_id',uid).eq('kind','class').eq('key',delC[i]);
+      if(d1.error)failedDel.c[delC[i]]=1;
+    }
+    for(var j=0;j<delP.length;j++){
+      var d2=await sb.from('saved_items').delete().eq('user_id',uid).eq('kind','prof').eq('key',delP[j]);
+      if(d2.error)failedDel.p[delP[j]]=1;
+    }
+    /* 3. the new base = what the account holds now */
+    var nc={}, np={};
+    Object.keys(srvC).forEach(function(k){ nc[k]=1; });
+    Object.keys(srvP).forEach(function(k){ np[k]=1; });
+    insC.forEach(function(k){ if(!failedIns.c[k])nc[k]=1; }); insP.forEach(function(k){ if(!failedIns.p[k])np[k]=1; });
+    addLC.forEach(function(k){ nc[k]=1; }); addLP.forEach(function(k){ np[k]=1; });
+    delC.forEach(function(k){ if(!failedDel.c[k])delete nc[k]; }); delP.forEach(function(k){ if(!failedDel.p[k])delete np[k]; });
+    remLC.forEach(function(k){ delete nc[k]; }); remLP.forEach(function(k){ delete np[k]; });
+    /* ids that cannot be named keep their old base entry: they are neither new nor removed */
+    tcsBaseSet({c:Object.keys(nc),p:Object.keys(np)});
+  }catch(e){ try{ console.warn('[professify] saved_items sync:',e&&e.message); }catch(_){} }
+  finally{
+    TCS.busy=false;
+    if(TCS.again){ TCS.again=false; tcSavedChanged(); }
+  }
+}
+function tcSavedLoad(){ return tcsRun(true); }
+function tcSavedChanged(){
+  if(TCS.applying)return;
+  try{ if(typeof FALL!=='undefined'&&FALL.on)return; }catch(e){}
+  clearTimeout(TCS.timer);
+  TCS.timer=setTimeout(function(){ TCS.timer=0; tcsRun(false); },600);
+}
+window.tcSavedChanged=tcSavedChanged; window.tcSavedLoad=tcSavedLoad;
+
+/* ---------- a tab that was hidden for more than 2 minutes catches up when it is shown again (the phone: P:7562) ---------- */
+(function(){
+  var hiddenAt=0;
+  document.addEventListener('visibilitychange',function(){
+    if(document.visibilityState==='hidden'){ hiddenAt=Date.now(); return; }
+    var was=hiddenAt; hiddenAt=0;
+    if(!was||Date.now()-was<=120000)return;
+    try{ if(typeof sbUser!=='undefined'&&sbUser&&typeof frOnSignedIn==='function')frOnSignedIn(); }catch(e){}
+  });
+})();
+try{ window.TCSYNC=TCSYNC; window.tcPinsLoad=tcPinsLoad; window.tcFavsLoad=tcFavsLoad; window.tcApplyAccountProfile=tcApplyAccountProfile; }catch(e){}
+</script>
