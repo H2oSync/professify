@@ -20,7 +20,11 @@ function ok(c, name, info) {
 }
 const tick = async (p, ms = 400) => { await p.clock.runFor(ms); await p.waitForTimeout(250); };
 const NOW = '2026-10-14T10:30:00-07:00';           /* 5 days before Round 1 opens */
-const desk = (o = {}) => openApp(Object.assign({ path: '/', width: 1440, height: 900, wait: 4000, terms: 'live', time: NOW }, o));
+/* one-card (2026-10-15): the compact "Round 1 registration opens" card hides the rail's own day card while it shows; most of these tests are about
+   that day card, so the page starts with the compact card dismissed, and UNDISMISS brings it back for the tests about the compact card */
+const DISMISS = () => { try { localStorage.setItem('professify_dismiss_reg_2026-10-19', '1'); } catch (e) {} };
+const desk = (o = {}) => openApp(Object.assign({ path: '/', width: 1440, height: 900, wait: 4000, terms: 'live', time: NOW, init: DISMISS }, o));
+const UNDISMISS = async page => { await page.evaluate(() => { localStorage.removeItem('professify_dismiss_reg_2026-10-19'); regDayRepaint(); }); await page.clock.runFor(300); await page.waitForTimeout(250); };
 const T = {};
 const test = (name, fn) => { T[name] = fn; };
 const ME = FX.ME.id, F = FX.FRIENDS.map(f => f.id);
@@ -49,7 +53,9 @@ test('cards', async () => {
     ok(s.plans.state === 'set' && s.plans.head === 'Register Wed, Oct 21, 11a' && s.plans.sub === 'in 7 days' && s.plans.btn === 'Change', 'set: “Register Wed, Oct 21, 11a · in 7 days” on Plans', s.plans);
     ok(s.rail.head === 'Register Wed, Oct 21, 11a' && s.rail.sub === 'in 7 days', 'set: …and on Home’s rail', s.rail);
     ok(await page.evaluate(() => document.querySelector('.rg-card').title) === 'Wednesday, October 21, 2026', 'set: the full date, with its year, is on the card');
-    ok(await page.evaluate(() => /Change your registration day/.test(document.getElementById('campusBanner').innerText)), 'banner: with a day set it says “Change your registration day”');
+    /* websync (2026-10-15): the banner is a card on Home's rail now (#hmRegCard, under the greeting); the top strip is empty of it */
+    await UNDISMISS(page);
+    ok(await page.evaluate(() => /Change your registration day/.test(document.getElementById('hmRegCard').innerText) && !/registration/i.test(document.getElementById('campusBanner').innerText)), 'banner card: with a day set it says “Change your registration day”, and nothing about it is left at the top');
     ok(log.errors.length === 0, 'set: no page errors', log.errors);
     await close(); }
   /* no time, tomorrow, today before / after, the day after */
@@ -88,7 +94,7 @@ test('window', async () => {
   { const { page, close, log } = await desk({ tables: withDay({ day: '2026-10-21' }), time: '2026-11-04T09:00:00-08:00' }); await tick(page, 1500);
     const s = await slots(page);
     ok(!s.plans.has && !s.rail.has, 'after Round 1 (Nov 4): no card anywhere', s);
-    ok(await page.evaluate(() => !/registration day/i.test(document.getElementById('campusBanner').innerText)), 'after Round 1: the banner has no link either');
+    ok(await page.evaluate(() => !document.getElementById('hmRegCard') && !/registration day/i.test(document.getElementById('campusBanner').innerText)), 'after Round 1: the banner card is gone too');   /* websync (2026-10-15) */
     ok(!log.reads.some(r => /registration/.test(r)), 'after Round 1: registration_days and the RPC are never asked', log.reads.filter(r => /registration/.test(r)));
     await close(); }
   /* the last day itself still shows */
@@ -100,7 +106,7 @@ test('window', async () => {
     const s = await slots(page);
     ok(!s.plans.has && !s.rail.has, 'signed out: no card', s);
     ok(!log.reads.some(r => /registration/.test(r)) && log.writes.length === 0, 'signed out: nothing about registration is read or written', log.reads.filter(r => /registration/.test(r)));
-    ok(await page.evaluate(() => !/registration day/i.test(document.getElementById('campusBanner').innerText)), 'signed out: the banner has no link');
+    ok(await page.evaluate(() => !document.getElementById('hmRegCard') && !/registration day/i.test(document.getElementById('campusBanner').innerText)), 'signed out: no banner card');   /* websync (2026-10-15) */
     await close(); }
   /* not the registration term */
   { const { page, close, log } = await desk({ terms: 'single', tables: withDay({ day: '2026-10-21' }) }); await tick(page, 1500);
@@ -139,7 +145,8 @@ test('save', async () => {
   const s = await slots(page);
   ok(s.plans.head === 'Register Thu, Oct 22, 2:30p' && s.plans.sub === 'in 8 days' && s.rail.head === 'Register Thu, Oct 22, 2:30p', 'save: the cards say Thu, Oct 22, 2:30p', s);
   ok(await toast(page) === 'Your registration day is saved' && !(await page.evaluate(() => document.getElementById('rgBack').classList.contains('open'))), 'save: the sheet closes and a toast says it is saved');
-  ok(await page.evaluate(() => document.getElementById('campusBanner').innerText.includes('Change your registration day')), 'banner: now says “Change your registration day”');
+  await UNDISMISS(page);
+  ok(await page.evaluate(() => document.getElementById('hmRegCard').innerText.includes('Change your registration day')), 'banner card: now says “Change your registration day”');   /* websync (2026-10-15) */
   const kept = JSON.parse(await LS(page) || 'null');
   ok(kept && kept.day === '2026-10-22' && kept.time === '14:30' && kept.shared === false && !kept.pending, 'save: kept on this device, nothing waiting', kept);
   /* change it: no time, shared on; the sheet opens with what is there */
@@ -176,8 +183,9 @@ test('save', async () => {
 
 test('banner', async () => {
   const { page, close } = await desk({ tables: withDay(null) }); await tick(page, 1500);
-  await page.click('#campusBanner button:has-text("Set your registration day")'); await tick(page, 400);
-  ok(await page.evaluate(() => document.getElementById('rgBack').classList.contains('open') && document.getElementById('rgTitle').textContent === 'When do you register?'), 'banner: “Set your registration day” opens the sheet');
+  await UNDISMISS(page);
+  await page.click('#hmRegCard button:has-text("Set your registration day")'); await tick(page, 400);   /* websync (2026-10-15): the card on Home's rail */
+  ok(await page.evaluate(() => document.getElementById('rgBack').classList.contains('open') && document.getElementById('rgTitle').textContent === 'When do you register?'), 'banner card: “Set your registration day” opens the sheet');
   await close();
 });
 
@@ -384,10 +392,12 @@ test('friendsRefresh', async () => {
   /* opening the sheet asks too */
   { const rpc = rpcWith([]);
     const o = await desk({ tables: withDay(null), rpc }); await tick(o.page, 1500);
-    const before = o.log.rpcs.length;
+    /* websync (2026-10-15): the sign-in now also asks my_pinned_friends / my_favorite_teachers, which can land after this snapshot, so
+       counting every RPC let the promise pass without the sheet asking. Count the one the promise is about. */
+    const nReg = () => o.log.rpcs.filter(r => r.fn === 'friend_registration_days').length, before = nReg();
     await o.page.clock.runFor(125000); await o.page.waitForTimeout(300);
     await o.page.click('.rg-slot[data-rg="rail"] [data-rg-act="open"]'); await tick(o.page, 800);
-    ok(o.log.rpcs.length > before, 'friends refresh: opening the sheet asks the RPC again once the list is stale', { before, after: o.log.rpcs.length });
+    ok(nReg() > before, 'friends refresh: opening the sheet asks the RPC again once the list is stale', { before, after: nReg() });
     await o.close(); }
 });
 
@@ -437,9 +447,10 @@ test('focus', async () => {
   await o.page.click('.rg-slot[data-rg="rail"] [data-rg-act="open"]'); await tick(o.page, 400);
   await o.page.click('[data-rg-act="clear"]'); await tick(o.page, 1000);
   ok(await focusOn('.rg-slot[data-rg="rail"] [data-rg-act="open"]'), 'focus: after Clear it is on the slot’s new Set day button');
-  await o.page.click('#campusBanner button:has-text("Set your registration day")'); await tick(o.page, 400);
+  await UNDISMISS(o.page);
+  await o.page.click('#hmRegCard button:has-text("Set your registration day")'); await tick(o.page, 400);   /* websync (2026-10-15): the card, not the top strip */
   await o.page.click('.rg-d[data-day="2026-10-22"]'); await o.page.click('[data-rg-act="save"]'); await tick(o.page, 1000);
-  ok(await focusOn('#campusBanner button'), 'focus: opened from the banner, it goes back to the banner’s button');
+  ok(await focusOn('#hmRegCard button[onclick^="regDayOpen"]'), 'focus: opened from the banner card, it goes back to the card’s button');
   await o.close();
 });
 
@@ -466,8 +477,9 @@ test('a11y', async () => {
   ok(r.inv === 'true' && r.d === 'rgErr' && /doesn’t look right/.test(r.txt || ''), 'a11y: the time error is tied to the time field (aria-invalid + aria-describedby)', r);
   await o.close();
   const p = await desk({ tables: withDay(null), tz: 'Pacific/Auckland' }); await tick(p.page, 1500);
-  const b = await p.page.evaluate(() => document.getElementById('campusBanner').innerText);
-  ok(/opens in 5 days/.test(b), 'banner: the day count is Pacific’s (5), even in a browser that is already on the 15th', b);
+  await UNDISMISS(p.page);
+  const b = await p.page.evaluate(() => document.getElementById('hmRegCard').innerText);   /* websync (2026-10-15) */
+  ok(/opens in 5 days/.test(b), 'banner card: the day count is Pacific’s (5), even in a browser that is already on the 15th', b);
   await p.close();
 });
 

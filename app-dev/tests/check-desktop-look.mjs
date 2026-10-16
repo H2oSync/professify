@@ -339,6 +339,9 @@ test('majors', async () => {
     const opts = [...new DOMParser().parseFromString('<select>' + majorOptionsHtml('') + '</select>', 'text/html').querySelectorAll('option')].map(o => o.textContent);
     const S = n => Object.values(SCHED_MAJORS).find(m => m.name === n), sum = e => e && e.terms.map(t => t.slots.reduce((a, x) => a + x.units, 0)).join();
     const coming = (window.SCHED_COMING || []).flat();
+    /* websync (2026-10-15): the page now reads the account's major on sign-in and keeps it on this device, which overwrote the
+       old-name profile this test seeded; the promise tested is loadProfile()'s rename, so the old-name profile is put back first */
+    try { localStorage.setItem('professify-profile', JSON.stringify({ school: 'calpoly', major: OLD, conc: null })); } catch (e) {}
     loadProfile();
     return { opts: ['Industrial Technology & Packaging', 'Physics (BA)', NEW].every(n => opts.includes(n)) && !opts.includes(OLD), itp: sum(S('Industrial Technology & Packaging')), ba: sum(S('Physics (BA)')),
       itpForced: /ITP 2260|ITP 3390/.test(JSON.stringify(S('Industrial Technology & Packaging'))), coming: coming.filter(n => /Industrial Technology/.test(n)), me: student.major,

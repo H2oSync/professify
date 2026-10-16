@@ -67,7 +67,8 @@ test('sheet: the greeting, the bird, the four chips, each asks its question', as
   for (const [i, c] of CHIPS.entries()) {
     await page.evaluate(([c, i]) => { const sel = i === 0 ? '.hawk-cgrid .hawk-cchip' : '.hawk-chips .hawk-cchip'; [...document.querySelectorAll(sel)].find(x => x.textContent === c).click(); }, [c, i]);
     await tick(page, 1500);
-    const said = await page.evaluate(() => (document.querySelector('.hawk-said__q') || {}).textContent);
+    // 2026-10-15: Champ is a chat now, so the turns accumulate; the question just asked is the LAST bubble
+    const said = await page.evaluate(() => { const q = document.querySelectorAll('.hawk-said__q'); return (q[q.length - 1] || {}).textContent; });
     ok(said === c, 'tapping "' + c + '" asks exactly that', said);
   }
   const after = await page.evaluate(() => ({ strip: getComputedStyle(document.querySelector('.hawk-chips')).display, big: !!document.querySelector('.hawk-hint') }));
