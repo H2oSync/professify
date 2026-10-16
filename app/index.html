@@ -2269,7 +2269,7 @@ if(typeof qrcode==="function")window.qrcode=qrcode;
 
 <script>
 
-window.TERMCHAMP_APP_BUILD = '2026-10-13 07:45';
+window.TERMCHAMP_APP_BUILD = '2026-10-15 12:00';
 /* ================================================================================================
    TERMCHAMP — THE PHONE APP (termchamp.com/app)
    ------------------------------------------------------------------------------------------------
@@ -2507,6 +2507,12 @@ function colorFor(id) { let h = 0; const s = String(id || ''); for (let i = 0; i
 function initialsOf(n) { const w = String(n || '').trim().split(/\s+/).filter(Boolean); return ((w[0] || '?')[0] + (w.length > 1 ? w[w.length - 1][0] : '')).toUpperCase(); }
 function canonCode(c) { const m = /^([A-Z&]{2,5})\s*(\d{3,4}[A-Z]?)$/.exec(String(c || '').toUpperCase().replace(/\s+/g, ' ').trim()); return m ? m[1] + ' ' + m[2] : null; }
 function schemaGap(err) { if (!err) return false; const c = String(err.code || ''), m = String(err.message || ''); return c === '42703' || c === '42P01' || c === 'PGRST204' || c === 'PGRST205' || /does not exist|schema cache/i.test(m); }
+/* sync-app (2026-10-15): the server pieces of sql/professify-sync-2026-10-15.sql may not be installed yet. syncGap() is "not installed"
+   (a missing function, table or column): the feature then behaves as it did before. Per-account flags live under tc- so the wipe removes them. */
+const syncGap = e => !!e && (schemaGap(e) || /^(PGRST202|42883)$/.test(String(e.code || '')) || /could not find the function|does not exist|schema cache/i.test(String(e.message || '')));
+const syncKey = n => 'tc-' + n + ':' + ((TC.user && TC.user.id) || '');
+const syncFlag = k => { try { return localStorage.getItem(k) === '1'; } catch (e) { return false; } };
+const syncFlagSet = (k, on) => { try { if (on) localStorage.setItem(k, '1'); else localStorage.removeItem(k); } catch (e) {} };
 function agoText(iso) {
   if (!iso) return '';
   const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
@@ -2569,7 +2575,10 @@ function addSection(sec) {
 TC.client = function () {
   if (TC.sb) return TC.sb;
   if (!window.supabase || !window.supabase.createClient) return null;
-  TC.sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+  TC.sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true,
+    /* security-app (2026-10-15): PKCE, like the website. The default (implicit) flow signed in anyone who opened /app/#access_token=...&refresh_token=...,
+       so a link could sign a victim into the attacker's account. Sign-in here is an emailed code or a password; neither reads the URL. */
+    flowType: 'pkce' } });
   TC.sb.auth.onAuthStateChange((ev, session) => {
     const was = TC.user && TC.user.id, now = session && session.user && session.user.id;
     if (was === now) return;
@@ -2767,7 +2776,24 @@ TC.createProfile = async function (f) {
   gaEvent('sign_up', { method: 'email_code' });              // a new profile, not every code sign-in
   return null;
 };
-TC.signOut = async function () { await TC.pushForget(false); try { await TC.client().auth.signOut(); } catch (e) {} location.replace(location.pathname); };
+/* security-app (2026-10-15): a shared browser keeps nothing of the person who just left. Every localStorage / sessionStorage key this app
+   (or the website on the same origin) writes starts tc-, tc_, professify or termchamp; all of them go EXCEPT the device's own non-personal
+   choices and public caches below. wipeDevice(true) also drops supabase-js's own session keys. */
+const WIPE_PREFIXES = ['tc-', 'tc_', 'professify', 'termchamp'];
+const WIPE_KEEP = ['tc-theme', 'termchamp_app_seats_v1', 'professify_prof_cache', 'tc_deleted'];
+TC.wipeDevice = function (auth) {
+  [['localStorage'], ['sessionStorage']].forEach(([w]) => {
+    try {
+      const st = window[w], ks = [];
+      for (let i = 0; i < st.length; i++) ks.push(st.key(i));
+      ks.forEach(k => {
+        if (k == null || WIPE_KEEP.indexOf(k) >= 0) return;
+        if (WIPE_PREFIXES.some(p => k.indexOf(p) === 0) || (auth && /^sb-.*-(auth-token|code-verifier)/.test(k))) { try { st.removeItem(k); } catch (e) {} }
+      });
+    } catch (e) {}
+  });
+};
+TC.signOut = async function () { await TC.pushForget(false); TC.wipeDevice(); try { await TC.client().auth.signOut(); } catch (e) {} TC.wipeDevice(true); location.replace(location.pathname); };
 
 /* ---------------------------------------------------------------------------------------------
    The load. Public data (seats, PolyRatings) and the student's own data run side by side.
@@ -2804,6 +2830,23 @@ function concRemember(major, conc) {
   try { localStorage.setItem(CONC_KEY, JSON.stringify({ u: TC.user.id, major: major || '', conc: conc || '' })); } catch (e) {}
   try { const d = JSON.parse(localStorage.getItem('professify-profile') || 'null'); if (d && d.major && majorNow(d.major) === major) { d.major = major; d.conc = conc || null; localStorage.setItem('professify-profile', JSON.stringify(d)); } } catch (e) {}
 }
+/* sync-app (2026-10-15): the concentration the account says. 'General / Open' (the website's word for none) and empty are none. Read from the
+   database => it wins over this device's copy. A device copy the database never got is uploaded ONCE (flag set when that write lands);
+   after that the database is the truth, so clearing it on the website clears it here. Column not readable => today's behaviour. */
+function concClean(c) { c = String(c == null ? '' : c).trim(); return c && c !== 'General / Open' ? c : ''; }
+function concResolve(p, srv) {
+  if (!srv) return concRead(p);
+  const db = concClean(p.concentration), mk = syncKey('conc-migrated');
+  if (db) { concRemember(p.major, db); return db; }
+  const loc = concRead(p);
+  if (loc && !syncFlag(mk)) {
+    try { TC.client().from('profiles').update({ concentration: loc }).eq('id', TC.user.id).select('id').then(r => { if (r && !r.error && (r.data || []).length) syncFlagSet(mk, true); }, () => {}); } catch (e) {}
+    return loc;
+  }
+  syncFlagSet(mk, true);
+  if (loc) concRemember(p.major, '');
+  return null;
+}
 async function loadAll() {
   const sb = TC.client(); if (!sb || !TC.user) return;
   TC.loadedAt = Date.now();
@@ -2814,12 +2857,15 @@ async function loadAll() {
      no wait; the answer is looked at before anything is shown. */
   const pdAsk = TC.pendingDeletion().catch(() => ({ err: 'network' }));
   const me = TC.user.id;
-  /* Only the columns `authenticated` is granted (professify-lockdown.sql). `concentration` is NOT
-     one of them: naming it made PostgREST refuse the whole read with 42501 — for your own row — and
-     the app then told a fully set-up student their account "hasn't been set up yet". The desktop
-     never reads it back either; it keeps the concentration on the device ('professify-profile'),
-     and so does this app (concRead below). */
-  const p = await sb.from('profiles').select('id,display_name,username,avatar_url,major,class_standing').eq('id', me).maybeSingle();
+  /* Only the columns `authenticated` is granted (professify-lockdown.sql). `concentration` IS one of them now (sync-app (2026-10-15)),
+     and the website reads it too, so the account's value follows the student from device to device. A database that does NOT grant it
+     refuses the whole read with 42501 — for your own row — which once told a fully set-up student their account "hasn't been set
+     up yet": so that answer (or a missing column) is retried without the column, and the concentration stays on the device
+     ('professify-profile' / termchamp_app_conc, concRead) as it did before. */
+  const askConc = !(TC.noOwnConc && Date.now() - TC.noOwnConc < 600000);   /* refused once => not asked again for 10 minutes (as the friends read does), so a refusal costs one extra round trip, once */
+  let p = await sb.from('profiles').select('id,display_name,username,avatar_url,major,class_standing' + (askConc ? ',concentration' : '')).eq('id', me).maybeSingle();
+  let concSrv = askConc && !p.error;
+  if (askConc && p.error && (String(p.error.code) === '42501' || schemaGap(p.error))) { TC.noOwnConc = Date.now(); p = await sb.from('profiles').select('id,display_name,username,avatar_url,major,class_standing').eq('id', me).maybeSingle(); }
   const pd = await pdAsk;
   /* a refresh whose check fails keeps the app you have (as the profile read does) */
   if (pd && pd.err && TC.ready) { toast('Couldn’t refresh — check your connection'); return; }
@@ -2834,12 +2880,13 @@ async function loadAll() {
      sends a real student off to redo a setup they already did. */
   if (p.error) { TC.err.profile = (p.error.code ? p.error.code + ' · ' : '') + (p.error.message || ''); TC.phase = 'profileerr'; render(); return; }
   if (!TC.profile) { TC.phase = 'noprofile'; render(); return; }
-  TC.profile.concentration = concRead(TC.profile);
+  TC.profile.concentration = concResolve(TC.profile, concSrv);
   const nm = TC.profile.display_name || TC.profile.username || 'You';
   PEOPLE.me = Object.assign(PEOPLE.me, { name: nm, short: nm.split(/\s+/)[0], ini: initialsOf(nm), avatar: TC.profile.avatar_url || '', color: colorFor(me), handle: TC.profile.username || '' });
   TC.phase = 'ok'; onbResume(); render(!!TC.ready);
   const blk = TC.loadBlocks().catch(() => {});   /* blocks first: they decide which messages a chat shows */
-  await Promise.all([loadMine(), loadFriends(), loadPlans(), loadWatches(), loadReviews(), blk.then(() => loadThreads()), loadAudit(), loadPrefs(), loadRegDay(), loadCommits(), loadFriendBusy()]);
+  TC._cpSynced = false;
+  await Promise.all([loadMine(), loadFriends().then(v => { loadPins().catch(() => {}); return v; }), loadSaved().catch(() => {}), loadPlans(), loadWatches(), loadReviews(), blk.then(() => loadThreads()), loadAudit(), loadPrefs(), loadRegDay(), loadCommits(), loadFriendBusy()]);
   loadRegFriends(true);
   loadSuggestions(); loadRateList(); loadFriendPlans(); loadNowSeats();
   UI.storyOrder = null; TC.ready = true; TC.loadDone = Date.now(); render(true);
@@ -3480,6 +3527,7 @@ const firstYearEmpty = standing => standing === 'Freshman' && !!CFG.TERM_ENDS &&
 
 /* ---- Plans A–C (the same plans table and rules the desktop's Plans use). ---------------------- */
 const PLAN_LOCAL = 'termchamp_app_plans_v1';
+const PLAN_RAW = {};   /* class_nbr -> the {code, class_nbr} object the plans table holds (sync-app (2026-10-15)) */
 async function loadPlans() {
   TC.plansLoaded = false;
   try { const c = JSON.parse(localStorage.getItem(PLAN_LOCAL) || 'null'); if (c && c.uid === TC.user.id && c.term === CFG.TERM) TC.autoWatch = c.autoWatch || {}; } catch (e) {}
@@ -3490,6 +3538,8 @@ async function loadPlans() {
   (r.data || []).forEach(row => {
     if (!TC.plans[row.slot]) return;
     TC.plans[row.slot] = (Array.isArray(row.sections) ? row.sections : []).map(x => String(x.class_nbr)).filter(Boolean);
+    /* sync-app (2026-10-15): the rows as the account has them, so a class number this phone's seat feed doesn't hold goes back up as it was */
+    (Array.isArray(row.sections) ? row.sections : []).forEach(x => { if (x && x.class_nbr != null) PLAN_RAW[String(x.class_nbr)] = x; });
     TC.planShared[row.slot] = row.shared !== false;
   });
 }
@@ -3503,9 +3553,12 @@ TC.setPlan = function (slot, ids) {
   clearTimeout(planTimers[slot]);
   planTimers[slot] = setTimeout(() => pushPlan(slot), 350);
 };
+/* sync-app (2026-10-15): the rows a plan goes up as. A class number missing from the loaded seat feed keeps its original object (the website's plan, or a section
+   the feed no longer lists); dropping it here silently shortened a plan the student never touched. Used by pushPlan and setPlanShared. */
+function planList(slot) { return TC.plans[slot].map(id => { const s = SEC[id]; return s ? { code: s.code, class_nbr: id } : (PLAN_RAW[id] ? Object.assign({}, PLAN_RAW[id]) : null); }).filter(Boolean); }
 async function pushPlan(slot) {
   const sb = TC.client(); if (!sb || !TC.user) return;
-  const list = TC.plans[slot].map(id => { const s = SEC[id]; return s ? { code: s.code, class_nbr: id } : null; }).filter(Boolean);
+  const list = planList(slot);
   const q = list.length
     ? sb.from('plans').upsert({ user_id: TC.user.id, term: CFG.TERM, slot, sections: list, shared: TC.planShared[slot] !== false }, { onConflict: 'user_id,term,slot' })
     : sb.from('plans').delete().eq('user_id', TC.user.id).eq('term', CFG.TERM).eq('slot', slot);
@@ -3824,14 +3877,16 @@ async function loadThreads() {
   const ids = (mine.data || []).map(r => r.conversation_id);
   const readAt = Object.fromEntries((mine.data || []).map(r => [r.conversation_id, r.last_read_at]));
   if (!ids.length) { TC.threads = []; return; }
-  const [convs, memb, last, clr, hid, mut] = await Promise.all([
+  const [convs, memb, last, clr, hid, mut, cpin] = await Promise.all([
     sb.from('conversations').select('id,kind,title,created_by,last_at').in('id', ids),
     sb.from('conversation_members').select('conversation_id,user_id').in('conversation_id', ids),
     sb.from('messages').select('id,conversation_id,sender,kind,body,payload,created_at').in('conversation_id', ids).order('created_at', { ascending: false }).limit(300),
     sb.from('conversation_clears').select('conversation_id,cleared_at'),
     sb.from('message_hides').select('message_id').limit(5000),
-    sb.from('conversation_mutes').select('conversation_id')
+    sb.from('conversation_mutes').select('conversation_id'),
+    TC._cpSynced ? null : sb.from('conversation_members').select('conversation_id,pinned_at').eq('user_id', me)   /* sync-app (2026-10-15): chat pins, once per load */
   ]);
+  chatPinsSync(cpin, ids);
   chatXRead(clr, hid);
   if (mut && mut.error) { if (missingTable(mut.error)) TC.mutesOn = false; }
   else if (mut) { TC.mutesOn = true; TC.mutes = new Set((mut.data || []).map(r => String(r.conversation_id))); }
@@ -4016,7 +4071,15 @@ const nRatings = n => `${n} rating${n === 1 ? '' : 's'}`;
 const rTxt = pk => { const r = ratingOf(pk); return r == null ? 'No rating' : '★ ' + r.toFixed(1); };
 
 /* A person's picture when they have a real one, their initials when they don't. */
-function safeImg(u) { return /^https:\/\//.test(String(u || '')) ? u : ''; }
+/* security-app (2026-10-15): only OUR avatars bucket (or a local raster data: preview). Any other host would let a profile's avatar_url
+   make every viewer's phone fetch from a server the profile's owner chose. The check runs again on the normalised URL (../ and \ tricks). */
+const AVATAR_BASE = 'https://rqkndeqbcahozidniesn.supabase.co/storage/v1/object/public/avatars/';
+function safeImg(u) {
+  u = String(u || '');
+  if (/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+\/=]+$/.test(u)) return u;
+  if (u.indexOf(AVATAR_BASE) !== 0) return '';
+  try { return new URL(u).href.indexOf(AVATAR_BASE) === 0 ? u : ''; } catch (e) { return ''; }
+}
 /* No photo: a light grey circle with a white person, like Instagram and LinkedIn (Tate, 2026-10-03). */
 const NOPHOTO = 'var(--nophoto)';
 const silhouette = (sz = '100%') => `<svg class="nophoto" viewBox="0 0 24 24" width="${sz}" height="${sz}" aria-hidden="true" style="display:block;grid-area:1/1"><circle cx="12" cy="9.2" r="4.4" fill="#fff"/><path d="M3.2 24.5c.6-5.4 4.2-8.6 8.8-8.6s8.2 3.2 8.8 8.6z" fill="#fff"/></svg>`;
@@ -4119,6 +4182,56 @@ const profCourses = pk => {
 };
 const courseProfs = code => [...new Set(secsOf(code).map(s => s.prof))];
 const isSaved = k => S.saved.includes(k);
+/* ---- sync-app (2026-10-15): Explore bookmarks <-> saved_items(kind 'class'|'prof', key). S.saved ('c:BUS 3431', 'p:<profKey>') is the cache.
+   class key 'BUS 3431'; professor key = the review key 'name|dept' lowercased (reviewKeyOf) — for a row that came FROM the account we keep the key it
+   had (SV.srv), so removing it deletes that row. One-time upload of what this phone had (tc-saved-migrated:<uid>); a toggle that failed for a reason
+   other than "not installed" sets tc-saved-dirty:<uid> and the next load pushes this phone's list instead of reading over it. ---- */
+const SV = { on: null, srv: {}, q: Promise.resolve(), seq: 0 };
+function svRow(k) {
+  const m = /^([cp]):(.+)$/.exec(String(k)); if (!m) return null;
+  if (m[1] === 'c') return { kind: 'class', key: canonCode(m[2]) || m[2] };
+  return { kind: 'prof', key: SV.srv[k] || reviewKeyOf(m[2]) || (m[2] + '|') };
+}
+function svLocal(r) {
+  if (!r || !r.key) return null;
+  if (r.kind === 'class') return 'c:' + (canonCode(r.key) || r.key);
+  if (r.kind === 'prof') { const pk = profKeyOf(String(r.key).split('|')[0]); if (!pk) return null; SV.srv['p:' + pk] = String(r.key); return 'p:' + pk; }
+  return null;
+}
+function svPush(k, add) {
+  const row = svRow(k); if (!row || SV.on === false || !TC.user) return;
+  SV.seq++;
+  SV.q = SV.q.then(async () => {
+    if (SV.on === false) return;
+    const sb = TC.client(); let r;
+    try { r = add ? await sb.from('saved_items').insert(row) : await sb.from('saved_items').delete().eq('user_id', TC.user.id).eq('kind', row.kind).eq('key', row.key); } catch (e) { r = { error: e }; }
+    if (r.error && add && String(r.error.code) === '23505') return;
+    if (r.error) { if (syncGap(r.error)) SV.on = false; else syncFlagSet(syncKey('saved-dirty'), true); }
+  }).catch(() => {});
+}
+function svWaitProfs() { return new Promise(res => { let n = 0; const t = () => (TC.profsLoaded || ++n > 40) ? res() : setTimeout(t, 250); t(); }); }
+async function loadSaved() {
+  if (!TC.user) return;
+  const seq0 = SV.seq, me = TC.user.id, sb = TC.client();
+  let r; try { r = await sb.from('saved_items').select('kind,key,created_at').eq('user_id', me).order('created_at', { ascending: true }); } catch (e) { r = { error: e }; }
+  if (r.error) { if (syncGap(r.error)) SV.on = false; return; }
+  SV.on = true;
+  const rows = Array.isArray(r.data) ? r.data : [], srv = [];
+  rows.forEach(x => { const k = svLocal(x); if (k && srv.indexOf(k) < 0) srv.push(k); });
+  const mk = syncKey('saved-migrated'), dk = syncKey('saved-dirty'), migrated = syncFlag(mk), dirty = syncFlag(dk);
+  if (migrated && !dirty) { if (SV.seq === seq0 && JSON.stringify(srv) !== JSON.stringify(S.saved)) { S.saved = srv; save(); render(true); } return; }
+  /* first time on this account, or a change that never got there: what this phone has goes up */
+  if (S.saved.some(k => /^p:/.test(k) && !SV.srv[k])) await svWaitProfs();
+  const loc = S.saved.slice(), have = new Set(rows.map(x => x.kind + '|' + x.key)), want = new Map();
+  loc.forEach(k => { const w = svRow(k); if (w) want.set(w.kind + '|' + w.key, w); });
+  const add = [...want].filter(([id]) => !have.has(id)).map(([, w]) => w), del = dirty ? rows.filter(x => !want.has(x.kind + '|' + x.key)) : [];
+  let bad = false;
+  if (add.length) { let q; try { q = await sb.from('saved_items').insert(add); } catch (e) { q = { error: e }; } if (q.error) { bad = true; if (syncGap(q.error)) SV.on = false; } }
+  for (const x of del) { let q; try { q = await sb.from('saved_items').delete().eq('user_id', me).eq('kind', x.kind).eq('key', x.key); } catch (e) { q = { error: e }; } if (q.error) bad = true; }
+  if (bad) return;
+  syncFlagSet(mk, true); syncFlagSet(dk, false);
+  if (!dirty) { const un = srv.concat(loc.filter(k => srv.indexOf(k) < 0)); if (SV.seq === seq0 && JSON.stringify(un) !== JSON.stringify(S.saved)) { S.saved = un; save(); render(true); } }
+}
 const avStack = (ids, size = 26) => ids.length ? `<span class="stack">${ids.slice(0, 3).map(f => size < 26 && !safeImg((PEOPLE[f] || {}).avatar) ? noPhotoAv(size) : pav(f, size, size * .36)).join('')}</span>` : '';
 function unrated() { const out = []; TC.rateList.forEach(t => t.items.forEach(([p, c]) => { if (!iReviewed(p)) out.push([p, c, t.term]); })); return out; }
 const planSecs = k => TC.plans[k].map(id => SEC[id]).filter(Boolean);
@@ -4852,14 +4965,50 @@ function groupAv(t, size) {
   const s = Math.round(size * 0.68);
   return `<span class="gav" style="width:${size}px;height:${size}px" aria-hidden="true"><span class="gav-b">${pav(pick[1], s)}</span><span class="gav-f">${pav(pick[0], s)}</span></span>`;
 }
-/* Pinned chats (Tate, 2026-10-04): kept on this phone, per account, in the order pinned, up to 3. */
+/* Pinned chats (Tate, 2026-10-04): in the order pinned, up to 3. sync-app (2026-10-15): the account keeps them (conversation_members.pinned_at, own row);
+   this phone's list (tc-chat-pins-<uid>) is the cache. Not installed yet => it stays on this phone, as before. */
 const CHAT_PIN_MAX = 3;
 function chatPinKey() { return 'tc-chat-pins-' + (TC.user ? TC.user.id : ''); }
 function chatPins() { try { const v = JSON.parse(localStorage.getItem(chatPinKey()) || '[]'); return Array.isArray(v) ? v.map(String) : []; } catch (e) { return []; } }
 function chatPinned(id) { return chatPins().includes(String(id)); }
 /* pins of chats that are still in your Chats list (a deleted or vanished chat's pin doesn't count) */
 function chatPinsLive() { const live = new Set(TC.threads.filter(t => !chatCleared(t)).map(t => String(t.id))); return chatPins().filter(x => live.has(x)); }
-function chatPinSet(list) { try { localStorage.setItem(chatPinKey(), JSON.stringify(list)); return true; } catch (e) { return false; } }
+function chatPinLocal(list) { try { localStorage.setItem(chatPinKey(), JSON.stringify(list)); return true; } catch (e) { return false; } }
+const CP = { on: null, q: Promise.resolve() };
+function chatPinSet(list) {
+  const prev = chatPins(), now = list.map(String); if (!chatPinLocal(list)) return false;
+  chatPinPush(now.filter(x => prev.indexOf(x) < 0), prev.filter(x => now.indexOf(x) < 0), false);
+  return true;
+}
+/* pinned_at is the order: a new pin is stamped now; a one-time upload is stamped in the past, oldest first, so the order survives. A failure that isn't
+   "not installed" sets tc-chatpins-dirty:<uid>; the next load pushes this phone's list. */
+function chatPinPush(add, del, past) {
+  if (CP.on === false || !TC.user || !(add.length || del.length)) return;
+  const me = TC.user.id, base = Date.now();
+  CP.q = CP.q.then(async () => {
+    if (CP.on === false) return;
+    const sb = TC.client(), ops = add.map((id, i) => [id, new Date(past ? base - (add.length - i) * 1000 : base + i).toISOString()]).concat(del.map(id => [id, null]));
+    let bad = false;
+    for (const [id, at] of ops) {
+      let r; try { r = await sb.from('conversation_members').update({ pinned_at: at }).eq('conversation_id', id).eq('user_id', me); } catch (e) { r = { error: e }; }
+      if (r.error) { if (syncGap(r.error) || String(r.error.code) === '42501') { CP.on = false; return; } bad = true; }
+    }
+    if (bad) syncFlagSet(syncKey('chatpins-dirty'), true);
+  }).catch(() => {});
+}
+function chatPinsSync(res, ids) {
+  if (!res) return;
+  TC._cpSynced = true;
+  if (res.error) { if (syncGap(res.error) || String(res.error.code) === '42501') CP.on = false; return; }
+  CP.on = true;
+  const have = new Set(ids.map(String)), mk = syncKey('chatpins-migrated'), dk = syncKey('chatpins-dirty');
+  const srv = (res.data || []).filter(r => r && r.pinned_at && have.has(String(r.conversation_id))).sort((a, b) => new Date(a.pinned_at) - new Date(b.pinned_at)).map(r => String(r.conversation_id)).slice(0, CHAT_PIN_MAX);
+  const loc = chatPins().filter(x => have.has(x)).slice(0, CHAT_PIN_MAX), dirty = syncFlag(dk);
+  const up = dirty || (!syncFlag(mk) && !srv.length && loc.length);
+  syncFlagSet(mk, true);
+  if (up) { syncFlagSet(dk, false); chatPinPush(loc.filter(x => srv.indexOf(x) < 0), srv.filter(x => loc.indexOf(x) < 0), true); return; }
+  if (JSON.stringify(srv) !== JSON.stringify(chatPins())) chatPinLocal(srv);
+}
 /* A chat row you can swipe left for Pin / Delete. */
 const SW = { el: null, x0: 0, y0: 0, dx: 0, dir: null, base: 0, open: null, until: 0 };
 function swipeRow(t) {
@@ -5404,6 +5553,14 @@ SHEETS.blockAsk = ({ uid }) => {
  ${UI.blockErr ? `<div class="tc-err" role="alert" style="margin-bottom:10px">${esc(UI.blockErr)}</div>` : ''}
  <div style="display:grid;gap:8px"><button class="btn" style="background:#DC2626" data-a="blockGo" data-x="${esc(uid)}"${busy ? ' disabled' : ''}>${busy ? 'Blocking…' : 'Block ' + f}</button><button class="btn soft" data-a="closeSheet">Cancel</button></div>`;
 };
+/* An invite link's question (security-app, 2026-10-15): nothing is sent until Add. */
+SHEETS.inviteAsk = ({ id, name, err, busy }) => {
+  const who = name ? esc(name) : 'this person', inc = TC.relation(id) === 'incoming';
+  return `<h3>Add ${who}?</h3>
+ <div class="muted b" style="font-size:14.5px;margin:8px 0 16px;line-height:1.45">${inc ? 'They already asked to be your friend. Adding accepts it.' : 'You opened their invite link. Adding sends a friend request, and they choose whether to accept it.'}</div>
+ ${err ? `<div class="tc-err" role="alert" style="margin-bottom:10px">${esc(err)}</div>` : ''}
+ <div style="display:grid;gap:8px"><button class="btn" data-a="inviteAdd"${busy ? ' disabled' : ''}>${busy ? 'Adding…' : 'Add'}</button><button class="btn soft" data-a="inviteNo">Not now</button></div>`;
+};
 SHEETS.leaveAsk = ({ cid }) => {
   const t = chatOf(cid); if (!t) return '';
   return `<h3>Leave ${esc(threadName(t))}?</h3>
@@ -5701,13 +5858,44 @@ function storyOrder() {
   return pins.length ? pins.concat(UI.storyOrder.filter(id => pins.indexOf(id) < 0)) : UI.storyOrder;
 }
 /* ---- pinned stories (Tate, 2026-10-04: "pin 3 friends on stories") ----
-   Up to three, first in the row in the order pinned. Kept on this phone per account; never sent. */
+   Up to three, first in the row in the order pinned. sync-app (2026-10-15): the account keeps them (profiles.pinned_friends, read with
+   my_pinned_friends(), written with set_pinned_friends(); the server keeps only friends, max 3) so the website shows the same row. This
+   phone's list (tc-story-pins:<uid>) is the cache. Not installed yet => it stays on this phone, as before. */
 const PIN_MAX = 3;
+const PN = { on: null, q: Promise.resolve(), seq: 0 };
 function pinKey() { return 'tc-story-pins:' + (TC.user ? TC.user.id : ''); }
 function pinsSaved() { let a = []; try { a = JSON.parse(localStorage.getItem(pinKey()) || '[]'); } catch (e) {} return Array.isArray(a) ? a.filter(x => typeof x === 'string') : []; }
 /* what shows: saved pins that are friends right now (a friend list still loading drops nobody) */
 function pinsGet() { return pinsSaved().filter(id => TC.friends.indexOf(id) >= 0).slice(0, PIN_MAX); }
-function pinsSet(a) { try { localStorage.setItem(pinKey(), JSON.stringify(a)); return true; } catch (e) { return false; } }
+function pinsLocal(a) { try { localStorage.setItem(pinKey(), JSON.stringify(a)); return true; } catch (e) { return false; } }
+function pinsSet(a) { if (!pinsLocal(a)) return false; pinsPush(a); return true; }
+/* up to the account, in order. The server answers with what it kept; that becomes the cache unless the student has pinned again since. */
+function pinsPush(a) {
+  if (PN.on === false || !TC.user) return;
+  const ids = a.filter(x => TC.friends.indexOf(x) >= 0).slice(0, PIN_MAX), seq = ++PN.seq;
+  PN.q = PN.q.then(async () => {
+    if (PN.on === false) return;
+    let r; try { r = await TC.client().rpc('set_pinned_friends', { p_ids: ids }); } catch (e) { r = { error: e }; }
+    if (r.error) { if (syncGap(r.error)) PN.on = false; else syncFlagSet(syncKey('pins-dirty'), true); return; }
+    PN.on = true; syncFlagSet(syncKey('pins-dirty'), false);
+    const keep = Array.isArray(r.data) ? r.data.map(String) : null;
+    if (keep && seq === PN.seq && JSON.stringify(keep) !== JSON.stringify(pinsGet())) { pinsLocal(keep); render(true); }
+  }).catch(() => {});
+}
+/* On every load: the account's pins become the cache. First time on this account with none on the server: this phone's go up (once).
+   A change that never reached the server (tc-pins-dirty) goes up instead of being overwritten. */
+async function loadPins() {
+  if (!TC.user || !TC.friends.length) return;
+  let r; try { r = await TC.client().rpc('my_pinned_friends'); } catch (e) { r = { error: e }; }
+  if (r.error) { if (syncGap(r.error)) PN.on = false; return; }
+  PN.on = true;
+  const mk = syncKey('pins-migrated'), seq = PN.seq;
+  const srv = (Array.isArray(r.data) ? r.data : []).map(String).filter(x => TC.friends.indexOf(x) >= 0).slice(0, PIN_MAX), loc = pinsGet();
+  const up = syncFlag(syncKey('pins-dirty')) || (!syncFlag(mk) && !srv.length && loc.length);
+  syncFlagSet(mk, true);
+  if (up) { pinsPush(loc); return; }
+  if (seq === PN.seq && JSON.stringify(srv) !== JSON.stringify(loc)) { pinsLocal(srv); render(true); }
+}
 function orList(a) { return a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' or ' + a[a.length - 1]; }
 function togglePin(id) {
   if (!id || TC.friends.indexOf(id) < 0) return;
@@ -7052,7 +7240,7 @@ const A = {
   retryGeList: () => { TC._plFailed = false; needPlanner(); render(true); },
   setSubj: c => { S.subj = c; S.exLimit = 40; save(); render(true); }, openOnly: () => { S.openOnly = !S.openOnly; save(); render(true); },
   clearFilters: () => { S.subj = 'All'; S.openOnly = false; S.savedOnly = false; S.q = ''; UI.sheet = null; save(); render(true); },
-  save: k => { const on = isSaved(k); S.saved = on ? S.saved.filter(x => x !== k) : [...S.saved, k]; toast(on ? 'Removed from saved' : 'Saved on this phone'); save(); render(true); },
+  save: k => { const on = isSaved(k); S.saved = on ? S.saved.filter(x => x !== k) : [...S.saved, k]; toast(on ? 'Removed from saved' : 'Saved on this phone'); save(); render(true); svPush(k, !on); },
   pickPlan: k => { S.plan = k; save(); render(true); },
   /* the current term is stored as null, so after the Oct 5 flip nobody is left on last term's chip */
   pickMineTerm: k => { const t = myTerms().find(x => x.label === k); S.mineTerm = t && (t.code !== CFG.TERM || splitTerms()) ? k : null; S.schedDay = null; save(); render(true); },
@@ -7746,9 +7934,10 @@ TC.deleteAccount = async function (deleteReviews) {
    phone and a recovered account needs (concentration, local plans) stays; the rest is dropped. */
 TC.afterDelete = async function () {
   await TC.pushForget(true);
-  try { [KEY, RECENT_KEY, DRAFT_KEY, ONB_KEY, 'professify_rev_times', AUDIT_KEY(), PREFS_KEY(), PLDRAFT_KEY(), plSkipKey(), MARKS_KEY(), REG_KEY()].forEach(k => localStorage.removeItem(k)); } catch (e) {}
+  TC.wipeDevice();   /* security-app (2026-10-15): everything of theirs on this browser, not a hand-picked list (concentration and local plans too; the account is recoverable from the server) */
   try { sessionStorage.setItem('tc_deleted', String(TC.purgeAt || '1')); } catch (e) {}
   try { await TC.client().auth.signOut({ scope: 'global' }); } catch (e) {}
+  TC.wipeDevice(true);
   /* (global: the account still exists for 30 days, so every device's sign-in is revoked) */
   location.replace(location.pathname);
 };
@@ -7814,7 +8003,7 @@ TC.setPassword = async function (pw) {
 TC.setPlanShared = async function (slot, on) {
   if (!TC.plans[slot].length) return 'Add a class to Plan ' + slot + ' first.';
   TC.planShared[slot] = !!on;
-  const list = TC.plans[slot].map(id => { const s = SEC[id]; return s ? { code: s.code, class_nbr: id } : null; }).filter(Boolean);
+  const list = planList(slot);
   const r = await TC.client().from('plans').upsert({ user_id: TC.user.id, term: CFG.TERM, slot, sections: list, shared: !!on }, { onConflict: 'user_id,term,slot' });
   return r.error ? dbSay(r.error, 'Couldn’t change that.') : null;
 };
@@ -7921,6 +8110,8 @@ function loadPdfJs() {
     /* Pinned like supabase-js: this script reads the report's raw text, so it must be exactly the
        file we checked (sha384 of pdfjs-dist@3.11.174 legacy/build/pdf.min.js). */
     s.integrity = 'sha384-OemFRmhjDZwhIKuUld0HJozkF2YErsgDaCL41trxGQZt4/WgnopJQqQl2DvDZ07Z'; s.crossOrigin = 'anonymous';
+    /* security-app (2026-10-15): the WORKER is started by pdf.js from workerSrc, not by a <script> tag, so it cannot carry an
+       integrity hash. Closing that gap means shipping pdf.min.js + pdf.worker.min.js inside the app bundle (a build step). */
     s.onload = () => { try { window.pdfjsLib.GlobalWorkerOptions.workerSrc = TCPL.pdfBase + 'pdf.worker.min.js'; } catch (e) {} res(window.pdfjsLib); };
     s.onerror = () => rej(new Error('pdf')); document.head.appendChild(s);
   });
@@ -7993,7 +8184,8 @@ async function readDpr(file) {
   let doc = null, text = '';
   try {
     /* pictures as plain pixels (not an ImageBitmap) so the transfer icon can be told from the others */
-    doc = await lib.getDocument({ data: new Uint8Array(await TCPL.fileBytes(file)), isOffscreenCanvasSupported: false }).promise;
+    /* security-app (2026-10-15): isEvalSupported:false = no new Function() for font programs (CVE-2024-4367) */
+    doc = await lib.getDocument({ data: new Uint8Array(await TCPL.fileBytes(file)), isOffscreenCanvasSupported: false, isEvalSupported: false }).promise;
     text = await dprDocText(doc);
   } catch (e) {
     return { err: /password/i.test((e && e.name) + ' ' + (e && e.message)) ? 'That PDF is password-protected. Save the report again without a password.' : 'Couldn’t read that PDF — it may be damaged. Download the report again from the Cal Poly Portal.' };
@@ -8980,8 +9172,11 @@ async function loadCommits() {
   let r; try { r = await TC.client().from('commitments').select('id,kind,name,days,start_min,end_min,busy').eq('user_id', TC.user.id).order('start_min'); } catch (e) { r = { error: { message: String(e) } }; }
   if (r.error) { TC.err.commits = schemaGap(r.error) ? 'missing' : r.error.message; return; }
   const rows = (Array.isArray(r.data) ? r.data : []).map(cmFromRow).filter(cmOk);
-  /* kept on this phone before RUN 18: the first time the table answers with nothing, they go up */
-  if (!rows.length && TC.commits.length) { for (const x of TC.commits) await cmPush(x); return; }
+  /* kept on this phone before RUN 18: the first time the table answers with nothing, they go up. sync-app (2026-10-15): ONCE per account
+     (tc-commits-migrated:<uid>) — an empty list later means the student deleted them (on the website), not that the server lost them. */
+  const mk = syncKey('commits-migrated');
+  if (!rows.length && TC.commits.length && !syncFlag(mk)) { for (const x of TC.commits) await cmPush(x); if (!TC.err.commits) syncFlagSet(mk, true); return; }
+  syncFlagSet(mk, true);
   TC.commits = rows.sort((a, b) => a.s - b.s); cmKeep();
 }
 /* up to the server (gone: removes it). Returns what to tell the student, or null. */
@@ -10087,6 +10282,22 @@ Object.assign(A, {
   },
   personMenu: uid => { if (!uid || !PEOPLE[uid]) return; UI.sheet = { type: 'personAct', uid }; render(true); },
   blockAsk: uid => { if (!uid || !TC.user || uid === TC.user.id) return; ensurePerson(uid); UI.blockErr = ''; UI.sheet = { type: 'blockAsk', uid }; render(true); },
+  inviteAdd: async () => {   /* the one place an invite link writes (security-app, 2026-10-15) */
+    const sh = UI.sheet; if (!sh || sh.type !== 'inviteAsk' || sh.busy) return;
+    const id = sh.id, rel = TC.relation(id); sh.busy = true; sh.err = ''; render(true);
+    let ok = false;
+    try { ok = (rel === 'friends' || rel === 'sent') ? true : rel === 'incoming' ? await TC.acceptRequest(id) : await TC.sendRequest(id); } catch (e) {}
+    sh.busy = false;
+    if (!ok) { if (UI.sheet === sh) { sh.err = 'Couldn’t add them. Check your connection and try again.'; render(true); } return; }   /* the invite stays */
+    try { localStorage.removeItem(INVITE_KEY); } catch (e) {}
+    const first = sh.name ? sh.name.split(/\s+/)[0] : '';
+    if (UI.sheet === sh) A.closeSheet(); else render(true);
+    toast(rel === 'incoming' ? `You and ${first || 'your friend'} are now friends` : first ? `Friend request sent to ${first} — you’re friends once they accept` : 'Friend request sent — you’re friends once they accept');
+  },
+  inviteNo: () => {   /* Not now: answered, nothing written */
+    try { localStorage.removeItem(INVITE_KEY); } catch (e) {}
+    A.closeSheet();
+  },
   blockGo: async uid => {
     if (!uid || UI.busy.block) return; UI.busy.block = 1; UI.blockErr = ''; render(true);
     let r; try { r = await TC.client().rpc('block_user', { p_target: uid }); } catch (e) { r = { error: { message: 'failed to fetch' } }; }
@@ -10575,19 +10786,34 @@ async function loadInviter() {
   /* the sign-in screens keep their own DOM while you type, so the line is filled in place */
   const el = document.querySelector('.tc-invited'); if (el && TC.inviter) el.textContent = TC.inviter + ' invited you to TermChamp. Sign up and you’ll be connected.';
 }
-/* Signed in: a friend request to whoever invited you — the website's rule (a request, not an
-   auto-accept). Theirs to you already waiting: accepted. Nothing for friends, a request already
-   sent, someone you blocked, or your own link. */
+/* Signed in: an invite link is a QUESTION, never a write (security-app, 2026-10-15; the website's rule since 2026-10-14).
+   A sheet asks "Add <name>?"; friend_requests is written when Add is tapped and nowhere else, and if they already asked
+   you, that same tap accepts. Not now clears the invite. Closing the sheet any other way does not answer it: the id stays
+   (up to 14 days, pendingInvite) and the sheet comes back the next time the app is opened. Nothing is asked for a friend,
+   a request already sent, someone you blocked, or your own link. The name is the profile's own (get_inviter), not the link's. */
 TC.processInvite = async function () {
-  const id = pendingInvite();
-  try { localStorage.removeItem(INVITE_KEY); } catch (e) {}
-  if (!id || !TC.user || id === TC.user.id || isBlocked(id)) return;
+  if (TC._inviteAsked || !TC.user) return;
+  const id = pendingInvite(); if (!id) return;
+  const drop = () => { try { localStorage.removeItem(INVITE_KEY); } catch (e) {} };
+  if (id === TC.user.id || isBlocked(id)) { drop(); return; }
+  const rel0 = TC.relation(id);
+  if (rel0 === 'friends' || rel0 === 'sent') { drop(); return; }
+  let name = '';
+  try {
+    const r = await Promise.race([TC.client().rpc('get_inviter', { ref: id }), new Promise(res => setTimeout(() => res(null), 3000))]);
+    const row = r && !r.error ? (Array.isArray(r.data) ? r.data[0] : r.data) : null;
+    if (row && row.display_name) name = String(row.display_name).slice(0, 80);
+  } catch (e) {}
+  if (!name && rel0 === 'incoming' && PEOPLE[id] && PEOPLE[id].name) name = String(PEOPLE[id].name).slice(0, 80);
+  if (TC._inviteAsked || !TC.user || pendingInvite() !== id) return;          /* answered, cleared or asked while we looked */
   const rel = TC.relation(id);
-  if (rel === 'friends' || rel === 'sent') return;
-  let name = (PEOPLE[id] && PEOPLE[id].short) || '';
-  if (!name) { try { const r = await TC.client().rpc('get_inviter', { ref: id }); const row = r && !r.error ? (Array.isArray(r.data) ? r.data[0] : r.data) : null; name = row && row.display_name ? String(row.display_name).split(/\s+/)[0] : ''; } catch (e) {} }
-  if (rel === 'incoming') { if (await TC.acceptRequest(id)) toast(`You and ${name || 'your friend'} are now friends`); render(true); return; }
-  if (await TC.sendRequest(id)) { toast(name ? `Friend request sent to ${name} — you’re friends once they accept` : 'Friend request sent — you’re friends once they accept'); render(true); }
+  if (rel === 'friends' || rel === 'sent') { drop(); return; }
+  if (UI.sheet || UI.champ) {                                                /* something else is open: look again in a moment, never stack on it */
+    if (!TC._inviteWait && (TC._inviteTries = (TC._inviteTries || 0) + 1) <= 60) TC._inviteWait = setTimeout(() => { TC._inviteWait = 0; TC.processInvite().catch(() => {}); }, 1500);
+    return;
+  }
+  TC._inviteAsked = true; TC._inviteTries = 0;
+  UI.sheet = { type: 'inviteAsk', id, name, err: '', busy: false }; render(true);
 };
 const TC_GONE = (() => { try { const v = sessionStorage.getItem('tc_deleted'); sessionStorage.removeItem('tc_deleted'); return v || ''; } catch (e) { return ''; } })();
 function onbSignin() {
@@ -11128,10 +11354,12 @@ TC.pushForget = async function (all) {
   try { if (all) await TC.client().rpc('forget_my_push_tokens'); else if (tok) await TC.client().rpc('unregister_push_token', { p_token: tok }); } catch (e) {}
 };
 async function pushLoadPrefs() {
-  let r; try { r = await TC.client().from('push_prefs').select('prefs').eq('user_id', TC.user.id).maybeSingle(); } catch (e) { r = { error: e }; }
+  let r; try { r = await TC.client().from('push_prefs').select('prefs,seats').eq('user_id', TC.user.id).maybeSingle(); } catch (e) { r = { error: e }; }
   if (r.error) { PUSH.prefsErr = true; if (!PUSH.prefs) PUSH.prefs = {}; return; }
   PUSH.prefsErr = false;
-  PUSH.prefs = r.data && r.data.prefs && typeof r.data.prefs === 'object' ? r.data.prefs : {};
+  PUSH.prefs = r.data && r.data.prefs && typeof r.data.prefs === 'object' ? Object.assign({}, r.data.prefs) : {};
+  /* sync-app (2026-10-15): the website's "seat alerts" switch is push_prefs.seats; off in either place is off in both */
+  if (r.data && r.data.seats === false) PUSH.prefs.seat_open = false;
 }
 TC.pushAfterLoad = async function () {
   pushLoadPrefs().then(() => render(true), () => {});
@@ -11230,7 +11458,9 @@ Object.assign(A, {
     const prev = Object.assign({}, PUSH.prefs || {}), next = Object.assign({}, prev);
     if (pushPrefOn(k)) next[k] = false; else delete next[k];
     PUSH.prefs = next; render(true); refocusBtn('pushPref', k); UI.busy.pp = 1;
-    let r; try { r = await TC.client().from('push_prefs').upsert({ user_id: TC.user.id, prefs: next, updated_at: new Date().toISOString() }); } catch (e) { r = { error: e }; }
+    const row = { user_id: TC.user.id, prefs: next, updated_at: new Date().toISOString() };
+    if (k === 'seat_open') row.seats = pushPrefOn('seat_open');   /* sync-app (2026-10-15): the website's column for the same switch */
+    let r; try { r = await TC.client().from('push_prefs').upsert(row); } catch (e) { r = { error: e }; }
     UI.busy.pp = 0;
     if (r.error) { PUSH.prefs = prev; toast(missingTable(r.error) ? 'Notification settings aren’t switched on yet' : 'Couldn’t save that — try again'); render(true); refocusBtn('pushPref', k); }
   },

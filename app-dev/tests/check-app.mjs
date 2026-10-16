@@ -1454,8 +1454,8 @@ tests.friendMajor = async () => {
   const ids = T.profiles.slice(1, 4).map(p => p.id);
   const look = async (page, id) => { await page.evaluate(id => A.openFriend(id), id); await settle(page);
     const r = await page.evaluate(() => { const b = [...document.querySelectorAll('.fstrip .fs-c')]; const v = l => { const x = b.find(e => (e.querySelector('.fs-l') || {}).textContent === l); return x ? x.querySelector('.fs-v').textContent : null; }; const sub = [v('Concentration') ? v('Concentration') + ' concentration' : '', v('Year')].filter(Boolean).join(' · '); return { pill: v('Major'), sub: sub || null }; }); await click(page, '[data-a="back"]'); await settle(page); return r; };
-  /* before the SQL runs: concentration can't be read, so major and year only */
-  let o = await openApp({ tables: T });
+  /* before the SQL runs: concentration can't be read, so major and year only (the live database grants it now; this models an older one) */
+  let o = await openApp({ tables: T, grants: { _revoke: { profiles: ['concentration'] } } });
   await o.page.waitForFunction(() => TC.ready && document.querySelectorAll('.hfeed .fcard').length === 5, null, { timeout: 8000 });
   let a = await look(o.page, ids[0]);
   ok(a.pill === 'Finance' && a.sub === 'Junior', 'friend major: before the SQL, the major pill and the year (no concentration)', a);
@@ -3828,7 +3828,7 @@ tests.ratingGradient = async () => {
 tests.noPhotoGray = async () => {
   const T = JSON.parse(JSON.stringify(FX.TABLES));
   const rowan = FX.FRIENDS[1].id;
-  T.profiles = T.profiles.map(p => p.id === rowan ? Object.assign({}, p, { avatar_url: 'https://photos.example.invalid/rowan.png' }) : p);
+  T.profiles = T.profiles.map(p => p.id === rowan ? Object.assign({}, p, { avatar_url: 'https://rqkndeqbcahozidniesn.supabase.co/storage/v1/object/public/avatars/rowan/avatar.jpg' }) : p);
   const { page, close, log } = await openApp({ tables: T });
   await page.waitForFunction(() => TC.ready && document.querySelectorAll('.story').length >= 5, null, { timeout: 8000 });
   await tick(page, 400);
@@ -6502,7 +6502,7 @@ tests.noProfile = async () => {
 tests.profileGrants = async () => {
   let { page, close, log } = await openApp();
   const own = log.reads.filter(r => r.startsWith('profiles?') && r.includes(FX.ME.id));
-  ok(own.length >= 1 && own.every(r => !/concentration|select=\*/.test(decodeURIComponent(r))), 'profile: own read names only granted columns', own);
+  ok(own.length === 2 && /concentration/.test(decodeURIComponent(own[0])) && !/concentration|select=\*/.test(decodeURIComponent(own[1])) && own.every(r => !/select=\*/.test(decodeURIComponent(r))), 'profile: own read asks for concentration (sync-app (2026-10-15)) and, refused with 42501, is read again with granted columns only', own);
   ok(await page.locator('.tabbar').count() === 1 && !/Finish setting up/.test(await text(page)), 'profile: a set-up account loads the app');
   await close();
 
@@ -6817,7 +6817,7 @@ tests.deleteAccount = async () => {
   ok(/\|sb-rqkndeqbcahozidniesn-auth-token\b/.test(noted[1]), 'delete: the session is dropped on this phone before the reload', noted);
   ok(noted[1].includes('|tc-marks:' + FX.ME.id), 'delete: flowchart marks are cleared from this phone', noted[1]);
   const left = await page.evaluate(() => [localStorage.getItem('termchamp_app_recent'), localStorage.getItem('termchamp_app_conc')]);
-  ok(left[0] === null && left[1] !== null, 'delete: recent searches are cleared; the concentration (phone-only) stays for a recovery', left);
+  ok(left[0] === null && left[1] === null, 'delete: recent searches and the concentration are cleared too — a shared browser keeps nothing of the person who left (security-app (2026-10-15))', left);
   const pl = await page.evaluate(id => ['tc-audit:' + id, 'tc-prefs:' + id, 'tc-pl-nodpr:' + id, 'tc-drafted:' + id + ':2268'].map(k => localStorage.getItem(k)), FX.ME.id);
   ok(pl.every(v => v === null), 'delete: what the report said, the Planner answers and the drafts are cleared from the phone', pl);
   ok(log.errors.length === 0, 'delete: no page errors', log.errors);
@@ -6899,7 +6899,7 @@ tests.recoverAccount = async () => {
   ok(/Recover your account\?/.test(t) && /permanently deleted on Nov 3, 2026/.test(t) && /other students can’t see it/.test(t) && /except your profile photo/.test(t), 'recover: signing in shows the recover screen with the date, and says the photo doesn’t come back', t.slice(0, 400));
   ok(await page.locator('.tabbar').count() === 0, 'recover: the app isn’t behind it');
   /* (your own profile row is read alongside the check, so the check adds no wait; nothing else is) */
-  ok(!log.reads.some(r => /^(my_sections|saved_classes|friend_requests|plans|class_history|conversation_members|messages)\b/.test(r)) && log.reads.filter(r => /^profiles\b/.test(r)).length <= 1, 'recover: nothing beyond your own profile row is loaded before deciding', log.reads.filter(r => !/course_|rpc:/.test(r)));
+  ok(!log.reads.some(r => /^(my_sections|saved_classes|friend_requests|plans|class_history|conversation_members|messages)\b/.test(r)) && log.reads.filter(r => /^profiles\b/.test(r)).length <= 2, 'recover: nothing beyond your own profile row is loaded before deciding', log.reads.filter(r => !/course_|rpc:/.test(r)));
   await page.locator('[data-a="recoverAccount"]').click(); await tick(page, 1500); await tick(page, 1500);
   ok(calls.filter(c => c.fn === 'cancel_account_deletion').length === 1, 'recover: Recover my account calls cancel_account_deletion() once', calls);
   ok(await page.locator('.tabbar').count() === 1 && !/Recover your account\?/.test(await page.locator('body').innerText()), 'recover: the app loads as before afterwards', (await page.locator('body').innerText()).slice(0, 200));
@@ -7708,18 +7708,23 @@ tests.inviteToApp = async () => {
   const land = await o.page.locator('body').innerText();
   ok(/Avery Quill invited you to TermChamp\. Sign up and you’ll be connected\./.test(land) && !/add=/.test(o.page.url()), 'invite: the landing says who invited you, and the id leaves the address bar', { url: o.page.url(), t: land.slice(0, 200) });
   await o.close();
-  /* signed in: a request to whoever invited you */
+  /* signed in: asked first (security-app (2026-10-15)); the request is written when Add is tapped */
   o = await openApp({ path: '/app/?add=' + SUG.id, rpc: Object.assign({}, FX.RPC, { get_inviter: [{ display_name: SUG.display_name }] }) });
   await o.page.waitForFunction(() => TC.ready, null, { timeout: 8000 }); await tick(o.page, 600);
-  let fr = o.log.writes.filter(w => w.table === 'friend_requests' && w.m === 'POST');
-  ok(fr.length === 1 && fr[0].body.to_user === SUG.id && fr[0].body.from_user === FX.ME.id && fr[0].body.status === 'pending' && /Friend request sent to Pat/.test(await o.page.locator('#toast').innerText()), 'invite: signed in, a friend request goes to whoever invited you', fr);
+  let fr = o.log.writes.filter(w => w.table === 'friend_requests');
+  ok(fr.length === 0 && /Add Pat Suggestia\?/.test(await o.page.locator('#sheet').innerText()), 'invite: signed in, the link ASKS “Add Pat Suggestia?” and writes nothing', fr);
+  await o.page.evaluate(() => A.inviteAdd()); await tick(o.page, 800);
+  fr = o.log.writes.filter(w => w.table === 'friend_requests' && w.m === 'POST');
+  ok(fr.length === 1 && fr[0].body.to_user === SUG.id && fr[0].body.from_user === FX.ME.id && fr[0].body.status === 'pending' && /Friend request sent to Pat/.test(await o.page.locator('#toast').innerText()), 'invite: Add sends a friend request to whoever invited you', fr);
   ok(await o.page.evaluate(() => localStorage.getItem('tc_pending_add')) === null, 'invite: …once');
   await o.close();
-  /* they already asked you: accepted, not a second request */
+  /* they already asked you: still a question; Add accepts, not a second request */
   o = await openApp({ path: '/app/?add=' + STR.id });
   await o.page.waitForFunction(() => TC.ready, null, { timeout: 8000 }); await tick(o.page, 800);
+  ok(!o.log.writes.some(w => w.table === 'friend_requests'), 'invite: if they’d already asked you, the link alone accepts nothing');
+  await o.page.evaluate(() => A.inviteAdd()); await tick(o.page, 800);
   fr = o.log.writes.filter(w => w.table === 'friend_requests');
-  ok(fr.length === 1 && fr[0].m === 'PATCH' && fr[0].body.status === 'accepted', 'invite: if they’d already asked you, it’s accepted instead', fr);
+  ok(fr.length === 1 && fr[0].m === 'PATCH' && fr[0].body.status === 'accepted', 'invite: …Add accepts it instead of sending a second request', fr);
   await o.close();
   /* already friends, or your own link: nothing */
   for (const id of [AVQ.id, FX.ME.id]) {
@@ -8224,7 +8229,7 @@ tests.weekFaces = async () => {
   for (const [w, days, clock] of [[390, 1, '16:30'], [360, 1, '16:30'], [390, 5, '16:30'], [390, 5, '16:02'], [360, 5, '16:08'], [320, 5, '16:30'], [390, 2, '16:08'], [360, 3, '16:15'], [390, 1, '14:20'], [390, 3, '14:20'], [360, 5, '14:20'], [320, 5, '14:20'], [390, 5, '14:50'], [390, 3, '10:30'], [390, 3, '15:00'], [390, 2, '10:30'], [390, 5, '10:45'], [320, 5, '11:20'], [390, 3, '11:50'], [390, 5, '16:50'], [360, 4, '16:50'], [320, 3, '16:50'], [390, 2, '12:50'], [390, 1, '11:50'], [360, 5, '12:50'], [390, 2, '16:05']]) {
     const tag = `${w}px, ${days} day${days > 1 ? 's' : ''}, ${clock}`;
     const { page, close } = await openApp({ width: w, height: 780, time: `2026-09-28T${clock}:00-07:00` });
-    await page.route('https://photos.test/**', r => r.fulfill({ status: 200, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="48"><rect width="64" height="48" fill="#fff"/><circle cx="32" cy="20" r="12" fill="#c08a60"/></svg>' }));
+    await page.route('https://rqkndeqbcahozidniesn.supabase.co/storage/v1/object/public/avatars/**', r => r.fulfill({ status: 200, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="48"><rect width="64" height="48" fill="#fff"/><circle cx="32" cy="20" r="12" fill="#c08a60"/></svg>' }));
     await page.waitForFunction(() => TC.ready && TC.seatsLoaded && TC.friends.length >= 3, null, { timeout: 8000 });
     await page.evaluate(days => {
       S.tab = 'schedule'; S.schedTab = 'mine'; const me = PEOPLE.me, base = me.secs[0], DD = ['M', 'T', 'W', 'R', 'F'].slice(0, days);
@@ -8232,7 +8237,7 @@ tests.weekFaces = async () => {
       me.secs = [mk('BUS 3438', 600, 710, 0), mk('BUS 4442', 720, 810, 1), mk('BUS 4445', 810, 890, 2), mk('BUS 3431', 960, 1070, 3)];
       const fr = TC.friends; fr.forEach(f => { PEOPLE[f].secs = []; });
       const add = (f, ...idx) => idx.forEach(i => PEOPLE[f].secs.push(Object.assign({}, me.secs[i], { id: 'F' + f + i })));
-      add(fr[0], 0, 1, 3); add(fr[1], 0, 1, 3); add(fr[2], 0, 3); PEOPLE[fr[2]].avatar = 'https://photos.test/a.png'; add(fr[2], 2);
+      add(fr[0], 0, 1, 3); add(fr[1], 0, 1, 3); add(fr[2], 0, 3); PEOPLE[fr[2]].avatar = 'https://rqkndeqbcahozidniesn.supabase.co/storage/v1/object/public/avatars/a.png'; add(fr[2], 2);
       if (fr[3]) add(fr[3], 0, 3, 1); if (fr[4]) add(fr[4], 0, 3, 1); add(fr[2], 1); /* 4442 is 90 min: 5 friends in a block only tall enough for 2 faces + a +3 */
       S.schedDay = 'M'; render(true);
     }, days);

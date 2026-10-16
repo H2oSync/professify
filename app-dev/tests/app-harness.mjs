@@ -23,12 +23,14 @@ function session(user) {
    stand-in used to answer any column, which is how a profile read of `concentration` passed every
    test here and failed for Tate's real account on the first sign-in. */
 const COL_GRANTS = {
-  profiles: ['id', 'display_name', 'username', 'avatar_url', 'major', 'class_standing', 'pinned_friends', 'instagram_handle', 'school'],
+  /* websync (2026-10-15): as the live catalog has it: concentration is selectable, pinned_friends is NOT (INSERT/UPDATE only; pins are read through my_pinned_friends()) */
+  profiles: ['id', 'display_name', 'username', 'avatar_url', 'major', 'class_standing', 'concentration', 'instagram_handle', 'school'],
   reviews: { not: ['user_id'] },
 };
 function colDenied(table, select, extra) {
   let g = COL_GRANTS[table]; if (!g) return null;
   if (extra && extra[table] && Array.isArray(g)) g = g.concat(extra[table]);   /* a grant a newer SQL file adds */
+  if (extra && extra._revoke && extra._revoke[table] && Array.isArray(g)) g = g.filter(c => !extra._revoke[table].includes(c));   /* an older database that lacks a grant */
   const cols = String(select || '*').split(',').map(c => c.trim().split(':').pop().split('(')[0]).filter(Boolean);
   for (const c of cols) {
     if (c === '*') return { code: '42501', message: 'permission denied for table ' + table };
@@ -73,6 +75,7 @@ export async function openApp({ signedIn = true, width = 390, height = 844, tabl
   const ctx = await browser.newContext(Object.assign({ viewport: { width, height }, deviceScaleFactor: 1, timezoneId: tz, isMobile: touch === null ? width < 700 : touch, hasTouch: touch === null ? width < 700 : touch }, screen ? { screen } : {}));
   const sess = session(FX.ME);
   let nextId = 5000;
+  let pinsSrv = [];                      // the stand-in for profiles.pinned_friends (my_pinned_friends / set_pinned_friends)
   let authed = signedIn;                 // flips on a successful code or password sign-in
   await ctx.route('**', async route => {
     const req = route.request(); const url = new URL(req.url());
@@ -110,7 +113,9 @@ export async function openApp({ signedIn = true, width = 390, height = 844, tabl
       if (p.startsWith('/auth/v1/')) { log.writes.push({ m, table: 'auth:' + p.slice(9), body, query: url.search }); const ok = p.includes('token') || p.includes('verify'); if (ok) authed = true; return route.fulfill({ status: 200, headers: cors, contentType: 'application/json', body: ok ? JSON.stringify(sess) : '{}' }); }
       if (p.startsWith('/rest/v1/rpc/')) {
         const fn = p.slice(13); log.reads.push('rpc:' + fn); log.rpcs.push({ fn, body });
-        const v = fn in rpc ? rpc[fn] : [];
+        let v = fn in rpc ? rpc[fn] : [];
+        if (!(fn in rpc) && fn === 'my_pinned_friends') v = pinsSrv.slice();
+        if (!(fn in rpc) && fn === 'set_pinned_friends') { pinsSrv = ((body && body.p_ids) || []).slice(0, 3); v = pinsSrv.slice(); }
         if (v && v.__error) return route.fulfill({ status: 400, headers: cors, contentType: 'application/json', body: JSON.stringify(v.__error) });
         return route.fulfill({ status: 200, headers: cors, contentType: 'application/json', body: JSON.stringify(v) });
       }
@@ -127,8 +132,19 @@ export async function openApp({ signedIn = true, width = 390, height = 844, tabl
             else T[table] = (T[table] || []).filter(r => rows.indexOf(r) < 0);
           }
           if (m === 'POST') {
-            const arr = (Array.isArray(body) ? body : [body]).map(r => Object.assign({ id: r.id || (table === 'conversations' ? 'c-new-' + (nextId++) : nextId++), created_at: new Date().toISOString() }, r));
-            T[table] = (T[table] || []).concat(arr); rows = arr;
+            let arr = (Array.isArray(body) ? body : [body]).map(r => Object.assign({ id: r.id || (table === 'conversations' ? 'c-new-' + (nextId++) : nextId++), created_at: new Date().toISOString() }, r));
+            /* websync (2026-10-15): an upsert (?on_conflict=a,b) updates the row that has the same a,b — or, with ignore-duplicates, leaves it —
+               instead of adding a second one, as PostgREST does; push_prefs and saved_items are written twice in a row by the new tests */
+            const oc = url.searchParams.get('on_conflict');
+            if (oc) {
+              const cols = oc.split(','), same = (a, b) => cols.every(c => String(a[c]) === String(b[c]));
+              const fresh = [];
+              for (const r of arr) {
+                const ex = (T[table] || []).find(x => same(x, r));
+                if (ex) { if (!/ignore-duplicates/.test(prefer)) Object.assign(ex, r, { id: ex.id, created_at: ex.created_at }); } else fresh.push(r);
+              }
+              T[table] = (T[table] || []).concat(fresh); rows = arr;
+            } else { T[table] = (T[table] || []).concat(arr); rows = arr; }
           }
           const accept = req.headers()['accept'] || '';
           if (/return=representation/.test(prefer)) {
