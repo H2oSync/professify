@@ -1454,8 +1454,8 @@ tests.friendMajor = async () => {
   const ids = T.profiles.slice(1, 4).map(p => p.id);
   const look = async (page, id) => { await page.evaluate(id => A.openFriend(id), id); await settle(page);
     const r = await page.evaluate(() => { const b = [...document.querySelectorAll('.fstrip .fs-c')]; const v = l => { const x = b.find(e => (e.querySelector('.fs-l') || {}).textContent === l); return x ? x.querySelector('.fs-v').textContent : null; }; const sub = [v('Concentration') ? v('Concentration') + ' concentration' : '', v('Year')].filter(Boolean).join(' · '); return { pill: v('Major'), sub: sub || null }; }); await click(page, '[data-a="back"]'); await settle(page); return r; };
-  /* before the SQL runs: concentration can't be read, so major and year only */
-  let o = await openApp({ tables: T });
+  /* before the SQL runs: concentration can't be read, so major and year only (the live database grants it now; this models an older one) */
+  let o = await openApp({ tables: T, grants: { _revoke: { profiles: ['concentration'] } } });
   await o.page.waitForFunction(() => TC.ready && document.querySelectorAll('.hfeed .fcard').length === 5, null, { timeout: 8000 });
   let a = await look(o.page, ids[0]);
   ok(a.pill === 'Finance' && a.sub === 'Junior', 'friend major: before the SQL, the major pill and the year (no concentration)', a);
@@ -6502,7 +6502,7 @@ tests.noProfile = async () => {
 tests.profileGrants = async () => {
   let { page, close, log } = await openApp();
   const own = log.reads.filter(r => r.startsWith('profiles?') && r.includes(FX.ME.id));
-  ok(own.length >= 1 && own.every(r => !/concentration|select=\*/.test(decodeURIComponent(r))), 'profile: own read names only granted columns', own);
+  ok(own.length === 2 && /concentration/.test(decodeURIComponent(own[0])) && !/concentration|select=\*/.test(decodeURIComponent(own[1])) && own.every(r => !/select=\*/.test(decodeURIComponent(r))), 'profile: own read asks for concentration (sync-app (2026-10-15)) and, refused with 42501, is read again with granted columns only', own);
   ok(await page.locator('.tabbar').count() === 1 && !/Finish setting up/.test(await text(page)), 'profile: a set-up account loads the app');
   await close();
 
@@ -6899,7 +6899,7 @@ tests.recoverAccount = async () => {
   ok(/Recover your account\?/.test(t) && /permanently deleted on Nov 3, 2026/.test(t) && /other students can’t see it/.test(t) && /except your profile photo/.test(t), 'recover: signing in shows the recover screen with the date, and says the photo doesn’t come back', t.slice(0, 400));
   ok(await page.locator('.tabbar').count() === 0, 'recover: the app isn’t behind it');
   /* (your own profile row is read alongside the check, so the check adds no wait; nothing else is) */
-  ok(!log.reads.some(r => /^(my_sections|saved_classes|friend_requests|plans|class_history|conversation_members|messages)\b/.test(r)) && log.reads.filter(r => /^profiles\b/.test(r)).length <= 1, 'recover: nothing beyond your own profile row is loaded before deciding', log.reads.filter(r => !/course_|rpc:/.test(r)));
+  ok(!log.reads.some(r => /^(my_sections|saved_classes|friend_requests|plans|class_history|conversation_members|messages)\b/.test(r)) && log.reads.filter(r => /^profiles\b/.test(r)).length <= 2, 'recover: nothing beyond your own profile row is loaded before deciding', log.reads.filter(r => !/course_|rpc:/.test(r)));
   await page.locator('[data-a="recoverAccount"]').click(); await tick(page, 1500); await tick(page, 1500);
   ok(calls.filter(c => c.fn === 'cancel_account_deletion').length === 1, 'recover: Recover my account calls cancel_account_deletion() once', calls);
   ok(await page.locator('.tabbar').count() === 1 && !/Recover your account\?/.test(await page.locator('body').innerText()), 'recover: the app loads as before afterwards', (await page.locator('body').innerText()).slice(0, 200));
