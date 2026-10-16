@@ -641,8 +641,8 @@ for (const [w,h,label] of [[1280,900,'desktop'],[390,780,'phone']]) {
   });
   if (aiUp) {
     const askAI = async (q) => { await p.fill('#hawk-input', q); await p.press('#hawk-input','Enter'); await p.waitForTimeout(1300); return log(); };
-    /* ("when am i free on tuesday" is a lookup now, answered on the device like the phone's; "am i busy on tuesday" is not) */
-    t = await askAI('am i busy on tuesday');
+    /* (the stand-in names my_free with no day, so the answer is the week card: its Tue row, not the word "Tuesday") */
+    t = await askAI('when am i free on tuesday');
     ok(`${label}: AI-first — a confident personal question still goes to the model`, /\bAI\b/.test(t) && /Tue/.test(t), t.slice(0,90));
     /* THE LIVE MISS, 2026-09-23. The model answered with go_to "my classes"; the router reads it as
        my_professors, and a model go_to never overrides a clean device reading. */
