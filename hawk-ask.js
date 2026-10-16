@@ -1567,24 +1567,27 @@
 
   function answer(q) {
     var cat = buildCatalog();
-    /* The shapes that are a lookup (free time, my day, who is free, does X fit, best professor for X) are answered here, in the
-       browser, before the router or the model is asked: they work offline and signed out, and the chips under a card use them. */
-    var near = localIntent(q, cat);
-    if (near) { readings = { local: near, model: null }; render(q, near, cat); return; }
+    /* AI-FIRST (owner, 2026-10-15: "send to ai every time"). A lookup the device can read (free time, my day, who is free, does X
+       fit, best professor for X — localIntent) goes to the model like any other question; the device's reading is only what is
+       shown when the model cannot be used or has nothing clean to say. A follow-up that narrows the last search stays on the device. */
     var result = R.route(q, cat);
     var fu = buildFollowUp(q, result) || followUp(result);
+    var near = localIntent(q, cat);
+    if (near) fu = null;
     if (fu) result = fu;
+    var device = near || result;
+    var toModel = near ? true : !(skipsModel(result) || !result.in_scope);
 
-    if (skipsModel(result) || !result.in_scope || !aiUrl()) {
-      readings = { local: result, model: null };
-      render(q, result, cat);
+    if (!toModel || !aiUrl()) {
+      readings = { local: device, model: null };
+      render(q, device, cat);
       return;
     }
     var thinking = renderThinking(q);
     askModel(q).then(function (viaModel) {
       if (!thinking.isConnected) return;            // they cleared the chat meanwhile
-      readings = { local: result, model: viaModel };
-      render(q, pickAnswer(viaModel, result), cat, thinking);
+      readings = { local: device, model: viaModel };
+      render(q, pickAnswer(viaModel, device), cat, thinking);
     });
   }
 
@@ -3649,9 +3652,10 @@
     return null;
   }
 
-  /* ---- questions answered here before the model is asked: the shape is unmistakable and the answer is a lookup
-     (the phone's chIntent, 2026-10-08). They also work signed out and offline, and the chips under a card are asked
-     through them, so a follow-up never needs a round trip. ---- */
+  /* ---- the device's own reading of a lookup: the shape is unmistakable and the answer is a lookup (the phone's chIntent,
+     2026-10-08). Since 2026-10-15 (AI-first) it is only the FALLBACK — what answer() shows when the model could not be asked
+     (signed out, no session, the call failed, fallback:'search', the gate) — and the reading kept when the model has nothing
+     clean to say. The question itself always goes to the model first. ---- */
   var CH_CODE = /\b([a-z&]{2,5})\s*-?\s*(\d{3,4}[a-z]?)\b/i;
   var CH_NOTNAME = /^(me|my|i|im|you|u|anyone|anybody|someone|somebody|friends?|everyone|everybody|them|him|her|us|a|an|the|class|classes|lunch|food|today|tomorrow|now|people|good|open|seats)$/;
   var CH_NOWQ = /\b(now|rn|right now|currently|at the moment)\b|^(is|are) [a-z][a-z'-]* free\??$/;
