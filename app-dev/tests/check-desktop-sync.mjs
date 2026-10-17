@@ -41,23 +41,24 @@ const NO_TABLE = { code: 'PGRST205', message: "Could not find the table 'public.
 /* set_pinned_friends answers with what it kept, like the real function (friends only, max 3, no repeats) */
 const echoPins = (kept) => { const h = (url, m, body) => { if (!url.pathname.endsWith('/rpc/set_pinned_friends')) return null; h.calls.push({ fn: 'set_pinned_friends', body }); return { status: 200, body: JSON.stringify(kept ? kept(body.p_ids) : body.p_ids) }; }; h.calls = []; return h; };
 const pinRpc = (ids, extra) => Object.assign({}, FX.RPC, { my_pinned_friends: ids }, extra || {});
-const strip = page => page.evaluate(() => [...document.querySelectorAll('#hmStripWrap .hm-fitem:not(.hm-fadd)')].map(b => ({ nm: b.querySelector('.nm').textContent.split(' ')[0], cls: b.className.replace(/hm-fitem|\s+/g, ' ').trim(), pinned: b.classList.contains('pinned'), badge: !!b.querySelector('.hm-pinbadge'), title: b.title })));
+const strip = page => page.evaluate(() => [...document.querySelectorAll('#hmStripWrap .hm-fitem:not(.hm-fadd)')].map(b => ({ nm: b.querySelector('.nm').textContent.split(' ')[0], cls: b.className.replace(/hm-fitem|\s+/g, ' ').trim(), pinned: b.classList.contains('pinned'), badge: !!b.querySelector('.hm-pinmark') && !b.querySelector('.hm-pinbadge'), title: b.title })));
 const order = async page => (await strip(page)).map(x => x.nm);
 
 /* ======================================================================================================== TASK 1 */
 test('regcard', async () => {
+  /* reg-timeline (2026-10-16): the card is the Spring 2027 timeline (it was the "Round 1 registration opens" card, website-sync 2026-10-15) */
   const o = await live({ tables: clone(FX.TABLES) }); const { page } = o; await tick(page, 1500);
   const r = await page.evaluate(() => {
     const c = document.getElementById('hmRegCard'), td = document.querySelector('#hmRailR .hm-td'), rail = document.getElementById('hmRailR');
-    const btns = c ? [...c.querySelectorAll('.hm-reg-acts .btn')] : [];
+    const btns = c ? [...c.querySelectorAll('.tl-go, .tl-all')] : [];
     return { has: !!c, inRail: !!c && !!rail && rail.contains(c), after: !!c && !!td && td.nextElementSibling === c, text: c ? c.innerText.replace(/\s+/g, ' ').trim() : '',
-      btns: btns.map(b => b.textContent.trim()), stacked: btns.length === 2 && btns[1].getBoundingClientRect().top >= btns[0].getBoundingClientRect().bottom - 1 && Math.abs(btns[1].getBoundingClientRect().left - btns[0].getBoundingClientRect().left) < 2,
+      rows: c ? c.querySelectorAll('.tl-li').length : 0, btns: btns.map(b => b.textContent.replace(/\s+/g, ' ').trim()),
       w: c ? Math.round(c.getBoundingClientRect().width) : 0, rw: rail ? Math.round(rail.getBoundingClientRect().width) : 0, card: !!(c && c.classList.contains('hm-card')),
       top: document.getElementById('campusBanner').innerText.trim() };
   });
   ok(r.has && r.inRail && r.after, 'the card is on Home’s right rail, directly under the greeting card', r);
-  ok(/Round 1 registration opens in 5 days/.test(r.text) && /game plan says what to register for first/.test(r.text), 'it has the countdown and the sentence', r.text);
-  ok(JSON.stringify(r.btns) === '["Your game plan","Set your registration day"]' && r.stacked, 'two buttons, stacked', r);
+  ok(/^×? ?📅 Spring 2027/.test(r.text) && /Your Round 1/.test(r.text) && /Your Round 2/.test(r.text) && /Classes begin/.test(r.text) && /Last day to add/.test(r.text) && /Last day to drop/.test(r.text) && /Last day to withdraw/.test(r.text) && r.rows === 6, 'it is the Spring 2027 timeline: six rows — Round 1, Round 2, classes begin, last day to add, drop, withdraw', r);
+  ok(JSON.stringify(r.btns) === '["Your game plan →","All dates"]', 'one primary button, “Your game plan”, and a quiet “All dates”', r.btns);
   ok(r.card && r.w <= r.rw && r.w > 150, 'it is a normal rail card, no wider than the rail', r);
   ok(r.top === '', 'nothing about registration is left in the strip at the top of the page', r.top);
   /* every other page: the strip stays empty of it */
@@ -69,25 +70,26 @@ test('regcard', async () => {
   /* the x */
   await page.evaluate(() => show('home')); await tick(page, 500);
   await page.click('#hmRegCard .hm-regx'); await tick(page, 300);
-  const d = await page.evaluate(() => ({ gone: !document.getElementById('hmRegCard'), ls: localStorage.getItem('professify_dismiss_reg_2026-10-19'), rg: !!document.querySelector('#hmRailR .rg-slot .rg-card') }));
-  ok(d.gone && d.ls === '1', 'x dismisses it, remembered under the banner’s own key', d);
-  ok(d.rg, 'the rail’s registration-day card is still there');
+  const d = await page.evaluate(() => ({ gone: !document.getElementById('hmRegCard'), ls: localStorage.getItem('professify_dismiss_regtl_' + sbUser.id + '_2274'), rg: !!document.querySelector('#hmRailR .rg-slot .rg-card') }));
+  ok(d.gone && d.ls === '1', 'x dismisses it, remembered under the card’s own key (regtl_<user id>_2274)', d);
+  ok(!d.rg, 'the rail’s own day card is gone for good — the pencils on the timeline replace it');
   await page.evaluate(() => renderHome()); await tick(page, 600);
   ok(await page.evaluate(() => !document.getElementById('hmRegCard')), 'a re-render does not bring it back');
   ok(o.log.errors.length === 0, 'no page errors', o.log.errors); await o.close();
   /* the buttons */
   const p = await live({ tables: clone(FX.TABLES) }); await tick(p.page, 1500);
-  await p.page.click('#hmRegCard button:has-text("Set your registration day")'); await tick(p.page, 400);
-  ok(await p.page.evaluate(() => document.getElementById('rgBack').classList.contains('open')), 'the second button opens the registration-day sheet');
+  await p.page.click('#hmRegCard [data-tl-key="add1"]'); await tick(p.page, 400);
+  ok(await p.page.evaluate(() => document.getElementById('rgBack').classList.contains('open')), 'Round 1’s “+ Add” opens the registration-day sheet');
   await p.page.keyboard.press('Escape'); await tick(p.page, 300);
   await p.page.evaluate(() => { window.__fb = 0; TCPlans.fromBanner = function () { window.__fb++; }; });
-  await p.page.click('#hmRegCard button:has-text("Your game plan")'); await tick(p.page, 300);
-  ok(await p.page.evaluate(() => window.__fb) === 1, 'the first button goes to the game plan');
+  await p.page.click('#hmRegCard .tl-go'); await tick(p.page, 300);
+  ok(await p.page.evaluate(() => window.__fb) === 1, '“Your game plan” goes to the game plan');
   await p.close();
-  /* not before 7 days, never signed out, and never after Round 1 opens */
-  for (const [t, si, why] of [['2026-10-09T10:30:00-07:00', true, 'eight days out'], ['2026-10-20T10:30:00-07:00', true, 'the day after it opened'], [LIVE_NOW, false, 'signed out']]) {
+  /* not before 14 days, never signed out, and not after the term's last day of instruction (May 14) */
+  for (const [t, si, why, want] of [['2026-10-01T10:30:00-07:00', true, 'eighteen days out', false], ['2026-10-05T10:30:00-07:00', true, 'fourteen days out', true], ['2026-10-20T10:30:00-07:00', true, 'the day after Round 1 opened', true],
+    ['2027-01-27T10:30:00-08:00', true, 'once classes have begun', true], ['2027-05-15T10:30:00-07:00', true, 'the day after the last day of classes', false], [LIVE_NOW, false, 'signed out', false]]) {
     const q = await live({ time: t, signedIn: si, tables: clone(FX.TABLES) }); await tick(q.page, 1200);
-    ok(await q.page.evaluate(() => !document.getElementById('hmRegCard')), 'no card ' + why);
+    ok(await q.page.evaluate(() => !!document.getElementById('hmRegCard')) === want, (want ? 'the card shows ' : 'no card ') + why);
     await q.close();
   }
   /* the finals-week banner is not touched */
@@ -97,40 +99,35 @@ test('regcard', async () => {
   await f.close();
 });
 
-/* ONE registration card on Home: the compact card carries the old rail card's day and button; the old one only shows when it does not */
+/* ONE registration card on Home (the timeline), on the rail or, below 1140px, at the top of the main column */
 test('regcard-one', async () => {
   const day = row => { const t = clone(FX.TABLES); t.registration_days = row ? [Object.assign({ user_id: ME, term: '2274', shared: true, updated_at: '2026-10-13T00:00:00Z' }, row)] : []; return t; };
   const cards = page => page.evaluate(() => {
     const vis = e => !!e && e.offsetParent !== null;
     return { compact: [...document.querySelectorAll('.hm-regcard')].filter(vis).length, old: [...document.querySelectorAll('.rg-slot[data-rg="rail"] .rg-card')].filter(vis).length,
       txt: (document.querySelector('#hmRegCard') || {}).innerText || '', day: (document.querySelector('#hmRegCard .hm-reg-day') || {}).textContent || null,
-      btns: [...document.querySelectorAll('#hmRegCard .hm-reg-acts .btn')].map(b => b.textContent.trim()) };
+      btns: [...document.querySelectorAll('#hmRegCard .tl-go, #hmRegCard .tl-all')].map(b => b.textContent.replace(/\s+/g, ' ').trim()) };
   });
   /* no day set */
   let o = await live({ tables: day(null) }); await tick(o.page, 1500);
   let c = await cards(o.page);
-  ok(c.compact === 1 && c.old === 0, 'one card on the rail, not two (the old day card is not drawn while the compact one shows)', c);
-  ok(JSON.stringify(c.btns) === '["Your game plan","Set your registration day"]' && c.day === null, 'no day set: the second button says “Set your registration day”, and there is no day line', c);
-  await o.page.click('#hmRegCard button:has-text("Set your registration day")'); await tick(o.page, 400);
+  ok(c.compact === 1 && c.old === 0, 'one card on the rail, not two', c);
+  ok(JSON.stringify(c.btns) === '["Your game plan →","All dates"]' && c.day === null && /Your Round 1 Opens Oct 19 \+ Add/.test(c.txt.replace(/\s+/g, ' ')), 'no day set: Round 1 says “+ Add · Opens Oct 19”, and there is no green day line', c);
+  await o.page.click('#hmRegCard [data-tl-key="add1"]'); await tick(o.page, 400);
   ok(await o.page.evaluate(() => document.getElementById('rgBack').classList.contains('open')), 'it opens the same registration-day sheet');
   await o.page.keyboard.press('Escape'); await tick(o.page, 300);
-  /* dismiss: the old card is back, and there is still one */
+  /* dismiss: nothing else takes its place on the rail */
   await o.page.click('#hmRegCard .hm-regx'); await tick(o.page, 400);
   c = await cards(o.page);
-  ok(c.compact === 0 && c.old === 1, 'dismissed: the rail’s own day card is back (one card)', c);
+  ok(c.compact === 0 && c.old === 0, 'dismissed: no registration card on the rail at all', c);
   ok(o.log.errors.length === 0, 'one card: no page errors', o.log.errors); await o.close();
   /* a day set */
   o = await live({ tables: day({ day: '2026-10-21', at_time: '11:00:00' }) }); await tick(o.page, 1500);
   c = await cards(o.page);
-  ok(c.compact === 1 && c.old === 0 && JSON.stringify(c.btns) === '["Your game plan","Change your registration day"]', 'a day set: the second button says “Change your registration day”', c);
-  ok(c.day === 'Your day: Wed, Oct 21, 11a · in 7 days', 'a day set: a line says “Your day: Wed, Oct 21, 11a · in 7 days”', c.day);
-  await o.page.click('#hmRegCard button:has-text("Change your registration day")'); await tick(o.page, 400);
-  ok(await o.page.evaluate(() => document.getElementById('rgBack').classList.contains('open') && !!document.querySelector('.rg-d.on[data-day="2026-10-21"]')), 'the same sheet opens, on that day');
-  await o.close();
-  /* the day after: 6 days out is inside 7, 10 days out is not — then only the old card shows, as before */
-  o = await live({ tables: day(null), time: '2026-10-09T10:30:00-07:00' }); await tick(o.page, 1500);
-  c = await cards(o.page);
-  ok(c.compact === 0 && c.old === 1, 'outside the 7-day window the rail shows the old day card as before', c);
+  ok(c.compact === 1 && c.old === 0 && c.day === null && !/Change your registration day/.test(c.txt), 'a day set: one card, no “Change your registration day” button, no green day line', c);
+  ok(/Your Round 1\s+Wed, Oct 21 · 11:00 AM\s+in 7 days/.test(c.txt.replace(/\n+/g, ' ').replace(/\s+/g, ' ')) || /Wed, Oct 21 · 11:00 AM/.test(c.txt), 'a day set: Round 1 says “Wed, Oct 21 · 11:00 AM · in 7 days”', c.txt);
+  await o.page.click('#hmRegCard [data-tl-key="pen1"]'); await tick(o.page, 400);
+  ok(await o.page.evaluate(() => document.getElementById('rgBack').classList.contains('open') && !!document.querySelector('.rg-d.on[data-day="2026-10-21"]')), 'the pencil opens the same sheet, on that day');
   await o.close();
   /* below 1140px the rail is hidden: the card is at the top of the main column */
   o = await live({ tables: day(null), width: 900 }); await tick(o.page, 1500);
@@ -140,14 +137,14 @@ test('regcard-one', async () => {
       txt: t ? t.innerText.replace(/\s+/g, ' ').trim() : '', old: [...document.querySelectorAll('.rg-slot[data-rg="rail"] .rg-card')].filter(e => e.offsetParent !== null).length, within: !!t && r.right <= innerWidth && r.left >= 0 };
   });
   ok(n.has && n.shown && n.aboveFeed && n.within && n.railCopyHidden && n.old === 0, 'at 900px: the card is at the top of Home’s main column (above the feed), once', n);
-  ok(/Round 1 registration opens in 5 days/.test(n.txt) && /Your game plan/.test(n.txt) && /Set your registration day/.test(n.txt), 'at 900px: the same content', n.txt);
+  ok(/Spring 2027/.test(n.txt) && /Your game plan/.test(n.txt) && /Your Round 1/.test(n.txt), 'at 900px: the same content', n.txt);
   await o.page.click('#hmRegCardN .hm-regx'); await tick(o.page, 400);
-  ok(await o.page.evaluate(() => !document.getElementById('hmRegCardN') && !document.getElementById('hmRegCard') && localStorage.getItem('professify_dismiss_reg_2026-10-19') === '1'), 'at 900px: x dismisses it for good');
+  ok(await o.page.evaluate(() => !document.getElementById('hmRegCardN') && !document.getElementById('hmRegCard') && localStorage.getItem('professify_dismiss_regtl_' + sbUser.id + '_2274') === '1'), 'at 900px: x dismisses it for good');
   await o.close();
-  /* a phone-width window: the rail may be moved into the page flow there; still one visible card */
+  /* a phone-width window: still one visible card, no sideways scroll */
   o = await live({ tables: day(null), width: 390, height: 844 }); await tick(o.page, 1500);
   c = await cards(o.page);
-  ok(c.compact === 1 && c.old === 0, 'at 390px: one card, at the top', c);
+  ok(c.compact === 1 && c.old === 0 && await o.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'at 390px: one card, at the top, no sideways scroll', c);
   await o.close();
   /* at 1440 the top copy is not shown */
   o = await live({ tables: day(null) }); await tick(o.page, 1500);
@@ -191,7 +188,7 @@ test('pins', async () => {
   let o = await desk({ tables: clone(FX.TABLES), rpc: pinRpc([HA.id, RO.id]), hook: hk }); await ready(o.page); await home(o.page);
   let st = await strip(o.page);
   ok(JSON.stringify(st.map(x => x.nm)) === '["Harper","Rowan","Sky","Avery","Quinn"]', 'pinned friends first in pin order, then the freeness order', st.map(x => x.nm));
-  ok(st[0].pinned && st[1].pinned && st[0].badge && st[1].badge && !st[2].pinned && !st[2].badge, 'a pinned story wears the pin badge', st.map(x => [x.nm, x.pinned, x.badge]));
+  ok(st[0].pinned && st[1].pinned && st[0].badge && st[1].badge && !st[2].pinned && !st[2].badge, 'a pinned story wears a small pin before its name (no badge on the ring)', st.map(x => [x.nm, x.pinned, x.badge]));
   ok(/hm-unset/.test(st[0].cls), 'a pinned friend keeps their own state ring (Harper: schedule not set up)', st[0].cls);
   ok(rpcs(o.log, 'my_pinned_friends').length >= 1 && !o.log.reads.some(r => /^profiles\?select=[^&]*pinned_friends/.test(decodeURIComponent(r))), 'pins are read through my_pinned_friends, never by selecting the column', o.log.reads.filter(r => /profiles\?/.test(r)));
   /* pin a third from the website: the button on the tile */
@@ -604,3 +601,5 @@ for (const n of names) {
 }
 console.log(`\ncheck-desktop-sync: ${pass} passed, ${fail} failed`);
 if (fail) { console.log('failed:', fails.join(' | ')); process.exit(1); }
+/* friend-polish (2026-10-16): this file was updated by edit-tests-friend-polish-2026-10-16.py */
+/* reg-timeline (2026-10-16): this file was updated by edit-tests-reg-timeline-2026-10-16.py */
