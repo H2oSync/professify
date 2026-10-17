@@ -231,10 +231,10 @@ test('friend-profile', async () => {
 test('phone', async () => {
   const { page, close, log } = await desk({ width: 390, height: 844 }); await tick(page, 1500); await toMine(page);
   const m = await page.evaluate(() => ({ day: document.querySelector('.mc-cal .cal-day').offsetHeight, gut: document.querySelector('.mc-cal').classList.contains('hv-gut'), over: document.documentElement.scrollWidth - innerWidth, hv: document.querySelectorAll('.hv-card,.hv-svg').length }));
-  ok(m.day < 500 && !m.gut && m.over <= 0 && m.hv === 0, 'phone: My classes keeps its scale, reserves no margin, no sideways scroll', m);
+  ok(m.day > 500 && m.day < 700 && !m.gut && m.over <= 0 && m.hv === 0, 'phone: My classes is the phone-sized taller week (phone-sched, 2026-10-16), reserves no margin, no sideways scroll', m);
   await toPlans(page);
-  const p = await page.evaluate(() => ({ grid: document.querySelector('#plansOut .pl3-week .pl3-grid').offsetHeight, nm: [...document.querySelectorAll('#plansOut .pl3-week .pl3-nmw')].every(w => getComputedStyle(w).display === 'none'), gut: document.querySelector('#plansOut .pl3-week').classList.contains('hv-gut'), over: document.documentElement.scrollWidth - innerWidth }));
-  ok(p.grid === 440 && p.nm && !p.gut && p.over <= 0, 'phone: Plans keeps its 440px week, no names squeezed in, no margin, no sideways scroll', p);
+  const p = await page.evaluate(() => ({ grid: document.querySelector('#plansOut .pl3-week .pl3-grid').offsetHeight, nm: [...document.querySelectorAll('#plansOut .pl3-week .pl3-nmw')].every(w => getComputedStyle(w).display !== 'none'), gut: document.querySelector('#plansOut .pl3-week').classList.contains('hv-gut'), over: document.documentElement.scrollWidth - innerWidth }));
+  ok(p.grid === 560 && p.nm && !p.gut && p.over <= 0, 'phone: Plans is 56px an hour (560px for 10h) with the class names in (phone-sched, 2026-10-16), no margin, no sideways scroll', p);
   ok(log.errors.length === 0, 'no page errors', log.errors); await close();
 });
 

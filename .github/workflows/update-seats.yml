@@ -28,6 +28,14 @@ name: Update Cal Poly seats
 #   scrape  the lanes, fanned out over subject x term.
 #   discover / bench   manual, and deliberately outside the concurrency group below.
 
+# LEAST PRIVILEGE (2026-10-17)
+# Nothing in this workflow writes to the repository: no push, no commit, no comment, no release, no
+# issue or PR change. The jobs check the code out (read), run scripts, and upload artifacts (which
+# uses the Actions artifact service, not the GITHUB_TOKEN's scopes). So the token is read-only for
+# every job; a job that ever needs more must ask for it in its own `permissions:` block.
+permissions:
+  contents: read
+
 # ONE SWEEP IN FLIGHT — scoped to scheduled runs only.
 # Two things this gets right that the obvious version does not:
 #   · It is at the WORKFLOW level. On a job with a 24-entry matrix, `concurrency` puts all 24 legs
@@ -149,7 +157,7 @@ jobs:
         with: { node-version: '20' }
       - name: Install deps + Chromium
         working-directory: seats
-        run: npm install && npx playwright install --with-deps chromium
+        run: npm ci --ignore-scripts && npx playwright install --with-deps chromium
       - name: Resolve the missing term code
         id: find
         working-directory: seats
@@ -213,7 +221,7 @@ jobs:
         with: { node-version: '20' }
       - name: Install deps + Chromium
         working-directory: seats
-        run: npm install && npx playwright install --with-deps chromium
+        run: npm ci --ignore-scripts && npx playwright install --with-deps chromium
       - name: Resolve term code
         working-directory: seats
         env:
@@ -235,7 +243,7 @@ jobs:
         with: { node-version: '20' }
       - name: Install deps + Chromium
         working-directory: seats
-        run: npm install && npx playwright install --with-deps chromium
+        run: npm ci --ignore-scripts && npx playwright install --with-deps chromium
       - name: Benchmark
         working-directory: seats
         env:
@@ -298,7 +306,7 @@ jobs:
       - name: Install deps + Chromium
         working-directory: seats
         run: |
-          npm install
+          npm ci --ignore-scripts
           npx playwright install --with-deps chromium
 
       - name: Scrape lane -> Supabase
