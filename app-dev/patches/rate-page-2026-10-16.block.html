@@ -1,0 +1,491 @@
+<style id="rate-page-style">
+/* ================================================================================================
+   THE RATE PAGE (#view-rate) — rate-page (2026-10-16)
+   The Rate tab was a modal ("Review a professor"). It is a page now, like Home / Explore / Schedule / Friends: your
+   professors by term with a Rate button each, the existing review form opening under the professor's row, your own
+   reviews on the right. Own <style> at the end for the reason the other late blocks have one (the big sheet above ends
+   with stray braces). Tokens only, so light and dark both follow.
+   ================================================================================================ */
+#view-rate .rt-head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;padding:44px 0 6px}
+#view-rate .rt-title{font-size:var(--t-page);font-weight:600;letter-spacing:-.03em;margin:0 0 8px;line-height:1.1}
+#view-rate .rt-sub{color:var(--muted);margin:0;font-size:var(--t-para);max-width:60ch}
+#view-rate .rt-prog{min-width:220px;text-align:right;padding-bottom:6px}
+#view-rate .rt-prog b{font-size:var(--t-body);font-weight:700;color:var(--text)}
+#view-rate .rt-prog span{font-size:var(--t-body);color:var(--muted)}
+#view-rate .rt-bar{height:6px;border-radius:99px;background:var(--panel-3);overflow:hidden;margin-top:8px}
+#view-rate .rt-bar i{display:block;height:100%;background:var(--accent);border-radius:99px;transition:width .3s}
+#view-rate .rt-grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:30px;margin-top:20px;align-items:start;padding-bottom:60px}
+#view-rate .rt-search{display:flex;align-items:center;gap:10px;height:46px;padding:0 16px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--muted)}
+#view-rate .rt-search:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
+#view-rate .rt-search svg{width:18px;height:18px;flex:none}
+#view-rate .rt-search input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--text);font:inherit;font-size:16px;font-weight:600}
+#view-rate .rt-search input::placeholder{color:var(--faint);font-weight:600}
+#view-rate .rt-narrowbtn{background:none;border:0;padding:10px 4px 6px;font:inherit;font-size:var(--t-body);font-weight:700;color:var(--accent);cursor:pointer}
+#view-rate .rt-narrowbtn:hover{text-decoration:underline;text-underline-offset:3px}
+#view-rate .rt-filt{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin:4px 0 6px}
+#view-rate .rt-filt[hidden]{display:none}
+#view-rate .rt-lab{font-size:var(--t-label);font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}
+#view-rate .rt-majorrow{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;font-size:var(--t-name);font-weight:700}
+#view-rate .rt-majorrow button{background:none;border:0;color:var(--accent);font:inherit;font-size:var(--t-body);font-weight:700;cursor:pointer;padding:6px 2px}
+#view-rate .rt-two{display:flex;gap:10px}
+#view-rate .rt-two > div{flex:1;min-width:0}
+#view-rate .rt-in,#view-rate .rt-filt select{width:100%;box-sizing:border-box;background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:9px 12px;font:inherit;font-size:16px;font-weight:600;color:var(--text)}
+#view-rate .rt-gate{display:flex;align-items:center;gap:16px;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:16px 18px;margin-bottom:14px}
+#view-rate .rt-gate b{display:block;font-size:var(--t-title);font-weight:800;margin-bottom:2px}
+#view-rate .rt-gate p{margin:0;color:var(--muted);font-size:var(--t-body);line-height:1.45}
+#view-rate .rt-gate .btn{flex:none}
+#view-rate .rt-grp{display:flex;align-items:center;gap:10px;margin:24px 0 4px;font-size:var(--t-label);font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+#view-rate .rt-grp i{flex:1;height:1px;background:var(--line)}
+#view-rate .rt-grp b{font-weight:600;letter-spacing:0;text-transform:none;font-size:var(--t-body)}
+#view-rate .rt-grp .rt-link{font-weight:700;letter-spacing:0;text-transform:none;font-size:var(--t-body);color:var(--accent);background:none;border:0;cursor:pointer;font-family:inherit;padding:2px 0}
+#view-rate .rt-term{font-size:var(--t-label);font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin:14px 0 2px 6px}
+#view-rate .rt-item{border-bottom:1px solid var(--line-soft)}
+#view-rate .rt-item.open{background:var(--panel-2);border-radius:16px;border-bottom-color:transparent}
+#view-rate .rt-row{display:flex;align-items:center;gap:14px;padding:12px 8px;cursor:pointer;border-radius:14px}
+#view-rate .rt-av{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:var(--t-body);flex:none;background:var(--accent-dim);color:var(--accent)}
+#view-rate .rt-mi{flex:1;min-width:0}
+#view-rate .rt-nm{font-size:var(--t-name);font-weight:700;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#view-rate .rt-sb{font-size:var(--t-body);color:var(--muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#view-rate .rt-sc{display:inline-flex;align-items:center;gap:4px;font-size:var(--t-body);font-weight:800;white-space:nowrap;flex:none}
+#view-rate .rt-sc svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2;stroke-linejoin:round}
+#view-rate .rt-sc.none{font-weight:600;color:var(--muted)}
+#view-rate .rt-chip{font-size:var(--t-label);font-weight:700;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:3px 9px;white-space:nowrap;flex:none}
+#view-rate .rt-badge{font-size:var(--t-label);font-weight:700;color:var(--good-ink);border:1px solid var(--line);border-radius:999px;padding:4px 11px;white-space:nowrap;flex:none;display:inline-flex;gap:5px;align-items:center}
+#view-rate .rt-rate{flex:none;min-width:86px;border:0;border-radius:999px;background:var(--accent);color:var(--accent-ink);font:inherit;font-size:var(--t-body);font-weight:800;padding:8px 16px;cursor:pointer;white-space:nowrap}
+#view-rate .rt-rate:hover{filter:brightness(1.08)}
+#view-rate .rt-item.open .rt-rate{background:var(--panel);color:var(--text);border:1px solid var(--line)}
+#view-rate .rt-fh:empty{display:none}
+#view-rate .rt-fh{margin:0 8px 10px;background:var(--panel);border:1px solid rgba(var(--accent-rgb),.35);border-radius:16px}
+/* the form is not its own scroll box here (the old modal capped .rf at 66vh): the page, or the phone sheet, scrolls */
+#view-rate .rt-fh .rf{max-height:none;overflow:visible;padding-right:0}
+#view-rate .rt-edit.rt-rowedit{flex:none;padding:6px 4px}
+@media (min-width:641px){ #view-rate .rt-fh .rate-wrap > .mclose{display:none} }   /* the row's Close is the one control; the phone sheet keeps the ×, its row is behind it */
+#view-rate .rt-fh .rate-wrap{padding:20px 22px 18px}
+#view-rate .rt-empty{font-size:var(--t-body);color:var(--muted);line-height:1.5;padding:12px 4px}
+#view-rate .rt-empty a{color:var(--accent);font-weight:700}
+#view-rate .rt-more{display:none}
+#view-rate .rt-all .rt-more{display:block}
+#view-rate .rt-showmore{background:none;border:0;color:var(--accent);font:inherit;font-weight:700;font-size:var(--t-body);cursor:pointer;padding:12px 6px}
+#view-rate .rt-rail .rt-card{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:16px 18px;margin-bottom:16px}
+#view-rate .rt-rail h4{margin:0 0 10px;font-size:var(--t-label);font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+#view-rate .rt-votes{display:flex;align-items:baseline;gap:8px;background:var(--panel-2);border-radius:12px;padding:10px 12px;margin-bottom:6px}
+#view-rate .rt-votes b{font-size:26px;font-weight:800;letter-spacing:-.03em}
+#view-rate .rt-votes span{font-size:var(--t-body);color:var(--muted)}
+#view-rate .rt-rev{padding:12px 0;border-top:1px solid var(--line-soft)}
+#view-rate .rt-rev:first-of-type{border-top:0}
+#view-rate .rt-rh{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:3px}
+#view-rate .rt-rh b{font-size:var(--t-name);font-weight:700}
+#view-rate .rt-rev p{margin:0;color:var(--text-2);line-height:1.45;font-size:var(--t-body);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+#view-rate .rt-rm{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:5px;font-size:var(--t-label);color:var(--muted)}
+#view-rate .rt-edit{background:none;border:0;padding:4px 0;font:inherit;font-size:var(--t-body);font-weight:700;color:var(--accent);cursor:pointer}
+#view-rate .rt-edit:hover{text-decoration:underline;text-underline-offset:3px}
+#view-rate .rt-all-link{display:block;background:none;border:0;padding:10px 0 0;font:inherit;font-size:var(--t-body);font-weight:700;color:var(--accent);cursor:pointer}
+#view-rate .rt-note{font-size:var(--t-body);color:var(--muted);line-height:1.45}
+#view-rate .rt-scrim{display:none}
+@media (max-width:1139px){
+  #view-rate .rt-grid{grid-template-columns:minmax(0,1fr) 300px;gap:22px}
+}
+@media (max-width:860px){
+  #view-rate .rt-grid{grid-template-columns:minmax(0,1fr)}
+  #view-rate .rt-rail{order:2}
+}
+@media (max-width:640px){
+  #view-rate .rt-head{padding:18px 0 4px;flex-direction:column;align-items:stretch;gap:10px}
+  #view-rate .rt-title{font-size:29px}
+  #view-rate .rt-prog{text-align:left;min-width:0;padding-bottom:0}
+  #view-rate .rt-grid{margin-top:12px;padding-bottom:30px}
+  #view-rate .rt-row{gap:11px;padding:11px 2px}
+  #view-rate .rt-av{width:36px;height:36px}
+  #view-rate .rt-rate{min-width:0;padding:8px 14px}
+  #view-rate .rt-gate{flex-direction:column;align-items:stretch;gap:10px}
+  #view-rate .rt-item.open{background:transparent;border-radius:0;border-bottom-color:var(--line-soft)}
+  /* the form is a bottom sheet on a phone */
+  #view-rate.rt-sheet .rt-scrim{display:block;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:78}
+  #view-rate .rt-item.open .rt-fh{position:fixed;left:0;right:0;bottom:0;z-index:79;margin:0;max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
+    border-radius:24px 24px 0 0;border:0;border-top:1px solid var(--line);box-shadow:0 -20px 50px rgba(0,0,0,.35);padding-bottom:env(safe-area-inset-bottom)}
+  #view-rate .rt-item.open .rt-fh::before{content:"";display:block;width:40px;height:4px;border-radius:9px;background:var(--line);margin:10px auto 0}
+  #view-rate .rt-item.open .rt-fh{margin:0}
+  #view-rate .rt-fh .rate-wrap{padding:18px 18px 22px}
+  #view-rate .rt-fh .rate-wrap > .mclose{position:absolute;top:10px;right:12px;left:auto}
+  body.rt-sheet-open .hawk-fab{display:none!important}
+}
+</style>
+<script>
+/* ================================================================================================
+   THE RATE PAGE — rate-page (2026-10-16). Owner: "make the Rate tab a real page instead of the Review a professor modal".
+   What is reused, untouched: the finding logic (rlMyProfs / rlMyProfGroups / rlScopedProfs / rlNameHits and the
+   rlMajor / rlPrefix / rlNum state), the review form (renderRateForm, validation, submitRate, rfSaveEdit), the edit flow
+   (myrEdit) and the data loaders (loadMyReviewed, loadMyHistory, loadMyReviews). What is new is only where the form is drawn:
+   rfHost() is the professor's row on this page while it is open, and the old #modal everywhere else.
+   Entry points (the list is in app-dev/patches/rate-page-2026-10-16.py's header).
+   ================================================================================================ */
+var RT={pid:null,course:'',host:null,all:false,filt:false,fromSearch:false,signed:null,q:'',n:0,locked:false};
+function rtSignedIn(){ try{ return !!(typeof sbUser!=='undefined'&&sbUser); }catch(e){ return false; } }
+function rtActive(){ var v=document.getElementById('view-rate'); return !!(v&&v.classList.contains('active')); }
+function rtOn(){ return RT.pid!=null&&!!RT.host&&document.body.contains(RT.host); }
+/* where the review form (and its thank-you) is drawn */
+function rfHost(){ return rtOn()?RT.host:document.getElementById('modal'); }
+function rtStar(){ return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>'; }
+function rtEsc(s){ return escapeHtml(s==null?'':String(s)); }
+function rtMine(){ try{ return rlMyProfs(); }catch(e){ return []; } }
+function rtIsRated(p){ try{ return !!(window.MY_REVIEWED&&MY_REVIEWED[profKeyName(p)]); }catch(e){ return false; } }
+
+/* ---- the page's skeleton: search, the course filters, the lists. Painted when the page is entered. ---- */
+function rtRenderShell(){
+  var m=document.getElementById('rtMain'); if(!m)return;
+  m.innerHTML='<div id="rtGate"></div>'
+   +'<label class="rt-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>'
+   +'<input id="rtSearch" type="search" placeholder="'+(rtPhone()?'Find a professor or a course':'Find a professor \u2014 by name, or a course like CSC 101')+'" aria-label="Find a professor by name or course" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" oninput="rtOnSearch()" onkeydown="if(event.key===\'Enter\'){event.preventDefault();rtOnSearch(true);}" value="'+rtEsc(RT.q||'')+'"></label>'
+   +'<button type="button" class="rt-narrowbtn" id="rtNarrowBtn" aria-expanded="'+(RT.filt?'true':'false')+'" onclick="rtToggleFilt()">'+(RT.filt?'Hide course filters':'Narrow by course')+'</button>'
+   +'<div class="rt-filt" id="rtFilt"'+(RT.filt?'':' hidden')+'></div>'
+   +'<div id="rtPin"></div><div id="rtLists"></div>';
+  rtRenderFilt();
+}
+function rtToggleFilt(){
+  RT.filt=!RT.filt;
+  var f=document.getElementById('rtFilt'), b=document.getElementById('rtNarrowBtn');
+  if(f)f.hidden=!RT.filt;
+  if(b){ b.setAttribute('aria-expanded',String(RT.filt)); b.textContent=RT.filt?'Hide course filters':'Narrow by course'; }
+}
+/* YOUR MAJOR / COURSE PREFIX / COURSE NUMBER — the modal's three fields, same state (rlMajor, rlPrefix, rlNum) */
+function rtRenderFilt(){
+  var f=document.getElementById('rtFilt'); if(!f)return;
+  if(!rlMajor)rlMajor=(typeof student!=='undefined'&&student&&student.major)||'';
+  if(!rlPrefix)rlPrefix=majorPrefix(rlMajor)||'';
+  var majorLine=(rlMajorLocked&&rlMajor)
+    ?'<div class="rt-majorrow"><span>'+rtEsc(rlMajor)+'</span><button type="button" onclick="rtUnlockMajor()">Change</button></div>'
+    :'<div class="rt-majorrow" style="display:block"><div class="selwrap"><select onchange="rtPickMajor(this.value)" aria-label="Your major">'+(rlMajor?'':'<option value="">Set your major…</option>')+majorOptionsHtml(rlMajor)+'</select></div></div>';
+  f.innerHTML='<div class="rt-lab">Your major</div>'+majorLine
+   +'<div class="rt-two"><div><div class="rt-lab">Course prefix</div><input id="rtPrefixIn" class="rt-in" value="'+rtEsc(rlPrefix)+'" oninput="rtSetPrefix(this.value)" placeholder="e.g. PSY" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false"></div>'
+   +'<div><div class="rt-lab">Course number</div><input id="rtNumIn" class="rt-in" value="'+rtEsc(rlNum)+'" oninput="rtSetNum(this.value)" placeholder="e.g. 254" inputmode="numeric" autocomplete="off" autocorrect="off" spellcheck="false"></div></div>';
+}
+function rtPickMajor(m){ rlMajor=m; rlPrefix=majorPrefix(m)||''; rtRenderFilt(); rtRenderLists(); }
+function rtUnlockMajor(){ rlMajorLocked=false; rtRenderFilt(); }
+function rtSetPrefix(v){ RT.fromSearch=false; rlTouched=true; rlPrefix=String(v||'').toUpperCase().replace(/[^A-Z]/g,''); clearTimeout(rlT); rlT=setTimeout(rtRenderLists,220); }
+function rtSetNum(v){ RT.fromSearch=false; rlTouched=true; rlNum=String(v||'').trim(); clearTimeout(rlT); rlT=setTimeout(rtRenderLists,220); }
+/* The search box takes a name, or a course written as prefix + number ("CSC 101", "bus3438"), which fills the course filters. */
+function rtOnSearch(now){
+  var el=document.getElementById('rtSearch'); RT.q=el?el.value:'';
+  var m=/^\s*([A-Za-z]{2,5})\s*-?\s*(\d{1,4}[A-Za-z]?)\s*$/.exec(RT.q);
+  if(m){
+    RT.fromSearch=true; rlTouched=true; rlPrefix=m[1].toUpperCase(); rlNum=m[2];
+    var a=document.getElementById('rtPrefixIn'), b=document.getElementById('rtNumIn'); if(a)a.value=rlPrefix; if(b)b.value=rlNum;
+  }else if(RT.fromSearch){
+    RT.fromSearch=false; rlTouched=false; rlNum=''; rlPrefix=majorPrefix(rlMajor)||'';
+    var a2=document.getElementById('rtPrefixIn'), b2=document.getElementById('rtNumIn'); if(a2)a2.value=rlPrefix; if(b2)b2.value=rlNum;
+  }
+  clearTimeout(rlT);
+  if(now)rtRenderLists(); else rlT=setTimeout(rtRenderLists,180);
+}
+
+/* ---- one row ---- */
+function rtRowHtml(id,p,ctx,code,extraCls){
+  var rvd=rtIsRated(p), unrated=(p.rating==null);
+  var dept=''; try{ dept=(typeof profDeptLabel==='function'?profDeptLabel(p):(p.dept||''))||''; }catch(e){}
+  var sub;
+  if(ctx)sub=ctx+(dept?(' · '+dept):'');
+  else{
+    var cs=[]; try{ cs=pfCoursesTaught(p).map(function(c){return c.code;}).concat(wlCourses(p)).filter(function(v,i,a){return a.indexOf(v)===i;}).slice(0,2); }catch(e){}
+    sub=cs.length?cs.join(', '):dept;
+  }
+  var idA=jsAttr(id), codeA=jsAttr(code||'');
+  var sc=unrated?'<span class="rt-sc none">No ratings yet</span>'
+    :'<span class="rt-sc" style="color:'+scoreColor(p.rating)+'">'+rtStar()+to5(p.rating).toFixed(1)+'</span>';
+  var off=''; try{ if(typeof pfNotTeachingKnown==='function'&&pfNotTeachingKnown(p))off='<span class="rt-chip">Not teaching this term</span>'; }catch(e){}
+  var fid='rtfh-'+(RT.n++);
+  var mineRow=null;
+  if(rvd){ try{ (window.MY_REVIEWS||[]).forEach(function(r){ if(!mineRow&&r&&r.id&&!r._local&&r.professor_key===profKey(p))mineRow=r; }); }catch(e){} }
+  var tail=rvd?((mineRow?'<button type="button" class="rt-edit rt-rowedit" data-id="'+rtEsc(String(mineRow.id))+'" onclick="event.stopPropagation();myrEdit(this)" aria-label="'+rtEsc('Edit your review of '+p.name)+'">Edit</button>':'')+'<span class="rt-badge">✓ Reviewed</span>')
+    :'<button type="button" class="rt-rate" aria-controls="'+fid+'" onclick="event.stopPropagation();rtRowClick(\''+idA+'\',\''+codeA+'\')" aria-expanded="false">'+((unrated&&!ctx)?'Be the first ★':'Rate ★')+'</button>';
+  var tint=unrated?'':(' style="'+rtEsc(profTintStyle(p.rating))+'"');
+  return '<div class="rt-item'+(extraCls?(' '+extraCls):'')+'" data-pid="'+rtEsc(id)+'"><div class="rt-row" '
+    +(rvd?'onclick="openProf(\''+idA+'\')" title="Open this professor"':'onclick="rtRowClick(\''+idA+'\',\''+codeA+'\')"')+'>'
+    +'<span class="rt-av"'+tint+'>'+rtEsc(initials(p.name))+'</span>'
+    +'<div class="rt-mi"><div class="rt-nm">'+rtEsc(p.name)+'</div><div class="rt-sb">'+rtEsc(sub)+'</div></div>'
+    +off+sc+tail+'</div><div class="rt-fh" id="'+fid+'"></div></div>';
+}
+function rtRowClick(id,code){
+  if(RT.pid===id&&rtOn()){ rtClose(); return; }
+  try{ startRate(id,code||''); }catch(e){}
+}
+function rtGrpHtml(label,right,extra){
+  return '<div class="rt-grp'+(extra?(' '+extra):'')+'"><span>'+rtEsc(label)+'</span><i></i>'+(right||'')+'</div>';
+}
+
+/* ---- the lists: what you asked for, then your professors by term (the modal's order) ---- */
+function rtRenderLists(){
+  var box=document.getElementById('rtLists'); if(!box)return;
+  var pin=document.getElementById('rtPin');
+  /* the open form lives in RT.host; take it out before the rows are rebuilt, put it back under its professor after.
+     Taking a node out of the page drops focus (and, on a phone, the keyboard), so what had focus, its caret and the sheet's scroll are put back. */
+  var keep=null;
+  if(RT.host&&RT.host.parentNode){
+    var ae=document.activeElement, fh0=RT.host.parentNode;
+    keep={el:(ae&&RT.host.contains(ae))?ae:null,top:fh0.scrollTop};
+    if(keep.el){ try{ keep.s=keep.el.selectionStart; keep.e=keep.el.selectionEnd; }catch(e){} }
+    RT.host.parentNode.removeChild(RT.host);
+  }
+  RT.n=0;
+  var nameEl=document.getElementById('rtSearch');
+  var q=(nameEl&&nameEl.value||'').trim();
+  var courseQ=/^\s*[A-Za-z]{2,5}\s*-?\s*\d{1,4}[A-Za-z]?\s*$/.test(q);
+  var nameQ=courseQ?'':q;
+  var filtering=!!((rlTouched&&(rlPrefix||rlNum))||nameQ.length>=2);
+  var html='';
+  if(filtering){
+    var hits,label;
+    if(nameQ.length>=2){ hits=rlNameHits(nameQ); label='Matching “'+nameQ+'”'; }
+    else{ var sc=rlScopedProfs(); hits=sc.rated.concat(sc.unrated); label='Matching '+((rlPrefix||'')+(rlNum?(' '+rlNum):'')).toUpperCase(); }
+    html+=rtGrpHtml(label,hits.length?('<b>'+hits.length+' found</b>'):'');
+    html+=hits.length?hits.slice(0,12).map(function(h){return rtRowHtml(h[0],h[1],'','');}).join('')
+      :'<div class="rt-empty">Nothing matches that. Try a different number, or search by name.</div>';
+  }
+  var mine=rtMine();
+  if(mine.length){
+    var groups=rlMyProfGroups(mine), now=groups.filter(function(g){return g.key==='now';})[0];
+    var past=groups.filter(function(g){return g.key!=='now';});
+    var stack=0; try{ stack=(typeof rsBuildQueue==='function')?rsBuildQueue().length:0; }catch(e){}
+    var todo=function(g){ return g.rows.filter(function(m){return !rtIsRated(m.p);}).length; };
+    if(now){
+      html+=rtGrpHtml(now.label,'<b>'+(todo(now)?(todo(now)+' to rate'):'All rated')+'</b>'
+        +(stack>1?'<button type="button" class="rt-link" onclick="rsOpen(\'sheet\')">Rate them one at a time</button>':''));
+      html+=now.rows.map(function(m){return rtRowHtml(m.id,m.p,m.ctx,m.code);}).join('');
+    }else if(stack>1){
+      html+=rtGrpHtml('Your professors','<button type="button" class="rt-link" onclick="rsOpen(\'sheet\')">Rate them one at a time</button>');
+    }
+    if(past.length){
+      var total=0; past.forEach(function(g){ total+=g.rows.length; });
+      var pastTodo=0; past.forEach(function(g){ pastTodo+=todo(g); });
+      html+=rtGrpHtml('Past terms','<b>'+(pastTodo?(pastTodo+' to rate'):'All rated')+'</b>');
+      var SHOW=6, n=0;
+      past.forEach(function(g){
+        var first=n>=SHOW;
+        html+='<div class="rt-term'+(first?' rt-more':'')+'">'+rtEsc(g.label)+'</div>';
+        g.rows.forEach(function(m){ html+=rtRowHtml(m.id,m.p,m.ctx,m.code,(n>=SHOW)?'rt-more':''); n++; });
+      });
+      if(total>SHOW)html+='<button type="button" class="rt-showmore" id="rtShowMore" onclick="rtToggleAll()">'+(RT.all?'Show fewer':('Show '+(total-SHOW)+' more'))+'</button>';
+    }
+  }else if(!filtering){
+    html+='<div class="rt-empty">Search a professor by name above'+(rtSignedIn()?', or <a href="#" onclick="event.preventDefault();show(\'past\')">add the classes you have taken</a> and the professors you had show up here.':'.')+'</div>';
+  }
+  box.innerHTML=html;
+  box.classList.toggle('rt-all',!!RT.all);
+  if(pin)pin.innerHTML='';
+  /* the open form goes back under its professor (a professor not on screen — an edit, a search that moved on — gets its own row above the lists) */
+  if(RT.pid!=null&&RT.host&&PROFESSORS[RT.pid]){
+    var it=null; [].forEach.call(box.querySelectorAll('.rt-item'),function(e){ if(!it&&e.getAttribute('data-pid')===String(RT.pid))it=e; });
+    if(!it&&pin){
+      pin.innerHTML=rtGrpHtml((window.RATE_EDIT&&window.RATE_EDIT.id)?'Editing your review':'Rating')+rtRowHtml(RT.pid,PROFESSORS[RT.pid],'',RT.course||'');
+      it=pin.querySelector('.rt-item');
+    }
+    if(it){
+      it.classList.add('open');
+      var b=it.querySelector('.rt-rate'); if(b){ b.textContent='Close'; b.setAttribute('aria-expanded','true'); }
+      var fh=it.querySelector('.rt-fh'); fh.appendChild(RT.host);
+      if(keep){
+        try{ fh.scrollTop=keep.top; }catch(e){}
+        if(keep.el&&document.body.contains(keep.el)){
+          try{ keep.el.focus({preventScroll:true}); if(keep.s!=null&&keep.el.setSelectionRange)keep.el.setSelectionRange(keep.s,keep.e); }catch(e){}
+        }
+      }
+    }
+  }
+}
+function rtToggleAll(){ RT.all=!RT.all; rtRenderLists(); }
+
+/* ---- header: "N of M rated" ---- */
+function rtRenderHead(){
+  var h=document.getElementById('rtProg'); if(!h)return;
+  var mine=rtMine();
+  if(!rtSignedIn()||!mine.length){ h.innerHTML=''; return; }
+  var n=mine.filter(function(m){return rtIsRated(m.p);}).length;
+  h.innerHTML='<b>'+n+'</b> <span>of '+mine.length+' rated</span><div class="rt-bar" role="progressbar" aria-valuemin="0" aria-valuemax="'+mine.length+'" aria-valuenow="'+n+'" aria-label="Professors you have rated"><i style="width:'+Math.round(n/mine.length*100)+'%"></i></div>';
+}
+function rtGateHtml(){
+  if(rtSignedIn())return '';
+  return '<div class="rt-gate"><div style="flex:1;min-width:0"><b>Sign in to rate</b><p>Only verified Cal Poly students can rate — that is what keeps reviews real. We email you a code, so there is no password, and reviews post anonymously.</p></div><button type="button" class="btn primary" onclick="openAuth(\'rate\')">Sign in</button></div>';
+}
+
+/* ---- right rail: your reviews (with Edit), helpful votes, the community ---- */
+function rtAgo(ts){
+  try{ var d=(Date.now()-new Date(ts).getTime())/1000; if(!isFinite(d))return '';
+    var u=function(n,w){ return n+' '+w+(n===1?'':'s')+' ago'; };
+    if(d<3600)return Math.max(1,Math.floor(d/60))+' min ago'; if(d<86400)return u(Math.floor(d/3600),'hour');
+    if(d<172800)return 'yesterday'; if(d<2592000)return u(Math.floor(d/86400),'day'); return ''; }catch(e){ return ''; }
+}
+function rtYourHtml(){
+  var list=window.MY_REVIEWS;
+  var head='<h4>Your reviews</h4>';
+  if(list==null)return '<div class="rt-card">'+head+'<div class="rt-note">Loading…</div></div>';
+  if(!list.length){
+    if(window.MY_REVIEWS_FAILED)return '<div class="rt-card">'+head+'<div class="rt-note">Couldn’t load your reviews just now. <button type="button" class="rt-edit" onclick="rtReloadMine()">Try again</button></div></div>';
+    return '<div class="rt-card">'+head+'<div class="rt-note">You haven’t written any reviews yet. Rate a professor and it shows up here so you can find it again.</div></div>';
+  }
+  var votes='';
+  if(typeof window.MY_IMPACT==='number'&&!window.MY_REVIEWS_FAILED)
+    votes='<div class="rt-votes"><b>'+window.MY_IMPACT+'</b><span>helpful vote'+(window.MY_IMPACT===1?'':'s')+' on your reviews</span></div>';
+  var rows=list.slice(0,4).map(function(r){
+    var pid=null; try{ pid=myRevProfId(r); }catch(e){}
+    var sc=(r.score!=null&&r.score!=='')?Number(r.score).toFixed(1):'—';
+    var col=(r.score!=null)?scoreColor((Number(r.score)||0)/5*4):'var(--faint)';
+    var editable=!!(r.id&&!r._local&&pid);
+    var sub=''; try{ sub=myrRowLabel(r); }catch(e){}
+    return '<div class="rt-rev"><div class="rt-rh"><b>'+rtEsc(r.professor_name||'Professor')+'</b><span class="rt-sc" style="color:'+col+'">'+rtStar()+sc+'</span></div>'
+      +(r.note?'<p>'+rtEsc(r.note)+'</p>':'')
+      +'<div class="rt-rm"><span>'+sub+'</span>'+(editable?'<button type="button" class="rt-edit" data-id="'+rtEsc(String(r.id))+'" onclick="event.stopPropagation();myrEdit(this)">Edit</button>':'')+'</div></div>';
+  }).join('');
+  return '<div class="rt-card">'+head+votes+rows
+    +(list.length>4?'<button type="button" class="rt-all-link" onclick="openMyReviews()">See all '+list.length+' →</button>':'<button type="button" class="rt-all-link" onclick="openMyReviews()">Manage your reviews →</button>')+'</div>';
+}
+/* "Latest reviews at Cal Poly" — only when Home's feed data (reviews_public, already loaded) has at least 8 */
+function rtCommunityHtml(){
+  var L=[]; try{ if(typeof hmRecentsGet==='function')L=hmRecentsGet()||[]; }catch(e){}
+  if(!Array.isArray(L)||L.length<8)return '';
+  var open=true; try{ open=(typeof recipUnlocked==='function')?recipUnlocked():true; }catch(e){}
+  var rows=L.slice(0,3).map(function(r){
+    var sc=(r.score!=null&&r.score!=='')?Number(r.score).toFixed(1):'';
+    var meta=[r.course||'',r.department||'',rtAgo(r.created_at)].filter(Boolean).join(' · ');
+    var txt=open&&r.note?String(r.note):'';
+    return '<div class="rt-rev"><div class="rt-rh"><b>'+rtEsc(r.professor_name||'Professor')+'</b>'+(sc?'<span class="rt-sc" style="color:'+scoreColor((Number(r.score)||0)/5*4)+'">'+rtStar()+sc+'</span>':'')+'</div>'
+      +(txt?'<p>'+rtEsc(txt)+'</p>':'')+'<div class="rt-rm"><span>'+rtEsc(meta)+'</span></div></div>';
+  }).join('');
+  return '<div class="rt-card"><h4>Latest reviews at Cal Poly</h4>'+rows
+    +(open?'':'<div class="rt-note" style="margin-top:8px">Write a review to read what students said.</div>')+'</div>';
+}
+function rtRenderRail(){
+  var r=document.getElementById('rtRail'); if(!r)return;
+  r.innerHTML=(rtSignedIn()?rtYourHtml():'')+rtCommunityHtml();
+  r.style.display=r.innerHTML?'':'none';
+}
+function rtReloadMine(){ try{ loadMyReviews().then(rtRenderRail,rtRenderRail); }catch(e){} }
+function rtRenderAll(){
+  var g=document.getElementById('rtGate'); if(g)g.innerHTML=rtGateHtml();
+  rtRenderHead(); rtRenderLists(); rtRenderRail();
+}
+
+/* ---- entering the page ---- */
+function rtLoad(){
+  /* your professors, your reviewed marks and your own reviews arrive async; repaint once, and never under a form that is open (rtRenderLists puts it back) */
+  try{
+    var jobs=[];
+    if(typeof loadMyReviewed==='function')jobs.push(loadMyReviewed());
+    if(rtSignedIn()&&typeof myHistory!=='undefined'&&!myHistory.length&&typeof loadMyHistory==='function')jobs.push(loadMyHistory());
+    if(rtSignedIn()&&typeof loadMyReviews==='function'&&window.MY_REVIEWS==null)jobs.push(loadMyReviews());
+    if(jobs.length)Promise.all(jobs.map(function(j){ return Promise.resolve(j).catch(function(){}); })).then(function(){ if(rtActive())rtRenderAll(); });
+  }catch(e){}
+}
+function rtEnter(){
+  rlMajorLocked=true; rlTouched=false; RT.fromSearch=false; RT.q=''; RT.all=false; RT.signed=rtSignedIn();
+  if(!rlMajor)rlMajor=(typeof student!=='undefined'&&student&&student.major)||'';
+  if(!rlPrefix)rlPrefix=majorPrefix(rlMajor)||'';
+  rtRenderShell(); rtRenderAll(); rtLoad();
+}
+/* signing in or out while the page is open: repaint in place (a form that is open stays), and fetch what the account has */
+function rtAuthChanged(){
+  if(!rtActive())return;
+  var now=rtSignedIn(); if(RT.signed===now)return;
+  RT.signed=now;
+  if(!now&&RT.pid!=null)rtClose(true);          /* signed out: an open form (and any edit) is put away */
+  rtRenderAll(); rtLoad();
+}
+/* leaving the page abandons an open form (the draft is already saved by the form itself) */
+function rtLeave(){ if(RT.pid!=null)rtClose(true); }
+
+/* ---- the form, opened and closed in the row ---- */
+/* inline only on the Rate page, with nothing else open on top of it, for a professor that exists; otherwise the old modal, in place */
+function rtWantInline(id){
+  var ok=rtActive()&&!(PROFESSORS&&id!=null&&!PROFESSORS[id])&&!document.querySelector('.mback.open,#rsBack.open');
+  if(!ok&&RT.pid!=null)rtClose(true);
+  return ok;
+}
+function rtPhone(){ try{ return window.matchMedia('(max-width:640px)').matches; }catch(e){ return false; } }
+function rtSheet(on){
+  var sheet=!!on&&rtPhone();
+  var v=document.getElementById('view-rate'); if(v)v.classList.toggle('rt-sheet',sheet);
+  try{ document.body.classList.toggle('rt-sheet-open',sheet); }catch(e){}
+  try{
+    if(sheet){ document.body.style.overflow='hidden'; RT.locked=true; }
+    else if(RT.locked){ RT.locked=false; document.body.style.overflow=document.querySelector('.mback.open')?'hidden':''; }
+  }catch(e){}
+  /* a phone sheet is a dialog; on a desktop the form is just part of the page */
+  var h=RT.host;
+  if(h){
+    if(sheet){ h.setAttribute('role','dialog'); h.setAttribute('aria-modal','true'); try{ h.setAttribute('aria-label','Rate '+PROFESSORS[RT.pid].name); }catch(e){} }
+    else{ h.removeAttribute('role'); h.removeAttribute('aria-modal'); h.removeAttribute('aria-label'); }
+  }
+}
+function rtFocusForm(){
+  try{
+    var h=RT.host; if(!h||!document.body.contains(h))return;
+    var t=h.querySelector('.rate-h'); if(t){ t.setAttribute('tabindex','-1'); t.focus({preventScroll:true}); }
+    else{ var c=h.querySelector('input,select,textarea,button'); if(c)c.focus({preventScroll:true}); }
+  }catch(e){}
+}
+function rtOpenInline(id,course){
+  if(RT.pid!=null&&RT.pid!==id&&RT.host)RT.host.innerHTML='';
+  RT.pid=id; RT.course=course||'';
+  /* an old form left in the closed modal would share ids with this one */
+  try{ var _m=document.getElementById('modal'), _b=document.getElementById('mback'); if(_m&&_b&&!_b.classList.contains('open'))_m.innerHTML=''; }catch(e){}
+  if(!RT.host){ RT.host=document.createElement('div'); RT.host.className='rt-formbox'; }
+  /* a row folded under "Show more" has to be showing */
+  var past=document.querySelectorAll('#rtLists .rt-item.rt-more'); [].forEach.call(past,function(e){ if(e.getAttribute('data-pid')===String(id))RT.all=true; });
+  rtRenderLists();
+  rtSheet(true);
+  /* the form is drawn right after this returns: then its heading takes focus (keyboard and screen readers land in it) */
+  setTimeout(function(){
+    rtFocusForm();
+    try{ var it=RT.host&&RT.host.closest&&RT.host.closest('.rt-item'); if(it&&!rtPhone())it.scrollIntoView({block:'center',behavior:'smooth'}); }catch(e){}
+  },0);
+}
+function rtClose(quiet){
+  try{ window.RATE_EDIT=null; window._rfEditDraft=null; }catch(e){}
+  var had=RT.pid!=null, was=RT.pid, inForm=false;
+  try{ inForm=!!(RT.host&&RT.host.contains(document.activeElement)); }catch(e){}
+  RT.pid=null; RT.course='';
+  if(RT.host){ if(RT.host.parentNode)RT.host.parentNode.removeChild(RT.host); RT.host.innerHTML=''; }
+  rtSheet(false);
+  try{ modalMode='profile'; }catch(e){}
+  if(had&&rtActive()&&!quiet){
+    rtRenderAll();
+    /* focus goes back to the professor's Rate button (or the Edit that opened it) */
+    if(inForm||document.activeElement===document.body){
+      try{ var it=null; [].forEach.call(document.querySelectorAll('#rtLists .rt-item'),function(e){ if(!it&&e.getAttribute('data-pid')===String(was))it=e; });
+        var b=it&&it.querySelector('.rt-rate,.rt-rowedit'); if(b)b.focus(); }catch(e){}
+    }
+  }
+}
+/* the thank-you is on screen: the progress and your reviews are already true; the rows catch up when it is closed */
+function rtAfterPost(){
+  try{ rtRenderHead(); }catch(e){}
+  try{ if(typeof loadMyReviews==='function')loadMyReviews().then(function(){ try{ rtRenderRail(); }catch(e){} }); }catch(e){}
+}
+function rateDone(){ if(rtOn())rtClose(); else closeModal(); }
+/* Escape closes an open form */
+try{ document.addEventListener('keydown',function(e){
+  if(e.key!=='Escape'||!rtOn())return;
+  if(document.querySelector('.mback.open,.sl-back[style*="flex"],#cmdkBack.open'))return;
+  rtClose();
+}); }catch(e){}
+/* a phone sheet keeps Tab inside it */
+try{ document.addEventListener('keydown',function(e){
+  if(e.key!=='Tab'||!rtOn()||!rtPhone())return;
+  var f=[].filter.call(RT.host.querySelectorAll('button,input,select,textarea,a[href],[tabindex]:not([tabindex="-1"])'),function(x){ return !x.disabled&&x.offsetParent!==null; });
+  if(!f.length)return;
+  var first=f[0], last=f[f.length-1], a=document.activeElement;
+  if(!RT.host.contains(a)){ e.preventDefault(); first.focus(); }
+  else if(e.shiftKey&&(a===first||a.getAttribute('tabindex')==='-1')){ e.preventDefault(); last.focus(); }
+  else if(!e.shiftKey&&a===last){ e.preventDefault(); first.focus(); }
+}); }catch(e){}
+/* phone to desktop (a rotation, a resized window) while a form is open: the page is not locked and the form is plain again */
+try{ window.addEventListener('resize',function(){ if(rtOn())rtSheet(true); }); }catch(e){}
+/* the one-at-a-time sheet writes reviews of its own: when it closes on the Rate page, the page catches up */
+try{ var _rsClose=window.rsClose; if(typeof _rsClose==='function')window.rsClose=function(){
+  var r=_rsClose.apply(this,arguments);
+  if(rtActive()){
+    var jobs=[]; try{ jobs.push(loadMyReviewed()); }catch(e){} try{ if(rtSignedIn())jobs.push(loadMyReviews()); }catch(e){}
+    Promise.all(jobs.map(function(j){ return Promise.resolve(j).catch(function(){}); })).then(function(){ if(rtActive())rtRenderAll(); });
+  }
+  return r;
+}; }catch(e){}
+try{ window.rtEnter=rtEnter; window.rtAuthChanged=rtAuthChanged; window.rtClose=rtClose; window.rtOn=rtOn; window.rfHost=rfHost; window.rtRenderAll=rtRenderAll; window.RT=RT; }catch(e){}
+</script>

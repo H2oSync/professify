@@ -62,7 +62,8 @@ const cardOf = (page, id) => page.evaluate(id => {
   const a = document.querySelector('#hmFeed article[data-fid="' + id + '"]'); if (!a) return null;
   const tag = a.querySelector('.hm-fview'), nw = a.querySelector('.hm-fnew');
   return { chg: !!a.querySelector('.hm-chg'), view: a.getAttribute('data-hmview'), cls: a.className, tag: tag ? tag.textContent : null, tagColor: tag ? getComputedStyle(tag).color : null, fresh: nw ? nw.textContent : null,
-    ctx: (a.querySelector('.ctx') || {}).textContent || '', txt: a.innerText, blocks: [...a.querySelectorAll('.cal-block')].map(b => b.textContent.replace(/\s+/g, ' ').trim()) };
+    ctx: (a.querySelector('.ctx') || {}).textContent || '', txt: a.innerText, chips: a.querySelectorAll('.hm-fview').length, line: (a.querySelector('.av-line') || {}).textContent || null,
+    head: (a.querySelector('.fhead-t') || {}).innerText || '', blocks: [...a.querySelectorAll('.cal-block')].map(b => b.textContent.replace(/\s+/g, ' ').trim()) };
 }, id);
 const cardOrder = page => page.evaluate(() => [...document.querySelectorAll('#hmFeed > article.hm-card')].map(a => a.getAttribute('data-fid')));
 
@@ -70,14 +71,15 @@ test('cards', async () => {
   const { page, close, log } = await desk({ terms: SPRING_CFG, tables: homeTables(), init: SEED }); await tick(page, 2500); await ready(page);
   await page.evaluate(() => { show('home'); renderHome(); }); await tick(page, 800);
   const av = await cardOf(page, AV.id), ro = await cardOf(page, RO.id), sk = await cardOf(page, SK.id), qu = await cardOf(page, QU.id), ha = await cardOf(page, HA.id);
-  ok(av && av.view === 'next' && av.tag === 'Spring 2027 classes' && /^Planning 4 classes · Spring 2027/.test(av.ctx), 'Avery (Spring classes): tag “Spring 2027 classes”, “Planning 4 classes · Spring 2027”', av && { v: av.view, t: av.tag, c: av.ctx });
+  ok(av && av.view === 'next' && av.chips === 0 && /^Spring 2027 · 4 classes/.test(av.ctx) && (av.head.match(/Spring 2027/g) || []).length === 1, 'Avery (Spring classes): the header says “Spring 2027 · 4 classes” once, no second chip', av && { v: av.view, c: av.ctx, h: av.head });
+  ok([av, ro].every(x => x && x.line === null && !/left today|both open|No class till/.test(x.txt)), 'a Spring / plan card has no free-today line (“No class left today · both open …”)', [av && av.line, ro && ro.line]);
   ok(av && /4401/.test(av.txt) && av.blocks.length > 0 && !/4442|PHIL/.test(av.blocks.join(' ')), 'Avery: her week is her Spring classes, none of the Fall ones', av && av.blocks);
   ok(av && /1 with you/.test(av.ctx) && ro && !/with you/.test(ro.ctx), 'overlap: Avery’s Spring class is yours (Spring list); Rowan’s plan shares nothing with it (BUS 3431 is yours in FALL only)', { av: av && av.ctx, ro: ro && ro.ctx });
-  ok(ro && ro.view === 'B' && ro.tag === 'Plan B · Spring 2027' && /^Planning 3 classes · Spring 2027/.test(ro.ctx), 'Rowan (only a shared Spring plan): the first shared plan — “Plan B · Spring 2027”, “Planning 3 classes”', ro && { v: ro.view, t: ro.tag, c: ro.ctx });
-  ok(ro && /hm-plan-B/.test(ro.cls) && ro.tagColor === 'rgb(154, 52, 18)', 'Rowan: the card and tag are in Plan B’s colour (orange ink #9A3412)', ro && { c: ro.cls, col: ro.tagColor });
+  ok(ro && ro.view === 'B' && ro.chips === 0 && /^Plan B · Spring 2027 · 3 classes/.test(ro.ctx) && (ro.head.match(/Spring 2027/g) || []).length === 1 && (ro.head.match(/Plan/g) || []).length === 1, 'Rowan (only a shared Spring plan): the first shared plan — one line, “Plan B · Spring 2027 · 3 classes”', ro && { v: ro.view, c: ro.ctx, h: ro.head });
+  ok(ro && /hm-plan-B/.test(ro.cls), 'Rowan: the card is in Plan B’s colour (hm-plan-B)', ro && ro.cls);
   ok(ro && ro.blocks.length > 0 && !/4445|2303|1101/.test(ro.blocks.join(' ')) && /3346|3431/.test(ro.blocks.join(' ')), 'Rowan: the plan’s week, none of her Fall classes (BUS 4445, ECON 2303)', ro && ro.blocks);
-  ok(sk && sk.view === 'now' && sk.tag === 'Now · Fall 2026' && /^Taking 2 classes · Fall 2026/.test(sk.ctx), 'Sky (Fall only): her week now — “Now · Fall 2026”, “Taking 2 classes · Fall 2026”', sk && { t: sk.tag, c: sk.ctx });
-  ok(qu && qu.view === 'now' && qu.tag === 'Now · Fall 2026' && /^Taking 1 class · Fall 2026/.test(qu.ctx), 'Quinn: “Taking 1 class · Fall 2026” (one class, singular)', qu && qu.ctx);
+  ok(sk && sk.view === 'now' && sk.chips === 0 && /^Taking 2 classes · Fall 2026/.test(sk.ctx) && (sk.head.match(/Fall 2026/g) || []).length === 1, 'Sky (Fall only): her week now — “Taking 2 classes · Fall 2026”, said once', sk && { c: sk.ctx, h: sk.head });
+  ok(qu && qu.view === 'now' && /^Taking 1 class · Fall 2026/.test(qu.ctx), 'Quinn: “Taking 1 class · Fall 2026” (one class, singular)', qu && qu.ctx);
   ok(ha === null, 'Harper (nothing anywhere): no card');
   const reads = log.reads.map(r => decodeURIComponent(r)).filter(r => /^plans\?/.test(r));
   ok(reads.length > 0 && reads.every(r => /term=eq\.2274/.test(r)), 'wire: every plans read names Spring’s term', reads);
@@ -98,8 +100,8 @@ test('lift', async () => {
   await page.evaluate(() => { show('home'); renderHome(); }); await tick(page, 900);
   const order = await cardOrder(page), ro = await cardOf(page, RO.id), sk = await cardOf(page, SK.id), av = await cardOf(page, AV.id);
   ok(JSON.stringify(order.slice(0, 2).sort()) === JSON.stringify([RO.id, SK.id].sort()), 'after a change: the two friends who changed are the first two cards', order);
-  ok(ro && ro.fresh === 'New plan' && ro.view === 'A' && ro.tag === 'Plan A · Spring 2027', 'Rowan: “New plan” on Plan A', ro && { f: ro.fresh, t: ro.tag });
-  ok(sk && sk.fresh === 'Spring classes added' && sk.tag === 'Spring 2027 classes', 'Sky: “Spring classes added” on her Spring classes', sk && { f: sk.fresh, t: sk.tag });
+  ok(ro && ro.fresh === 'New' && ro.view === 'A' && ro.chips === 0 && /^Plan A · Spring 2027 · \d class(?:es)?New$/.test(ro.ctx) && (ro.head.match(/Spring 2027/g) || []).length === 1, 'Rowan: one small “New” on Plan A, the plan and term said once', ro && { f: ro.fresh, c: ro.ctx, h: ro.head });
+  ok(sk && sk.fresh === 'New' && sk.chips === 0 && /^Spring 2027 · \d class(?:es)?New$/.test(sk.ctx), 'Sky: one small “New” on her Spring classes', sk && { f: sk.fresh, c: sk.ctx });
   ok(av && av.fresh === null, 'Avery (nothing changed): no mark', av && av.fresh);
   ok(ro && sk && !ro.chg && !sk.chg, 'a new view is not a “changed” card: no Added/Dropped line comparing their Fall week with the Spring one', { ro: ro && ro.chg, sk: sk && sk.chg });
   /* once */
@@ -232,3 +234,4 @@ for (const n of names) {
 }
 console.log(`\ncheck-desktop-home: ${pass} passed, ${fail} failed`);
 if (fail) { console.log('failed:', fails.join(' | ')); process.exit(1); }
+/* friend-polish (2026-10-16): this file was updated by edit-tests-friend-polish-2026-10-16.py */

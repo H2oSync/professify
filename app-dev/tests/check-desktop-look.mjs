@@ -83,7 +83,7 @@ test('topBar', async () => {
   await page.evaluate(() => show('sched')); await tick(page, 300);
   ok(await page.evaluate(() => document.getElementById('tab-sched').classList.contains('active') && !document.getElementById('tab-home').classList.contains('active')), 'the pill follows the screen');
   await page.click('#tab-rate'); await tick(page, 500);
-  ok(await page.evaluate(() => { const b = document.getElementById('rlBack'); return !!b && getComputedStyle(b).display !== 'none' && b.getBoundingClientRect().height > 0; }), 'Rate opens Review a professor');
+  ok(await page.evaluate(() => { const v = document.getElementById('view-rate'), b = document.getElementById('rlBack'); return !!v && v.classList.contains('active') && v.getBoundingClientRect().height > 0 && !b.classList.contains('open') && document.getElementById('tab-rate').classList.contains('active'); }), 'Rate opens the Rate page (not the Review a professor sheet), and its tab is lit');
   await close();
 });
 
@@ -325,8 +325,8 @@ test('layoutScreens', async () => {
   r = await page.evaluate(() => { const t = document.querySelector('#view-settings .st-tab.on'); return { bg: getComputedStyle(t).backgroundColor, bar: getComputedStyle(t, '::before').display }; });
   ok(r.bg === 'rgb(227, 236, 255)' && r.bar === 'none', 'Settings\' tabs are the app\'s pills', r);
   await page.evaluate(() => openRate()); await tick(page, 800);
-  r = await page.evaluate(() => { const row = document.querySelector('#rlLists > div:not(.rl-term):not(:first-child)'); return row && getComputedStyle(row).backgroundColor; });
-  ok(r === 'rgb(243, 238, 255)', 'the Rate sheet\'s professors are the app\'s soft-purple rows', r);
+  r = await page.evaluate(() => { const b = document.querySelector('#rtLists .rt-rate'), c = document.querySelector('#rtRail .rt-card'); return b && c && { btn: getComputedStyle(b).backgroundColor, card: getComputedStyle(c).backgroundColor }; });
+  ok(r && r.btn === 'rgb(37, 99, 235)' && r.card === 'rgb(255, 255, 255)', 'the Rate page\'s buttons are the app\'s blue and its cards the app\'s white', r);
   await close();
 }
 });
@@ -416,3 +416,4 @@ for (const n of names) {
 }
 console.log(`\ncheck-desktop-look: ${pass} passed, ${fail} failed`);
 if (fail) { console.log('failed:', fails.join(' | ')); process.exit(1); }
+/* rate-page (2026-10-16): this file was updated by edit-tests-rate-page-2026-10-16.py */

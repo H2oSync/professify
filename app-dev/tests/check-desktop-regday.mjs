@@ -24,7 +24,8 @@ const NOW = '2026-10-14T10:30:00-07:00';           /* 5 days before Round 1 open
    that day card, so the page starts with the compact card dismissed, and UNDISMISS brings it back for the tests about the compact card */
 const DISMISS = () => { try { localStorage.setItem('professify_dismiss_reg_2026-10-19', '1'); } catch (e) {} };
 const desk = (o = {}) => openApp(Object.assign({ path: '/', width: 1440, height: 900, wait: 4000, terms: 'live', time: NOW, init: DISMISS }, o));
-const UNDISMISS = async page => { await page.evaluate(() => { localStorage.removeItem('professify_dismiss_reg_2026-10-19'); regDayRepaint(); }); await page.clock.runFor(300); await page.waitForTimeout(250); };
+const R1BTN = '#hmRegCard [data-tl-key="pen1"], #hmRegCard [data-tl-key="add1"]';   /* reg-timeline (2026-10-16): Home's one card is the timeline; Round 1's pencil / + Add opens the same sheet */
+const UNDISMISS = async page => {};   /* reg-timeline (2026-10-16): the timeline card is not hidden by the old key */
 const T = {};
 const test = (name, fn) => { T[name] = fn; };
 const ME = FX.ME.id, F = FX.FRIENDS.map(f => f.id);
@@ -42,7 +43,7 @@ test('cards', async () => {
   { const { page, close, log } = await desk({ tables: withDay(null) }); await tick(page, 1500);
     const s = await slots(page);
     ok(s.plans && s.plans.has && s.plans.state === 'none' && s.plans.head === 'Set your registration day' && /^Opens Oct 19 · in 5 days$/.test(s.plans.sub) && s.plans.btn === 'Set day', 'none: Plans says “Set your registration day” with when it opens', s.plans);
-    ok(s.rail && s.rail.has && s.rail.state === 'none' && s.rail.head === 'Set your registration day', 'none: Home’s rail says it too (Round 1 is 5 days away)', s.rail);
+    ok(await page.evaluate(() => { const c = document.getElementById('hmRegCard'); return !!c && /Spring 2027/.test(c.innerText) && !!c.querySelector('[data-tl-key="add1"]') && /Opens Oct 19/.test(c.innerText); }), 'none: Home’s card is the Spring 2027 timeline, with “+ Add” on Your Round 1 (Round 1 opens Oct 19)');
     const reads = log.reads.map(r => decodeURIComponent(r));
     ok(reads.some(r => /^registration_days\?select=day,at_time,shared,updated_at&user_id=eq\.[^&]+&term=eq\.2274$/.test(r)), 'reads: your row is read by user and term 2274', reads.filter(r => /registration/.test(r)));
     ok(log.errors.length === 0, 'none: no page errors', log.errors);
@@ -51,11 +52,10 @@ test('cards', async () => {
   { const { page, close, log } = await desk({ tables: withDay({ day: '2026-10-21', at_time: '11:00:00' }) }); await tick(page, 1500);
     const s = await slots(page);
     ok(s.plans.state === 'set' && s.plans.head === 'Register Wed, Oct 21, 11a' && s.plans.sub === 'in 7 days' && s.plans.btn === 'Change', 'set: “Register Wed, Oct 21, 11a · in 7 days” on Plans', s.plans);
-    ok(s.rail.head === 'Register Wed, Oct 21, 11a' && s.rail.sub === 'in 7 days', 'set: …and on Home’s rail', s.rail);
+    ok(await page.evaluate(() => { const r = document.querySelector('#hmRegCard [data-tl-row="r1"]'); return !!r && /Wed, Oct 21 · 11:00 AM/.test(r.innerText) && /in 7 days/.test(r.innerText); }), 'set: …and Home’s timeline says Wed, Oct 21 · 11:00 AM, in 7 days');
     ok(await page.evaluate(() => document.querySelector('.rg-card').title) === 'Wednesday, October 21, 2026', 'set: the full date, with its year, is on the card');
-    /* websync (2026-10-15): the banner is a card on Home's rail now (#hmRegCard, under the greeting); the top strip is empty of it */
-    await UNDISMISS(page);
-    ok(await page.evaluate(() => /Change your registration day/.test(document.getElementById('hmRegCard').innerText) && !/registration/i.test(document.getElementById('campusBanner').innerText)), 'banner card: with a day set it says “Change your registration day”, and nothing about it is left at the top');
+    /* reg-timeline (2026-10-16): the old green “Your day…” line and the grey “Change your registration day” button are gone; the top strip has nothing */
+    ok(await page.evaluate(() => !/Change your registration day|Your day:/.test(document.getElementById('hmRegCard').innerText) && !document.querySelector('#hmRegCard .hm-reg-day') && !/registration/i.test(document.getElementById('campusBanner').innerText)), 'timeline: no “Your day…” line, no “Change your registration day” button, nothing at the top');
     ok(log.errors.length === 0, 'set: no page errors', log.errors);
     await close(); }
   /* no time, tomorrow, today before / after, the day after */
@@ -79,23 +79,22 @@ test('window', async () => {
   /* Round 1 running, nothing set */
   { const { page, close } = await desk({ tables: withDay(null), time: '2026-10-27T10:00:00-07:00' }); await tick(page, 1500);
     const s = await slots(page);
-    ok(s.plans.has && s.plans.sub === 'Round 1 is open · ends Nov 3' && s.rail.has, 'running: Round 1 is open, ends Nov 3 — card and rail still there', s);
+    ok(s.plans.has && s.plans.sub === 'Round 1 is open · ends Nov 3' && await page.evaluate(() => !!document.getElementById('hmRegCard')), 'running: Round 1 is open, ends Nov 3 — Plans card and Home’s timeline still there', s);
     await close(); }
   /* the rail waits until 14 days before; Plans does not */
   { const a = await desk({ tables: withDay(null), time: '2026-10-01T10:00:00-07:00' }); await tick(a.page, 1500);
     const s = await slots(a.page);
-    ok(s.plans.has && !s.rail.has, '18 days out: Plans has the card, Home’s rail does not', s);
+    ok(s.plans.has && await a.page.evaluate(() => !document.getElementById('hmRegCard')), '18 days out: Plans has the card, Home’s timeline does not', s);
     await a.close();
     const b = await desk({ tables: withDay(null), time: '2026-10-05T10:00:00-07:00' }); await tick(b.page, 1500);
     const s2 = await slots(b.page);
-    ok(s2.plans.has && s2.rail.has, '14 days out: Home’s rail has it too', s2);
+    ok(s2.plans.has && await b.page.evaluate(() => !!document.getElementById('hmRegCard')), '14 days out: Home’s timeline has it too', s2);
     await b.close(); }
   /* after Round 1: nothing, and nothing asked */
   { const { page, close, log } = await desk({ tables: withDay({ day: '2026-10-21' }), time: '2026-11-04T09:00:00-08:00' }); await tick(page, 1500);
     const s = await slots(page);
-    ok(!s.plans.has && !s.rail.has, 'after Round 1 (Nov 4): no card anywhere', s);
-    ok(await page.evaluate(() => !document.getElementById('hmRegCard') && !/registration day/i.test(document.getElementById('campusBanner').innerText)), 'after Round 1: the banner card is gone too');   /* websync (2026-10-15) */
-    ok(!log.reads.some(r => /registration/.test(r)), 'after Round 1: registration_days and the RPC are never asked', log.reads.filter(r => /registration/.test(r)));
+    ok(!s.plans.has && await page.evaluate(() => { const c = document.getElementById('hmRegCard'); return !!c && /Your Round 1/.test(c.innerText) && !c.querySelector('[data-tl-key="pen1"]'); }), 'after Round 1 (Nov 4): the Schedule card is gone; Home’s timeline stays, Round 1 done with no pencil', s);
+    ok(!log.reads.some(r => r === 'rpc:friend_registration_days') && log.reads.some(r => /^registration_days\?/.test(r)), 'after Round 1: friends’ Round 1 days (the RPC) are never asked; your own rows are still read for the timeline', log.reads.filter(r => /registration/.test(r)));
     await close(); }
   /* the last day itself still shows */
   { const { page, close } = await desk({ tables: withDay(null), time: '2026-11-03T20:00:00-08:00' }); await tick(page, 1500);
@@ -104,14 +103,14 @@ test('window', async () => {
   /* signed out */
   { const { page, close, log } = await desk({ signedIn: false, tables: withDay({ day: '2026-10-21' }) }); await tick(page, 1500);
     const s = await slots(page);
-    ok(!s.plans.has && !s.rail.has, 'signed out: no card', s);
+    ok(!s.plans.has, 'signed out: no card', s);
     ok(!log.reads.some(r => /registration/.test(r)) && log.writes.length === 0, 'signed out: nothing about registration is read or written', log.reads.filter(r => /registration/.test(r)));
     ok(await page.evaluate(() => !document.getElementById('hmRegCard') && !/registration day/i.test(document.getElementById('campusBanner').innerText)), 'signed out: no banner card');   /* websync (2026-10-15) */
     await close(); }
   /* not the registration term */
   { const { page, close, log } = await desk({ terms: 'single', tables: withDay({ day: '2026-10-21' }) }); await tick(page, 1500);
     const s = await slots(page);
-    ok(!s.plans.has && !s.rail.has && !log.reads.some(r => /registration/.test(r)), 'a site choosing in another term (Fall 2026) shows no card and asks nothing', s);
+    ok(!s.plans.has && !log.reads.some(r => /registration/.test(r)), 'a site choosing in another term (Fall 2026) shows no card and asks nothing', s);
     await close(); }
 });
 
@@ -143,10 +142,8 @@ test('save', async () => {
   const b = w[0] && w[0].body;
   ok(b && b.user_id === ME && b.term === '2274' && b.day === '2026-10-22' && b.at_time === '14:30' && b.shared === false && typeof b.updated_at === 'string', 'save: {user_id, term:2274, day, at_time:14:30, shared:false}', b);
   const s = await slots(page);
-  ok(s.plans.head === 'Register Thu, Oct 22, 2:30p' && s.plans.sub === 'in 8 days' && s.rail.head === 'Register Thu, Oct 22, 2:30p', 'save: the cards say Thu, Oct 22, 2:30p', s);
+  ok(s.plans.head === 'Register Thu, Oct 22, 2:30p' && s.plans.sub === 'in 8 days' && await page.evaluate(() => /Thu, Oct 22 · 2:30 PM/.test(document.getElementById('hmRegCard').innerText)), 'save: the cards say Thu, Oct 22, 2:30p', s);
   ok(await toast(page) === 'Your registration day is saved' && !(await page.evaluate(() => document.getElementById('rgBack').classList.contains('open'))), 'save: the sheet closes and a toast says it is saved');
-  await UNDISMISS(page);
-  ok(await page.evaluate(() => document.getElementById('hmRegCard').innerText.includes('Change your registration day')), 'banner card: now says “Change your registration day”');   /* websync (2026-10-15) */
   const kept = JSON.parse(await LS(page) || 'null');
   ok(kept && kept.day === '2026-10-22' && kept.time === '14:30' && kept.shared === false && !kept.pending, 'save: kept on this device, nothing waiting', kept);
   /* change it: no time, shared on; the sheet opens with what is there */
@@ -175,7 +172,7 @@ test('save', async () => {
   await close();
   /* past days are off once Round 1 has started */
   { const o = await desk({ tables: withDay(null), time: '2026-10-21T10:00:00-07:00' }); await tick(o.page, 1500);
-    await o.page.click('.rg-slot[data-rg="rail"] [data-rg-act="open"]'); await tick(o.page, 400);
+    await o.page.click(R1BTN); await tick(o.page, 400);
     const off = await o.page.evaluate(() => [...document.querySelectorAll('.rg-d:disabled')].map(b => b.getAttribute('data-day')));
     ok(JSON.stringify(off) === '["2026-10-19","2026-10-20"]', 'Oct 21: Oct 19 and 20 are off, today is not', off);
     await o.close(); }
@@ -183,8 +180,7 @@ test('save', async () => {
 
 test('banner', async () => {
   const { page, close } = await desk({ tables: withDay(null) }); await tick(page, 1500);
-  await UNDISMISS(page);
-  await page.click('#hmRegCard button:has-text("Set your registration day")'); await tick(page, 400);   /* websync (2026-10-15): the card on Home's rail */
+  await page.click('#hmRegCard [data-tl-key="add1"]'); await tick(page, 400);   /* reg-timeline: Round 1's “+ Add” on Home's card */
   ok(await page.evaluate(() => document.getElementById('rgBack').classList.contains('open') && document.getElementById('rgTitle').textContent === 'When do you register?'), 'banner card: “Set your registration day” opens the sheet');
   await close();
 });
@@ -198,7 +194,7 @@ test('refused', async () => {
     return st.refuse ? { status: 500, body: JSON.stringify({ code: 'XX000', message: 'down', details: null, hint: null }) } : null;
   };
   const { page, close, log } = await desk({ tables: withDay(null), hook }); await tick(page, 1500);
-  await page.click('.rg-slot[data-rg="rail"] [data-rg-act="open"]'); await tick(page, 400);
+  await page.click(R1BTN); await tick(page, 400);
   await page.click('.rg-d[data-day="2026-10-21"]'); await page.fill('#rgTime', '11a'); await page.click('[data-rg-act="save"]'); await tick(page, 1000);
   let s = await slots(page);
   ok(s.plans.state === 'set' && s.plans.head === 'Register Wed, Oct 21, 11a', 'refused: the card still says what you chose', s.plans);
@@ -220,7 +216,7 @@ test('refused', async () => {
   { const st2 = { refuse: true, calls: [] };
     const h2 = (url, m, body) => { if (url.pathname !== '/rest/v1/registration_days' || m === 'GET') return null; st2.calls.push({ m, body }); return st2.refuse ? { status: 500, body: JSON.stringify({ code: 'XX000', message: 'down' }) } : null; };
     const o = await desk({ tables: withDay(null), hook: h2 }); await tick(o.page, 1500);
-    await o.page.click('.rg-slot[data-rg="rail"] [data-rg-act="open"]'); await tick(o.page, 400);
+    await o.page.click(R1BTN); await tick(o.page, 400);
     await o.page.click('.rg-d[data-day="2026-10-23"]'); await o.page.click('[data-rg-act="save"]'); await tick(o.page, 1000);
     st2.refuse = false; await o.page.clock.runFor(61000); await o.page.waitForTimeout(400);
     ok(st2.calls.length === 2 && st2.calls[1].body.day === '2026-10-23', 'retry: a minute later it tries again by itself', st2.calls.length);
@@ -240,7 +236,7 @@ test('refused', async () => {
   { const st4 = { refuse: true, calls: [] };
     const h4 = (url, m, body) => { if (url.pathname !== '/rest/v1/registration_days' || m === 'GET') return null; st4.calls.push({ m }); return st4.refuse ? { status: 500, body: JSON.stringify({ code: 'XX000', message: 'down' }) } : null; };
     const o = await desk({ tables: withDay({ day: '2026-10-21', at_time: '11:00:00' }), hook: h4 }); await tick(o.page, 1500);
-    await o.page.click('.rg-slot[data-rg="rail"] [data-rg-act="open"]'); await tick(o.page, 400);
+    await o.page.click(R1BTN); await tick(o.page, 400);
     await o.page.click('[data-rg-act="clear"]'); await tick(o.page, 800);
     const tt = await toast(o.page);
     ok(/Not done yet — friends can still see your day until it goes through/.test(tt) && st4.calls.some(c => c.m === 'DELETE'), 'clear refused: “Not done yet — friends can still see your day until it goes through”', tt);
@@ -259,7 +255,7 @@ test('schemaGap', async () => {
   const { page, close, log } = await desk({ tables: withDay(null), hook }); await tick(page, 1500);
   let s = await slots(page);
   ok(s.plans.has && s.plans.state === 'none' && !s.plans.friends.length, 'no table: the card still invites you; no friends’ days', s.plans);
-  await page.click('.rg-slot[data-rg="rail"] [data-rg-act="open"]'); await tick(page, 400);
+  await page.click(R1BTN); await tick(page, 400);
   await page.click('.rg-d[data-day="2026-10-21"]'); await page.click('[data-rg-act="save"]'); await tick(page, 1000);
   s = await slots(page);
   ok(s.plans.head === 'Register Wed, Oct 21' && /Kept on this device only/.test(s.plans.note), 'no table: it is kept on this device and says “Kept on this device only”', s.plans);
@@ -273,9 +269,9 @@ test('schemaGap', async () => {
   { let nw = 0;
     const h2 = (url, m) => (url.pathname === '/rest/v1/registration_days' && m !== 'GET' && ++nw) ? { status: 404, body: JSON.stringify({ code: '42P01', message: 'relation "public.registration_days" does not exist' }) } : null;
     const o = await desk({ tables: withDay(null), hook: h2 }); await tick(o.page, 1500);
-    await o.page.click('.rg-slot[data-rg="rail"] [data-rg-act="open"]'); await tick(o.page, 400);
+    await o.page.click(R1BTN); await tick(o.page, 400);
     await o.page.click('.rg-d[data-day="2026-10-21"]'); await o.page.click('[data-rg-act="save"]'); await tick(o.page, 1000);
-    const n2 = nw, s2 = (await slots(o.page)).rail;
+    const n2 = nw, s2 = (await slots(o.page)).plans;
     ok(n2 === 1 && /Kept on this device only/.test(s2.note) && await toast(o.page) === 'Saved on this device', 'write-only gap: one attempt, “Kept on this device only”, “Saved on this device”', { n2, note: s2.note });
     await o.page.evaluate(() => window.dispatchEvent(new Event('online'))); await o.page.clock.runFor(61000); await tick(o.page, 500);
     ok(nw === 1, 'write-only gap: and it is not tried again', nw);
@@ -294,47 +290,61 @@ test('friends', async () => {
   { const { page, close, log } = await desk({ tables: withDay({ day: '2026-10-21', at_time: '11:00:00' }), rpc: rpcWith(rows) }); await tick(page, 1500);
     const calls = log.rpcs.filter(r => r.fn === 'friend_registration_days');
     ok(calls.length >= 1 && calls.every(c => c.body && c.body.p_term === '2274'), 'friends: the RPC is asked for term 2274', calls);
-    const s = await slots(page);
-    const want = ['Rowan Testa | Mon, Oct 19 · 2 days before you', 'Avery Quill | Wed, Oct 21 · 8a · same day as you', 'Sky Placeholder | Wed, Oct 21 · 2:30p · same day as you'];
-    const norm = a => a;
-    ok(JSON.stringify(norm(s.plans.friends)) === JSON.stringify(norm(want)), 'friends: soonest first (by day, then time), friends only, each with how far from yours', s.plans.friends);
-    ok(s.plans.miss === '2 friends haven’t set theirs', 'friends: “2 friends haven’t set theirs”', s.plans.miss);
-    ok(JSON.stringify(norm(s.rail.friends)) === JSON.stringify(norm(want)), 'friends: the rail lists them too', s.rail.friends);
-    await page.click('.rg-slot[data-rg="rail"] .rg-f'); await tick(page, 600);
-    ok(await page.evaluate(() => document.getElementById('frpBack').classList.contains('open') && /Rowan/.test(document.getElementById('frpBack').innerText)), 'friends: tapping one opens their page');
+    const s = await stripOf(page);
+    const want = ['Mon Oct 19|Rowan Testa|2 days before you', 'Wed Oct 21 8a|Avery Quill|same day as you', 'Wed Oct 21 11a|You|your day', 'Wed Oct 21 2:30p|Sky Placeholder|same day as you'];
+    ok(JSON.stringify(s.rows.map(r => r.label + '|' + r.names + '|' + r.rel)) === JSON.stringify(want), 'friends: soonest first (by day, then time), friends only, yours in its place, each with how far from yours', s.rows);
+    ok(s.rows.filter(r => r.me).length === 1 && s.rows[2].me, 'friends: your own row is the highlighted one', s.rows);
+    ok(s.miss === '2 friends haven’t set theirs' && s.round === 'Round 1 · Oct 19–Nov 3', 'friends: “2 friends haven’t set theirs”, Round 1 · Oct 19–Nov 3', s);
+    await page.evaluate(() => show('friends')); await tick(page, 500);
+    await page.click('#frRegStrip .rs-fb[data-id="' + F[1] + '"]'); await tick(page, 600);
+    ok(await page.evaluate(() => document.getElementById('frpBack').classList.contains('open') && /Rowan/.test(document.getElementById('frpBack').innerText)), 'friends: tapping a face opens their page');
     ok(log.errors.length === 0, 'friends: no page errors', log.errors);
     await close(); }
-  /* nothing set by me: no “before you”, and the card still lists them */
+  /* nothing set by me: no “before you”, and the strip still lists them */
   { const { page, close } = await desk({ tables: withDay(null), rpc: rpcWith(rows) }); await tick(page, 1500);
-    const s = await slots(page);
-    ok(s.plans.friends.length === 3 && s.plans.friends.every(f => !/before you|after you|same day/.test(f)) && /Mon, Oct 19$/.test(s.plans.friends[0]), 'friends: with no day of yours there is no “before you”', s.plans.friends);
+    const s = await stripOf(page);
+    ok(s.rows.length === 3 && s.rows.every(r => r.rel === '' && !r.me) && /^Mon Oct 19/.test(s.rows[0].label), 'friends: with no day of yours there is no “before you”, no row of yours', s.rows);
     await close(); }
   /* a friend whose day has passed is not “to come”; the ones who haven't set theirs are still counted */
   { const r = [{ user_id: F[1], day: '2026-10-19', at_time: null }, { user_id: F[0], day: '2026-10-22', at_time: '09:00:00' }];
     const { page, close } = await desk({ tables: withDay(null), rpc: rpcWith(r), time: '2026-10-21T10:00:00-07:00' }); await tick(page, 1500);
-    const s = await slots(page);
-    ok(s.plans.friends.length === 1 && /Avery/.test(s.plans.friends[0]) && s.plans.miss === '3 friends haven’t set theirs', 'friends: a day already gone is not listed (and that friend is not “unset”)', s.plans);
+    const s = await stripOf(page);
+    ok(s.rows.length === 1 && /Avery/.test(s.rows[0].names) && s.miss === '3 friends haven’t set theirs', 'friends: a day already gone is not listed (and that friend is not “unset”)', s);
     await close(); }
-  /* nobody shared: no friends section at all */
+  /* nobody shared: with a day of yours the strip is your row and “5 friends haven’t set theirs”; with none, no strip at all */
   { const { page, close } = await desk({ tables: withDay({ day: '2026-10-21' }), rpc: rpcWith([]) }); await tick(page, 1500);
-    ok(await page.evaluate(() => !document.querySelector('.rg-fr') && !/haven’t set theirs/.test(document.body.innerText)), 'friends: nobody shared → no friends section, no “haven’t set theirs”');
+    const s = await stripOf(page);
+    ok(s.rows.length === 1 && s.rows[0].me && s.miss === '5 friends haven’t set theirs', 'friends: nobody shared → just your row and “5 friends haven’t set theirs”', s);
     await close(); }
-  /* only non-friends shared: still nothing */
+  { const { page, close } = await desk({ tables: withDay(null), rpc: rpcWith([]) }); await tick(page, 1500);
+    ok((await stripOf(page)).text === '', 'friends: nobody shared and no day of yours → no strip at all');
+    await close(); }
+  /* only non-friends shared: still nothing of theirs */
   { const { page, close } = await desk({ tables: withDay({ day: '2026-10-21' }), rpc: rpcWith([rows[3]]) }); await tick(page, 1500);
-    ok(await page.evaluate(() => !document.querySelector('.rg-fr')), 'friends: a day from someone who is not your friend is never drawn');
+    ok(await page.evaluate(() => !document.querySelector('#frRegStrip [data-id="33333333-3333-4333-8333-333333333399"]') && document.querySelectorAll('#frRegStrip .rs-row').length === 1), 'friends: a day from someone who is not your friend is never drawn');
     await close(); }
-  /* the RPC fails: no list, no error text, no crash */
+  /* the RPC fails: no strip, no error text, no crash, and your own card is left alone */
   { const hook = url => url.pathname === '/rest/v1/rpc/friend_registration_days' ? { status: 500, body: JSON.stringify({ code: 'XX000', message: 'down' }) } : null;
     const { page, close, log } = await desk({ tables: withDay({ day: '2026-10-21' }), hook }); await tick(page, 1500);
     const s = await slots(page);
-    ok(s.plans.has && s.plans.head === 'Register Wed, Oct 21' && !s.plans.friends.length && log.errors.length === 0, 'friends: a failing RPC leaves your card alone and shows no friends', { s: s.plans, e: log.errors });
+    ok(s.plans.has && s.plans.head === 'Register Wed, Oct 21' && (await stripOf(page)).text === '' && log.errors.length === 0, 'friends: a failing RPC leaves your card alone and shows no strip', { s: s.plans, e: log.errors });
     await close(); }
-  /* the rail shows three and says where the rest are */
+  /* the Schedule card no longer lists friends */
+  { const { page, close } = await desk({ tables: withDay({ day: '2026-10-21' }), rpc: rpcWith(rows) }); await tick(page, 1500);
+    ok(await page.evaluate(() => !document.querySelector('.rg-fr') && !document.querySelector('.rg-slot .rg-f')), 'friends: the Schedule card has no friends’ list any more');
+    await close(); }
+  /* five days fit; a sixth day is behind “+1 more day” */
   { const many = FX.FRIENDS.slice(0, 5).map((f, i) => ({ user_id: f.id, day: '2026-10-2' + i, at_time: null }));
-    const { page, close } = await desk({ tables: withDay(null), rpc: rpcWith(many) }); await tick(page, 1500);
-    const s = await slots(page);
-    ok(s.rail.friends.length === 3 && s.plans.friends.length === 5 && await page.evaluate(() => /\+2 more in Plans/.test(document.querySelector('.rg-slot[data-rg="rail"]').innerText)), 'friends: the rail lists three and “+2 more in Plans”; Plans lists all five', { rail: s.rail.friends.length, plans: s.plans.friends.length });
-    await close(); }
+    const a = await desk({ tables: withDay(null), rpc: rpcWith(many) }); await tick(a.page, 1500);
+    ok(await a.page.evaluate(() => document.querySelectorAll('#frRegStrip .rs-row').length === 5 && !document.querySelector('#frRegStrip .rs-more')), 'friends: five days are all there, no “more”');
+    await a.close();
+    const b = await desk({ tables: withDay({ day: '2026-10-26' }), rpc: rpcWith(many) }); await tick(b.page, 1500);
+    await b.page.evaluate(() => show('friends')); await tick(b.page, 500);
+    const hid = () => b.page.evaluate(() => [...document.querySelectorAll('#frRegStrip .rs-row')].map(r => r.offsetParent !== null));
+    ok(JSON.stringify(await hid()) === '[true,true,true,true,true,false]' && /\+1 more day/.test(await b.page.evaluate(() => document.querySelector('#frRegStrip .rs-more').textContent)), 'friends: a sixth day waits behind “+1 more day”', await hid());
+    await b.page.click('#frRegStrip .rs-more'); await tick(b.page, 300);
+    ok((await hid()).every(Boolean), 'friends: “+1 more day” shows it');
+    await b.close(); }
 });
 
 test('parse', async () => {
@@ -352,7 +362,13 @@ test('parse', async () => {
 });
 
 /* ---- review fixes (regday-fixes, 2026-10-14) ---- */
-const frRowsOf = page => page.evaluate(() => [...document.querySelectorAll('.rg-slot[data-rg="plans"] .rg-f')].map(b => b.querySelector('.rg-fn').textContent));
+/* reg-timeline (2026-10-16): friends' days are the strip above Messages on the Friends tab (#frRegStrip), not a list in the Schedule card */
+const stripOf = page => page.evaluate(() => {
+  const e = document.getElementById('frRegStrip'), n = t => (t || '').replace(/\s+/g, ' ').trim();
+  return { rows: [...(e ? e.querySelectorAll('.rs-row') : [])].map(r => ({ label: n([...r.querySelector('.rs-d').children].map(c => c.textContent).join(' ')), names: n(r.querySelector('.rs-n').textContent), rel: n(r.querySelector('.rs-rel').textContent), me: r.classList.contains('rs-me') })),
+    miss: n((e && e.querySelector('.rs-ft span') || {}).textContent), text: n(e ? e.innerText : ''), round: n((e && e.querySelector('.rs-rnd') || {}).textContent) };
+});
+const frRowsOf = async page => (await stripOf(page)).rows.map(r => r.names);
 
 test('blocked', async () => {
   const rows = [{ user_id: F[1], day: '2026-10-19', at_time: null }, { user_id: F[0], day: '2026-10-21', at_time: '08:00:00' }];
@@ -362,8 +378,8 @@ test('blocked', async () => {
   ok(pre.blocked && pre.friend, 'blocked: precondition — Rowan is a friend and blocked', pre);
   const names = await frRowsOf(page);
   ok(JSON.stringify(names) === '["Avery Quill"]', 'blocked: a blocked friend in the RPC rows is not drawn', names);
-  const s = await slots(page);
-  ok(s.plans.miss === '3 friends haven’t set theirs', 'blocked: …and is not counted among those who haven’t set theirs', s.plans.miss);
+  const s = await stripOf(page);
+  ok(s.miss === '3 friends haven’t set theirs', 'blocked: …and is not counted among those who haven’t set theirs', s.miss);
   ok(log.errors.length === 0, 'blocked: no page errors', log.errors);
   await close();
 });
@@ -373,7 +389,7 @@ test('friendsRefresh', async () => {
   { let n = 0;
     const rpc = rpcWith([{ user_id: F[0], day: '2026-10-21', at_time: '08:00:00' }]);
     const hook = url => (url.pathname === '/rest/v1/rpc/friend_registration_days' && ++n === 1) ? { status: 500, body: JSON.stringify({ code: 'XX000', message: 'down' }) } : null;
-    const o = await desk({ tables: withDay({ day: '2026-10-21' }), rpc, hook }); await tick(o.page, 1500);
+    const o = await desk({ tables: withDay(null), rpc, hook }); await tick(o.page, 1500);
     ok(n >= 1 && (await frRowsOf(o.page)).length === 0, 'friends refresh: the first load failed — nothing drawn yet', { n });
     await o.page.clock.runFor(16500); await o.page.waitForTimeout(500);
     ok(n >= 2 && JSON.stringify(await frRowsOf(o.page)) === '["Avery Quill"]', 'friends refresh: …and it asks again by itself, 15 seconds on', { n, rows: await frRowsOf(o.page) });
@@ -396,7 +412,7 @@ test('friendsRefresh', async () => {
        counting every RPC let the promise pass without the sheet asking. Count the one the promise is about. */
     const nReg = () => o.log.rpcs.filter(r => r.fn === 'friend_registration_days').length, before = nReg();
     await o.page.clock.runFor(125000); await o.page.waitForTimeout(300);
-    await o.page.click('.rg-slot[data-rg="rail"] [data-rg-act="open"]'); await tick(o.page, 800);
+    await o.page.click(R1BTN); await tick(o.page, 800);
     ok(nReg() > before, 'friends refresh: opening the sheet asks the RPC again once the list is stale', { before, after: nReg() });
     await o.close(); }
 });
@@ -405,7 +421,7 @@ test('retryNewer', async () => {
   const st = { refuse: true, posts: 0 };
   const hook = (url, m) => { if (url.pathname !== '/rest/v1/registration_days' || m === 'GET') return null; st.posts++; return st.refuse ? { status: 500, body: JSON.stringify({ code: 'XX000', message: 'down' }) } : null; };
   const o = await desk({ tables: withDay(null), hook }); await tick(o.page, 1500);
-  await o.page.click('.rg-slot[data-rg="rail"] [data-rg-act="open"]'); await tick(o.page, 400);
+  await o.page.click(R1BTN); await tick(o.page, 400);
   await o.page.click('.rg-d[data-day="2026-10-21"]'); await o.page.click('[data-rg-act="save"]'); await tick(o.page, 1000);
   ok(st.posts === 1 && JSON.parse(await LS(o.page)).pending === true, 'retry newer: this device’s change is waiting (refused once)', st.posts);
   /* another device saves a later day to the account meanwhile */
@@ -413,7 +429,7 @@ test('retryNewer', async () => {
   st.refuse = false;
   await o.page.evaluate(() => window.dispatchEvent(new Event('online'))); await tick(o.page, 1200);
   ok(st.posts === 1, 'retry newer: coming back online does not push the older change over the newer row', st.posts);
-  const s = (await slots(o.page)).rail, kept = JSON.parse(await LS(o.page) || 'null');
+  const s = (await slots(o.page)).plans, kept = JSON.parse(await LS(o.page) || 'null');
   ok(s.head === 'Register Mon, Oct 26, 9a' && s.note === '' && kept && !kept.pending && kept.day === '2026-10-26', 'retry newer: the card shows the account’s later day and nothing is waiting', { s, kept });
   await o.close();
 });
@@ -427,12 +443,12 @@ test('inFlight', async () => {
     return { status: 500, body: JSON.stringify({ code: 'XX000', message: 'down' }) };                    /* the newer one is refused */
   };
   const o = await desk({ tables: withDay(null), hook }); await tick(o.page, 1500);
-  await o.page.click('.rg-slot[data-rg="rail"] [data-rg-act="open"]'); await tick(o.page, 400);
+  await o.page.click(R1BTN); await tick(o.page, 400);
   await o.page.click('.rg-d[data-day="2026-10-21"]'); await o.page.click('[data-rg-act="save"]'); await tick(o.page, 600);
   await o.page.evaluate(() => { window.__b = TCReg.save({ day: '2026-10-23', time: '', shared: true }); }); await tick(o.page, 800);
   ok(st.n === 2, 'in flight: a newer save went out while the first was still on its way', st.n);
   st.release(); await tick(o.page, 1200);
-  const kept = JSON.parse(await LS(o.page) || 'null'), s = (await slots(o.page)).rail;
+  const kept = JSON.parse(await LS(o.page) || 'null'), s = (await slots(o.page)).plans;
   ok(kept && kept.day === '2026-10-23' && kept.pending === true, 'in flight: the first write finishing does not mark its older day as saved over the newer pending one', kept);
   ok(s.head === 'Register Fri, Oct 23' && /not saved to your account yet/.test(s.note), 'in flight: the card still shows the newer day, still waiting', s);
   await o.close();
@@ -441,29 +457,28 @@ test('inFlight', async () => {
 test('focus', async () => {
   const o = await desk({ tables: withDay(null) }); await tick(o.page, 1500);
   const focusOn = sel => o.page.evaluate(q => !!document.activeElement && document.activeElement.isConnected && document.activeElement.matches(q), sel);
-  await o.page.click('.rg-slot[data-rg="rail"] [data-rg-act="open"]'); await tick(o.page, 400);
+  await o.page.click(R1BTN); await tick(o.page, 400);
   await o.page.click('.rg-d[data-day="2026-10-21"]'); await o.page.click('[data-rg-act="save"]'); await tick(o.page, 1000);
-  ok(await focusOn('.rg-slot[data-rg="rail"] [data-rg-act="open"]'), 'focus: after Save it is on the slot’s new Change button, not on a button that was drawn away');
-  await o.page.click('.rg-slot[data-rg="rail"] [data-rg-act="open"]'); await tick(o.page, 400);
+  ok(await focusOn(R1BTN), 'focus: after Save it is on the slot’s new Change button, not on a button that was drawn away');
+  await o.page.click(R1BTN); await tick(o.page, 400);
   await o.page.click('[data-rg-act="clear"]'); await tick(o.page, 1000);
-  ok(await focusOn('.rg-slot[data-rg="rail"] [data-rg-act="open"]'), 'focus: after Clear it is on the slot’s new Set day button');
-  await UNDISMISS(o.page);
-  await o.page.click('#hmRegCard button:has-text("Set your registration day")'); await tick(o.page, 400);   /* websync (2026-10-15): the card, not the top strip */
+  ok(await focusOn(R1BTN), 'focus: after Clear it is on the slot’s new Set day button');
+  await o.page.click('#hmRegCard [data-tl-key="add1"]'); await tick(o.page, 400);
   await o.page.click('.rg-d[data-day="2026-10-22"]'); await o.page.click('[data-rg-act="save"]'); await tick(o.page, 1000);
-  ok(await focusOn('#hmRegCard button[onclick^="regDayOpen"]'), 'focus: opened from the banner card, it goes back to the card’s button');
+  ok(await focusOn('#hmRegCard [data-tl-key="pen1"]'), 'focus: opened from the timeline’s “+ Add”, it goes back to the row’s pencil');
   await o.close();
 });
 
 test('permission', async () => {
   const hook = (url, m) => (url.pathname === '/rest/v1/registration_days' && m !== 'GET') ? { status: 403, body: JSON.stringify({ code: '42501', message: 'new row violates row-level security policy for table "registration_days"' }) } : null;
   const o = await desk({ tables: withDay({ day: '2026-10-21', at_time: '11:00:00' }), hook }); await tick(o.page, 1500);
-  await o.page.click('.rg-slot[data-rg="rail"] [data-rg-act="open"]'); await tick(o.page, 400);
+  await o.page.click(R1BTN); await tick(o.page, 400);
   await o.page.click('[data-rg-act="clear"]'); await tick(o.page, 1000);
   const t1 = await toast(o.page);
   ok(/Not done yet — friends can still see your day/.test(t1) && !/cleared|removed/.test(t1), 'permission: a refused Clear (42501) says it is not done, never “cleared”', t1);
-  await o.page.click('.rg-slot[data-rg="rail"] [data-rg-act="open"]'); await tick(o.page, 400);
+  await o.page.click(R1BTN); await tick(o.page, 400);
   await o.page.click('.rg-d[data-day="2026-10-22"]'); await o.page.click('[data-rg-act="save"]'); await tick(o.page, 1000);
-  const t2 = await toast(o.page), s = (await slots(o.page)).rail;
+  const t2 = await toast(o.page), s = (await slots(o.page)).plans;
   ok(/Couldn’t save/.test(t2) && !/is saved|Saved on this device/.test(t2) && /not saved to your account yet/.test(s.note) && !/Kept on this device only/.test(s.note), 'permission: a refused save (42501) says it failed and is only on this device for now — not a missing table', { t2, note: s.note });
   ok(o.log.errors.length === 0, 'permission: no page errors', o.log.errors);
   await o.close();
@@ -471,15 +486,14 @@ test('permission', async () => {
 
 test('a11y', async () => {
   const o = await desk({ tables: withDay(null) }); await tick(o.page, 1500);
-  await o.page.click('.rg-slot[data-rg="rail"] [data-rg-act="open"]'); await tick(o.page, 400);
+  await o.page.click(R1BTN); await tick(o.page, 400);
   await o.page.click('.rg-d[data-day="2026-10-22"]'); await o.page.fill('#rgTime', 'soon'); await o.page.click('[data-rg-act="save"]'); await tick(o.page, 400);
   const r = await o.page.evaluate(() => { const i = document.getElementById('rgTime'), d = i.getAttribute('aria-describedby'); return { inv: i.getAttribute('aria-invalid'), d, txt: d && document.getElementById(d) ? document.getElementById(d).textContent : null }; });
   ok(r.inv === 'true' && r.d === 'rgErr' && /doesn’t look right/.test(r.txt || ''), 'a11y: the time error is tied to the time field (aria-invalid + aria-describedby)', r);
   await o.close();
-  const p = await desk({ tables: withDay(null), tz: 'Pacific/Auckland' }); await tick(p.page, 1500);
-  await UNDISMISS(p.page);
-  const b = await p.page.evaluate(() => document.getElementById('hmRegCard').innerText);   /* websync (2026-10-15) */
-  ok(/opens in 5 days/.test(b), 'banner card: the day count is Pacific’s (5), even in a browser that is already on the 15th', b);
+  const p = await desk({ tables: withDay({ day: '2026-10-21' }), tz: 'Pacific/Auckland' }); await tick(p.page, 1500);
+  const b = await p.page.evaluate(() => document.getElementById('hmRegCard').innerText);
+  ok(/in 7 days/.test(b), 'timeline: the day count is Pacific’s (7), even in a browser that is already on the 15th', b);
   await p.close();
 });
 
@@ -491,3 +505,4 @@ for (const n of names) {
 }
 console.log(`\ncheck-desktop-regday: ${pass} passed, ${fail} failed`);
 if (fail) { console.log('failed:', fails.join(' | ')); process.exit(1); }
+/* reg-timeline (2026-10-16): this file was updated by edit-tests-reg-timeline-2026-10-16.py */

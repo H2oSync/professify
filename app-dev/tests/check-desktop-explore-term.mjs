@@ -31,12 +31,13 @@ function springTables() {
 const search = async (page, q) => { await page.evaluate(q => { show('explore'); const i = document.getElementById('exQuery'); i.value = q; onExSearch(); }, q); await tick(page, 500); };
 const exText = page => page.evaluate(() => document.getElementById('exOut').innerText);
 const fullFallReads = log => log.reads.map(r => decodeURIComponent(r)).filter(r => /^course_seats\?term=eq\.2268/.test(r) && !/course_code=in\./.test(r));
-const clickTerm = (page, t) => page.evaluate(t => document.querySelector('#exContext .ex-term[data-term="' + t + '"]').click(), t);
+/* explore-bar: the term is ONE switch button showing the current term; it flips, so click only when it is not already on t */
+const clickTerm = (page, t) => page.evaluate(t => { const b = document.querySelector('#exContext .ex-termsw'); if (b.getAttribute('data-term') !== t) b.click(); }, t);
 
 test('single', async () => {
   const { page, close, log } = await desk(); await tick(page, 1500);
   await page.evaluate(() => { show('explore'); renderExContext(); }); await tick(page, 400);
-  ok((await page.$$('#exContext .ex-term')).length === 0, 'single term: no term switch in Explore');
+  ok((await page.$$('#exContext .ex-termsw')).length === 0, 'single term: no term switch in Explore');
   ok(log.errors.length === 0, 'single term: no page errors', log.errors);
   await close();
 });
@@ -44,8 +45,8 @@ test('single', async () => {
 test('switch', async () => {
   const { page, close, log } = await desk({ terms: SPRING_CFG, tables: springTables() }); await tick(page, 2500);
   await page.evaluate(() => { show('explore'); renderExContext(); }); await tick(page, 600);
-  const sw = () => page.evaluate(() => [...document.querySelectorAll('#exContext .ex-term')].map(b => b.textContent + (b.getAttribute('aria-pressed') === 'true' ? '*' : '')).join('|'));
-  ok(await sw() === 'Spring 2027*|Fall 2026', 'switch: Spring 2027 | Fall 2026, starting on Spring', await sw());
+  const sw = () => page.evaluate(() => [...document.querySelectorAll('#exContext .ex-termsw')].map(b => b.textContent.trim() + '*').join('|'));
+  ok(await sw() === 'Spring 2027*', 'switch: ONE switch (not two pills), starting on Spring 2027', await sw());
   ok(fullFallReads(log).length === 0, 'switch: nothing of Fall’s feed is read until it is asked for', fullFallReads(log));
   await search(page, 'BUS 3431');
   const spRows = await page.evaluate(() => [...document.querySelectorAll('#exOut .cls-row')].map(r => r.innerText).join(' || '));
@@ -53,7 +54,7 @@ test('switch', async () => {
   const cacheBefore = await page.evaluate(() => localStorage.getItem('professify_seats_cache:2274'));
   const nBefore = await page.evaluate(() => { window.__ss = SEAT_SECTIONS; window.__ps = PROFESSIFY_SEATS; return Object.keys(SEAT_SECTIONS).length; });
   await clickTerm(page, 'now'); await tick(page, 1500);
-  ok(await sw() === 'Spring 2027|Fall 2026*', 'switch: Fall 2026 is now lit', await sw());
+  ok(await sw() === 'Fall 2026*', 'switch: one tap flips it to Fall 2026', await sw());
   ok(fullFallReads(log).length === 1, 'fall: the now term’s whole feed is read once, on demand', fullFallReads(log));
   const st = await page.evaluate(() => ({ same: SEAT_SECTIONS === window.__ss && PROFESSIFY_SEATS === window.__ps, has38: !!SEAT_SECTIONS['BUS 3438'], fall38: !!(FALL.sec && FALL.sec['BUS 3438']), n: Object.keys(SEAT_SECTIONS).length,
     keys: Object.keys(localStorage).filter(k => /^professify_seats_cache/.test(k)), cache: localStorage.getItem('professify_seats_cache:2274') }));
@@ -164,3 +165,4 @@ for (const n of names) {
 }
 console.log(`\ncheck-desktop-explore-term: ${pass} passed, ${fail} failed`);
 if (fail) { console.log('failed:', fails.join(' | ')); process.exit(1); }
+/* explore-bar (2026-10-16): this file was updated by edit-tests-explore-bar-2026-10-16.py */

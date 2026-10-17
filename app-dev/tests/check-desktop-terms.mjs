@@ -97,20 +97,20 @@ test('wall', async () => {
   ok(cal.tag && cal.b38 && !cal.b01, 'home: “My schedule” is your Fall week, tagged Fall 2026', cal);
   /* My Classes: Fall 2026 · Spring 2027 — opens on Spring (you have a Spring class); Fall is read-only */
   await page.evaluate(() => { show('sched'); try { setSchedTab('mine'); } catch (e) {} renderMyClasses(); }); await tick(page, 600);
-  let mc = await page.evaluate(() => ({ chips: [...document.querySelectorAll('#watchMineOut > .mc-terms button')].map(b => b.textContent + (b.getAttribute('aria-pressed') === 'true' ? '*' : '')), add: !!document.querySelector('#watchMineOut .mc-addbtn'), txt: document.getElementById('watchMineOut').innerText }));
-  ok(mc.chips.join('|') === 'Fall 2026|Spring 2027*' && mc.add && /4401/.test(mc.txt) && !/3438/.test(mc.txt), 'my classes: Fall 2026 · Spring 2027, open on Spring — the list you add to', mc);
+  let mc = await page.evaluate(() => ({ chips: [...document.querySelectorAll('#watchMineOut > .mc-terms button')].map(b => b.textContent.trim() + '*'), add: !!document.querySelector('#watchMineOut .mc-addbtn'), txt: document.getElementById('watchMineOut').innerText }));
+  ok(mc.chips.join('|') === 'Spring 2027*' && mc.add && /4401/.test(mc.txt) && !/3438/.test(mc.txt), 'my classes: one term switch (not two pills), open on Spring 2027 — the list you add to', mc);
   ok(await page.evaluate(() => (document.getElementById('schedTerm') || {}).textContent) === 'Spring 2027', 'my classes: the header names Spring 2027 over the Spring list');
   await page.evaluate(() => mcSetTermView('now')); await tick(page, 600);
-  mc = await page.evaluate(() => ({ chips: [...document.querySelectorAll('#watchMineOut > .mc-terms button')].map(b => b.textContent + (b.getAttribute('aria-pressed') === 'true' ? '*' : '')), add: !!document.querySelector('#watchMineOut .mc-addbtn'), note: (document.querySelector('.mc-now-note') || {}).textContent || '', blocks: [...document.querySelectorAll('#watchMineOut .mc-cal-now [onclick*="cbTap"]')].length, txt: document.getElementById('watchMineOut').innerText }));
+  mc = await page.evaluate(() => ({ chips: [...document.querySelectorAll('#watchMineOut > .mc-terms button')].map(b => b.textContent.trim() + '*'), add: !!document.querySelector('#watchMineOut .mc-addbtn'), note: (document.querySelector('.mc-now-note') || {}).textContent || '', blocks: [...document.querySelectorAll('#watchMineOut .mc-cal-now [onclick*="cbTap"]')].length, txt: document.getElementById('watchMineOut').innerText }));
   ok(await page.evaluate(() => (document.getElementById('schedTerm') || {}).textContent) === 'Fall 2026', 'my classes: …and Fall 2026 over the Fall week');
-  ok(mc.chips.join('|') === 'Fall 2026*|Spring 2027' && !mc.add && /Read-only/.test(mc.note) && mc.blocks > 0 && /3438/.test(mc.txt) && !/4401/.test(mc.txt), 'my classes: Fall shows your week now, read-only, nothing to add', mc);
+  ok(mc.chips.join('|') === 'Fall 2026*' && !mc.add && /Read-only/.test(mc.note) && mc.blocks > 0 && /3438/.test(mc.txt) && !/4401/.test(mc.txt), 'my classes: Fall shows your week now, read-only, nothing to add', mc);
   /* a friend's page: Fall · Spring, opens on now */
   await page.evaluate(id => openFriendProfile(id), FX.FRIENDS[0].id); await tick(page, 600);
-  let fp = await page.evaluate(() => ({ chips: [...document.querySelectorAll('.frp-terms button')].map(b => b.textContent + (b.getAttribute('aria-pressed') === 'true' ? '*' : '')), txt: document.getElementById('frpModal').innerText }));
-  ok(fp.chips.join('|') === 'Fall 2026*|Spring 2027' && !/BUS 4401/.test(fp.txt), 'friend page: Fall 2026 · Spring 2027, open on their week now (no Spring class on it)', fp.chips);
+  let fp = await page.evaluate(() => ({ chips: [...document.querySelectorAll('.frp-terms button')].map(b => b.textContent.trim() + '*'), txt: document.getElementById('frpModal').innerText }));
+  ok(fp.chips.join('|') === 'Fall 2026*' && !/BUS 4401/.test(fp.txt), 'friend page: one term switch (the phone’s look) showing Fall 2026, open on their week now (no Spring class on it)', fp.chips);
   await page.evaluate(() => setFrpTerm('term')); await tick(page, 500);
-  fp = await page.evaluate(() => ({ chips: [...document.querySelectorAll('.frp-terms button')].map(b => b.textContent + (b.getAttribute('aria-pressed') === 'true' ? '*' : '')), txt: document.getElementById('frpModal').innerText }));
-  ok(fp.chips.join('|') === 'Fall 2026|Spring 2027*' && /BUS 4401/.test(fp.txt), 'friend page: Spring shows their Spring classes', fp.chips);
+  fp = await page.evaluate(() => ({ chips: [...document.querySelectorAll('.frp-terms button')].map(b => b.textContent.trim() + '*'), txt: document.getElementById('frpModal').innerText }));
+  ok(fp.chips.join('|') === 'Spring 2027*' && /BUS 4401/.test(fp.txt), 'friend page: Spring shows their Spring classes', fp.chips);
   await page.evaluate(() => closeFriendProfile()); await tick(page, 300);
   const misc = await page.evaluate(id => ({ next: friendNextTogether(friendsList.find(x => x.id === id)) || '', taking: myTakingCodes().slice().sort(), enrolled: enrolledNowCodes().slice().sort() }), FX.FRIENDS[0].id);
   ok(!/4401/.test(misc.next), 'friends: “together tomorrow” is a Fall class you share, never a Spring one (Spring hasn’t started)', misc.next);
@@ -242,3 +242,5 @@ for (const n of names) {
 }
 console.log(`\ncheck-desktop-terms: ${pass} passed, ${fail} failed`);
 if (fail) { console.log('failed:', fails.join(' | ')); process.exit(1); }
+/* friend-polish (2026-10-16): this file was updated by edit-tests-friend-polish-2026-10-16.py */
+/* explore-bar (2026-10-16): this file was updated by edit-tests-explore-bar-2026-10-16.py */
