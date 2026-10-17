@@ -143,7 +143,7 @@ window.PROFESSIFY_CONFIG = Object.assign({
   GA_MEASUREMENT_ID: 'G-L98ZTJQ1LY',
   // Seasonal banner dates (YYYY-MM-DD). A banner auto-shows in the 7 days before each.
   // Leave blank to keep it hidden. Set to Cal Poly's real priority-registration and
-  // quarter-end dates to turn it on.
+  // term-end dates to turn it on (the key is still called QUARTER_END).
   /* Spring 2027, quoted from registrar.calpoly.edu/spring-semester-planning-calendar (read 2026-09-24):
      "October 19 | Monday | Round 1 Registration opens for registration appointment rotations"
      "November 4 | Wednesday | Round 2 Registration begins"
@@ -2128,9 +2128,9 @@ window.toggleTheme = toggleTheme;
     .mc-card .mc-x{position:absolute;top:9px;right:8px}
   }
 </style>
-<link rel="stylesheet" href="hawk-ask.css?v=202610162055">
-<script defer src="hawk-router.js?v=202610162055"></script>
-<script defer src="hawk-ask.js?v=202610162055"></script>
+<link rel="stylesheet" href="hawk-ask.css?v=202610171358">
+<script defer src="hawk-router.js?v=202610171358"></script>
+<script defer src="hawk-ask.js?v=202610171358"></script>
 <style id="app-look-tokens">
 /* ================================================================================================
    APP-LOOK 2026-10-04 — the website in the phone app's design language, pass 1 (Tate: "the goal is
@@ -2771,7 +2771,7 @@ html[data-auth="in"] #schedGuestNote{display:none!important}
    "BUS 3348" came back as "US 334" on every block. The rule is the same one as above and it
    now applies to both: an async class has no hour, so it is the thing that gives up the grid,
    never the five real days. */
-@media (max-width:560px){
+@media (max-width:640px){   /* phone-sched: was 560, but the rail's 100% width applies at 640 */
   .cal-wrap{flex-wrap:wrap}
   .cal-wrap .cal-any{flex:1 0 100%;min-width:100%;margin-left:0;border-left:0;
     border-top:1px dashed rgba(var(--fg-rgb),.16);display:flex;align-items:center;gap:9px;padding:7px 9px}
@@ -5202,7 +5202,7 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
    The flag is the whole switch — every gp* surface already gates on gpFlagOn(), so this is
    one word and the code stays in git. Turn it back on the same day the migration runs. */
 window.PROFESSIFY_FLAGS={groups:false,messages:true};
-window.PROFESSIFY_BUILD='2026-10-16 20:55';
+window.PROFESSIFY_BUILD='2026-10-17 13:58';
 /* Paint the build stamp everywhere it appears. */
 try{
   (function(){
@@ -10520,13 +10520,26 @@ function exNeedTag(group){
   if(group==='major')return '<span class="exm-tag req">MAJOR</span>';
   return '';
 }
+/* sem-left (2026-10-16): while Explore shows Fall 2026 (read only) the rail beside it is still about the term you can register for.
+   It says so, and its rows open that term's class page (not Fall's, which is what Explore being on Fall would otherwise pick). */
+function exRailFor(){
+  try{
+    if(typeof fallActive==='function'&&fallActive()&&typeof fallViewId==='function'&&fallViewId()==='explore')
+      return '<span class="exm-for">For '+escapeHtml(mcTermLabel())+'</span> \u00b7 ';
+  }catch(e){}
+  return '';
+}
+function exRailOpen(code,ev){
+  window._exSpringLens=true;
+  try{ openClassPage(code,ev); }finally{ window._exSpringLens=false; }
+}
 function exRailClassRow(code,showMeter,seat,group){
   var s=(seat!==undefined)?seat:((typeof realSeat==='function')?realSeat(code):null);
   var num=exSeatNum(s), fill=showMeter?exSeatFill(s):null;
   /* term-fix (2026-10-16): a class with no section in the chosen term's feed is not offered that term. It is not "0 left". */
   if(!s&&typeof seatFeedLoaded==='function'&&seatFeedLoaded())num={t:'Not offered '+mcTermLabel(),c:'faint'};
   var nm=exCourseName(code);
-  return '<button type="button" class="exm-row" onclick="openClassPage(\''+jsAttr(code)+'\',event)">'
+  return '<button type="button" class="exm-row" onclick="exRailOpen(\''+jsAttr(code)+'\',event)">'
     +'<span class="exm-rt"><b>'+escapeHtml(code)+'</b>'+exNeedTag(group)
     +(num.t?('<span class="num '+num.c+'">'+escapeHtml(num.t)+'</span>'):'')+'</span>'
     +(nm?('<span class="exm-rs">'+escapeHtml(nm)+'</span>'):'')
@@ -10575,10 +10588,10 @@ function friendsWhereHtml(){
       +'<button type="button" class="exm-f" onclick="show(\'friends\')">Add friends \u2192</button>');
   }
   if(!wf.length){
-    return exMod('blue','Where your friends are',fr.length+' friend'+(fr.length===1?'':'s')+' on TermChamp',
+    return exMod('blue','Where your friends are',exRailFor()+fr.length+' friend'+(fr.length===1?'':'s')+' on TermChamp',
       '<p class="exm-empty">None of your friends have shared a class you\u2019re not already in.</p>');
   }
-  return exMod('blue','Where your friends are',wf.length+' class'+(wf.length===1?'':'es')+' you\u2019re not in yet',
+  return exMod('blue','Where your friends are',exRailFor()+wf.length+' class'+(wf.length===1?'':'es')+' you\u2019re not in yet',
     '<div class="exm-b">'+wf.slice(0,4).map(exFriendRow).join('')+'</div>');
 }
 try{ window.friendsWhereHtml=friendsWhereHtml; }catch(e){}
@@ -10646,7 +10659,7 @@ function exFriendRow(w){
   var avs=w.friends.slice(0,3).map(function(f){
     return '<span class="fr-av" style="background:'+(f.color||'')+'" title="'+escapeHtml(f.name||'')+'">'+faceHtml(f)+'</span>';
   }).join('');
-  return '<button type="button" class="exm-row exm-row-fr" onclick="openClassPage(\''+jsAttr(w.code)+'\',event)">'
+  return '<button type="button" class="exm-row exm-row-fr" onclick="exRailOpen(\''+jsAttr(w.code)+'\',event)">'
     +'<span class="exm-rt"><b>'+escapeHtml(w.code)+'</b><span class="num blue">'+n+' friend'+(n===1?'':'s')+'</span></span>'
     +'<span class="exm-frline"><span class="fr-avs">'+avs+'</span>'+(nm?('<span class="exm-rs">'+escapeHtml(nm)+'</span>'):'')+'</span>'
     +'</button>';
@@ -10685,6 +10698,7 @@ function renderExploreRail(){
               : offered ? (offered+' of '+sn.coded+' with a course code are offered in '+mcTermLabel()
                            +(nOpen?(' · '+nOpen+' more to choose'):''))
               : (left+' left · none show sections in our feed');
+      if(exRailFor())sub=exRailFor()+sub.replace(' are offered in '+mcTermLabel(),' are offered');   /* sem-left (2026-10-16): on Fall, "For Spring 2027 - 3 of 4 ... are offered" (the term is named once) */
       var rows=sn.items.slice(0,3).map(function(it){ return exRailClassRow(it.code,false,undefined,it.group); });
       /* The requirements you choose a class for sit with the ones you cannot, because they are
          the same question — what is left — and splitting them is how they got dropped. */
@@ -10734,7 +10748,7 @@ function renderExploreRail(){
         : '<p class="exm-empty">Tap the bookmark on any professor to keep them here.</p>');
   }else{
     out+=exMod('green','Saved classes',
-      saved.length?(saved.length+' on your list'):'Nothing on your list yet',
+      saved.length?(exRailFor()+saved.length+' on your list'):'Nothing on your list yet',
       saved.length
         ? '<div class="exm-b">'+saved.slice(0,5).map(function(c){ return exRailClassRow(c,false); }).join('')+'</div>'
           +'<button type="button" class="exm-f" onclick="show(\'watch\')">View all '+saved.length+' saved →</button>'
@@ -13248,6 +13262,7 @@ window.exSetTerm=function(t){
 /* ---- which term does a page opened from HERE belong to? ---- */
 function fallLensForOpen(code,forProf){
   if(!mcTwoTerms())return false;
+  if(window._exSpringLens)return false;   /* sem-left (2026-10-16): a row of Explore's rail is about the term you can register for */
   var v=fallViewId();
   if(!forProf){
     var frp=document.getElementById('frpBack');
@@ -18456,6 +18471,10 @@ function renderMyCalendar(codes,conf,meta,opts){
      two-line name. A friend's week, the Watchlist week and the phone keep the old scale. */
   var _tall=(opts.cm==='me'&&typeof window!=='undefined'&&window.innerWidth>640);
   if(_tall)PPM=0.92;
+  /* phone-sched (2026-10-16): on a phone the owner's own week is a little taller too (a 50-minute class = 48px), so the name has a
+     line or two under the code instead of "Introdu to...". The phone stacks the code in two lines (about 22px). */
+  var _ph=(opts.cm==='me'&&typeof window!=='undefined'&&window.innerWidth<=640);
+  if(_ph)PPM=0.96;
   var gridH=(hi-lo)*PPM;
   var rowPx=60*PPM;                       // one hour, in px — drives the grid rules
   var every=(typeof CAL_LABEL_EVERY!=='undefined')?CAL_LABEL_EVERY:2;
@@ -18510,8 +18529,8 @@ function renderMyCalendar(codes,conf,meta,opts){
            order: the code always, then as many lines of title as fit, then the friends who
            are in it with you. Overflowing and letting overflow:hidden guillotine a row of
            avatars is how you get a block with half a face poking out of the bottom. */
-        var room=h-6-(_tall?16:13);                        // padding + the code line (sched-hover: the tall week measures the real 15.5px code row)
-        var nmLines=Math.max(0,Math.min(2,Math.floor(room/12)));
+        var room=h-6-(_ph?22:(_tall?16:13));                        // padding + the code line (sched-hover: the tall week measures the real 15.5px code row)
+        var nmLines=Math.max(0,Math.min(2,Math.floor(room/(_ph?11:12))));
         /* A 50-minute class is 28px tall at CAL_PPM, which leaves 9px once the code line is
            paid for — three short of a 12px title row. So EVERY 50-minute class, the most common
            length Cal Poly runs, printed as a bare code while its 80-minute neighbours printed
@@ -18521,7 +18540,8 @@ function renderMyCalendar(codes,conf,meta,opts){
            misses by a hair goes compact: 2px of padding instead of 3, one 10px title line.
            Under 26px there genuinely isn't room and the code still stands alone. */
         var tight=false;
-        if(nmLines===0&&(h-4-13)>=10){ tight=true; nmLines=1; }
+        if(_ph){ var _n2=Math.max(0,Math.min(2,Math.floor((h-4-22)/11))); if(_n2>nmLines){ tight=true; nmLines=_n2; } }   /* phone-sched: compact padding buys the second line */
+        else if(nmLines===0&&(h-4-13)>=10){ tight=true; nmLines=1; }
         /* Tagged by SECTION, not by course, and same-section faces first — those are the people
            actually in the room at this hour. */
         var calFr=opts.peopleFor?(opts.peopleFor(m.code,m.crn)||[])
@@ -18574,9 +18594,9 @@ function renderMyCalendar(codes,conf,meta,opts){
            -webkit-line-clamp — which is how "The Economics of Equity and Social" ended up with
            its third line sliced in half by the block's edge. max-height, not height, so a
            one-line title doesn't reserve two. */
-        var nmLH=tight?10:12;
+        var nmLH=_ph?11:(tight?10:12);
         var nmHtml=(nmLines&&m.name)?('<span class="cb-nm" style="max-height:'+(nmLines*nmLH)+'px">'
-          +'<i class="cb-nmc" style="-webkit-line-clamp:'+nmLines+(_tall?';line-height:12px':'')+'">'+escAcc(String(m.name||''))+'</i></span>'):'';
+          +'<i class="cb-nmc" style="-webkit-line-clamp:'+nmLines+(_tall?';line-height:12px':(_ph?';line-height:11px':''))+'">'+escAcc(String(m.name||''))+'</i></span>'):'';
         /* The tooltip still carries everything the block had to drop, so nothing is lost —
            it's only not shouted. Friends who didn't fit are named there too. */
         if(calFr.length&&!showFr){
@@ -18592,7 +18612,7 @@ function renderMyCalendar(codes,conf,meta,opts){
         /* The block names its own course, section number and instructor. Nothing on screen reads
            these today except the halo layer, which needs to know WHICH section a rectangle is
            before it can say who teaches it — and asking the DOM beats recomputing the geometry. */
-        html+='<div class="cal-block cb-tap'+(tight?' cb-tight':'')+(bad?' bad':'')+(m.wl?' wl':'')+(m._sc?(' sc-pair '+m._sc):'')
+        html+='<div class="cal-block cb-tap'+(_ph?' cb-ph':'')+(tight?' cb-tight':'')+(bad?' bad':'')+(m.wl?' wl':'')+(m._sc?(' sc-pair '+m._sc):'')
           +'" data-code="'+escAcc(m.code)+'" data-crn="'+escAcc(m.crn||'')+'" data-prof="'+escAcc(m.prof||'')+'"'
           +' data-d="'+d+'" data-s="'+m.meet.start+'" data-e="'+m.meet.end+'"'
           +' role="button" tabindex="0" onclick="event.stopPropagation();cbTap(\''+tapCode+'\',\''+jsAttr(m.crn||'')+'\','+(_own?1:0)+')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();event.stopPropagation();cbTap(\''+tapCode+'\',\''+jsAttr(m.crn||'')+'\','+(_own?1:0)+')}" style="top:'+top+'px;height:'+Math.max(h,18)+'px;left:calc('+left+'% + 3px);width:calc('+w+'% - 6px)" title="'+escAcc(tip+' \u2014 tap for sections & seats')+'"><span class="cb-top"><span class="cb-code">'+cbCodeHtml(m.code)+'</span>'+wlTag+calFrHtml+'</span>'+nmHtml+'</div>';
@@ -19485,7 +19505,8 @@ window.SCHED_MAJORS['m-physicsba']={"name":"Physics (BA)","degree":"BA","college
       }
       ['Fall','Spring'].forEach(function(tm){
         var slots=Y1[tm];
-        while(uu(slots)<13&&slots.length<5){var un=uu(slots)<=11?4:3;slots.push({id:mkId('ge1'+tm+'p'+slots.length),title:'GE',units:un,type:'ge'});}
+        /* sem-left (2026-10-16): a semester term is ~15 units of 3-unit classes (12-18 is full time), not 13 units of 4-unit slots */
+        while(uu(slots)<=12&&slots.length<6){slots.push({id:mkId('ge1'+tm+'p'+slots.length),title:'GE',units:3,type:'ge'});}
         terms.push({year:1,term:tm,slots:slots});
       });
       var rem=core.filter(function(c){return !placed[canon(c.code)];});
@@ -19498,9 +19519,9 @@ window.SCHED_MAJORS['m-physicsba']={"name":"Physics (BA)","degree":"BA","college
         [['Fall',fall],['Spring',spring]].forEach(function(pair){
           var tm=pair[0];
           var slots=pair[1].map(function(c){return courseSlot(c.code,c.name,c.units);});
-          if(concLeft>0&&tm==='Fall'&&(yr===3||yr===4)){ slots.push({id:mkId('conc'+yr),title:'Concentration course',units:4,type:'concentration',note:concKeys.length+' concentrations — pick your focus in Step 2'}); concLeft--; }
+          if(concLeft>0&&tm==='Fall'&&(yr===3||yr===4)){ slots.push({id:mkId('conc'+yr),title:'Concentration course',units:3,type:'concentration',note:concKeys.length+' concentrations — pick your focus in Step 2'}); concLeft--; }
           var pad=0;
-          while(uu(slots)<13&&pad<2){var un=uu(slots)<=11?4:3;slots.push({id:mkId('ge'+yr+tm+pad),title:(yr>=3?'Upper-division GE or elective':'GE or support elective'),units:un,type:'ge'});pad++;}
+          while(uu(slots)<=12&&pad<5){var un=3;slots.push({id:mkId('ge'+yr+tm+pad),title:(yr>=3?'Upper-division GE or elective':'GE or support elective'),units:un,type:'ge'});pad++;}
           if(slots.length)terms.push({year:yr,term:tm,slots:slots});
         });
       });
@@ -21534,6 +21555,10 @@ window.SCHED_COMING=[["College of Liberal Arts","Anthropology-Geography","Art & 
 .msg-b.me{background:var(--clsblk);color:var(--clsblk-ink);border-bottom-left-radius:16px;
   border-bottom-right-radius:6px}
 .msg-note{margin-top:5px;font-size:12.5px;color:var(--muted);padding:0 3px}
+/* chat-links (2026-10-16): a link in a bubble takes the bubble's own text color */
+.msg-b a.msg-link{color:inherit;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:2px;overflow-wrap:anywhere}
+.msg-b a.msg-link:hover{text-decoration-thickness:2px}
+.msg-b a.msg-link:focus-visible{outline:2px solid currentColor;outline-offset:2px;border-radius:3px}
 
 /* a suggestion card, in a thread */
 .msug{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
@@ -28948,6 +28973,7 @@ function scUploadPayload(id,payload){
 function scPayloadUrl(id){
   var base=String(cfg().SUPABASE_URL||'').replace(/\/+$/,'');
   if(!base||!id)return '';
+  if(!/^[a-z0-9-]{16,64}(\.png|\.json)?$/.test(String(id)))return '';   /* fixups-2026-10-17 */
   return base+'/storage/v1/object/public/'+SC_BUCKET+'/'+String(id).replace(/\.png$/,'')+'.json';
 }
 /* THE LINK (Tate, 2026-08-29: "i want a link with a preview like this sleeper i attached").
@@ -29104,10 +29130,15 @@ function _shDays(t){ var out=[]; var s=String(t||''); ['Mo','Tu','We','Th','Fr',
 function _shTimeOnly(t){ var m=String(t||'').match(/\d{1,2}:\d{2}\s?[AaPp][Mm].*/); return m?m[0].replace(/\s+/g,''):''; }
 /* `qs` is a test seam, not a feature: a file:// page cannot replaceState() to a URL with a query
    on it, so there is no other way to drive the two link shapes through the real code path. */
+/* share-ops (2026-10-16) */
 function initSchedShare(qs){
-  var enc=null,nm='A friend',addId=null,imgId=null;
+  var enc=null,nm='A friend',addId=null,imgId=null,plan='',tm='';
   try{ var q=new URLSearchParams(qs!=null?qs:location.search); enc=q.get('sched'); nm=q.get('nm')||'A friend';
-       addId=q.get('add')||null; imgId=q.get('i')||null; }catch(e){ return; }
+       addId=q.get('add')||null; imgId=q.get('i')||null;
+       /* share-ops (2026-10-16): a shared Plan carries pl=A|B|C and tm=<term>; anything else is ignored */
+       var pl0=q.get('pl')||'', tm0=q.get('tm')||'';
+       plan=/^[ABC]$/.test(pl0)?pl0:'';
+       tm=/^(Fall|Spring|Summer|Winter) 20\d\d$/.test(tm0)?tm0:''; }catch(e){ return; }
   /* SHORT LINK: the week is in the bucket under the same id as the preview picture, so fetch it
      and then run the identical decode path an old ?sched= link takes. Every link anyone has
      already sent still carries its own payload and never touches the network. */
@@ -29115,14 +29146,14 @@ function initSchedShare(qs){
     var u=scPayloadUrl(imgId);
     if(u){
       fetch(u,{cache:'no-store'}).then(function(r){ return r.ok?r.text():null; }).then(function(txt){
-        if(txt)schedShareFrom(String(txt).trim(),nm,addId);
+        if(txt)schedShareFrom(String(txt).trim(),nm,addId,plan,tm);
         else schedShareMissing(nm);
       }).catch(function(){ schedShareMissing(nm); });
     }
     return;
   }
   if(!enc)return;
-  schedShareFrom(enc,nm,addId);
+  schedShareFrom(enc,nm,addId,plan,tm);
 }
 /* Said out loud rather than left as an empty screen. The two ways to get here are a link whose
    upload never finished and a link old enough that the object was cleaned up; neither is the
@@ -29134,7 +29165,7 @@ function schedShareMissing(nm){
       frToast('That schedule link has expired — ask '+first+' to send it again.');
   }catch(e){}
 }
-function schedShareFrom(enc,nm,addId){
+function schedShareFrom(enc,nm,addId,plan,tm){
   if(!enc)return;
   /* v2 first, then v1's JSON — every link anyone has already sent has to keep opening. */
   var plain=_b64urlDec(enc), data=null;
@@ -29145,12 +29176,13 @@ function schedShareFrom(enc,nm,addId){
   if(addId&&typeof UUID_RE!=='undefined'&&UUID_RE.test(addId)){ pendAddSet(addId); }   /* kept, then ASKED about after sign-in (security-client-hardening 2026-10-14) */
   window._schedLandingOpen=true;
   try{ history.replaceState({},'',location.pathname); }catch(e){}   // clean the long URL
-  renderSharedScheduleLanding(nm, data.cl, (addId&&UUID_RE.test(addId))?addId:null, data.term||'');
+  renderSharedScheduleLanding(nm, data.cl, (addId&&UUID_RE.test(addId))?addId:null, tm||data.term||'', plan||'');
 }
-function renderSharedScheduleLanding(nm, cl, addId, term){
+function renderSharedScheduleLanding(nm, cl, addId, term, plan){
   /* Older links carry no term; fall back to the term this build runs on rather than printing
      a bare "schedule" — and never to a literal that has to be hand-edited every quarter. */
   var termLabel=String(term||((typeof APP_TERM!=='undefined')?APP_TERM:'')||'').trim();
+  var planLetter=/^[ABC]$/.test(String(plan||''))?String(plan):'';   /* share-ops (2026-10-16) */
   var host=document.getElementById('schedLanding');
   if(!host){ host=document.createElement('div'); host.id='schedLanding'; host.className='sl-back'; document.body.appendChild(host); }
   var name=escapeHtml(nm||'A friend'); var first=escapeHtml((nm||'A friend').split(' ')[0]);
@@ -29170,7 +29202,9 @@ function renderSharedScheduleLanding(nm, cl, addId, term){
   host.innerHTML='<div class="sl-card">'
     +'<button class="sl-x" title="Close" onclick="closeSchedLanding()">&times;</button>'
     +'<div class="sl-kick">'+(addId?('Shared by '+name):'A TermChamp schedule')+'</div>'
-    +'<h2 class="sl-h">'+(addId?(first+'’s '):'')+(termLabel?(escapeHtml(termLabel)+' '):'')+'schedule</h2>'
+    +'<h2 class="sl-h">'+(planLetter
+        ? ((addId?(first+'’s '):'')+'Plan '+planLetter+(termLabel?(' · '+escapeHtml(termLabel)):''))
+        : ((addId?(first+'’s '):'')+(termLabel?(escapeHtml(termLabel)+' '):'')+'schedule'))+'</h2>'
     +'<div class="sl-list">'+rows+'</div>'
     +cta
     +'<button class="sl-ghost" onclick="closeSchedLanding();if(typeof show===\'function\')show(\'explore\')">Just browse TermChamp →</button>'
@@ -29192,9 +29226,10 @@ function schedLandingJoin(){ closeSchedLanding(); if(typeof openAuth==='function
 function dlSlug(x){ return String(x||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); }
 function dlFindProf(key){
   if(!key||typeof PROFESSORS==='undefined')return null;
-  if(PROFESSORS[key])return key;                                   // exact id
+  if(Object.prototype.hasOwnProperty.call(PROFESSORS,key))return key; // exact id (own keys only: fixups-2026-10-17)
   var want=dlSlug(key), hit=null;
   for(var id in PROFESSORS){
+    if(!Object.prototype.hasOwnProperty.call(PROFESSORS,id))continue;
     var p=PROFESSORS[id]; if(!p)continue;
     if(dlSlug(id)===want||dlSlug(p.name)===want){hit=id;break;}
   }
@@ -31137,6 +31172,54 @@ window.msgCreateConvNow=async function(){
   msgRenderList(); msgOpen(cid);
 };
 
+/* ---- links in a message (chat-links, 2026-10-16) ---------------------------------------------------
+   The text of a bubble is written by whoever is in the chat, so it is untrusted. Everything is escaped; the only markup made
+   here is the <a>, built from URL.href of an http: or https: URL that `new URL()` accepted. One pass over the text with a
+   character-class regex (no nested quantifiers: linear), at most MSG_LINK_TRY candidates and MSG_LINK_MAX links per message. */
+var MSG_LINK_MAX=10, MSG_LINK_TRY=20, MSG_LINK_SHOW=56;
+var MSG_URL_RE=/https?:\/\/[^\s<>"'`\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202f\u2060-\u2069\ufeff]+/gi;
+function msgLinkHtml(text){
+  text=String(text==null?'':text);
+  if(text.indexOf('//')<0)return msgEsc(text);
+  if(text.length>8000)return msgEsc(text);   /* fixups-2026-10-17: very long bodies stay plain text */
+  var re=new RegExp(MSG_URL_RE.source,'gi'), out='', last=0, links=0, tries=0, hit;
+  while(links<MSG_LINK_MAX&&tries<MSG_LINK_TRY&&(hit=re.exec(text))){
+    tries++;
+    var raw=hit[0], at=hit.index, end=raw.length, o=0, c=0, i;
+    /* "...see https://x.com/a." / "(https://x.com/a)" / "https://x.com/a!" - the punctuation after a link is not part of it;
+       a ")" that closes a "(" inside the URL is (en.wikipedia.org/wiki/Foo_(bar)). One count, then trim from the end. */
+    for(i=0;i<end;i++){ var ch=raw.charCodeAt(i); if(ch===40)o++; else if(ch===41)c++; }
+    while(end>0){
+      var l=raw.charAt(end-1);
+      if(l==='.'||l===','||l==='!'||l==='?'||l===';'||l===':')end--;
+      else if(l===')'&&c>o){ c--; end--; }
+      else break;
+    }
+    var url=raw.slice(0,end), u=null;
+    if(url.length<=url.indexOf('//')+2)continue;
+    try{ u=new URL(url); }catch(e){ continue; }
+    if(u.protocol!=='http:'&&u.protocol!=='https:')continue;
+    if(u.username||u.password||u.hostname.indexOf('.')<1||u.hostname.slice(-1)==='.')continue;
+    var shown=/^[\x21-\x7e]+$/.test(url)?url:u.href;     /* a non-ASCII address is shown as the browser will really send it */
+    var cut=shown.length>MSG_LINK_SHOW;
+    if(cut)shown=shown.slice(0,MSG_LINK_SHOW-1)+'…';
+    /* a professor or class link to this site opens inside it (click handler below); every other link opens in a new tab */
+    var site=null;
+    try{
+      if(u.protocol==='https:'&&msgSchedHostOk(u.host)&&(u.pathname==='/'||u.pathname==='')&&!u.hash){
+        var keys=[]; u.searchParams.forEach(function(v,k){ keys.push(k); });
+        if(keys.length===1&&keys[0]==='p'){ var pv=u.searchParams.get('p')||''; if(pv&&pv.length<=120&&!/[\u0000-\u001f\u007f]/.test(pv))site=['p',pv]; }
+        else if(keys.length===1&&keys[0]==='c'){ var cv=(u.searchParams.get('c')||'').trim(); if(/^[A-Za-z]{2,6}[ \-]?\d{2,4}[A-Za-z]?$/.test(cv))site=['c',cv]; }
+      }
+    }catch(e){ site=null; }
+    out+=msgEsc(text.slice(last,at))
+      +'<a class="msg-link" href="'+msgEsc(u.href)+'"'+(site?(' data-site="'+site[0]+'" data-v="'+msgEsc(site[1])+'"'):' target="_blank"')
+      +' rel="noopener noreferrer nofollow ugc"'+(cut?(' title="'+msgEsc(u.href.slice(0,300))+'"'):'')+'>'+msgEsc(shown)+'</a>';
+    last=at+end; links++;
+  }
+  return out+msgEsc(text.slice(last));
+}
+
 /* ---- rendering ------------------------------------------------------------------------------- */
 function msgBodyHtml(t,m){
   var mine=msgIsMe(m.sender);
@@ -31175,7 +31258,7 @@ function msgBodyHtml(t,m){
   }
   var _ss=msgSchedOf(m);
   if(_ss)return msgSchedCardHtml(t,m,_ss);
-  return '<div class="msg-b '+(mine?'me':'them')+'">'+msgEsc(m.body||'')+'</div>';
+  return '<div class="msg-b '+(mine?'me':'them')+'">'+msgLinkHtml(m.body||'')+'</div>';
 }
 
 /* ---- a shared schedule, in a thread (chat-cards, 2026-10-16) ------------------------------------
@@ -31272,7 +31355,7 @@ function msgSchedFind(mid){
 function msgSchedCardHtml(t,m,ss){
   var who=msgSchedWho(m,ss), title=msgSchedTitle(ss,who), img=msgSchedImg(ss), mid=jsAttr(String(m.id)), first=who.first;
   var add=msgSchedCanAdd(m,ss);
-  return (ss.text?('<div class="msg-b '+(msgIsMe(m.sender)?'me':'them')+'">'+msgEsc(ss.text)+'</div>'):'')
+  return (ss.text?('<div class="msg-b '+(msgIsMe(m.sender)?'me':'them')+'">'+msgLinkHtml(ss.text)+'</div>'):'')
     +'<div class="msug ssc"'+(ss.text?' style="margin-top:6px"':'')+'>'
     +(img?('<button class="ssc-img" onclick="msgSchedView(\''+mid+'\',event)" aria-label="View '+msgEsc(title)+'">'
         +'<img src="'+msgEsc(img)+'" alt="'+msgEsc(title)+'" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.className+=\' bad\'"></button>'):'')
@@ -31773,6 +31856,19 @@ window.msgAddWatch=function(code,ev){
 };
 window.msgOpenClass=function(code,ev){ if(ev)ev.stopPropagation(); try{ if(typeof openClassPage==='function')openClassPage(code); else if(typeof gotoSection==='function')gotoSection(code); }catch(e){} };
 window.msgOpenProf=function(key,ev){ if(ev)ev.stopPropagation(); try{ if(typeof openProf==='function')openProf(key); }catch(e){} };
+/* chat-links (2026-10-16): a termchamp.com/?p=<professor> or /?c=<class> link in a bubble opens inside the site, in this tab.
+   A plain click only (a new-tab click, a modifier or a middle click is left to the browser); if the site cannot find it the
+   link simply opens like any other. */
+try{ document.addEventListener('click',function(e){
+  var a=e.target&&e.target.closest&&e.target.closest('a.msg-link[data-site]');
+  if(!a||e.defaultPrevented||e.button||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;
+  var k=a.getAttribute('data-site'), v=a.getAttribute('data-v')||'', done=false;
+  try{
+    if(k==='p'&&typeof dlFindProf==='function'){ var id=dlFindProf(v); if(id&&typeof openProf==='function'){ openProf(id); done=true; } }
+    else if(k==='c'&&typeof dlOpenClass==='function')done=!!dlOpenClass(v);
+  }catch(x){}
+  if(done)e.preventDefault();
+}); }catch(e){}
 
 /* ---- realtime -------------------------------------------------------------------------------- */
 function msgStartRealtime(){
@@ -40809,6 +40905,8 @@ window.navCloseTop=function(){
 var _navPushing=false;
 function navPush(kind,val){
   if(_navPushing)return;
+  /* chat-links (2026-10-16): the Rate page's phone sheet pushed an entry that its closing has not taken back yet: this step replaces it */
+  try{ var _hs=history.state; if(_hs&&_hs.pf&&_hs.kind==='rtsheet'&&!window._rtNav){ history.replaceState({pf:1,kind:kind,val:val},''); return; } }catch(e){}
   try{ history.pushState({pf:1,kind:kind,val:val},''); }catch(e){}
 }
 /* Seed one entry so the very first Back has something of ours to land on instead of leaving. */
@@ -40834,6 +40932,10 @@ try{ history.replaceState({pf:1,kind:'view',val:'home'},''); }catch(e){}
   });
 
   window.addEventListener('popstate',function(ev){
+    /* chat-links (2026-10-16): the Back that rtSheet() asked for itself is not a navigation; Back with the Rate page's phone sheet
+       open (and nothing above it) closes the sheet and stays on the page */
+    if(window._navSwallow){ window._navSwallow=false; return; }
+    if(window._rtNav&&!navOpenOverlays().length){ window._rtNav=false; try{ rtClose(); }catch(e){} return; }
     /* Overlays first — Back should peel the top layer, not jump views underneath it. */
     if(navCloseTop()){ navPush('view',(document.querySelector('.view.active')||{}).id||'home'); return; }
     var st=ev.state;
@@ -42813,6 +42915,7 @@ try{ var _rf=window.renderFriends; if(typeof _rf==='function'){ window.renderFri
 .exm-chip.need{background:color-mix(in srgb,var(--mid) 16%,transparent);color:var(--mid)}
 .exm-h h3{margin:0;font-size:var(--t-name);font-weight:650;color:var(--text);letter-spacing:-.005em}
 .exm-h p{margin:2px 0 0;font-size:var(--t-body);color:var(--faint);line-height:1.35}
+.exm-h p .exm-for{color:var(--text-2);font-weight:650}   /* sem-left (2026-10-16) */
 .exm-b{margin-top:12px;display:flex;flex-direction:column;gap:11px}
 .exm-row{display:block;width:100%;text-align:left;background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer}
 .exm-rt{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
@@ -44917,8 +45020,22 @@ span.cal-cm{cursor:default}
 @media (min-width:1000px){
   #view-sched .pl3-week:not(.pl3-week--edit) .pl3-grid{height:calc(var(--pl3-hrs,10) * 80px)}
 }
-/* on a phone the columns are ~50px wide: code only, as before */
-@media (max-width:520px){.pl3-blk .pl3-nmw{display:none}}
+/* phone-sched (2026-10-16). A phone: the columns are ~50px wide, so the Plans week is taller (the hours it uses x 56px, not a flat 440px),
+   a block shows its code and as many lines of the name as fit (measured in hvFit, never guessed), and no time line (tap the class for it).
+   The Planner's week (--edit) keeps its code-only blocks. */
+@media (max-width:520px){
+  #view-sched .pl3-week:not(.pl3-week--edit) .pl3-grid{height:calc(var(--pl3-hrs,10) * 56px)}
+  #view-sched .pl3-week:not(.pl3-week--edit){padding-left:8px;padding-right:8px}
+  .pl3-week:not(.pl3-week--edit) .pl3-blk{padding:3px}
+  .pl3-week:not(.pl3-week--edit) .pl3-blk .pl3-nm{font-size:var(--t-micro);line-height:1.15;letter-spacing:-.01em;overflow-wrap:anywhere;hyphens:auto}
+  .pl3-week:not(.pl3-week--edit) .pl3-blk b{font-size:var(--t-micro);letter-spacing:-.02em}
+}
+/* My classes on a phone (the block carries .cb-ph): the code at the size the budget is counted for, a little less side padding, a long word breaks */
+@media (max-width:640px){
+  .cal-wrap .cal-block.cb-ph{padding-left:3px;padding-right:3px}
+  .cal-wrap .cal-block.cb-ph .cb-code{font-size:var(--t-micro)!important;line-height:1.12}
+  .cal-wrap .cal-block.cb-ph .cb-nmc{letter-spacing:-.01em;overflow-wrap:anywhere;hyphens:auto}
+}
 </style>
 <script id="sched-hover-js">
 /* sched-hover (2026-10-16). One hover layer for the two weeks that are the student's own: My classes (.mc-cal) and Plans
@@ -45079,11 +45196,9 @@ span.cal-cm{cursor:default}
   /* How many lines of a Plans block's name fit under its code and above its time: measured, never guessed. */
   function fit(host){
     if(host.getAttribute('data-hv')!=='plan')return;
-    var phone=false; try{ phone=!!(window.matchMedia&&matchMedia('(max-width:520px)').matches); }catch(e){}
     host.querySelectorAll('.pl3-blk').forEach(function(b){
       var w=b.querySelector('.pl3-nmw'), n=b.querySelector('.pl3-nm'), c=b.querySelector('b'), tm=b.querySelector('.pl3-tm');
       if(!w||!n||!b.clientHeight)return;                      /* not laid out (hidden pane): leave it for the next measure */
-      if(phone){ w.style.display=''; w.style.maxHeight=''; return; }
       var cs=getComputedStyle(b), lh=parseFloat(getComputedStyle(n).lineHeight)||13;
       var room=b.clientHeight-parseFloat(cs.paddingTop)-parseFloat(cs.paddingBottom)-(c?c.offsetHeight:0)-(tm?tm.offsetHeight:0)-2;
       var lines=Math.max(0,Math.min(2,Math.floor(room/lh)));
@@ -48429,6 +48544,21 @@ function rtWantInline(id){
 function rtPhone(){ try{ return window.matchMedia('(max-width:640px)').matches; }catch(e){ return false; } }
 function rtSheet(on){
   var sheet=!!on&&rtPhone();
+  /* chat-links (2026-10-16): the phone sheet is one history step. Opening pushes it (or takes back the one a close has not yet
+     removed); popstate closes the sheet (see the nav handler); any other close takes the step off again, unless the page has
+     already moved on (then navPush replaced it). */
+  try{
+    if(sheet&&!window._rtNav){
+      window._rtNav=true;
+      var _s=history.state; if(!(_s&&_s.pf&&_s.kind==='rtsheet'))history.pushState({pf:1,kind:'rtsheet'},'');
+    }else if(!sheet&&window._rtNav){
+      window._rtNav=false;
+      setTimeout(function(){ try{
+        var s=history.state;
+        if(!window._rtNav&&s&&s.pf&&s.kind==='rtsheet'){ window._navSwallow=true; setTimeout(function(){ window._navSwallow=false; },800); history.back(); }
+      }catch(e){} },0);
+    }
+  }catch(e){}
   var v=document.getElementById('view-rate'); if(v)v.classList.toggle('rt-sheet',sheet);
   try{ document.body.classList.toggle('rt-sheet-open',sheet); }catch(e){}
   try{
