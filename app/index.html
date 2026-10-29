@@ -2595,13 +2595,28 @@ function addSection(sec) {
 /* ---------------------------------------------------------------------------------------------
    Sign-in
    --------------------------------------------------------------------------------------------- */
+/* A token "issued at future" (PGRST303) is refused before anything runs, so it is always safe to send
+   again; it clears within a second or two (2026-10-28, a friend's first sign-in). Anything else passes
+   through untouched. */
+const JWT_FUTURE_WAIT = [600, 1200, 2000, 3200];
+async function tcFetch(input, init) {
+  for (let i = 0; ; i++) {
+    const r = await fetch(input, init);
+    if (r.status !== 401 || i >= JWT_FUTURE_WAIT.length) return r;
+    let code = '';
+    try { const j = await r.clone().json(); code = String((j && (j.code || j.error_code)) || ''); } catch (e) {}
+    if (code !== 'PGRST303') return r;
+    TC.jwtRetries = (TC.jwtRetries || 0) + 1;
+    await new Promise(res => setTimeout(res, JWT_FUTURE_WAIT[i]));
+  }
+}
 TC.client = function () {
   if (TC.sb) return TC.sb;
   if (!window.supabase || !window.supabase.createClient) return null;
   TC.sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true,
     /* security-app (2026-10-15): PKCE, like the website. The default (implicit) flow signed in anyone who opened /app/#access_token=...&refresh_token=...,
        so a link could sign a victim into the attacker's account. Sign-in here is an emailed code or a password; neither reads the URL. */
-    flowType: 'pkce' } });
+    flowType: 'pkce' }, global: { fetch: tcFetch } });
   TC.sb.auth.onAuthStateChange((ev, session) => {
     const was = TC.user && TC.user.id, now = session && session.user && session.user.id;
     if (was === now) return;
