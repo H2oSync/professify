@@ -6,7 +6,8 @@
     "contentInset": "never",
     "backgroundColor": "#F4F6FB",
     "preferredContentMode": "mobile",
-    "allowsLinkPreview": false
+    "allowsLinkPreview": false,
+    "scrollEnabled": false
   },
   "plugins": {
     "PushNotifications": {
