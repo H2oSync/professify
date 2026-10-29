@@ -10,13 +10,21 @@
   },
   "plugins": {
     "PushNotifications": {
-      "presentationOptions": ["badge", "sound", "alert"]
+      "presentationOptions": [
+        "badge",
+        "sound",
+        "alert"
+      ]
     },
     "SplashScreen": {
       "launchShowDuration": 800,
       "launchAutoHide": true,
       "backgroundColor": "#F4F6FB",
       "showSpinner": false
+    },
+    "Keyboard": {
+      "resize": "native",
+      "style": "LIGHT"
     }
   }
 }

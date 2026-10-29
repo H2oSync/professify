@@ -54,6 +54,23 @@
   sync();
   new MutationObserver(sync).observe(document.head, { subtree: true, attributes: true, attributeFilter: ['content'] });
   } catch (e) {}
+  try {
+  /* The keyboard (Tate, 2026-10-28: "like linkedin", not Safari): no ^ v ✓ bar above it, and its
+     light/dark follows the app's theme rather than the phone's. Needs @capacitor/keyboard in the app
+     build; a build without it ignores this (every call is caught). */
+  var KB = (C.Plugins && C.Plugins.Keyboard) || null, kbLast = '';
+  var quiet = function (r) { if (r && typeof r.catch === 'function') r.catch(function () {}); };
+  if (KB) {
+    try { quiet(KB.setAccessoryBarVisible({ isVisible: false })); } catch (e) {}
+    var kb = function () {
+      var st = document.documentElement.getAttribute('data-theme') === 'dark' ? 'DARK' : 'LIGHT';
+      if (st === kbLast) return; kbLast = st;
+      try { quiet(KB.setStyle({ style: st })); } catch (e) {}
+    };
+    kb();
+    new MutationObserver(kb).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  }
+  } catch (e) {}
 } catch (e) { window.TC_NATIVE = false; } })();</script>
 <script>/* phone mode by device (2026-10-06): a touch screen whose short side is a phone's always gets the
    full-screen app, even when the page is wider than 520 CSS px (page zoom, Request Desktop Website);
