@@ -394,6 +394,12 @@ html.pz .onb .majorlist{max-height:calc(46vh / var(--pz,1))!important}
 .rm-bd{flex:1;display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:10px 12px 12px}
 .rm-bd .rchip{margin-top:auto}
 .homepg .recs-row{padding-bottom:20px;margin-bottom:-18px}
+/* 2026-10-28 (Tate): the suggested row was getting lost on the page — solid class-blue tops,
+   white text on them, and a defined edge on every card (light and dark). */
+.rm-top{background:var(--blue)}
+.rmini .rm-k,.rm-top .rm-p{color:#fff}
+.recs .card.rmini{box-shadow:0 0 0 1.5px rgba(37,99,235,.28),0 2px 4px rgba(15,23,42,.06),0 12px 26px rgba(22,51,107,.16)}
+:root[data-theme="dark"] .recs .card.rmini{box-shadow:0 0 0 1.5px rgba(110,162,255,.35),0 12px 26px rgba(0,0,0,.35)}
 :root[data-theme="dark"] .rf-sheet{box-shadow:0 -1px 0 rgba(255,255,255,.07)}
 /* 2026-10-04: Home, a deeper page (Tate) */
 :root.deep .phone,:root.deep .status{background:#E7ECF5}
