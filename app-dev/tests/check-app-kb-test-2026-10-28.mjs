@@ -1,0 +1,24 @@
+import { openApp } from './app-harness.mjs';
+let pass = 0, fail = 0; const ok = (c, m, d) => { if (c) { pass++; console.log('  ok  ', m); } else { fail++; console.log('  FAIL', m, JSON.stringify(d)); } };
+const init = () => { window.__kb = []; const K = { setAccessoryBarVisible: o => { __kb.push(['bar', o.isVisible]); return Promise.resolve(); }, setStyle: o => { __kb.push(['style', o.style]); return Promise.resolve(); } };
+  window.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'ios', Plugins: { Keyboard: K, StatusBar: { setStyle: () => Promise.resolve() }, PushNotifications: { checkPermissions: () => Promise.resolve({ receive: 'prompt' }), addListener: () => Promise.resolve({ remove(){} }) } } }; };
+let o = await openApp({ init });
+await o.page.waitForTimeout(1800);
+let kb = await o.page.evaluate(() => __kb);
+ok(kb.some(x => x[0] === 'bar' && x[1] === false), 'native: the ^ v ✓ bar is turned off', kb);
+ok(kb.filter(x => x[0] === 'style').pop()?.[1] === 'LIGHT', 'native: light app → light keyboard', kb);
+await o.page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark')); await o.page.waitForTimeout(100);
+kb = await o.page.evaluate(() => __kb); ok(kb.filter(x => x[0] === 'style').pop()?.[1] === 'DARK', 'native: dark app → dark keyboard', kb);
+await o.page.evaluate(() => document.documentElement.removeAttribute('data-theme')); await o.page.waitForTimeout(100);
+kb = await o.page.evaluate(() => __kb); ok(kb.filter(x => x[0] === 'style').pop()?.[1] === 'LIGHT', 'native: back to light', kb);
+ok(o.log.errors.length === 0, 'native: no page errors', o.log.errors); await o.close();
+/* a build without the plugin: rejecting calls are swallowed, no errors */
+const init2 = () => { window.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'ios', Plugins: { StatusBar: { setStyle: () => Promise.resolve() } } }; };
+o = await openApp({ init: init2 }); await o.page.waitForTimeout(1800);
+ok(o.log.errors.length === 0, 'native without the keyboard plugin: no errors', o.log.errors); await o.close();
+const init3 = () => { window.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'ios', Plugins: { Keyboard: { setAccessoryBarVisible: () => Promise.reject(new Error('not implemented')), setStyle: () => Promise.reject(new Error('nope')) }, StatusBar: { setStyle: () => Promise.resolve() } } }; };
+o = await openApp({ init: init3 }); await o.page.waitForTimeout(1800);
+ok(o.log.errors.length === 0, 'native, plugin rejects: swallowed, no errors', o.log.errors); await o.close();
+o = await openApp({}); await o.page.waitForTimeout(1800);
+ok(o.log.errors.length === 0 && await o.page.evaluate(() => !window.TC_NATIVE), 'web: nothing changes', o.log.errors); await o.close();
+console.log(`kb-test: ${pass} passed, ${fail} failed`);
