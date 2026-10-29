@@ -846,7 +846,7 @@ tests.homeDeep = async () => {
     const rows = [...sec.querySelectorAll('.rmini')].map(x => x.querySelector('.rm-top') && getComputedStyle(x.querySelector('.rm-top')).backgroundColor);
     return { h: [...sec.querySelector('.recs-h').children].map(x => x.textContent.trim()).join(' '), tag: C(sec.querySelector('.rs-tag')) && sec.querySelector('.rs-tag').textContent, top: C(top) && C(top).backgroundColor, k: k && k.innerText, kc: C(k) && C(k).color, kfs: C(k) && C(k).fontSize, kbg: C(k) && C(k).backgroundColor,
       friendsInTop: !!(top && /\d+ friends?/.test(top.innerText)), bd: C(bd) && C(bd).backgroundColor, nameInBd: !!(bd && bd.querySelector('.rm-t')), rows, code: b.dataset.x }; });
-  ok(r && r.top === 'rgb(227, 236, 255)' && r.rows.every(c => c === r.top) && r.kc === 'rgb(30, 64, 175)' && r.kfs === '20px' && r.kbg === 'rgba(0, 0, 0, 0)' && r.k === r.code, 'recs: every card has a class-blue top (#E3ECFF) with the code large in #1E40AF', r);
+  ok(r && r.top === 'rgb(37, 99, 235)' && r.rows.every(c => c === r.top) && r.kc === 'rgb(255, 255, 255)' && r.kfs === '20px' && r.kbg === 'rgba(0, 0, 0, 0)' && r.k === r.code, 'recs: every card has a solid class-blue top (#2563EB) with the code large in white (2026-10-28: stands out on the page)', r);
   ok(r && r.friendsInTop && r.nameInBd && r.bd !== r.top, 'recs: friends in the blue top; the class name below it on white', r);
   ok(r && /^Classes your friends are taking Suggested$/.test(r.h) && r.tag === 'Suggested', 'recs: heading “Classes your friends are taking” with a “Suggested” tag', r);
   /* a full-page sheet over Home is light, so the band and strip go light with it (review fix) */
