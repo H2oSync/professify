@@ -4487,8 +4487,8 @@ function homeWeekCard(id) {
   else if (!isMe && !(TC.friendRows && TC.friendRows[id])) week = loadingCard('Loading ' + P.short + '’s week…');
   else if (!isMe && TC.err.friendSecs) week = errCard('Couldn’t load ' + P.short + '’s classes.', 'refresh');
   else if (!nClasses) week = `<div class="empty"><b>${isMe ? 'No classes yet' : esc(P.short) + ' hasn’t added classes'}</b>${isMe ? `Find your ${esc(CFG.TERM_LABEL)} classes in Explore and tap + to add them — your week shows up here.` : ''}</div>`;
-  else if (!secs.some(onGrid)) week = anyRow;
-  else week = (/^[ABC]$/.test(v.k) ? `<div class="plancol plan-${v.k}">` : '') + grid(secs, { sel: S.homeDays[id], act: 'homeDay', key: id, blockAct: 'secSheet', shared, one: true, fit: 30, H: 300, extra: /^[ABC]$/.test(v.k) ? [] : cmBlocks(isMe ? 'me' : id) }) + (/^[ABC]$/.test(v.k) ? '</div>' : '') + anyRow;
+  else if (!secs.some(onGrid)) week = /^[ABC]$/.test(v.k) ? `<div class="plancol plan-${v.k}">${anyRow}</div>` : anyRow;
+  else week = (/^[ABC]$/.test(v.k) ? `<div class="plancol plan-${v.k}">` : '') + grid(secs, { sel: S.homeDays[id], act: 'homeDay', key: id, blockAct: 'secSheet', shared, one: true, fit: 30, H: 300, extra: /^[ABC]$/.test(v.k) ? [] : cmBlocks(isMe ? 'me' : id) }) + anyRow + (/^[ABC]$/.test(v.k) ? '</div>' : '');
   return `<div class="card fcard" id="hf-${esc(id)}">
   <button class="top" data-a="${isMe ? 'tab' : 'openFriend'}" data-x="${isMe ? 'schedule' : id}">
    ${pav(id, 50, 17)}
