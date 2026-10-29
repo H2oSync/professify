@@ -13883,8 +13883,10 @@ function authFriendlyErr(msg){
   var m=String(msg||'');
   if(/not authorized|Email address .* not authorized|is not authorized/i.test(m))
     return 'We can’t send a code to that address. Use your Cal Poly, SDSU or UCSB email — if that’s what you entered, let Tate know and he’ll check the sender.';
+  var wait=/after (\d+) second/i.exec(m);
+  if(wait) return 'A code was just sent \u2014 wait '+wait[1]+' seconds before asking for another. Check your Junk folder too.';
   if(/rate limit|too many requests|only request this after|429/i.test(m))
-    return 'Too many codes requested just now — there’s an hourly limit on verification emails. Wait a minute and hit resend.';
+    return 'Too many codes requested just now. Wait a minute, check your Junk folder, then tap Resend.';
   if(/signups not allowed|Signups not allowed/i.test(m))
     return 'New sign-ups are switched off for this project right now.';
   if(/invalid|malformed/i.test(m)&&/email/i.test(m))
@@ -14216,6 +14218,7 @@ function authCodeStep(email){
   document.getElementById('authBody').innerHTML=
     '<div class="auth-k">Check your inbox</div><h2 class="auth-h">Enter your code</h2>'
     +'<p class="auth-sub">We emailed a verification code to <b>'+escapeHtml(email)+'</b>.</p>'
+    +'<p class="auth-sub" id="authJunk" style="margin-top:-4px;font-size:13px">Not there? Check your <b>Junk</b> or <b>Spam</b> folder for \u201cYour TermChamp code\u201d from noreply@termchamp.com.</p>'
     +'<input id="authCode" class="auth-input" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="Enter code" style="letter-spacing:5px;text-align:center;font-size:20px;font-weight:700" oninput="authCheckCode()">'
     +'<div id="authErr" class="auth-err"></div>'
     +'<button id="authVerifyBtn" class="auth-submit" disabled onclick="authVerify(\''+esc+'\')">Verify &amp; continue</button>'
@@ -14225,7 +14228,7 @@ function authCodeStep(email){
     +'<button class="auth-alt" id="authResend" onclick="authResend(\''+esc+'\')">Didn\u2019t get it? Resend code</button>'
     +'<button class="auth-alt" onclick="authEmailStep()">Use a different email</button>';
   setTimeout(function(){var c=document.getElementById('authCode');if(c)c.focus();},50);
-  authResendCooldown(45);
+  authResendCooldown(60);
 }
 var _authResendT=null;
 function authResendCooldown(sec){
@@ -14252,10 +14255,11 @@ async function authResend(email){
     authSay('');
     var note=document.querySelector('#authBody .auth-sub');
     if(note)note.innerHTML='New code sent to <b>'+escapeHtml(email)+'</b>. The older one stops working.';
-    authResendCooldown(45);
+    authResendCooldown(60);
   }catch(e){
     authErr(e&&e.message,'Could not resend the code. Try again in a minute.');
-    authResendCooldown(20);
+    var w=/after (\d+) second/i.exec(String(e&&e.message||''));
+    authResendCooldown(w?Number(w[1])+1:60);
   }
 }
 function authCheckCode(){ var el=document.getElementById('authCode'); var v=(el.value||'').replace(/\D/g,''); if(el.value!==v)el.value=v; var b=document.getElementById('authVerifyBtn'); if(b)b.disabled=v.length<6; }

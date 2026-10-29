@@ -2663,8 +2663,10 @@ function authFriendlyErr(msg){
   var m=String(msg||'');
   if(/not authorized|Email address .* not authorized|is not authorized/i.test(m))
     return 'We can’t send a code to that address. Use your Cal Poly, SDSU or UCSB email — if that’s what you entered, let Tate know and he’ll check the sender.';
+  var wait=/after (\d+) second/i.exec(m);
+  if(wait) return 'A code was just sent — wait '+wait[1]+' seconds before asking for another. Check your Junk folder too.';
   if(/rate limit|too many requests|only request this after|429/i.test(m))
-    return 'Too many codes requested just now — there’s an hourly limit on verification emails. Wait a minute and hit resend.';
+    return 'Too many codes requested just now. Wait a minute, check your Junk folder, then tap Resend.';
   if(/signups not allowed|Signups not allowed/i.test(m))
     return 'New sign-ups are switched off for this project right now.';
   if(/invalid|malformed/i.test(m)&&/email/i.test(m))
@@ -7592,7 +7594,7 @@ const SUBMIT = {
     UI.busy.signin = 1; UI.signin.err = ''; render();
     const err = await TC.sendCode(e, false); UI.busy.signin = 0;
     if (err) { UI.signin.err = /signups? not allowed|user not found|otp_disabled/i.test(err) ? 'No TermChamp account uses that email yet — tap “Create an account” below.' : authFriendlyErr(err); render(); return; }
-    Object.assign(UI.signin, { mode: 'verify', err: '', note: '', resendAt: Date.now() + 45000 }); render();
+    Object.assign(UI.signin, { mode: 'verify', err: '', note: '', resendAt: Date.now() + 60000 }); render();
   },
   verify: async form => {
     const c = onbCode(form); if (c.length < 6 || UI.busy.signin) return;
@@ -11032,7 +11034,7 @@ function onbSignupReady() { const si = UI.signin; return onbEmailHint(si.email, 
 function onbVerify() {
   const si = UI.signin, login = si.mode === 'verify';
   return `<div class="onb"><form class="scr" data-submit="${login ? 'verify' : 'suVerify'}" novalidate>${onbTop()}<div class="body"><div class="tile">${ONB_I.mail}</div>
-    <div class="stack"><h1>Check your email</h1><p class="lead">We sent a 6-digit code to <span style="color:var(--ink);font-weight:800">${esc(onbMask(si.email))}</span></p><div><button type="button" class="pill-pink" data-a="onbBack">Edit email</button></div></div>
+    <div class="stack"><h1>Check your email</h1><p class="lead">We sent a 6-digit code to <span style="color:var(--ink);font-weight:800">${esc(onbMask(si.email))}</span></p><p id="junkHint" style="margin:0;font-size:13.5px;line-height:1.45;font-weight:700;color:var(--muted)">Not there? Check your <b>Junk</b> or <b>Spam</b> folder for “Your TermChamp code” from noreply@termchamp.com.</p><div><button type="button" class="pill-pink" data-a="onbBack">Edit email</button></div></div>
     <div class="code6 ${si.err ? 'bad' : ''}" id="code6" role="group" aria-label="6-digit code">${[0, 1, 2, 3, 4, 5].map(i => `<input inputmode="numeric" pattern="[0-9]*" maxlength="${i === 0 ? 6 : 1}" aria-label="Digit ${i + 1}" value="${esc(String(si.code || '')[i] || '')}" ${i === 0 ? 'autocomplete="one-time-code"' : 'autocomplete="off"'}>`).join('')}</div>
     <div class="hint bad" id="codeErr" role="alert">${esc(si.err || '')}</div>
     ${si.note ? `<div class="hint ok" role="status">${esc(si.note)}</div>` : ''}
@@ -11306,7 +11308,8 @@ Object.assign(A, {
     if (wait > 0) { si.err = `Wait ${wait}s before asking for another code — there’s an hourly limit.`; si.note = ''; return render(); }
     si.err = ''; si.note = ''; UI.busy.signin = 1; render();
     const err = await TC.sendCode(si.email, si.mode === 'suVerify'); UI.busy.signin = 0;
-    if (err) si.err = authFriendlyErr(err); else { si.note = 'New code sent. The older one stops working.'; si.resendAt = Date.now() + 60000; }
+    if (err) { const w = /after (\d+) second/i.exec(String(err)); si.err = authFriendlyErr(err); if (w) si.resendAt = Date.now() + (Number(w[1]) + 1) * 1000; }
+    else { si.note = 'New code sent. The older one stops working. Check Junk too.'; si.resendAt = Date.now() + 60000; }
     render();
   },
   joinWaitlist: async () => {
