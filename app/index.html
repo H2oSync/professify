@@ -7777,7 +7777,7 @@ function swdMove(x, y, ev) {
   if (ev && ev.cancelable) ev.preventDefault();
 }
 function swdEnd() {
-  const s = SWD.el; SWD.el = null; if (!s || !SWD.on) return;
+  const s = SWD.el, was = SWD.on; SWD.el = null; SWD.on = false; if (!s || !was) return;
   /* speed over the last ~120ms, so a quick flick counts even after a slow start */
   const p0 = SWD.pts[0], p1 = SWD.pts[SWD.pts.length - 1], v = (p1[1] - p0[1]) / Math.max(1, p1[0] - p0[0]);
   const go = SWD.dy > 110 || (SWD.dy > 36 && v > 0.5), sc = document.querySelector('#sheet .scrim');
@@ -7798,8 +7798,9 @@ document.addEventListener('touchcancel', swdEnd, { passive: true });
 /* the Desktop preview has no touch: a mouse drag does the same, and a drag that closed swallows its click */
 document.addEventListener('mousedown', ev => { if (ev.button === 0 && !(window.matchMedia && matchMedia('(pointer:coarse)').matches)) swdStart(ev.target, ev.clientX, ev.clientY); });
 document.addEventListener('mousemove', ev => { if (SWD.el) swdMove(ev.clientX, ev.clientY, null); });
-document.addEventListener('mouseup', () => { const moved = SWD.on; swdEnd(); if (moved) { UI.swdSwallow = true; setTimeout(() => { UI.swdSwallow = false; }, 60); } });
-document.addEventListener('click', ev => { if (UI.swdSwallow) { ev.stopPropagation(); ev.preventDefault(); UI.swdSwallow = false; } }, true);
+const tcFine = () => !(window.matchMedia && matchMedia('(pointer:coarse)').matches);   /* a real mouse, not a finger */
+document.addEventListener('mouseup', () => { if (!tcFine()) return; const moved = !!(SWD.el && SWD.on); swdEnd(); if (moved) { UI.swdSwallow = true; setTimeout(() => { UI.swdSwallow = false; }, 60); } });
+document.addEventListener('click', ev => { if (UI.swdSwallow && tcFine()) { ev.stopPropagation(); ev.preventDefault(); } UI.swdSwallow = false; }, true);
 /* Swipe between tabs (Tate, 2026-10-29: "like instagram"; then "more seamless and not so slow with
    blurring"). Instagram's feel: the page moves 1:1 with the finger and the next screen is right there
    beside it — a pager, no fade. The neighbour is drawn into a ghost layer next to #scroll; when the
@@ -7808,7 +7809,7 @@ const TSW = { dead: false, lock: false, busy: false, el: null, x0: 0, y0: 0, gho
 const tswStill = () => !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
 function tswBlocked(t) {
   if (!t || !t.closest || UI.sheet || UI.champ || TC.phase !== 'ok' || !t.closest('#scroll')) return true;
-  if (t.closest('input,textarea,select,[contenteditable],.swrow,.ptrspin,#hptr')) return true;
+  if (t.closest('input,textarea,select,[contenteditable],.swacts,.ptrspin,#hptr')) return true;
   for (let n = t; n && n.id !== 'scroll'; n = n.parentElement) {   /* anything that scrolls sideways keeps its own swipe */
     if (n.scrollWidth > n.clientWidth + 2) { const o = getComputedStyle(n).overflowX; if (o === 'auto' || o === 'scroll') return true; }
   }
@@ -7816,7 +7817,10 @@ function tswBlocked(t) {
 }
 function tswStart(t, x, y) {
   if (TSW.ghost) return; TSW.el = null; if (tswBlocked(t)) return;
-  Object.assign(TSW, { el: document.getElementById('scroll'), x0: x, y0: y, dead: false, lock: false });
+  /* a chat row: only a right swipe on a closed row is a tab swipe (left = Pin/Delete; right on an open row closes it) */
+  const row = t.closest('.swrow'), th = row && row.querySelector(':scope > .thread');
+  const rowOpen = !!(row && ((th && /translateX\(-[1-9]/.test(th.style.transform || '')) || (typeof SW !== 'undefined' && SW.open)));
+  Object.assign(TSW, { el: document.getElementById('scroll'), x0: x, y0: y, dead: false, lock: false, row: !!row, rowOpen });
 }
 function tswTarget(dir) {   /* dir 1 = swipe left (next tab), -1 = swipe right */
   const st = S.stack[S.tab] || [];
@@ -7841,7 +7845,8 @@ function tswMove(x, y, ev) {
   if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { TSW.dead = true; return; }
   if (Math.abs(dx) < 32 || Math.abs(dx) < Math.abs(dy) * 1.8) return;
   /* it's a slide: go there now, all the way — no holding it halfway (Tate, 2026-10-29) */
-  const dir = dx < 0 ? 1 : -1, to = tswTarget(dir); if (!to) { TSW.dead = true; return; }
+  const dir = dx < 0 ? 1 : -1; if (TSW.row && (dir > 0 || TSW.rowOpen)) { TSW.dead = true; return; }
+  const to = tswTarget(dir); if (!to) { TSW.dead = true; return; }
   TSW.el = null; TSW.lock = true; UI.tswLast = { dx, to };
   if (ev && ev.cancelable) ev.preventDefault();
   tswFling(sc, dir, to, dx);
@@ -7870,7 +7875,7 @@ document.addEventListener('touchend', tswEnd, { passive: true });
 document.addEventListener('touchcancel', tswEnd, { passive: true });
 document.addEventListener('mousedown', ev => { if (!TSW.busy && ev.button === 0 && !(window.matchMedia && matchMedia('(pointer:coarse)').matches)) tswStart(ev.target, ev.clientX, ev.clientY); });
 document.addEventListener('mousemove', ev => { if (TSW.el || TSW.lock) tswMove(ev.clientX, ev.clientY, null); });
-document.addEventListener('mouseup', () => { const moved = TSW.lock; tswEnd(); if (moved) { UI.swdSwallow = true; setTimeout(() => { UI.swdSwallow = false; }, 60); } });
+document.addEventListener('mouseup', () => { if (!tcFine()) return; const moved = TSW.lock; tswEnd(); if (moved) { UI.swdSwallow = true; setTimeout(() => { UI.swdSwallow = false; }, 60); } });
 document.addEventListener('keydown', ev => { if (ev.key === 'Enter' && ev.target && (ev.target.id === 'fq' || ev.target.id === 'myfq')) { ev.preventDefault(); ev.target.blur(); } });
 /* the app's zoom on a phone whose page is wider than its screen (phone-full-bleed, 2026-10-06) */
 function pzNow() { return window.__pz || 1; }
