@@ -5140,7 +5140,7 @@ function friendsBody() {
  <div class="hscroll">${sug.map(id => { const p = PEOPLE[id], rq = TC.relation(id) === 'sent'; return `<div class="card pym"><div style="display:flex;justify-content:center">${pav(id, 56, 18)}</div><div class="nm">${esc(p.name)}</div><div class="sub">${esc(p.sub || '')}</div><button class="pbtn ${rq ? 'done' : 'pink'}" data-a="addFriend" data-x="${id}">${rq ? 'Requested' : 'Add'}</button></div>`; }).join('')}</div>` : ''}
 `;
 }
-function fRepaint() { const el = document.getElementById('fbody'); if (el) el.innerHTML = friendsBody(); }
+function fRepaint() { const el = document.getElementById('fbody'); if (el) { const m = hxSave(el); el.innerHTML = friendsBody(); hxRestore(el, m); } }
 SCREENS.friends = () => ({
   body: `<div class="w12"><div class="fhdr"><div class="title">Friends</div><button class="invpill" data-a="sheet" data-x="invite" aria-label="Invite friends">${ic('qr', 18, 2.4)}Invite</button></div>
  <label class="search fsearch"><span style="color:var(--pink-t,var(--pink))">${ic('search', 22, 2.4)}</span><input id="fq" data-in="fq" type="search" value="${esc(S.fq)}" placeholder="Find friends by name or @handle" aria-label="Find friends by name or @handle" autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search"><button type="button" class="fqx" data-a="fqClear" aria-label="Clear search">${ic('x', 16, 2.6)}</button></label>
@@ -7639,6 +7639,18 @@ function parkNowPills(root) {
   });
 }
 window.addEventListener('resize', () => requestAnimationFrame(() => parkNowPills()));
+/* Sideways rows keep their place (Tate, 2026-10-29). Keyed by the row's first class and its order
+   among rows of that class, so a redraw puts each row back where it was. */
+const HX = '.stories,.recs-row,.hscroll,.chips,.pk-concrow,.gwmem';
+function hxSave(root) {
+  const m = {}, n = {};
+  if (root) root.querySelectorAll(HX).forEach(el => { const c = el.classList[0], i = n[c] = (n[c] || 0) + 1; if (el.scrollLeft > 0) m[c + ':' + i] = el.scrollLeft; });
+  return m;
+}
+function hxRestore(root, m) {
+  if (!root || !m) return; const n = {};
+  root.querySelectorAll(HX).forEach(el => { const c = el.classList[0], i = n[c] = (n[c] || 0) + 1, v = m[c + ':' + i]; if (v) el.scrollLeft = v; });
+}
 function render(keep) {
   const sc = document.getElementById('scroll'); if (!sc) return;
   if (!sc._barsOn) { sc._barsOn = true; sc.addEventListener('scroll', onScrollBars, { passive: true }); sc.addEventListener('scroll', statusHair, { passive: true }); }
@@ -7664,7 +7676,9 @@ function render(keep) {
   gaView(S.tab && cur() ? cur().s : 'app');
   const e = cur(); let v;
   try { v = SCREENS[e.s](e.p || {}); } catch (err) { console.error('[termchamp app]', err); v = missingScreen('Something went wrong on this screen.'); }
+  if (UI._rendE) UI._rendE.hx = hxSave(sc);
   sc.innerHTML = v.body; parkNowPills(sc);
+  hxRestore(sc, e.hx); UI._rendE = e;
   sc.style.paddingTop = v.padTop ? `calc(var(--sb) + ${v.padTop}px)` : '';
   document.getElementById('fixtop').innerHTML = v.top || '';
   document.getElementById('fixbot').innerHTML = v.bot || '';
