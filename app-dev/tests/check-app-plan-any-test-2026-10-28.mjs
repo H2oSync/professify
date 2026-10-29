@@ -1,0 +1,20 @@
+import { openApp } from './app-harness.mjs';
+let pass = 0, fail = 0; const ok = (c, m, d) => { if (c) { pass++; console.log('  ok  ', m); } else { fail++; console.log('  FAIL', m, JSON.stringify(d)); } };
+const { page, close, log } = await openApp({});
+await page.waitForFunction(() => TC.ready && document.querySelectorAll('.hfeed .fcard').length >= 2, null, { timeout: 10000 });
+const r = await page.evaluate(() => {
+  const id = TC.friends[0], all = Object.values(SEC), timed = all.find(s => !s.async && s.s != null && s.e != null), un = Object.assign({}, timed, { id: 'x-async', code: 'PSY 2240', async: true, s: null, e: null, days: '' });
+  const orig = feedView, out = {};
+  const probe = (k, secs) => { window.feedView = i => i === id ? { k, secs, unplaced: [] } : orig(i); const host = document.createElement('div'); host.className = 'homepg'; host.innerHTML = homeWeekCard(id); document.getElementById('scroll').appendChild(host);
+    const c = host.querySelector('.any-c'), b = host.querySelector('.g-b'), cs = c && getComputedStyle(c); const res = { chip: cs && cs.backgroundColor, ink: cs && cs.color, block: b ? getComputedStyle(b).backgroundColor : null }; host.remove(); window.feedView = orig; return res; };
+  const blueSoft2 = (() => { const d = document.createElement('div'); d.style.background = 'var(--blue-soft2)'; document.body.appendChild(d); const v = getComputedStyle(d).backgroundColor; d.remove(); return v; })();
+  const planSoft = k => { const w = document.createElement('div'); w.className = 'plancol plan-' + k; const d = document.createElement('div'); d.style.background = 'var(--pc-soft2)'; w.appendChild(d); document.body.appendChild(w); const v = getComputedStyle(d).backgroundColor; w.remove(); return v; };
+  out.blue = blueSoft2; out.A = planSoft('A'); out.B = planSoft('B');
+  out.onlyAsyncA = probe('A', [un]); out.mixedB = probe('B', [timed, un]); out.now = probe('now', [timed, un]);
+  return out;
+});
+ok(r.A !== r.blue && r.onlyAsyncA.chip === r.A, 'plan A with only an async class: the Anytime chip is Plan A’s colour, not blue', r);
+ok(r.mixedB.chip === r.B && r.mixedB.block === r.B, 'plan B with timed + async classes: chip and blocks share Plan B’s colour', r);
+ok(r.now.chip === r.blue, 'a friend’s current week (no plan): chips stay My Classes blue', r);
+ok(log.errors.length === 0, 'no page errors', log.errors);
+await close(); console.log(`plan-any-test: ${pass} passed, ${fail} failed`);
