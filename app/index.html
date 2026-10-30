@@ -378,6 +378,8 @@ html.pz .onb .majorlist{max-height:calc(46vh / var(--pz,1))!important}
 .fview.plan-A,.fview.plan-B,.fview.plan-C{background:var(--pc-soft);color:var(--pc-ink)}
 .fnew{display:inline-block;padding:3px 9px;border-radius:12px;font-size:12px;font-weight:900;line-height:1.35;background:var(--pink-soft);color:var(--pink-ink)}
 .secterm{color:var(--ink3)}
+.secrow.any-pick{width:100%;display:grid;grid-template-columns:1fr auto;align-items:center;gap:2px 10px;text-align:left}
+.secrow.any-pick .t{grid-column:1}.secrow.any-pick .muted{grid-column:1}.secrow.any-pick .pbtn{grid-column:2;grid-row:1 / span 2}
 .pillchip{display:inline-block;background:var(--blue-soft);color:var(--blue-ink);font-weight:900;font-size:13px;padding:4px 10px;border-radius:14px;margin-top:3px}
 .foot{padding:12px 18px 0;color:var(--muted);font-weight:800;font-size:14px}
 /* Anytime tray under a Home week (Tate, 2026-09-30 option A3; 2026-10-03): online sections, unposted times
@@ -908,6 +910,7 @@ button.gwb.tiny{padding:0}
 .gwhint:empty{display:none}
 @media (prefers-reduced-motion:reduce){.gwc,.gwdh,.gwhr,.gwcols{transition:none}}
 .msgs{padding:14px 14px 20px;display:flex;flex-direction:column;gap:6px}
+.msgs .olderbtn{align-self:center;margin:0 0 8px;font-size:13.5px}
 .msg{max-width:78%;padding:9px 13px;border-radius:18px;font-size:15px;font-weight:600;line-height:1.35;background:var(--card);align-self:flex-start;box-shadow:0 1px 2px rgba(15,23,42,.06);word-wrap:break-word}
 .msg.me{background:var(--blue);color:#fff;align-self:flex-end}
 .msgs .msg{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
@@ -2409,9 +2412,35 @@ window.PROFESSIFY_CONFIG = Object.assign({
      Nov 3" (registrar.calpoly.edu, Spring 2027 registration calendar; oct5-to-registration-plan-2026-09-21.md) */
   REGISTRATION_TERM_CODE: '2274',
   REGISTRATION_ROUND1_ENDS: '2026-11-03',
+  /* registration-round2 (2026-10-30): Round 2 and Open Enrollment, as the website has them (index.html's config and TL_TERMS;
+     seats/registrar-calendar.json, quoting registrar.calpoly.edu/spring-semester-planning-calendar): 'November 4 Round 2
+     Registration begins' … 'November 17 End of Registration appointments for continuing students', 'November 18 Open
+     Enrollment begins' … 'January 22 Open Enrollment ends'. Round 2's appointments are weekdays from Nov 5
+     (REGISTRATION_ROUND2_FIRST, the website's r2a), never a NO_CLASS_DAYS day (Veterans Day, Nov 11). */
+  REGISTRATION_ROUND2: '2026-11-04',
+  REGISTRATION_ROUND2_FIRST: '2026-11-05',
+  REGISTRATION_ROUND2_ENDS: '2026-11-17',
+  OPEN_ENROLLMENT: '2026-11-18',
+  OPEN_ENROLLMENT_ENDS: '2027-01-22',
   /* 'December 22 … End of term' — registrar.calpoly.edu/academic-calendar, Fall 2026. Until then a
      first-year has nothing on their Degree Progress Report, so the Planner uses their flowchart. */
   TERM_ENDS: '2026-12-22',
+  /* term-ends-by-term (2026-10-30): each term's last day, by term code — after it the term is finished (grades are in).
+     TERM_ENDS above is NOW_TERM's and wins for it. 2274: Spring 2027's last final exam, 'Final exams May 15, 17–21'
+     (registrar.calpoly.edu/spring-semester-planning-calendar, as the website's TL_TERMS quotes it).
+     TODO: swap in the registrar's 'End of term' row for Spring 2027 once it is read (Fall's, Dec 22, comes after its finals). */
+  TERM_END_DATES: { '2268': '2026-12-22', '2274': '2027-05-21' },
+  /* no-class-days (2026-10-30): Pacific days Cal Poly holds no classes, and what a friend's ring says on them. Only dates
+     the repo cites: Veterans Day (the website's TL_TERMS r2skip; oct5-to-registration-plan-2026-09-21.md), Spring 2027's
+     break and finals (registrar.calpoly.edu/spring-semester-planning-calendar, as TL_TERMS quotes them). Winter and
+     summer break need no row: after the term you're in ends (TERM_ENDS / TERM_END_DATES) nobody is in its classes.
+     TODO — not in the repo, add from registrar.calpoly.edu/academic-calendar, never guess: Fall 2026 Thanksgiving
+     break; Fall 2026 final exams week (before Dec 22); Spring 2027 Cesar Chavez Day; any other campus holiday. */
+  NO_CLASS_DAYS: [
+    { from: '2026-11-11', to: '2026-11-11', t: 'Veterans Day' },
+    { from: '2027-03-15', to: '2027-03-21', t: 'Spring break' },
+    { from: '2027-05-15', to: '2027-05-21', t: 'Finals week' }
+  ],
   /* My Classes' term chips, in order (2026-10-04). A code left '' shows the chip and reads nothing —
      never guess one (see the desktop's note on TERM). The entry named TERM_LABEL always uses TERM,
      so moving TERM/TERM_LABEL to Spring fills Spring's code here too. */
@@ -2428,8 +2457,10 @@ function sloYmd() {
   const t = Date.now(); if (sloYmd.c && t - sloYmd.t < 60000) return sloYmd.c;
   sloYmd.t = t; sloYmd.c = sloYmd0(); return sloYmd.c;
 }
+/* One Intl.DateTimeFormat per locale + options, kept: making one is slow (scale, 2026-10-30) */
+function dtf(loc, o) { const c = dtf.c || (dtf.c = new Map()), k = loc + '|' + JSON.stringify(o); let f = c.get(k); if (!f) { f = new Intl.DateTimeFormat(loc, o); c.set(k, f); } return f; }
 function sloYmd0() {
-  try { const p = {}; new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date()).forEach(x => { p[x.type] = x.value; }); return p.year + '-' + p.month + '-' + p.day; }
+  try { const p = {}; dtf('en-US', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date()).forEach(x => { p[x.type] = x.value; }); return p.year + '-' + p.month + '-' + p.day; }
   catch (e) { return new Date().toISOString().slice(0, 10); }
 }
 /* the term people are in right now: NOW_TERM until TERM's classes start, then TERM */
@@ -2530,6 +2561,25 @@ const PALETTE = ['#FDBA74', '#93C5FD', '#FDE68A', '#C4B5FD', '#F9A8D4', '#86EFAC
 function colorFor(id) { let h = 0; const s = String(id || ''); for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return PALETTE[h % PALETTE.length]; }
 function initialsOf(n) { const w = String(n || '').trim().split(/\s+/).filter(Boolean); return ((w[0] || '?')[0] + (w.length > 1 ? w[w.length - 1][0] : '')).toUpperCase(); }
 function canonCode(c) { const m = /^([A-Z&]{2,5})\s*(\d{3,4}[A-Z]?)$/.exec(String(c || '').toUpperCase().replace(/\s+/g, ' ').trim()); return m ? m[1] + ' ' + m[2] : null; }
+/* Every row, a page at a time (scale, 2026-10-30): PostgREST stops at 1000 rows a request without saying so.
+   mk() builds the query afresh for each page (a supabase-js query runs once); give it an order so pages don't overlap. */
+async function pagedAll(mk, max) {
+  const out = [];
+  for (let off = 0; off < (max || 50000); off += 1000) {
+    const r = await mk().range(off, off + 999);
+    if (r.error) return { data: out, error: r.error };
+    const d = Array.isArray(r.data) ? r.data : []; out.push(...d);
+    if (d.length < 1000) break;
+  }
+  return { data: out, error: null };
+}
+/* The same, for a list of ids too long for one URL: n ids a request, the chunks side by side. */
+async function pagedIn(ids, mk, n) {
+  const ch = []; for (let i = 0; i < ids.length; i += (n || 50)) ch.push(ids.slice(i, i + (n || 50)));
+  const rs = await Promise.all(ch.map(c => pagedAll(() => mk(c))));
+  const bad = rs.find(r => r.error);
+  return { data: rs.flatMap(r => r.data), error: bad ? bad.error : null };
+}
 function schemaGap(err) { if (!err) return false; const c = String(err.code || ''), m = String(err.message || ''); return c === '42703' || c === '42P01' || c === 'PGRST204' || c === 'PGRST205' || /does not exist|schema cache/i.test(m); }
 /* sync-app (2026-10-15): the server pieces of sql/professify-sync-2026-10-15.sql may not be installed yet. syncGap() is "not installed"
    (a missing function, table or column): the feature then behaves as it did before. Per-account flags live under tc- so the wipe removes them. */
@@ -2600,15 +2650,61 @@ function addSection(sec) {
    again; it clears within a second or two (2026-10-28, a friend's first sign-in). Anything else passes
    through untouched. */
 const JWT_FUTURE_WAIT = [600, 1200, 2000, 3200];
+/* (2026-10-30) No request waits forever: one hung read (profile, chats, plans) kept the app on its spinner for good.
+   Each attempt gets a deadline — 15 s for the database and sign-in, 2 minutes for storage uploads and edge functions —
+   and fails as a network failure, which every screen already knows how to say. The caller's own signal still aborts. */
+const TC_FETCH_MS = 15000, TC_FETCH_LONG_MS = 120000;
+const tcFetchUrl = input => String(typeof input === 'string' ? input : (input && input.url) || input || '');
+function tcFetchOnce(input, init) {
+  if (typeof AbortController !== 'function') return fetch(input, init);
+  const own = (init && init.signal) || (input && typeof input === 'object' && input.signal) || null;
+  if (own && own.aborted) return fetch(input, init);
+  const ctl = new AbortController(); let late = false;
+  if (own) own.addEventListener('abort', () => { try { ctl.abort(own.reason); } catch (e) { ctl.abort(); } }, { once: true });
+  const ms = /\/(storage|functions)\/v1\//.test(tcFetchUrl(input)) ? TC_FETCH_LONG_MS : TC_FETCH_MS;
+  const t = setTimeout(() => { late = true; ctl.abort(); }, ms);   /* left running after the headers: it covers the body too */
+  return fetch(input, Object.assign({}, init, { signal: ctl.signal })).catch(e => { clearTimeout(t); if (late) throw new TypeError('Failed to fetch (timed out)'); throw e; });
+}
+/* (2026-10-30) An expired token (401 PGRST301 / "JWT expired") is refreshed once — one refresh shared by every request
+   that hit it, none again for 10 s — and the request goes again with the new token. The refresh's own call (/auth/v1/)
+   is never refreshed. A refresh the server refuses signs the student out (supabase-js's SIGNED_OUT → sign-in). */
+let tcRf = null, tcRfAt = 0;
+function tcRefreshTok() {
+  const sb = TC.sb; if (!sb) return Promise.resolve(null);
+  if (!tcRf || Date.now() - tcRfAt > 10000) {
+    tcRfAt = Date.now(); TC.jwtRefreshes = (TC.jwtRefreshes || 0) + 1;
+    tcRf = sb.auth.refreshSession().then(x => {
+      if (x && !x.error && x.data && x.data.session && x.data.session.access_token) return x.data.session.access_token;
+      /* the server refused the refresh token (not a network failure): this sign-in is over. supabase-js keeps a session
+         whose expires_at is still ahead, so drop it here — SIGNED_OUT takes the student to sign-in. */
+      const e = x && x.error;
+      if (e && e.name === 'AuthApiError' && e.status >= 400 && e.status < 500) sb.auth.signOut({ scope: 'local' }).catch(() => {});
+      return null;
+    }, () => null);
+  }
+  return tcRf;
+}
 async function tcFetch(input, init) {
+  let refreshed = /\/auth\/v1\//.test(tcFetchUrl(input));
   for (let i = 0; ; i++) {
-    const r = await fetch(input, init);
-    if (r.status !== 401 || i >= JWT_FUTURE_WAIT.length) return r;
-    let code = '';
-    try { const j = await r.clone().json(); code = String((j && (j.code || j.error_code)) || ''); } catch (e) {}
-    if (code !== 'PGRST303') return r;
-    TC.jwtRetries = (TC.jwtRetries || 0) + 1;
-    await new Promise(res => setTimeout(res, JWT_FUTURE_WAIT[i]));
+    const r = await tcFetchOnce(input, init);
+    if (r.status !== 401) return r;
+    let code = '', msg = '';
+    try { const j = await r.clone().json(); code = String((j && (j.code || j.error_code)) || ''); msg = String((j && (j.message || j.msg)) || ''); } catch (e) {}
+    if (code === 'PGRST303' && i < JWT_FUTURE_WAIT.length) {
+      TC.jwtRetries = (TC.jwtRetries || 0) + 1;
+      await new Promise(res => setTimeout(res, JWT_FUTURE_WAIT[i])); continue;
+    }
+    if (!refreshed && (code === 'PGRST301' || /jwt expired|token is expired/i.test(msg))) {
+      refreshed = true;
+      const tok = await tcRefreshTok();
+      if (tok) {
+        const h = new Headers((init && init.headers) || (input && typeof input === 'object' && input.headers) || {});
+        h.set('Authorization', 'Bearer ' + tok);
+        init = Object.assign({}, init, { headers: h }); continue;
+      }
+    }
+    return r;
   }
 }
 TC.client = function () {
@@ -2782,11 +2878,58 @@ function mineSnap(code) {
   const M = TC.mineRows || { secs: [], saved: [] };
   return { saved: (M.saved || []).includes(code), rows: (M.secs || []).filter(r => canonCode(r.code) === code).map(r => Object.assign({}, r)) };
 }
-TC.removeMyClass = async function (code) {
-  const sb = TC.client(), me = TC.user.id;
-  const a = await sb.from('saved_classes').delete().eq('user_id', me).eq('term', CFG.TERM).eq('code', code);
+TC.removeMyClass = async function (code, term) {
+  const sb = TC.client(), me = TC.user.id, t = term || CFG.TERM;   /* term: another My Classes term (2026-10-30) */
+  const a = await sb.from('saved_classes').delete().eq('user_id', me).eq('term', t).eq('code', code);
   if (a.error) return dbSay(a.error, 'Couldn’t remove ' + code + '.');
-  await sb.from('my_sections').delete().eq('user_id', me).eq('term', CFG.TERM).eq('code', code);
+  await sb.from('my_sections').delete().eq('user_id', me).eq('term', t).eq('code', code);
+  await loadMine(); return null;
+};
+/* (2026-10-30) One class's rows in any My Classes term, for an Undo; and putting them back (TC.restoreMyCode's rule:
+   the old rows go back first, then only the number the change added comes out). */
+function mineSnapIn(code, term) {
+  if (!term || term === CFG.TERM) return mineSnap(code);
+  const M = splitTerms() && term === nowTerm().code ? TC.nowMineRows : TC.termMine[term];
+  return { saved: !!M && (M.saved || []).includes(code), rows: ((M && (M.secs || M.rows)) || []).filter(r => canonCode(r.code) === code).map(r => Object.assign({}, r)) };
+}
+TC.restoreMyCodeIn = async function (code, term, snap, added) {
+  if (!term || term === CFG.TERM) return TC.restoreMyCode(code, snap, added);
+  const sb = TC.client(), me = TC.user.id;
+  const back = snap.rows.filter(x => x.class_nbr != null && String(x.class_nbr) !== '');
+  let r = { error: null };
+  for (const x of back) {
+    r = await sb.from('my_sections').upsert({ user_id: me, term, code: x.code, class_nbr: String(x.class_nbr), section: x.section == null ? null : x.section, instructor: x.instructor == null ? null : x.instructor, days: x.days == null ? null : x.days, status: x.status || 'enrolled', wl_pos: x.wl_pos == null ? null : x.wl_pos }, { onConflict: 'user_id,class_nbr,term' });
+    if (r.error) break;
+  }
+  if (!r.error && added && !back.some(x => String(x.class_nbr) === String(added))) r = await sb.from('my_sections').delete().eq('user_id', me).eq('term', term).eq('code', code).eq('class_nbr', String(added));
+  if (!r.error) r = snap.saved ? await sb.from('saved_classes').upsert({ user_id: me, term, code }, { onConflict: 'user_id,code,term' }) : await sb.from('saved_classes').delete().eq('user_id', me).eq('term', term).eq('code', code);
+  await loadMine(); return r.error ? dbSay(r.error, 'Couldn’t undo that.') : null;
+};
+/* (2026-10-30) "This is my section" in the term people are in now (a Degree Progress Report saves those classes with
+   no section). The row goes under nowTerm().code; o.swap: the class's other section numbers that term, taken out. */
+TC.setNowSection = async function (s, o) {
+  o = o || {};
+  const sb = TC.client(), me = TC.user.id, t = nowTerm().code, nbr = String((s && s.nbr) || '');
+  if (!splitTerms() || !nbr || (s.nowTerm && s.nowTerm !== t)) return 'That section isn’t in ' + nowTerm().label + '.';
+  let r = await sb.from('saved_classes').upsert({ user_id: me, term: t, code: s.code }, { onConflict: 'user_id,code,term' });
+  if (r.error) return dbSay(r.error, 'Couldn’t save ' + s.code + '.');
+  r = await sb.from('my_sections').upsert({ user_id: me, term: t, code: s.code, class_nbr: nbr, section: s.sec || null, instructor: s.instructor || null, days: s.rawDays || null, status: 'enrolled', wl_pos: null }, { onConflict: 'user_id,class_nbr,term' });
+  if (r.error) { await loadMine(); return dbSay(r.error, 'Couldn’t save that section.'); }
+  /* known at once: stories, rings and "free now" read nowSecs, which looks the number up here */
+  if (!NOW_SEC_TERM || NOW_SEC_TERM === t) { NOW_SEC_TERM = t; NOW_SEC[nbr] = s; }
+  for (const old of (o.swap || [])) {
+    if (String(old) === nbr) continue;
+    const d = await sb.from('my_sections').delete().eq('user_id', me).eq('term', t).eq('code', s.code).eq('class_nbr', String(old));
+    if (d.error) { await loadMine(); return dbSay(d.error, 'Saved, but your other section is still there — remove it from its sheet.'); }
+  }
+  UI.storyOrder = null;
+  await loadMine(); return null;
+};
+TC.removeNowSection = async function (code, nbr) {
+  const sb = TC.client(), me = TC.user.id, t = nowTerm().code;
+  const r = await sb.from('my_sections').delete().eq('user_id', me).eq('term', t).eq('code', code).eq('class_nbr', String(nbr));
+  if (r.error) return dbSay(r.error, 'Couldn’t remove that section.');
+  UI.storyOrder = null;
   await loadMine(); return null;
 };
 /* Year, major and concentration from the "Does this look right?" step. */
@@ -2927,7 +3070,8 @@ async function loadAll() {
   TC.phase = 'ok'; onbResume(); render(!!TC.ready);
   const blk = TC.loadBlocks().catch(() => {});   /* blocks first: they decide which messages a chat shows */
   TC._cpSynced = false;
-  await Promise.all([loadMine(), loadFriends().then(v => { loadPins().catch(() => {}); return v; }), loadSaved().catch(() => {}), loadPlans(), loadWatches(), loadReviews(), blk.then(() => loadThreads()), loadAudit(), loadPrefs(), loadRegDay(), loadCommits(), loadFriendBusy()]);
+  /* allSettled (2026-10-30): one loader that fails must not keep the rest of the app from being ready */
+  await Promise.allSettled([loadMine(), loadFriends().then(v => { loadPins().catch(() => {}); return v; }), loadSaved().catch(() => {}), loadPlans(), loadWatches(), loadReviews(), blk.then(() => loadThreads()), loadAudit(), loadPrefs(), loadRegDay(), loadCommits(), loadFriendBusy()]);
   loadRegFriends(true);
   loadSuggestions(); loadRateList(); loadFriendPlans(); loadNowSeats();
   UI.storyOrder = null; TC.ready = true; TC.loadDone = Date.now(); render(true);
@@ -3319,9 +3463,9 @@ async function loadFriends() {
     /* both terms in one read when they differ (spring-wall); a row goes to the term it names */
     const split = splitTerms(), nowT = nowTerm().code, byTerm = q => split ? q.in('term', [CFG.TERM, nowT]) : q.eq('term', CFG.TERM);
     const [secs, saved, hist] = await Promise.all([
-      byTerm(sb.from('my_sections').select('user_id,code,class_nbr,section,instructor,days,status' + (split ? ',term' : '')).in('user_id', ids)),
-      byTerm(sb.from('saved_classes').select('user_id,code' + (split ? ',term' : '')).in('user_id', ids)),
-      sb.from('class_history').select('user_id,code,term,year,professor').in('user_id', ids)
+      pagedIn(ids, c => byTerm(sb.from('my_sections').select('user_id,code,class_nbr,section,instructor,days,status' + (split ? ',term' : '')).in('user_id', c)).order('user_id').order('class_nbr').order('term')),
+      pagedIn(ids, c => byTerm(sb.from('saved_classes').select('user_id,code' + (split ? ',term' : '')).in('user_id', c)).order('user_id').order('code').order('term')),
+      pagedIn(ids, c => sb.from('class_history').select('user_id,code,term,year,professor').in('user_id', c).order('user_id').order('code').order('year').order('term').order('professor'))
     ]);
     ids.forEach(id => { TC.friendRows[id] = { secs: [], saved: [] }; if (split) TC.friendNowRows[id] = { secs: [], saved: [] }; });
     const boxOf = r => split && String(r.term) !== String(CFG.TERM) ? TC.friendNowRows[r.user_id] : TC.friendRows[r.user_id];
@@ -3556,7 +3700,7 @@ TC.flagDprLine = async function (b, prog) {
   try { const q = await TC.client().from('dpr_flags').insert(row); return !q.error; } catch (e) { return false; }
 };
 /* Today in San Luis Obispo, as YYYY-MM-DD (the registrar's dates are Pacific dates). */
-function sloISO() { try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); } catch (e) { return new Date().toISOString().slice(0, 10); } }
+function sloISO() { try { return dtf('en-CA', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); } catch (e) { return new Date().toISOString().slice(0, 10); } }
 /* Seats matter once registration for the term being planned is open; before that every section is at
    capacity and "12 seats" would read as scarcity. A term other than the one registration is coming for
    (today: Fall 2026, in session) is open. */
@@ -3569,12 +3713,35 @@ const firstYearEmpty = standing => standing === 'Freshman' && !!CFG.TERM_ENDS &&
 /* ---- Plans A–C (the same plans table and rules the desktop's Plans use). ---------------------- */
 const PLAN_LOCAL = 'termchamp_app_plans_v1';
 const PLAN_RAW = {};   /* class_nbr -> the {code, class_nbr} object the plans table holds (sync-app (2026-10-15)) */
+/* (2026-10-30) A plan edit that hasn't reached the server is kept on the phone (rows as they go up, so it can be sent
+   again before the seat feed loads) until a save lands; loadPlans never overwrites it, and it goes up again when the
+   phone is back online or the app comes back to the front. */
+const PLAN_DIRTY = 'tc_plan_dirty';
+TC.planSeq = TC.planSeq || {};
+function planDirtyRead() { try { const d = JSON.parse(localStorage.getItem(PLAN_DIRTY) || 'null'); if (d && d.slots && TC.user && d.uid === TC.user.id && d.term === CFG.TERM) return d; } catch (e) {} return null; }
+function planDirtySet(slot, rows) {
+  if (!TC.user) return;
+  const d = planDirtyRead() || { uid: TC.user.id, term: CFG.TERM, slots: {} };
+  if (rows) d.slots[slot] = rows; else delete d.slots[slot];
+  try { if (Object.keys(d.slots).length) localStorage.setItem(PLAN_DIRTY, JSON.stringify(d)); else localStorage.removeItem(PLAN_DIRTY); } catch (e) {}
+}
+let planRetrying = false;
+async function planRetry() {
+  if (!TC.user || !TC.plansLoaded || planRetrying) return;
+  const d = planDirtyRead(); if (!d) return;
+  planRetrying = true;
+  try { for (const k of Object.keys(d.slots)) { if (!TC.plans[k]) continue; clearTimeout(planTimers[k]); await pushPlan(k, true); } } finally { planRetrying = false; }
+}
+window.addEventListener('online', () => { planRetry(); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') planRetry(); });
 async function loadPlans() {
   TC.plansLoaded = false;
   try { const c = JSON.parse(localStorage.getItem(PLAN_LOCAL) || 'null'); if (c && c.uid === TC.user.id && c.term === CFG.TERM) TC.autoWatch = c.autoWatch || {}; } catch (e) {}
+  const seq0 = Object.assign({}, TC.planSeq), d0 = planDirtyRead();
   const r = await TC.client().from('plans').select('slot,sections,shared').eq('user_id', TC.user.id).eq('term', CFG.TERM);
   if (r.error) { TC.err.plans = schemaGap(r.error) ? 'missing' : r.error.message; return; }
   delete TC.err.plans;
+  const prevPlans = TC.plans || {}, d1 = planDirtyRead();
   TC.plans = { A: [], B: [], C: [] }; TC.plansLoaded = true;
   (r.data || []).forEach(row => {
     if (!TC.plans[row.slot]) return;
@@ -3583,6 +3750,13 @@ async function loadPlans() {
     (Array.isArray(row.sections) ? row.sections : []).forEach(x => { if (x && x.class_nbr != null) PLAN_RAW[String(x.class_nbr)] = x; });
     TC.planShared[row.slot] = row.shared !== false;
   });
+  /* an unsaved slot, or one edited while this read was out, stays as the phone has it */
+  ['A', 'B', 'C'].forEach(k => {
+    const ds = (d1 && d1.slots[k]) || (d0 && d0.slots[k]);
+    if ((TC.planSeq[k] || 0) !== (seq0[k] || 0)) TC.plans[k] = (prevPlans[k] || []).slice();
+    else if (Array.isArray(ds)) { TC.plans[k] = ds.map(x => String(x && x.class_nbr)).filter(x => x && x !== 'undefined'); ds.forEach(x => { if (x && x.class_nbr != null && !PLAN_RAW[String(x.class_nbr)]) PLAN_RAW[String(x.class_nbr)] = x; }); }
+  });
+  if (d1) setTimeout(planRetry, 0);
 }
 function savePlanLocal() { try { localStorage.setItem(PLAN_LOCAL, JSON.stringify({ uid: TC.user.id, term: CFG.TERM, autoWatch: TC.autoWatch })); } catch (e) {} }
 const planTimers = {};
@@ -3590,6 +3764,7 @@ TC.setPlan = function (slot, ids) {
   const before = TC.plans[slot].slice();
   TC.plans[slot] = ids.map(String);
   const touched = [...new Set(before.concat(TC.plans[slot]))];
+  TC.planSeq[slot] = (TC.planSeq[slot] || 0) + 1; planDirtySet(slot, planList(slot));
   touched.forEach(syncPlanWatch);
   clearTimeout(planTimers[slot]);
   planTimers[slot] = setTimeout(() => pushPlan(slot), 350);
@@ -3597,14 +3772,16 @@ TC.setPlan = function (slot, ids) {
 /* sync-app (2026-10-15): the rows a plan goes up as. A class number missing from the loaded seat feed keeps its original object (the website's plan, or a section
    the feed no longer lists); dropping it here silently shortened a plan the student never touched. Used by pushPlan and setPlanShared. */
 function planList(slot) { return TC.plans[slot].map(id => { const s = SEC[id]; return s ? { code: s.code, class_nbr: id } : (PLAN_RAW[id] ? Object.assign({}, PLAN_RAW[id]) : null); }).filter(Boolean); }
-async function pushPlan(slot) {
+async function pushPlan(slot, quiet) {
   const sb = TC.client(); if (!sb || !TC.user) return;
-  const list = planList(slot);
+  const list = planList(slot), seq = TC.planSeq[slot] || 0;
   const q = list.length
     ? sb.from('plans').upsert({ user_id: TC.user.id, term: CFG.TERM, slot, sections: list, shared: TC.planShared[slot] !== false }, { onConflict: 'user_id,term,slot' })
     : sb.from('plans').delete().eq('user_id', TC.user.id).eq('term', CFG.TERM).eq('slot', slot);
-  const r = await q;
-  if (r.error) toast('Couldn’t save Plan ' + slot + ' — check your connection');
+  let r; try { r = await q; } catch (e) { r = { error: e }; }
+  if (r.error) { if (!quiet) toast('Couldn’t save Plan ' + slot + ' — it’s kept on this phone and will save when you’re back online'); return false; }
+  if ((TC.planSeq[slot] || 0) === seq) planDirtySet(slot, null);
+  return true;
 }
 /* Putting a section in a plan watches it (seat alerts). Taking it out of every plan un-watches it
    only if the plan was what watched it — a section watched on its own stays watched. */
@@ -3645,7 +3822,7 @@ TC.watch = async function (id, on) {
   const s = SEC[id]; if (!s) return false;
   const sb = TC.client();
   const r = on
-    ? await sb.from('watch_sections').upsert({ user_id: TC.user.id, term: CFG.TERM, code: s.code, class_nbr: String(id), section: s.sec || null, instructor: s.instructor || null, days: s.rawDays || null })
+    ? await sb.from('watch_sections').upsert({ user_id: TC.user.id, term: CFG.TERM, code: s.code, class_nbr: String(id), section: s.sec || null, instructor: s.instructor || null, days: s.rawDays || null }, { onConflict: 'user_id,class_nbr,term' })
     : await sb.from('watch_sections').delete().eq('user_id', TC.user.id).eq('term', CFG.TERM).eq('class_nbr', id);
   if (r.error) { toast('Couldn’t update your seat alert'); return false; }
   if (on) TC.watches[id] = true; else delete TC.watches[id];
@@ -3656,8 +3833,9 @@ TC.watch = async function (id, on) {
 async function loadReviews() {
   const sb = TC.client();
   const cols = 'id,professor_key,professor_name,course,score,would_again,tags,note,created_at,difficulty,grade,format';
-  let r = await sb.from('reviews_public').select(cols).order('created_at', { ascending: false }).limit(2000);
-  if (r.error && schemaGap(r.error)) r = await sb.from('reviews_public').select(cols.replace(',grade', '')).order('created_at', { ascending: false }).limit(2000);
+  const rv = c => pagedAll(() => sb.from('reviews_public').select(c).order('created_at', { ascending: false }).order('id', { ascending: false }), 20000);
+  let r = await rv(cols);
+  if (r.error && schemaGap(r.error)) r = await rv(cols.replace(',grade', ''));
   if (!r.error) {
     TC.reviewsByName = {};
     (r.data || []).forEach(v => { const nm = String(v.professor_key || '').split('|')[0] || String(v.professor_name || '').toLowerCase(); (TC.reviewsByName[nm] = TC.reviewsByName[nm] || []).push(v); });
@@ -3911,6 +4089,32 @@ async function loadRateList() {
 }
 
 /* ---- Messages. -------------------------------------------------------------------------------- */
+const MSG_COLS = 'id,conversation_id,sender,kind,body,payload,created_at';
+/* The newest few messages of each chat, for the list's previews and unread dots (scale, 2026-10-30).
+   last_messages() gives every chat its own 3; without it (the SQL not run yet), the old one-query read. */
+async function lastMsgs(sb, ids) {
+  if (!TC.noLastRpc || Date.now() - TC.noLastRpc > 600000) {
+    const out = []; let bad = null;
+    for (let i = 0; i < ids.length && !bad; i += 300) {
+      const r = await sb.rpc('last_messages', { conv_ids: ids.slice(i, i + 300), per_conv: 3 });
+      if (r.error || !Array.isArray(r.data)) bad = r.error || { message: 'no rows' }; else out.push(...r.data);
+    }
+    if (!bad && (out.length || !ids.length)) { delete TC.noLastRpc; return out; }   /* nothing at all for a list of chats: read the old way too */
+    if (bad && (syncGap(bad) || String(bad.code) === '404' || /not found/i.test(String(bad.message || '')))) TC.noLastRpc = Date.now();
+  }
+  const r = await sb.from('messages').select(MSG_COLS).in('conversation_id', ids).order('created_at', { ascending: false }).limit(300);
+  return (r && r.data) || [];
+}
+/* A chat still without a preview gets its own small read; one with nothing to show is skipped until its last_at moves. */
+async function fillLast(sb, convs, lastOf, take) {
+  const E = TC.lastEmpty = TC.lastEmpty || {};
+  const need = convs.filter(c => !lastOf[c.id] && E[c.id] !== c.last_at && !(TC.clears[c.id] && new Date(c.last_at) <= new Date(TC.clears[c.id])));
+  for (let i = 0; i < need.length; i += 6) await Promise.all(need.slice(i, i + 6).map(async c => {
+    const r = await sb.from('messages').select(MSG_COLS).eq('conversation_id', c.id).order('created_at', { ascending: false }).limit(5);
+    if (r.error) return;
+    take(r.data || []); if (!lastOf[c.id]) E[c.id] = c.last_at; else delete E[c.id];
+  }));
+}
 async function loadThreads() {
   const sb = TC.client(), me = TC.user.id;
   const mine = await sb.from('conversation_members').select('conversation_id,last_read_at').eq('user_id', me);
@@ -3921,9 +4125,9 @@ async function loadThreads() {
   const [convs, memb, last, clr, hid, mut, cpin] = await Promise.all([
     sb.from('conversations').select('id,kind,title,created_by,last_at').in('id', ids),
     sb.from('conversation_members').select('conversation_id,user_id').in('conversation_id', ids),
-    sb.from('messages').select('id,conversation_id,sender,kind,body,payload,created_at').in('conversation_id', ids).order('created_at', { ascending: false }).limit(300),
+    lastMsgs(sb, ids),
     sb.from('conversation_clears').select('conversation_id,cleared_at'),
-    sb.from('message_hides').select('message_id').limit(5000),
+    pagedAll(() => sb.from('message_hides').select('message_id').order('message_id')),
     sb.from('conversation_mutes').select('conversation_id'),
     TC._cpSynced ? null : sb.from('conversation_members').select('conversation_id,pinned_at').eq('user_id', me)   /* sync-app (2026-10-15): chat pins, once per load */
   ]);
@@ -3934,7 +4138,9 @@ async function loadThreads() {
   if (convs.error) { TC.err.threads = convs.error.message; return; }
   const members = {}; ((memb && memb.data) || []).forEach(r => { (members[r.conversation_id] = members[r.conversation_id] || []).push(r.user_id); });
   const lastOf = {}, spoke = {};
-  ((last && last.data) || []).forEach(m => { if (!lastOf[m.conversation_id] && msgVisible(m)) lastOf[m.conversation_id] = m; if (m.sender !== me) (spoke[m.conversation_id] = spoke[m.conversation_id] || {})[m.sender] = 1; });
+  const take = rows => rows.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).forEach(m => { if (!lastOf[m.conversation_id] && msgVisible(m)) lastOf[m.conversation_id] = m; if (m.sender !== me) (spoke[m.conversation_id] = spoke[m.conversation_id] || {})[m.sender] = 1; });
+  take(last || []);
+  await fillLast(sb, convs.data || [], lastOf, take);
   TC.threads = (convs.data || []).map(c => ({ id: c.id, kind: c.kind, title: c.title, created_by: c.created_by, last_at: c.last_at, members: members[c.id] || [], last: lastOf[c.id] || null,
     last_read_at: readAt[c.id], senders: Object.keys(spoke[c.id] || {}) })).sort((a, b) => new Date(b.last_at) - new Date(a.last_at));
   const unknown = [...new Set(TC.threads.flatMap(t => t.members.concat(t.senders)))].filter(u => u !== me && !TC.names[u]);
@@ -3944,19 +4150,40 @@ async function loadThreads() {
 function threadOther(t) { const me = TC.user.id; return t.members.find(u => u !== me) || t.senders.find(u => u !== me) || null; }
 function nameOf(uid) { if (uid === (TC.user && TC.user.id)) return 'You'; return (PEOPLE[uid] && PEOPLE[uid].name) || (TC.names[uid] && TC.names[uid].name) || 'Someone'; }
 function isUnread(t) { return !!(t.last && t.last.sender !== TC.user.id && (!t.last_read_at || new Date(t.last.created_at) > new Date(t.last_read_at))); }
+const CHAT_PAGE = 200;
+TC.rowsMore = {};
 TC.openThread = async function (cid) {
-  const r = await TC.client().from('messages').select('*').eq('conversation_id', cid).order('created_at', { ascending: true }).limit(400);
+  const r = await TC.client().from('messages').select('*').eq('conversation_id', cid).order('created_at', { ascending: false }).order('id', { ascending: false }).limit(CHAT_PAGE);
   /* A failed read keeps what was already on screen (the desktop's rule): an empty thread after a
      network blip reads as "your messages are gone". */
   TC.rowsErr = TC.rowsErr || {};
   if (r.error) { TC.rowsErr[cid] = true; if (TC.rows[cid]) toast('Couldn’t load new messages'); render(true); return; }
   delete TC.rowsErr[cid];
-  TC.rows[cid] = r.data || [];
+  { const got = (r.data || []).slice().reverse(), ids = new Set(got.map(x => String(x.id))), top = got.length ? Date.parse(got[got.length - 1].created_at) : -Infinity;
+    const late = (TC.rows[cid] || []).filter(x => !ids.has(String(x.id)) && Date.parse(x.created_at) > top);   /* a realtime echo or a send that beat this read */
+    TC.rows[cid] = got.concat(late); TC.rowsMore[cid] = (r.data || []).length >= CHAT_PAGE; }
   loadLikes(cid);
   const at = new Date().toISOString();
   TC.client().from('conversation_members').update({ last_read_at: at }).eq('conversation_id', cid).eq('user_id', TC.user.id).then(() => {});
   const t = TC.threads.find(x => x.id === cid); if (t) t.last_read_at = at;
   render(true);
+};
+TC.olderMessages = async function (cid) {
+  const rows = TC.rows[cid]; if (!rows || !rows.length) return false;
+  const sb = TC.client();
+  const r = await sb.from('messages').select('*').eq('conversation_id', cid).lte('created_at', rows[0].created_at).order('created_at', { ascending: false }).order('id', { ascending: false }).limit(CHAT_PAGE);
+  if (r.error) { toast('Couldn’t load earlier messages'); return false; }
+  const have = new Set(rows.map(x => String(x.id))), add = (r.data || []).filter(x => !have.has(String(x.id))).reverse();
+  TC.rows[cid] = add.concat(TC.rows[cid] || []);
+  TC.rowsMore[cid] = (r.data || []).length >= CHAT_PAGE && add.length > 0;
+  if (add.length && TC.chatX.on !== false) {   /* their likes, merged into what's known */
+    for (let i = 0; i < add.length; i += 100) {
+      const l = await sb.from('message_likes').select('message_id,user_id').in('message_id', add.slice(i, i + 100).map(m => m.id));
+      if (l.error) break;
+      const L = TC.likes[cid] = TC.likes[cid] || {}; (l.data || []).forEach(x => { const k = String(x.message_id); if (UI.busy['lk' + k]) return; (L[k] = L[k] || []).includes(x.user_id) || L[k].push(x.user_id); });
+    }
+  }
+  return add.length > 0;
 };
 TC.send = async function (cid, body, kind, payload) {
   const r = await TC.client().from('messages').insert({ conversation_id: cid, sender: TC.user.id, kind: kind || 'text', body: body == null ? null : body, payload: payload || null }).select().single();
@@ -3966,8 +4193,16 @@ TC.send = async function (cid, body, kind, payload) {
   TC.threads.sort((a, b) => new Date(b.last_at) - new Date(a.last_at));
   return true;
 };
-/* One direct thread per pair: find it before making one. */
-TC.threadWith = async function (uid) {
+/* One direct thread per pair: find it before making one. Callers that ask while one is being made get that same
+   one (2026-10-30: a double tap on Message made two). */
+TC.threadWith = function (uid) {
+  TC.thwIn = TC.thwIn || {};
+  if (TC.thwIn[uid]) return TC.thwIn[uid];
+  const p = TC.threadWith0(uid); TC.thwIn[uid] = p;
+  const done = () => { if (TC.thwIn[uid] === p) delete TC.thwIn[uid]; }; p.then(done, done);
+  return p;
+};
+TC.threadWith0 = async function (uid) {
   const hit = TC.threads.find(t => t.kind === 'direct' && t.members.length === 2 && t.members.indexOf(uid) >= 0);
   if (hit) return hit.id;
   const sb = TC.client();
@@ -4036,8 +4271,12 @@ TC.ask = async function (q) {
 /* In San Luis Obispo's time, not the phone's: classes meet in Pacific time wherever the student
    (or their phone's clock setting) happens to be. */
 function slo() {
+  const k = Math.floor(Date.now() / 60000); if (slo.k === k && slo.v) return slo.v;   /* once a minute: a render asks ~1,400 times */
+  slo.k = k; return (slo.v = slo0());
+}
+function slo0() {
   try {
-    const p = {}; new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', weekday: 'short', hour: 'numeric', minute: 'numeric', hourCycle: 'h23' }).formatToParts(new Date()).forEach(x => { p[x.type] = x.value; });
+    const p = {}; dtf('en-US', { timeZone: 'America/Los_Angeles', weekday: 'short', hour: 'numeric', minute: 'numeric', hourCycle: 'h23' }).formatToParts(new Date()).forEach(x => { p[x.type] = x.value; });
     return { wd: p.weekday, min: (+p.hour % 24) * 60 + (+p.minute) };
   } catch (e) { const d = new Date(); return { wd: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()], min: d.getHours() * 60 + d.getMinutes() }; }
 }
@@ -4197,6 +4436,9 @@ function status(id) {
      busyToday, a shift should count as a set time here too. */
   if (!nowSecs(id).some(x => !x.async && x.s != null && x.e != null) && !cmBlocks(id).length) return { c: null, rc: isDark() ? '#3A4660' : '#CBD5E1', t: nowSecs(id).length || nowUnplaced(id).length ? 'Class times not added' : 'No classes added', free: null };
   const inc = today.find(s => s.s <= now && now < s.e);
+  /* no-class-days (2026-10-30): no classes today (busyToday has none): say what the day is, grey — unless work or practice is on now */
+  const off = noClassDay();
+  if (off && !inc) return { c: isDark() ? '#8F9BAE' : '#64748B', rc: isDark() ? '#3A4660' : '#CBD5E1', t: off.t, free: null, off: true };
   if (inc && inc.busy) return { c: isDark() ? '#8F9BAE' : '#64748B', t: `${inc.code} till ${hs(inc.e)}`, free: false };
   if (inc) return { c: isDark() ? '#6EA2FF' : '#2563EB', t: `In ${inc.code} till ${hs(inc.e)}`, free: false };
   const nx = today.find(s => s.s > now);
@@ -4276,7 +4518,7 @@ async function loadSaved() {
 const avStack = (ids, size = 26) => ids.length ? `<span class="stack">${ids.slice(0, 3).map(f => size < 26 && !safeImg((PEOPLE[f] || {}).avatar) ? noPhotoAv(size) : pav(f, size, size * .36)).join('')}</span>` : '';
 function unrated() { const out = []; TC.rateList.forEach(t => t.items.forEach(([p, c]) => { if (!iReviewed(p)) out.push([p, c, t.term]); })); return out; }
 const planSecs = k => TC.plans[k].map(id => SEC[id]).filter(Boolean);
-const planMissing = k => TC.plans[k].filter(id => !SEC[id]).length;
+const planMissing = k => TC.seatsLoaded && !TC.err.seats ? TC.plans[k].filter(id => !SEC[id]).length : 0;
 
 /* ================= grid ================= */
 /* The week grid. Tap a day header to focus it: the column widens and its blocks show the full
@@ -4834,7 +5076,7 @@ SCREENS.rateForm = () => {
   const codes = d.codes || [];
   return {
     body: `<div class="rf"><div class="rf-sheet"><div class="grab" style="margin-top:0"></div>
-  <div class="rf-head"><button class="rf-who" data-a="openProf" data-x="${esc(d.prof)}" aria-label="${esc(p.name)} — open their page" ${UI.busy.rate ? 'disabled' : ''}>${profAv(d.prof, 48, 16)}<span class="grow">${d.editing ? '<span class="eyebrow" style="display:block">EDIT YOUR REVIEW OF</span>' : ''}<span class="rf-name" style="display:block;font-size:24px;font-weight:900;line-height:1.15">${esc(p.name)}</span></span></button><button class="xbtn" data-a="back" aria-label="Cancel">${ic('x', 18, 2.4)}</button></div>
+  <div class="rf-head"><button class="rf-who" data-a="openProf" data-x="${esc(d.prof)}" aria-label="${esc(p.name)} — open their page" ${UI.busy.rate ? 'disabled' : ''}>${profAv(d.prof, 48, 16)}<span class="grow">${d.editing ? '<span class="eyebrow" style="display:block">EDIT YOUR REVIEW OF</span>' : ''}<span class="rf-name" style="display:block;font-size:24px;font-weight:900;line-height:1.15">${esc(p.name)}</span></span></button><button class="xbtn" data-a="back" aria-label="Cancel" ${UI.busy.rate ? 'disabled aria-disabled="true"' : ''}>${ic('x', 18, 2.4)}</button></div>
   <div class="fcardx">
    <div class="frow2">${codes.length > 1 ? `<div class="flabel" style="margin-bottom:10px">Class</div>${sg('code', codes, null, true)}${d.code && courseName(d.code) ? `<div class="b rf-cname" style="margin-top:8px">${esc(courseName(d.code))}</div>` : ''}` : `<div class="row sb" style="align-items:flex-start;gap:12px"><span class="flabel">Class</span><span class="b" style="color:var(--ink3);text-align:right">${esc(d.code || '')}${d.term ? ' · ' + esc(d.term) : ''}${d.code && courseName(d.code) ? `<span class="rf-cname" style="display:block">${esc(courseName(d.code))}</span>` : ''}</span></div>`}</div>
    <div class="frow2 row sb"><span class="flabel">Overall<div class="hint rf-sw" role="status" aria-live="polite" style="margin-top:2px">${d.stars ? starWord(d.stars) : 'Tap to rate'}</div></span><span class="stars hstars" role="group" aria-label="Overall rating">${[1, 2, 3, 4, 5].map(k => `<span class="hstar">${starAt(30, d.stars, k, starCol(d.stars))}<button class="hh l" data-a="draft" data-x="stars" data-y="${k - 0.5}" aria-label="${k - 0.5} stars" aria-pressed="${d.stars === k - 0.5}"></button><button class="hh r" data-a="draft" data-x="stars" data-y="${k}" aria-label="${k} star${k > 1 ? 's' : ''}" aria-pressed="${d.stars === k}"></button></span>`).join('')}</span></div>
@@ -4926,7 +5168,7 @@ function mineAgenda(secs, unplaced, o) {
   const row = s => `<button class="arow" ${act(s)}><span class="tm">${hs(s.s)}<small>${hs(s.e)}</small></span><span class="vb"></span><span class="grow"><span style="font-weight:900;font-size:16px">${esc(s.code)}</span>${(courseName(s.code) || '') ? `<span class="cn">${esc(courseName(s.code))}</span>` : ''}<span class="muted b" style="display:block;font-size:14px">${rowProf(s.prof)}${seat(s)}${wl(s)}</span></span>${avStack(frIn(s), 26)}</button>`;
   const agenda = days.map(([d, list]) => agCard('mine' + o.label, d, list.length, d === CLOCK.day && !o.other, 'mine-ag', () => cmMix(list, d, row).join(''), cmDayWords(d))).join('');
   const anyItems = any.map(s => `<button class="any-c" ${act(s)} aria-label="${esc(s.code)}">${anyCodeHtml(s.code)}</button>`)
-    .concat((unplaced || []).filter(c => !secs.some(s => s.code === c)).map(c => `<button class="any-c" data-a="openClass" data-x="${esc(c)}"${o.now ? ' data-y="now"' : ''} aria-label="${esc(c)}">${anyCodeHtml(c)}</button>`));
+    .concat((unplaced || []).filter(c => !secs.some(s => s.code === c)).map(c => `<button class="any-c" data-a="anySheet" data-x="${esc(c)}"${o.now ? ' data-y="now"' : ''} aria-label="${esc(c)}">${anyCodeHtml(c)}</button>`));
   const anyCard = anyItems.length ? `<div class="card anytime mine-any" role="group" aria-label="${esc(o.label)}: classes with no set time"><span style="margin-right:4px;font-weight:900;font-size:16px">Anytime</span>${anyItems.join('')}</div>` : '';
   const week = timed.length || TC.commits.length ? `<div class="card" style="margin:10px 12px 0;padding:14px 0 12px">${grid(timed, Object.assign({ extra: cmBlocks('me') }, o.grid))}${cmWeekend()}</div>` : '';
   /* Anytime under the week, then the days — Plans' order (Tate, 2026-10-11) */
@@ -4951,7 +5193,7 @@ SCREENS.schedule = () => {
     const days = DAYS.map(d => [d, timed.filter(s => s.days.includes(d)).sort((a, b) => a.s - b.s)]).filter(x => x[1].length || cmDayWords(x[0]));
     inner = `<div class="pad" style="margin-top:14px"><div class="seg plans">${['A', 'B', 'C'].map(k => `<button class="plan-${k} ${S.plan === k ? 'on' : ''}" data-a="pickPlan" data-x="${k}" aria-pressed="${S.plan === k}"><i class="pdot"></i>Plan ${k}</button>`).join('')}</div></div>
   ${TC.err.plans ? `<div class="muted b" style="font-size:13px;padding:6px 14px">${TC.err.plans === 'missing' ? 'Plans aren’t set up on this server yet.' : 'Couldn’t load your plans — changes may not save.'}</div>` : ''}
-  ${miss ? `<div class="muted b" style="font-size:13px;padding:6px 14px">${miss} section${miss === 1 ? ' in this plan is' : 's in this plan are'} no longer in the ${esc(CFG.TERM_LABEL)} list.</div>` : ''}
+  ${miss ? `<div class="muted b plan-dead" style="font-size:13px;padding:6px 14px">${miss} section${miss === 1 ? ' in this plan is' : 's in this plan are'} no longer in the ${esc(CFG.TERM_LABEL)} list. <button class="link b" style="color:var(--blue-t,var(--blue));font-size:13px;padding:10px 4px;margin:-10px 0" data-a="planClearDead" data-x="${S.plan}">Clear</button></div>` : ''}
   <div class="card" style="margin:10px 12px 0;padding:14px 0 12px">${!TC.seatsLoaded ? loadingCard('Loading sections…') : timed.length || TC.commits.length ? grid(timed, { sel: S.schedDay, act: 'schedDay', blockAct: 'secSheet', H: 330, faces: true, extra: cmBlocks('me') }) + cmWeekend() : `<div class="empty"><b>${secs.length ? 'No timed classes' : `Nothing in Plan ${S.plan} yet`}</b>${secs.length ? 'Add classes from Explore.' : `Add classes from the Builder or Explore.`}${secs.length ? '' : `<button class="btn soft" style="margin-top:10px" data-a="schedTab" data-x="planner">Open the Builder</button>`}</div>`}</div>
   ${any.length ? `<div class="card anytime" role="group" aria-label="Plan ${S.plan}: classes with no set time"><span style="font-weight:900;font-size:16px;margin-right:4px">Anytime</span>${any.map(s => `<button class="any-c" data-a="secSheet" data-x="${s.code}" data-y="${esc(s.id)}" aria-label="${esc(s.code)}">${anyCodeHtml(s.code)}</button>`).join('')}</div>` : ''}
   ${days.map(([d, list]) => agCard('plan' + S.plan, d, list.length, d === CLOCK.day, '', () => cmMix(list, d, s => { const fr = friendsInSec(s.id); return `<button class="arow" data-a="secSheet" data-x="${s.code}" data-y="${esc(s.id)}"><span class="tm">${hs(s.s)}<small>${hs(s.e)}</small></span><span class="vb"></span><span class="grow"><span style="font-weight:900;font-size:16px">${s.code}</span>${courseName(s.code) ? `<span class="cn">${esc(courseName(s.code))}</span>` : ''}<span class="muted b" style="display:block;font-size:14px">${rowProf(s.prof)} · ${secSeatText(s)}</span></span>${avStack(fr, 26)}</button>`; }).join(''), cmDayWords(d))).join('')}
@@ -5169,7 +5411,7 @@ SCREENS.chat = ({ id }) => {
   }).join('');
   return {
     top: `<div class="chathdr"><button class="iconbtn" style="width:38px;height:38px" data-a="back" aria-label="Back">${ic('chevL', 20, 2.4)}</button>${head}${t.kind === 'group' ? `<button class="iconbtn gwbtn" data-a="openGroupWeek" data-x="${esc(String(id))}" aria-label="See when everyone’s free">${ic('cal', 20, 2.3)}</button>` : ''}${muteBtn(id)}</div>`, padTop: 64,
-    body: `<div class="msgs">${rows ? blockedNote(rows) + (msgs || (chatBlockedBar(t) ? '' : '<div class="muted b" style="text-align:center;font-size:13px;margin-top:20px">Say hi 👋</div>')) : (TC.rowsErr && TC.rowsErr[id]) ? errCard('Couldn’t load these messages.', 'retryChat') : loadingCard('Loading messages…')}</div><div style="height:${chatBlockedBar(t) ? 160 : 100}px"></div>`,
+    body: `<div class="msgs">${rows && TC.rowsMore && TC.rowsMore[id] ? `<button class="chip olderbtn" data-a="olderMsgs" data-x="${esc(String(id))}"${UI.busy.older ? ' disabled' : ''}>${UI.busy.older ? 'Loading…' : 'Load earlier messages'}</button>` : ''}${rows ? blockedNote(rows) + (msgs || (chatBlockedBar(t) ? '' : '<div class="muted b" style="text-align:center;font-size:13px;margin-top:20px">Say hi 👋</div>')) : (TC.rowsErr && TC.rowsErr[id]) ? errCard('Couldn’t load these messages.', 'retryChat') : loadingCard('Loading messages…')}</div><div style="height:${chatBlockedBar(t) ? 160 : 100}px"></div>`,
     bot: chatBlockedBar(t) || `<form class="composer" data-submit="send" data-x="${id}"><input id="chatin" placeholder="Message…" autocomplete="off" maxlength="2000" value="${esc(UI.prefill && UI.prefill.id === id ? UI.prefill.text : '')}"><button class="sendbtn pink" aria-label="Send">${ic('arrow', 20, 2.6)}</button></form>`, tabbar: false, fab: false, scrollEnd: true
   };
 };
@@ -5874,7 +6116,17 @@ function lpOpen(el) {
   }, true);
 })();
 /* ================= stories: today, most free first (Tate, 2026-09-30) ================= */
-function todaySecs(id) { return nowSecs(id).filter(x => !x.async && x.s != null && x.e != null && x.days.includes(CLOCK.day)).sort((a, b) => a.s - b.s); }
+/* no-class-days (2026-10-30): a day with no classes — a holiday, a break, finals, or after the term you're in ended.
+   { t: what the day is } or null. d: 'YYYY-MM-DD' (Pacific), today when left out (sloYmd: worked out once a minute). */
+function noClassDay(d) {
+  d = d || sloYmd();
+  const x = (Array.isArray(CFG.NO_CLASS_DAYS) ? CFG.NO_CLASS_DAYS : []).find(r => r && r.from && r.from <= d && d <= (r.to || r.from));
+  if (x) return { t: String(x.t || 'No classes today') };
+  const e = nowTermEnd();
+  if (e && d > e) { const n = String(nowTerm().label || ''); return { t: /^Fall\b/.test(n) ? 'Winter break' : /^Spring\b/.test(n) ? 'Summer break' : 'Break' }; }
+  return null;
+}
+function todaySecs(id) { if (noClassDay()) return []; return nowSecs(id).filter(x => !x.async && x.s != null && x.e != null && x.days.includes(CLOCK.day)).sort((a, b) => a.s - b.s); }
 /* [group, key], most free first (Tate, 2026-10-11): 0 no classes today; 1 done for the day; 2 not in class, a class
    later today — the furthest-off class first; 3 in class — out soonest first (a class straight after another is the
    same stretch); 4 schedule not set up (no class with a set time) — always last. Ties by name. */
@@ -6443,18 +6695,52 @@ function secProfRow(pid) {
   const r = ratingOf(pid);
   return `<button class="profrow" style="margin-top:12px" data-a="openProf" data-x="${esc(pid)}" aria-label="${esc(profName(pid))}, see professor">${profAv(pid, 40, 14)}<div class="grow"><div class="nm">${esc(profName(pid))}</div><div class="row b" style="gap:4px;font-size:14px">${r != null ? starI(13, rateTone(r).star) + `<span class="rt-${rateTone(r).k}" style="color:${rateTone(r).ink}">${r.toFixed(1)}</span><span class="muted" style="font-weight:700">&nbsp;· ${nRatings(PROFS[pid].count)}</span>` : '<span class="muted">No ratings yet</span>'}</div></div><span style="color:var(--purple-t,var(--purple))">${ic('chevR', 20)}</span></button>`;
 }
+/* (2026-10-30) A My Classes class with no section: its name and term, a way to give it a time, and Remove. */
+SHEETS.anyClass = sh => {
+  const { code, term } = sh, now = splitTerms() && term === nowTerm().code, choose = !now && term === CFG.TERM;
+  const L = now ? nowTerm().label : choose ? CFG.TERM_LABEL : ((myTerms().find(t => t.code === term) || {}).label || 'this term');
+  const st = !now ? 'done' : nowAllReady() ? 'done' : NOWT.term === term ? NOWT.codes[code] : undefined;
+  const list = now ? (NOWT.byCode[code] || []).slice().sort((a, b) => String(a.sec).localeCompare(String(b.sec), undefined, { numeric: true })) : choose ? secsOf(code) : [];
+  const title = (now ? ((NOWT.courses[code] || {}).title || NOW_TITLES[code]) : '') || courseName(code) || ((COURSES[code] || {}).title !== code && (COURSES[code] || {}).title) || '';
+  const off = (st === 'done' || !now) && !list.length && (now || choose);
+  const busy = UI.busy.nm || UI.busy.anyRm ? ' disabled' : '';
+  const rows = now && list.length ? `<div class="sec-h" style="padding:16px 2px 6px;font-size:16px"><span>Which section are you in?</span></div>${list.map(x => {
+      const when = x.async ? 'Online, self-paced' : x.noTime ? 'Time not posted' : daysLabel(x.days) + ' ' + range(x);
+      return `<button class="secrow nowrow any-pick" data-a="nowMine" data-x="${esc(x.id)}" aria-label="${esc((x.sec ? secLabel(x.sec) + ', ' : '') + when + ', ' + profName(x.prof) + ' — this is my section')}"${busy}>${secRowT(x)}<span class="muted b" style="font-size:13px">${esc(profName(x.prof))}</span><span class="pbtn" style="height:32px;padding:0 12px;font-size:13px">Mine</span></button>`; }).join('')}` : '';
+  const wait = now && st !== 'done' && st !== 'err' ? `<div class="muted b" style="margin-top:14px;font-size:14px">Looking up ${esc(code)}’s ${esc(L)} sections…</div>`
+    : now && st === 'err' ? `<div class="muted b" style="margin-top:14px;font-size:14px">Couldn’t load ${esc(code)}’s ${esc(L)} sections. <button class="link b" style="font-size:14px;padding:10px 4px;margin:-10px 0" data-a="anyRetry">Try again</button></div>` : '';
+  const why = off ? `<div class="sec-fill no" style="margin-top:14px">${esc(code)} isn’t offered in ${esc(L)}, so it can’t get a time here.</div>` : '';
+  return `<div class="row sb"><span class="code">${esc(code)}</span><button class="xbtn" data-a="closeSheet" aria-label="Close">${ic('x', 16, 2.4)}</button></div>
+ <h3 style="margin-top:10px">${esc(title || code)}</h3><div class="b secwhen" style="margin-top:4px;font-size:14px"><span class="secterm">${esc(L)}</span> · <span class="muted">In My Classes · no section yet</span></div>
+ ${why}${wait}${rows}
+ <div style="display:grid;gap:8px;margin-top:18px">${choose && list.length ? `<button class="btn" data-a="openClass" data-x="${esc(code)}">Pick a time</button>` : ''}${now && list.length ? `<button class="btn soft" data-a="openClass" data-x="${esc(code)}" data-y="now">View class</button>` : ''}
+ <button class="btn soft" style="color:var(--red-ink)" data-a="anyRemove"${busy}>${UI.busy.anyRm ? 'Removing…' : 'Remove from My Classes'}</button></div>`;
+};
+/* (2026-10-30) a now-term section's sheet: this is mine / switch / keep both, or remove it once it's yours */
+function nowSecActs(code, id, s) {
+  if (!isNowSecId(id) || !TC.user || !TC.nowMineRows || TC.err.nowMine) return '';
+  const mineN = nowSecs('me').filter(x => x.code === code), isMine = mineN.some(x => x.id === id || (s.nbr && x.nbr === s.nbr));
+  const busy = UI.busy.nm ? ' disabled' : '';
+  if (isMine) return `<div class="muted b" style="font-size:14px;text-align:center">${ic('check', 14, 3)} Your ${esc(nowTerm().label)} section</div><button class="btn soft" style="color:var(--red-ink)" data-a="nowSecRm" data-x="${esc(id)}"${busy}>${mineN.length > 1 ? 'Remove this section' : 'Remove from My Classes'}</button>`;
+  /* only for a class on your list for that term (a friend's class you're not in keeps its plain sheet) */
+  if (!s.nbr || String(id).startsWith('xn:') || !nowCodes().has(code)) return '';
+  if (mineN.length) return `<button class="btn" data-a="nowMine" data-x="${esc(id)}"${busy}>Switch to this section</button><button class="at-alt" style="margin-top:-4px" data-a="nowMine" data-x="${esc(id)}" data-y="keep"${busy}>Keep both — add as another section</button>`;
+  return `<button class="btn" data-a="nowMine" data-x="${esc(id)}"${busy}>This is my section</button>`;
+}
 SHEETS.sec = sh => { const { code, id } = sh;
   const s = SEC[id] || personSecs('me').find(x => x.id === id) || TC.friends.map(f => personSecs(f).find(x => x.id === id)).find(Boolean)
     || nowSecs('me').find(x => x.id === id) || TC.friends.map(f => nowSecs(f).find(x => x.id === id)).find(Boolean) || (isNowSecId(id) ? NOWT.sec[id] : null); if (!s) return '';
   const c = course(code), who = secPeople(code, id), inP = TC.plans[S.plan].includes(id), w = !!TC.watches[id];
   const termTag = splitTerms() ? `<span class="secterm">${esc(isNowSecId(id) ? nowTerm().label : CFG.TERM_LABEL)}</span> · ` : '';
+  const nowActs = nowSecActs(code, id, s);
   return `<div class="row sb"><span class="code">${code}${s.sec ? ' ' + esc(secLabel(s.sec)) : ''}</span><button class="xbtn" data-a="closeSheet">${ic('x', 16, 2.4)}</button></div>
  <h3 style="margin-top:10px">${esc(c.title)}</h3><div class="b secwhen" style="margin-top:4px;font-size:14px">${termTag}<span class="muted">${secWhen(s)}</span> · ${secSeatText(s)}</div>
  ${secProfRow(s.prof)}
  ${secPeopleRow(who.here, 'In this section')}${secPeopleRow(who.other, 'Other sections')}
  ${sh.fill ? `<div class="sec-fill${sh.fits ? '' : ' no'}">${sh.fits ? `Fills ${esc(sh.fill)} · clear of Plan ${sh.k}${TC.commits.length ? ' and your ' + esc(cmWords()) : ''}` : `Fills ${esc(sh.fill)} · over a class in Plan ${sh.k} or your week`}</div>` : ''}
- <div style="display:grid;gap:8px;margin-top:18px">${sh.fill && !inP && SEC[id] ? `<button class="btn" data-a="addPlanSheet" data-x="${esc(id)}">Add to a plan</button>` : ''}<button class="btn${sh.fill && !inP && SEC[id] ? ' soft' : ''}" data-a="openClass" data-x="${code}"${isNowSecId(id) ? ' data-y="now"' : ''}>View class</button>
+ <div style="display:grid;gap:8px;margin-top:18px">${nowActs}${sh.fill && !inP && SEC[id] ? `<button class="btn" data-a="addPlanSheet" data-x="${esc(id)}">Add to a plan</button>` : ''}<button class="btn${(sh.fill && !inP && SEC[id]) || nowActs ? ' soft' : ''}" data-a="openClass" data-x="${code}"${isNowSecId(id) ? ' data-y="now"' : ''}>View class</button>
  ${SEC[id] ? `<button class="btn soft" data-a="watch" data-x="${esc(id)}">${w ? 'Stop seat alerts' : 'Alert me about seats'}</button>` : ''}
+ ${SEC[id] && !isNowSecId(id) && personSecs('me').some(x => x.id === id) ? `<button class="btn soft" data-a="addPlanSheet" data-x="${esc(id)}">${personSecs('me').find(x => x.id === id).mineWl ? 'Waitlisted · change or remove' : 'Enrolled · change or remove'}</button>` : ''}
  ${inP ? `<button class="btn soft" style="color:var(--red-ink)" data-a="removeSec" data-x="${esc(id)}">Remove from Plan ${S.plan}</button>` : ''}</div>`;
 };
 
@@ -6851,8 +7137,7 @@ function chGame(c) {
     const bk = secsOf(s.code).filter(b => b.id !== s.id && b.status === 'open' && !conflicts(others(s.id), b).length).sort((x, y) => ((ratingOf(y.prof) ?? -1) - (ratingOf(x.prof) ?? -1)))[0];
     return `<button class="chg" data-a="openClass" data-x="${esc(s.code)}"><span class="chg-n ${tone}">${i + 1}</span><span class="grow"><b>${esc(s.code)}</b><span class="w">${esc(secWhen(s))}</span><span class="chg-bar"><span>${pct == null ? '' : `<i style="width:${pct}%;background:${col}"></i>`}</span><span style="color:${tone === 'hot' ? 'var(--red-ink)' : tone === 'mid' ? 'var(--amber-ink)' : tone === 'unk' ? 'var(--ink4)' : 'var(--ok-ink)'}">${left}</span></span><span class="chg-bk" style="display:block">${bk ? 'Backup: ' + esc(secLabel(bk.sec) + ' · ' + secWhen(bk)) : (s.status === 'full' || s.status === 'wait' ? 'No other open section fits — the waitlist is the way in' : 'No other open section fits')}</span></span></button>`;
   }).join('');
-  const open = new Date(CFG.REGISTRATION_OPENS + 'T12:00:00');
-  return `<section class="chc" aria-label="${esc('Plan ' + P + ' game plan')}"><div class="chc-h plan-${P}"><span class="chplan">Plan ${P}</span><span class="chc-t" style="font-size:13px;color:var(--muted)">${order.length} class${order.length === 1 ? '' : 'es'} · registration opens ${esc(open.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))}</span><button class="chc-open" data-a="champPlan" data-x="${P}">Open ›</button></div>${rows}</section>`;
+  return `<section class="chc" aria-label="${esc('Plan ' + P + ' game plan')}"><div class="chc-h plan-${P}"><span class="chplan">Plan ${P}</span><span class="chc-t" style="font-size:13px;color:var(--muted)">${order.length} class${order.length === 1 ? '' : 'es'} · ${esc(regNowShort())}</span><button class="chc-open" data-a="champPlan" data-x="${P}">Open ›</button></div>${rows}</section>`;
 }
 
 /* ---- your clashes ---- */
@@ -7043,7 +7328,7 @@ function answerTool(j, q) {
     case 'swap_section': { const c = cc(a.course); if (!c) return null; const mine = personSecs('me').find(s => s.code === c); const l = secsOf(c).filter(s => !mine || s.id !== mine.id).filter(s => !clashWithMine(s).length).filter(s => !a.prefer || !mine || s.s == null || mine.s == null || (a.prefer === 'later' ? s.s > mine.s : s.s < mine.s)); return l.length ? { t: `${l.length} other ${esc(c)} section${l.length === 1 ? '' : 's'} fit${l.length === 1 ? 's' : ''} your week.`, card: { k: 'secs', ids: l.slice(0, 5).map(s => s.id) } } : { t: `No other ${esc(c)} section fits your week.`, acts: [['Open ' + c, 'openClass', c]] }; }
     case 'prereqs': { const c = cc(a.course); return c ? ansPrereq(c) : null; }
     case 'game_plan': return ansGamePlan(a.plan);
-    case 'when_registration': return { t: `${esc(CFG.REGISTRATION_TERM)} registration starts ${esc(new Date(CFG.REGISTRATION_OPENS + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }))}. Your exact appointment is in the Cal Poly Portal.` };
+    case 'when_registration': return { t: regNowText() };   /* registration-round2 (2026-10-30): where it stands today */
     case 'my_units': case 'my_requirements': return { t: 'Units and requirements are in Schedule › Past classes.', acts: [['Open Past classes', 'schedTabGo', 'past']] };
     case 'build_term': return { t: 'TermChamp’s picks in the Builder are the classes to take next.', acts: [['Open Builder', 'schedTabGo', 'planner']] };
     case 'go_to': { const g = GOTO[a.where]; return g ? { t: 'Here you go.', acts: [['Open ' + a.where, g[0], g[1]]] } : window.TC_NATIVE ? { t: 'I couldn’t find that screen in the app. Try asking another way.', acts: [['Open Explore', 'tab', 'explore']] } : { t: `That’s on termchamp.com for now.`, acts: [['Open termchamp.com', 'web', '/']] }; }
@@ -7115,8 +7400,9 @@ function openAddTo(id) {
   const s = SEC[id];
   const inPlan = AT_PLANS.find(k => (TC.plans[k] || []).includes(id)), inMine = personSecs('me').some(x => x.id === id);
   const last = AT_PLANS.includes(S.addDest) || S.addDest === 'mine' ? S.addDest : null;
-  const dest = inPlan || (inMine ? 'mine' : last || (AT_PLANS.includes(S.plan) ? S.plan : 'A'));
-  UI.sheet = { type: 'addTo', id, dest, phase: 'preview', status: null, wlPos: '', keepBoth: false, err: null, seq: 1 };
+  const dest = inMine ? 'mine' : inPlan || last || (AT_PLANS.includes(S.plan) ? S.plan : 'A');
+  const mineS = inMine ? personSecs('me').find(x => x.id === id) : null;   /* (2026-10-30) the seat you saved */
+  UI.sheet = { type: 'addTo', id, dest, phase: 'preview', status: mineS ? (mineS.mineWl ? 'waitlisted' : 'enrolled') : null, wlPos: mineS && mineS.wlPos != null ? String(mineS.wlPos) : '', keepBoth: false, err: null, seq: 1 };
   S.homeDays.addto = null; UI.champ = false; render(true);
   return !!s;
 }
@@ -7130,7 +7416,7 @@ function atPlanOf(sh, s) {
     o.repl = o.inIt ? [] : others.filter(x => x.code === s.code);
     o.base = others.filter(x => x.code !== s.code || o.inIt);
     o.clash = o.inIt ? [] : conflicts(o.base.map(x => x.id), s);
-    o.full = !o.inIt && !o.repl.length && ids.length >= 12;
+    o.full = !o.inIt && !o.repl.length && ids.filter(x => SEC[x]).length >= 12;   /* numbers that left the list don't count (2026-10-30) */
     if (sh.replacing && !o.inIt && o.clash.length) { o.repl = o.repl.concat(o.clash); o.base = o.base.filter(x => !o.clash.includes(x)); o.clash = []; }
   } else if (mine) {
     const my = personSecs('me'), others = my.filter(x => x.id !== sh.id);
@@ -7174,8 +7460,11 @@ SHEETS.addTo = sh => {
   const status = o.mine && !o.inIt && (s.status === 'full' || s.status === 'wait')
     ? `<div class="at-status"><span>Did you get a seat?</span><div class="at-seg" role="group" aria-label="Enrolled or waitlisted">${[['enrolled', 'Enrolled'], ['waitlisted', 'Waitlisted']].map(([k, l]) => `<button class="${sh.status === k ? 'on' : ''}" data-a="atStatus" data-x="${k}" aria-pressed="${sh.status === k}">${l}</button>`).join('')}</div>
      ${sh.status === 'waitlisted' ? `<label class="at-wl">Spot #<input id="atwl" data-in="atwl" inputmode="numeric" pattern="[0-9]*" maxlength="3" value="${esc(sh.wlPos || '')}" placeholder="?" aria-label="Your waitlist spot (optional)"></label>` : ''}</div>` : '';
+  const mineSeat = o.mine && o.inIt && !sh.removing
+    ? `<div class="at-status at-mine-seat"><span>Your seat</span><div class="at-seg" role="group" aria-label="Enrolled or waitlisted">${[['enrolled', 'Enrolled'], ['waitlisted', 'Waitlisted']].map(([k, l]) => `<button class="${(sh.status || 'enrolled') === k ? 'on' : ''}" data-a="atMineStatus" data-x="${k}" aria-pressed="${(sh.status || 'enrolled') === k}" ${UI.busy.atm ? 'disabled' : ''}>${l}</button>`).join('')}</div>
+     ${sh.status === 'waitlisted' ? `<label class="at-wl">Spot #<input id="atwl" data-in="atwl" inputmode="numeric" pattern="[0-9]*" maxlength="3" value="${esc(sh.wlPos || '')}" placeholder="?" aria-label="Your waitlist spot (optional)" enterkeyhint="done"></label>` : ''}</div>` : '';
   const pick = `<div class="at-pick"><div class="at-seg" role="group" aria-label="Add to">${[['classes', 'My Classes'], ['plans', 'Plans']].map(([k, l]) => `<button class="${grp === k ? 'on' : ''}" data-a="atGroup" data-x="${k}" aria-pressed="${grp === k}">${l}</button>`).join('')}</div>
-  <div class="at-chips">${chips}</div>${status}</div>`;
+  <div class="at-chips">${chips}</div>${status}${mineSeat}</div>`;
   /* the week */
   const adding = sh.phase === 'adding', added = sh.phase === 'done';
   const secs = o.other ? [] : o.base.concat(o.repl).concat([s]);
@@ -7203,7 +7492,7 @@ SHEETS.addTo = sh => {
   else if (added) { note = `Added to ${o.where}.`; tn = 'ok'; btn = `<button class="btn at-go ok" data-a="closeSheet">✓ Added to ${o.where}</button>`; }
   else if (adding && sh.replacing) { note = `Replacing ${sh.replNames} with ${nm(s)}…`; btn = `<button class="btn at-go" disabled aria-disabled="true">Replacing…</button>`; }
   else if (adding) { note = o.repl.length ? `Swapping in ${nm(s)}…` : `Adding ${nm(s)}…`; btn = `<button class="btn at-go" disabled aria-disabled="true">Adding…</button>`; }
-  else if (o.inIt) { note = untimed ? `${nm(s)} is already in ${o.where} — under Anytime, since ${whyAny}.` : `${nm(s)} is in ${o.where}.`; btn = sh.removing ? `<button class="btn at-rm" disabled aria-disabled="true">Removing…</button>` : `<button class="btn at-rm" data-a="atRemove">Remove from ${o.where}</button>`; }
+  else if (o.inIt) { note = (untimed ? `${nm(s)} is already in ${o.where} — under Anytime, since ${whyAny}.` : `${nm(s)} is in ${o.where}.`) + (o.mine && sh.status === 'waitlisted' ? ` You’re on the waitlist${parseInt(sh.wlPos, 10) ? ' (#' + parseInt(sh.wlPos, 10) + ')' : ''}.` : ''); btn = sh.removing ? `<button class="btn at-rm" disabled aria-disabled="true">Removing…</button>` : `<button class="btn at-rm" data-a="atRemove">Remove from ${o.where}</button>`; }
   else if (o.P && o.clash.length) { note = `Clashes with ${o.clash.map(c => `${nm(c)} · ${daysLabel(c.days)} ${range(c)}`).join(', ')}`; tn = 'bad'; btn = go(atReplaceLabel(o.clash), 'replace'); }
   else if (o.P && o.full) { note = `Plan ${o.P} already has 12 sections.`; btn = off(`Plan ${o.P} is full`); }
   else if (o.P && o.repl.length) { note = `Swaps out ${nm(o.repl[0])} (${secWhen(o.repl[0])}).`; tn = 'warn'; btn = go(`Swap into Plan ${o.P}`, 'swap'); }
@@ -7295,6 +7584,20 @@ const A = {
     sh.seq++; sh.err = null; sh.keepBoth = false; S.homeDays.addto = null; render(true); },
   atPick: d => { const sh = UI.sheet; if (!sh || sh.type !== 'addTo' || sh.phase !== 'preview' || sh.dest === d) return; sh.dest = d; sh.seq++; sh.err = null; sh.keepBoth = false; S.homeDays.addto = null; render(true); },
   atStatus: v => { const sh = UI.sheet; if (!sh || sh.type !== 'addTo' || sh.phase !== 'preview') return; sh.status = v === 'waitlisted' ? 'waitlisted' : 'enrolled'; render(true); },
+  /* (2026-10-30) a section already in My Classes: Enrolled ↔ Waitlisted and the spot, saved on the tap */
+  atMineStatus: v => { const sh = UI.sheet; if (!sh || sh.type !== 'addTo' || sh.dest !== 'mine' || UI.busy.atm) return; const nv = v === 'waitlisted' ? 'waitlisted' : 'enrolled'; if ((sh.status || 'enrolled') === nv) return; sh.status = nv; if (nv === 'enrolled') sh.wlPos = ''; A.atMineSave(); },
+  atMineSave: async () => {
+    const sh = UI.sheet; if (!sh || sh.type !== 'addTo' || sh.phase !== 'preview' || UI.busy.atm || UI.busy.at) return;
+    const s = SEC[sh.id]; if (!s) return;
+    const o = atPlanOf(sh, s); if (!o.mine || !o.inIt) return;
+    const st = sh.status === 'waitlisted' ? 'waitlisted' : 'enrolled', wl = st === 'waitlisted' ? (parseInt(sh.wlPos, 10) || null) : null;
+    const was = personSecs('me').find(x => x.id === sh.id);
+    if (was && !!was.mineWl === (st === 'waitlisted') && (was.wlPos == null ? null : +was.wlPos) === wl) return;
+    UI.busy.atm = 1; sh.err = null; render(true);
+    let err = null; try { err = await TC.addMySection(s, { status: st, wlPos: wl, hadSaved: true }); } catch (e) { err = 'Couldn’t save that — check your connection.'; } finally { UI.busy.atm = 0; }
+    if (UI.sheet === sh) { sh.err = err; render(true); } else render(true);
+    toast(err || (st === 'waitlisted' ? `Saved: waitlisted for ${s.code}${wl ? ' (#' + wl + ')' : ''}` : `Saved: enrolled in ${s.code}`));
+  },
   atBoth: () => { const sh = UI.sheet; if (!sh || sh.type !== 'addTo' || sh.phase !== 'preview') return; sh.keepBoth = true; sh.seq++; render(true); },
   atGo: async mode => {
     const sh = UI.sheet; if (!sh || sh.type !== 'addTo' || sh.phase !== 'preview' || UI.busy.at) return;
@@ -7350,7 +7653,50 @@ const A = {
   },
   toastUndo: () => { const f = UI.undo; UI.undo = null; const t = document.getElementById('toast'); if (t) t.classList.remove('on', 'act'); clearTimeout(toastT); if (f) f(); },
   watch: async id => { if (UI.busy['w' + id]) return; UI.busy['w' + id] = 1; const on = !TC.watches[id]; const ok = await TC.watch(id, on); UI.busy['w' + id] = 0; if (ok) { if (!on) delete TC.autoWatch[id]; toast(on ? 'We’ll alert you when a seat opens' : 'Seat alerts off'); } render(true); if (ok && on) TC.pushAsk('seat'); },
+  /* (2026-10-30) the Anytime chip's sheet, and the now-term section's "this is mine" */
+  anySheet: (code, y) => {
+    if (!code) return;
+    const term = y === 'now' && splitTerms() ? nowTerm().code : ((mineTerm() || {}).code || CFG.TERM);
+    UI.champ = false; UI.sheet = { type: 'anyClass', code, term };
+    if (splitTerms() && term === nowTerm().code && !nowAllReady()) loadNowCode(code);
+    render(true);
+  },
+  anyRetry: () => { const sh = UI.sheet; if (!sh || sh.type !== 'anyClass') return; if (NOWT.codes[sh.code] === 'err') delete NOWT.codes[sh.code]; loadNowCode(sh.code); render(true); },
+  anyRemove: async () => {
+    const sh = UI.sheet; if (!sh || sh.type !== 'anyClass' || UI.busy.anyRm) return;
+    const { code, term } = sh, snap = mineSnapIn(code, term);
+    UI.busy.anyRm = 1; render(true);
+    let err = null; try { err = await TC.removeMyClass(code, term); } catch (e) { err = 'Couldn’t remove that — check your connection.'; } finally { UI.busy.anyRm = 0; }
+    if (err) { toast(err); return render(true); }
+    if (UI.sheet === sh) UI.sheet = null;
+    relinkPeople(); render(true);
+    toastUndo(`Removed ${code} from My Classes`, async () => { const e = await TC.restoreMyCodeIn(code, term, snap, null); relinkPeople(); render(true); toast(e || 'Undone'); });
+  },
+  nowMine: async (id, y) => {
+    if (UI.busy.nm || !splitTerms()) return;
+    const s = NOWT.sec[id] || Object.values(NOW_SEC).find(x => x && x.id === id); if (!s || !s.nbr) return;
+    const t = nowTerm().code, snap = mineSnapIn(s.code, t);
+    const swap = y === 'keep' ? [] : snap.rows.filter(r => r.class_nbr != null && String(r.class_nbr) !== '' && String(r.class_nbr) !== String(s.nbr)).map(r => String(r.class_nbr));
+    const sh0 = UI.sheet; UI.busy.nm = 1; render(true);
+    let err = null; try { err = await TC.setNowSection(s, { swap }); } catch (e) { err = 'Couldn’t save that — check your connection.'; } finally { UI.busy.nm = 0; }
+    if (err) { toast(err); return render(true); }
+    if (UI.sheet === sh0) UI.sheet = null;
+    relinkPeople(); render(true);
+    toastUndo(`${s.code}${secLabel(s.sec) ? ' ' + secLabel(s.sec) : ''} is your ${nowTerm().label} section`, async () => { const e = await TC.restoreMyCodeIn(s.code, t, snap, s.nbr); relinkPeople(); render(true); toast(e || 'Undone'); });
+  },
+  nowSecRm: async id => {
+    if (UI.busy.nm || !splitTerms()) return;
+    const mine = nowSecs('me'), s = mine.find(x => x.id === id) || NOWT.sec[id]; if (!s) return;
+    const t = nowTerm().code, snap = mineSnapIn(s.code, t), n = mine.filter(x => x.code === s.code).length, nbr = s.nbr || String(id).split(':').pop();
+    const sh0 = UI.sheet; UI.busy.nm = 1; render(true);
+    let err = null; try { err = n > 1 ? await TC.removeNowSection(s.code, nbr) : await TC.removeMyClass(s.code, t); } catch (e) { err = 'Couldn’t remove that — check your connection.'; } finally { UI.busy.nm = 0; }
+    if (err) { toast(err); return render(true); }
+    if (UI.sheet === sh0) UI.sheet = null;
+    relinkPeople(); render(true);
+    toastUndo(n > 1 ? `Removed that ${s.code} section` : `Removed ${s.code} from My Classes`, async () => { const e = await TC.restoreMyCodeIn(s.code, t, snap, null); relinkPeople(); render(true); toast(e || 'Undone'); });
+  },
   secSheet: (code, id) => { UI.sheet = { type: 'sec', code, id }; render(true); },
+  planClearDead: k => { if (!AT_PLANS.includes(k) || !TC.seatsLoaded || TC.err.seats) return; const prev = (TC.plans[k] || []).slice(), keep = prev.filter(x => SEC[x]); if (keep.length === prev.length) return; TC.setPlan(k, keep); render(true); toastUndo(`Cleared ${prev.length - keep.length} unlisted section${prev.length - keep.length === 1 ? '' : 's'} from Plan ${k}`, () => { TC.setPlan(k, prev); render(true); toast('Undone'); }); },
   removeSec: id => { TC.setPlan(S.plan, TC.plans[S.plan].filter(x => x !== id)); UI.sheet = null; toast(`Removed ${(SEC[id] || {}).code || 'it'} from Plan ${S.plan}`); render(true); },
   schedTab: t => { if (t !== 'planner') UI.plFor = null; UI.pcTerms = false; const e = cur(); if (e && t !== S.schedTab) e.y = 0; S.schedTab = t; save(); render(); },   /* a sub-tab opens at its top (2026-10-13) */
   schedTabGo: t => { UI.champ = false; S.schedTab = t; save(); setTab('schedule'); },
@@ -7380,13 +7726,15 @@ const A = {
   favTog: () => { const d = S.draft; if (!d || !TC.favOn) return; if (!d.fav && favOthers(d.favKey || reviewKeyOf(d.prof)) >= FAV_MAX) return; d.fav = !d.fav; d.favTouched = true; d.err = ''; draftSave(); const hf = document.activeElement && document.activeElement.classList.contains('favbtn'); render(true); if (hf) { const b = document.querySelector('.rf .favbtn'); if (b) b.focus(); } },
   postRating: async () => {
     const d = S.draft; if (!d || !d.stars || !d.code || UI.busy.rate) return;
+    const tab0 = S.tab, st = S.stack[tab0], form = st[st.length - 1];   /* the form this post belongs to (2026-10-30) */
     UI.busy.rate = 1; render(true);
     const r = await TC.postReview(d.prof, d);
     UI.busy.rate = 0;
     if (r.err) { d.err = r.err; render(true); return; }
     draftClear(d.prof);
     S.lastRated = Object.assign({}, d, { reviewId: r.id, share: false });
-    const st = S.stack[S.tab]; st[st.length - 1] = { s: 'rateThanks', p: {} }; render();
+    if (S.tab === tab0 && cur() === form && form && form.s === 'rateForm') { st[st.length - 1] = { s: 'rateThanks', p: {} }; render(); }
+    else { const i = st.indexOf(form); if (i > 0 && form.s === 'rateForm') st.splice(i, 1); if (S.draft === d) S.draft = null; toast('Rating posted.'); render(true); }
     /* The favorite is saved once the review exists (the server needs it), after the thanks screen
        is up, so a slow call never leaves the student waiting on the form. */
     if (d.fav && TC.favOn) { const L = S.lastRated, fe = await TC.setFav(d.favKey || reviewKeyOf(d.prof), true); if (fe) toast('Rating posted. ' + fe); else if (S.lastRated === L) { L.favSaved = true; if (cur() && cur().s === 'rateThanks') render(true); } }
@@ -7420,8 +7768,16 @@ const A = {
     go('chat', { id });
   },
   retryChat: () => { const e = cur(); if (e.p && e.p.id) TC.openThread(e.p.id); },
+  olderMsgs: async id => {
+    if (UI.busy.older) return; UI.busy.older = 1; render(true);
+    let ok = false; try { ok = await TC.olderMessages(id); } finally { UI.busy.older = 0; }
+    const sc = document.getElementById('scroll'), e = cur(), here = e && e.s === 'chat' && e.p && String(e.p.id) === String(id);
+    const h0 = sc ? sc.scrollHeight : 0, y0 = sc ? sc.scrollTop : 0;
+    render(true);
+    if (ok && here && sc) sc.scrollTop = y0 + (sc.scrollHeight - h0);
+  },
   openChatTab: id => { UI.sheet = null; S.tab = 'friends'; S.stack.friends = [{ s: 'friends' }]; A.openChat(id); },
-  openChatWith: async pid => { UI.champ = false; const id = await TC.threadWith(pid); if (id) A.openChat(id); },
+  openChatWith: async pid => { UI.champ = false; const k = 'cw' + pid; if (UI.busy[k]) return; UI.busy[k] = 1; let id = null; try { id = await TC.threadWith(pid); } finally { UI.busy[k] = 0; } if (id) A.openChat(id); },
   draftTo: async (pid, text) => { UI.champ = false; const id = await TC.threadWith(pid); if (!id) return; UI.prefill = { id, text: text || '' }; A.openChat(id); },
   addFriend: async id => {
     if (UI.busy['f' + id]) return; UI.busy['f' + id] = 1;
@@ -7429,8 +7785,8 @@ const A = {
     else if (await TC.sendRequest(id)) toast(`Request sent to ${PEOPLE[id].short}`);
     UI.busy['f' + id] = 0; render(true);
   },
-  acceptReq: async id => { if (await TC.acceptRequest(id)) { toast(`You and ${PEOPLE[id].short} are now friends`); relinkPeople(); } render(true); },
-  declineReq: async id => { if (await TC.declineRequest(id)) toast('Request declined'); render(true); },
+  acceptReq: async id => { const k = 'rq' + id; if (UI.busy[k]) return; UI.busy[k] = 1; let okA = false; try { okA = await TC.acceptRequest(id); } finally { UI.busy[k] = 0; } if (okA) { toast(`You and ${PEOPLE[id].short} are now friends`); relinkPeople(); } render(true); },
+  declineReq: async id => { const k = 'rq' + id; if (UI.busy[k]) return; UI.busy[k] = 1; let okD = false; try { okD = await TC.declineRequest(id); } finally { UI.busy[k] = 0; } if (okD) toast('Request declined'); render(true); },
   fqClear: () => { S.fq = ''; UI.fPeople = null; clearTimeout(fqT); const el = document.getElementById('fq'); if (el) { el.value = ''; el.focus(); } fRepaint(); },
   fqRetry: () => { const q = S.fq.trim(); UI.fPeople = { q, res: 'busy' }; fRepaint(); fPeopleRun(q); },
   /* chats (2026-10-03) */
@@ -7675,13 +8031,14 @@ function render(keep) {
   }
   /* The selected plan's colour reaches everything that acts on it — the + buttons on class and
      professor pages, and the section sheet — through --pc on <body>. */
+  if (!Array.isArray(S.stack[S.tab]) || !S.stack[S.tab].length) S.stack[S.tab] = [{ s: S.tab }];   /* an emptied stack starts again at the tab's root (2026-10-30) */
   ['A', 'B', 'C'].forEach(k => document.body.classList.toggle('plan-' + k, S.plan === k));
   gaView(S.tab && cur() ? cur().s : 'app');
   const e = cur(); let v;
   try { v = SCREENS[e.s](e.p || {}); } catch (err) { console.error('[termchamp app]', err); v = missingScreen('Something went wrong on this screen.'); }
   if (UI._rendE) UI._rendE.hx = hxSave(sc);
   sc.innerHTML = v.body; parkNowPills(sc);
-  hxRestore(sc, e.hx); UI._rendE = e;
+  hxRestore(sc, e && e.hx); UI._rendE = e;
   sc.style.paddingTop = v.padTop ? `calc(var(--sb) + ${v.padTop}px)` : '';
   document.getElementById('fixtop').innerHTML = v.top || '';
   document.getElementById('fixbot').innerHTML = v.bot || '';
@@ -7757,6 +8114,8 @@ document.addEventListener('input', ev => {
   else if (k === 'review') { S.draft.review = ev.target.value; draftSave(); const n = wordCount(ev.target.value), c = document.getElementById('revcount'); if (c) { c.textContent = n + '/300 words'; c.style.color = n > 300 ? '#B91C1C' : ''; } }
 });
 document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && (UI.sheet || UI.champ)) A.closeSheet(); });
+document.addEventListener('change', ev => { const t = ev.target; if (t && t.id === 'atwl' && UI.sheet && UI.sheet.type === 'addTo' && UI.sheet.dest === 'mine' && personSecs('me').some(x => x.id === UI.sheet.id)) A.atMineSave(); });
+document.addEventListener('keydown', ev => { const t = ev.target; if (ev.key === 'Enter' && t && t.id === 'atwl' && UI.sheet && UI.sheet.type === 'addTo' && personSecs('me').some(x => x.id === UI.sheet.id)) { ev.preventDefault(); t.blur(); } });
 /* Swipe a sheet down to close it (Tate, 2026-10-29: "swipe down instead of having to click the x"). */
 const SWD = { el: null, y0: 0, x0: 0, dy: 0, t0: 0, on: false, dead: false };
 function swdSheet(t) { const s = t && t.closest ? t.closest('#sheet .sheet') : null; return s && !s.classList.contains('champ') ? s : null; }
@@ -7888,7 +8247,21 @@ addEventListener('resize', fit); fit();
 function tickClock() { const el = document.querySelector('#status > span'); if (el) { const d = new Date(); el.textContent = (d.getHours() % 12 || 12) + ':' + String(d.getMinutes()).padStart(2, '0'); } }
 tickClock(); setInterval(() => { tickClock(); if (TC.phase === 'ok' && !document.activeElement.matches('input,textarea') && !UI.champ) render(true); }, 60000);
 /* Coming back to the app after a while: pick up new messages, requests and seats. */
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && TC.ready && Date.now() - (TC.loadedAt || 0) > 120000) { TC.loadedAt = Date.now(); TC.refresh(); loadSeats(); } });
+/* (2026-10-30) the seat feed is the whole term: downloaded again only when what we have is 10 minutes old */
+const SEATS_FRESH_MS = 600000;
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && TC.ready && Date.now() - (TC.loadedAt || 0) > 120000) { TC.loadedAt = Date.now(); TC.refresh(); if (!TC.seatsAt || TC.err.seats || Date.now() - TC.seatsAt >= SEATS_FRESH_MS) loadSeats(); } });
+/* (2026-10-30) "Can't reach TermChamp" and "Couldn't load your profile" try again by themselves when the phone is back
+   online or the app comes back to the front — nobody should have to find the Try again button. No supabase-js at all
+   (the script never loaded: web only, the iPhone app carries it) is a reload, exactly what Try again does. */
+let tcWakeAt = 0;
+function tcWake() {
+  if (TC.phase !== 'offline' && TC.phase !== 'profileerr') return;
+  if (!TC.client()) { if (navigator.onLine !== false && Date.now() - tcWakeAt > 5000) { tcWakeAt = Date.now(); location.reload(); } return; }
+  if (TC.user) TC.load(); else TC.boot();
+}
+window.addEventListener('online', () => tcWake());
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') tcWake(); });
+try { const AP = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.App; if (AP && AP.addListener) AP.addListener('appStateChange', st => { if (st && st.isActive) tcWake(); }); } catch (e) {}
 render();
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => TC.boot()); else TC.boot();
 
@@ -8249,8 +8622,15 @@ function histNotDone(h) {
   const row = (+h.year) * 10 + (HT_ORD[h.term] || 0), now = (+y) * 10 + HT_ORD[t];
   return row > now || (row === now && nowTermOn());
 }
-/* this term is still on: until its last day (CFG.TERM_ENDS, the registrar's calendar) — after it, grades are in */
-function nowTermOn() { return !CFG.TERM_ENDS || sloISO() <= CFG.TERM_ENDS; }
+/* this term is still on: until its last day (the registrar's calendar) — after it, grades are in. term-ends-by-term (2026-10-30):
+   the last day of the term you're IN — NOW_TERM's is CFG.TERM_ENDS; any other (Spring 2027 from Jan 25) is its own
+   CFG.TERM_END_DATES entry. '' = not known: the term is still on. */
+function nowTermEnd() {
+  const t = nowTerm(), own = String(CFG.NOW_TERM || CFG.TERM || '').trim();
+  if (CFG.TERM_ENDS && String(t.code) === own) return String(CFG.TERM_ENDS);
+  return String((CFG.TERM_END_DATES || {})[t.code] || '');
+}
+function nowTermOn() { const e = nowTermEnd(); return !e || sloISO() <= e; }
 const histDone = () => (TC.myHistory || []).filter(h => !histNotDone(h));
 /* what you're taking or registered for, plus your record's rows of this term — what picks, prerequisites and
    "in progress" count as yours (myCodes() stays My Classes only: friends' shared classes, counts) */
@@ -9228,22 +9608,61 @@ function planTabs(k) {
    registration_days (owner-only; RUN 17) or, before RUN 17 or offline, this phone. TC.regFr = { rows: [{ id, day,
    time }], at, off } | { err, at } — friends' days from friend_registration_days(), which answers only with your
    accepted same-school friends who shared, never anyone blocked on either side. Days are Pacific calendar days. */
-const REG_KEY = () => 'tc-regday:' + ((TC.user && TC.user.id) || '') + ':' + CFG.REGISTRATION_TERM_CODE;
+/* registration-round2 (2026-10-30): "your day" is the round under way — Round 1 until its last day (Nov 3), then Round 2 until
+   its last (Nov 17), kept in registration_round2 and read for friends from friend_registration_round2 (the website's Round 2;
+   friends get the day only). 0 = both rounds over (Open Enrollment): Round 2's rows, all behind us. TC.regRound = the round
+   TC.regDay was read for; TC.regDay1 = your Round 1 row while Round 2 is on (its "Friends can see your day" switch). */
+const regRound = () => { const t = sloISO(); return t <= regEnd() ? 1 : CFG.REGISTRATION_ROUND2_ENDS && t <= CFG.REGISTRATION_ROUND2_ENDS ? 2 : 0; };
+const regSrc = r => r === 1 ? { table: 'registration_days', rpc: 'friend_registration_days', key: 'tc-regday:' } : { table: 'registration_round2', rpc: 'friend_registration_round2', key: 'tc-regday2:' };
+const regR = () => TC.regRound == null ? regRound() : TC.regRound;
+const REG_KEY = r => regSrc(r == null ? regR() : r).key + ((TC.user && TC.user.id) || '') + ':' + CFG.REGISTRATION_TERM_CODE;
 const REG_TTL = 120000, REG_ERR_TTL = 15000;
-TC.regDay = null; TC.regFr = null; TC.regFrBusy = 0; TC.regGen = 0;
+TC.regDay = null; TC.regFr = null; TC.regFrBusy = 0; TC.regGen = 0; TC.regRound = null; TC.regDay1 = null;
 const regWhen = () => !!TC.user && CFG.TERM_LABEL === CFG.REGISTRATION_TERM && !!CFG.REGISTRATION_TERM_CODE && !!CFG.REGISTRATION_OPENS;
 const regDayOk = d => /^\d{4}-\d{2}-\d{2}$/.test(String(d || ''));
 const regTimeOk = t => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(t || ''));
 const regTime5 = t => { const v = String(t || '').slice(0, 5); return regTimeOk(v) ? v : ''; };
 const regEnd = () => CFG.REGISTRATION_ROUND1_ENDS || CFG.REGISTRATION_OPENS;
-/* Round 1's weekdays: the days an appointment falls on */
-function regRoundDays() {
+/* Round 1's weekdays: the days an appointment falls on. registration-round2 (2026-10-30): from Round 2 (Nov 4), Round 2's —
+   weekdays from Nov 5 to Nov 17. regRoundGrid() is every weekday (the picker's grid); regRoundDays() leaves out a day with
+   no classes (Veterans Day), which the grid shows greyed out. */
+function regRoundGrid(r) {
+  r = r == null ? regRound() : r;
+  const two = r !== 1 && !!CFG.REGISTRATION_ROUND2_ENDS;
+  const from = two ? (CFG.REGISTRATION_ROUND2_FIRST || CFG.REGISTRATION_ROUND2) : CFG.REGISTRATION_OPENS, to = two ? CFG.REGISTRATION_ROUND2_ENDS : regEnd();
   const out = [];
-  for (let t = Date.parse(CFG.REGISTRATION_OPENS + 'T12:00:00Z'), e = Date.parse(regEnd() + 'T12:00:00Z'); t <= e && out.length < 60; t += 864e5) {
+  for (let t = Date.parse(from + 'T12:00:00Z'), e = Date.parse(to + 'T12:00:00Z'); t <= e && out.length < 60; t += 864e5) {
     const d = new Date(t), wd = d.getUTCDay(); if (wd > 0 && wd < 6) out.push(d.toISOString().slice(0, 10));
   }
   return out;
 }
+const regSkip = d => (Array.isArray(CFG.NO_CLASS_DAYS) ? CFG.NO_CLASS_DAYS : []).find(x => x && x.from && x.from <= d && d <= (x.to || x.from)) || null;
+const regRoundDays = r => regRoundGrid(r).filter(d => !regSkip(d));
+const regMD = d => regDayText(d).split(', ')[1] || d;
+/* where registration stands today, in words: Champ's answer, and the game plan's line */
+function regNowText() {
+  const T = esc(CFG.REGISTRATION_TERM), t = sloISO(), L = d => esc(new Date(d + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })), at = ' Your exact appointment is in the Cal Poly Portal.';
+  if (CFG.REGISTRATION_OPENS && t < CFG.REGISTRATION_OPENS) return `${T} registration starts ${L(CFG.REGISTRATION_OPENS)}.${at}`;
+  if (t <= regEnd()) return `${T} Round 1 registration is open until ${L(regEnd())}${CFG.REGISTRATION_ROUND2 ? `; Round 2 starts ${L(CFG.REGISTRATION_ROUND2)}` : ''}.${at}`;
+  if (CFG.REGISTRATION_ROUND2_ENDS && t <= CFG.REGISTRATION_ROUND2_ENDS) return `${T} Round 2 registration is open until ${L(CFG.REGISTRATION_ROUND2_ENDS)}${CFG.OPEN_ENROLLMENT ? `; Open Enrollment starts ${L(CFG.OPEN_ENROLLMENT)}` : ''}.${at}`;
+  if (CFG.OPEN_ENROLLMENT && t >= CFG.OPEN_ENROLLMENT && (!CFG.OPEN_ENROLLMENT_ENDS || t <= CFG.OPEN_ENROLLMENT_ENDS)) return `${T} registration appointments are over. Open Enrollment is on${CFG.OPEN_ENROLLMENT_ENDS ? ` until ${L(CFG.OPEN_ENROLLMENT_ENDS)}` : ''}: anyone can add an open class in the Cal Poly Portal.`;
+  return `${T} registration is over. Changes go through the Cal Poly Portal.`;
+}
+function regNowShort() {
+  const t = sloISO();
+  if (CFG.REGISTRATION_OPENS && t < CFG.REGISTRATION_OPENS) return 'registration opens ' + regMD(CFG.REGISTRATION_OPENS);
+  if (t <= regEnd()) return 'Round 1 till ' + regMD(regEnd());
+  if (CFG.REGISTRATION_ROUND2_ENDS && t <= CFG.REGISTRATION_ROUND2_ENDS) return 'Round 2 till ' + regMD(CFG.REGISTRATION_ROUND2_ENDS);
+  if (CFG.OPEN_ENROLLMENT && t >= CFG.OPEN_ENROLLMENT && (!CFG.OPEN_ENROLLMENT_ENDS || t <= CFG.OPEN_ENROLLMENT_ENDS)) return 'Open Enrollment';
+  return 'registration is over';
+}
+/* a round that ended while the app was open (midnight, Nov 3 → 4): your day and friends' are read again for the new one */
+function regSync() {
+  if (!regWhen() || TC.regSyncing || TC.regRound == null || TC.regRound === regRound()) return;
+  TC.regSyncing = 1;
+  loadRegDay().then(() => loadRegFriends(true)).catch(() => {}).then(() => { TC.regSyncing = 0; render(true); });
+}
+const regSyncSoon = () => { if (TC.regRound != null && TC.regRound !== regRound() && !TC.regSyncing) setTimeout(regSync, 0); };
 const regGap = (a, b) => Math.round((Date.parse(b + 'T12:00:00Z') - Date.parse(a + 'T12:00:00Z')) / 864e5);
 const regDayText = (d, long) => { try { return new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { timeZone: 'UTC', weekday: long ? 'long' : 'short', month: long ? 'long' : 'short', day: 'numeric' }); } catch (e) { return d; } };
 const regTimeText = t => regTimeOk(t) ? hs(+t.slice(0, 2) * 60 + +t.slice(3, 5)) : '';
@@ -9256,27 +9675,35 @@ function regKeep(v, pending) {
 }
 /* Yours: the server's row, unless this phone has a change the server never got (then that goes up) */
 async function loadRegDay() {
-  TC.regDay = null; TC.regFr = null; delete TC.err.regDay;
+  TC.regDay = null; TC.regFr = null; TC.regDay1 = null; delete TC.err.regDay;
+  const R = TC.regRound = regRound(), src = regSrc(R);
   if (!regWhen()) return;
-  let loc = null; try { loc = JSON.parse(localStorage.getItem(REG_KEY()) || 'null'); } catch (e) {}
+  let loc = null; try { loc = JSON.parse(localStorage.getItem(REG_KEY(R)) || 'null'); } catch (e) {}
   if (loc && !loc.gone && !regDayOk(loc.day)) loc = null;
   if (loc && !loc.gone) TC.regDay = { day: loc.day, time: regTime5(loc.time), shared: loc.shared !== false, local: true };
   const gen = TC.regGen;
-  let r; try { r = await TC.client().from('registration_days').select('day,at_time,shared,updated_at').eq('user_id', TC.user.id).eq('term', CFG.REGISTRATION_TERM_CODE).maybeSingle(); } catch (e) { r = { error: { message: String(e) } }; }
+  let r; try { r = await TC.client().from(src.table).select('day,at_time,shared,updated_at').eq('user_id', TC.user.id).eq('term', CFG.REGISTRATION_TERM_CODE).maybeSingle(); } catch (e) { r = { error: { message: String(e) } }; }
   if (TC.regGen !== gen) return;   /* a save while this was in flight: that one stands */
   if (r.error) { TC.err.regDay = schemaGap(r.error) ? 'missing' : r.error.message; return; }
+  /* Round 2: "Friends can see your day" is one switch for both rounds (the website's; friend_registration_round2 asks both) */
+  if (R !== 1) {
+    let q; try { q = await TC.client().from('registration_days').select('day,at_time,shared').eq('user_id', TC.user.id).eq('term', CFG.REGISTRATION_TERM_CODE).maybeSingle(); } catch (e) { q = { error: { message: String(e) } }; }
+    if (TC.regGen !== gen) return;
+    TC.regDay1 = !q.error && q.data && regDayOk(q.data.day) ? { day: q.data.day, time: regTime5(q.data.at_time), shared: q.data.shared !== false } : null;
+  }
   const row = r.data && regDayOk(r.data.day) ? r.data : null;
   if (loc && loc.pending && (!row || !row.updated_at || Date.parse(row.updated_at) < (+loc.at || 0))) { await regPush(loc.gone ? null : TC.regDay); return; }
-  TC.regDay = row ? { day: row.day, time: regTime5(row.at_time), shared: row.shared !== false, local: false } : null;
+  TC.regDay = row ? { day: row.day, time: regTime5(row.at_time), shared: row.shared !== false && (!TC.regDay1 || TC.regDay1.shared), local: false } : null;
   regKeep(TC.regDay, false);
 }
 /* up to the server; null removes it. Returns what to tell the student, or null. */
 async function regPush(v) {
   if (TC.err.regDay === 'missing') return null;
+  const R = regR(), src = regSrc(R);
   let q;
   try {
-    q = v ? await TC.client().from('registration_days').upsert({ user_id: TC.user.id, term: CFG.REGISTRATION_TERM_CODE, day: v.day, at_time: v.time || null, shared: !!v.shared, updated_at: new Date().toISOString() }, { onConflict: 'user_id,term' })
-      : await TC.client().from('registration_days').delete().eq('user_id', TC.user.id).eq('term', CFG.REGISTRATION_TERM_CODE);
+    q = v ? await TC.client().from(src.table).upsert({ user_id: TC.user.id, term: CFG.REGISTRATION_TERM_CODE, day: v.day, at_time: v.time || null, shared: !!v.shared, updated_at: new Date().toISOString() }, { onConflict: 'user_id,term' })
+      : await TC.client().from(src.table).delete().eq('user_id', TC.user.id).eq('term', CFG.REGISTRATION_TERM_CODE);
   } catch (e) { q = { error: { message: String((e && e.message) || e) } }; }
   if (q.error) {
     if (schemaGap(q.error)) { TC.err.regDay = 'missing'; return null; }
@@ -9285,7 +9712,15 @@ async function regPush(v) {
     return !v || !v.shared ? 'Not done yet — friends can still see your day until it goes through. It’ll try again when you’re back online.' : say;
   }
   if (v && TC.regDay === v) v.local = false;
-  regKeep(v, false); return null;
+  regKeep(v, false);
+  /* Round 2: the one "Friends can see your day" switch follows into your Round 1 row when that row is the other way (as on the website) */
+  const r1 = TC.regDay1;
+  if (R !== 1 && v && r1 && r1.shared !== !!v.shared) {
+    let q1; try { q1 = await TC.client().from('registration_days').upsert({ user_id: TC.user.id, term: CFG.REGISTRATION_TERM_CODE, day: r1.day, at_time: r1.time || null, shared: !!v.shared, updated_at: new Date().toISOString() }, { onConflict: 'user_id,term' }); } catch (e) { q1 = { error: { message: String((e && e.message) || e) } }; }
+    if (q1.error) return dbSay(q1.error, 'Your day is saved, but who can see it didn’t change — try again.');
+    r1.shared = !!v.shared;
+  }
+  return null;
 }
 TC.saveRegDay = async function (v) {
   TC.regGen++;
@@ -9313,14 +9748,15 @@ async function loadRegFriends(force) {
   const was = TC.regFr;
   if (!force && was && (was.off || Date.now() - was.at < (was.err ? REG_ERR_TTL : REG_TTL))) return;
   TC.regFrBusy = 1;
-  let r; try { r = await Promise.race([TC.client().rpc('friend_registration_days', { p_term: CFG.REGISTRATION_TERM_CODE }), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 10000))]); }
+  const R = regRound();
+  let r; try { r = await Promise.race([TC.client().rpc(regSrc(R).rpc, { p_term: CFG.REGISTRATION_TERM_CODE }), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 10000))]); }
   catch (e) { r = { error: { message: String((e && e.message) || e) } }; }
   TC.regFrBusy = 0;
   if (r.error && noRpc(r.error)) TC.regFr = { rows: [], at: Date.now(), off: true };
   else if (r.error) { if (was && was.rows) was.at = Date.now() - REG_TTL + REG_ERR_TTL; else TC.regFr = { err: 1, at: Date.now() }; }
   else {
     const seen = new Set();
-    TC.regFr = { rows: (Array.isArray(r.data) ? r.data : []).filter(x => x && x.user_id && regDayOk(x.day) && !seen.has(x.user_id) && seen.add(x.user_id)).map(x => ({ id: x.user_id, day: x.day, time: regTime5(x.at_time) })), at: Date.now() };
+    TC.regFr = { rows: (Array.isArray(r.data) ? r.data : []).filter(x => x && x.user_id && regDayOk(x.day) && !seen.has(x.user_id) && seen.add(x.user_id)).map(x => ({ id: x.user_id, day: x.day, time: regTime5(x.at_time) })), at: Date.now(), round: R };
   }
   if (!UI.sheet) render(true);
 }
@@ -9423,6 +9859,7 @@ function regRel(day) {
 }
 /* (2026-10-13, Tate's option B) the Builder's one term card: when you register, and your units, edited together */
 function plTermCard(w) {
+  regSyncSoon();
   const u = `${plUnitsTarget()} units`, today = sloISO(), mine = TC.regDay, m = regWhen() && mine && mine.day >= today ? mine : null;
   let head = '', sub = '', add = false;
   if (m) {
@@ -9438,7 +9875,10 @@ function plTermCard(w) {
   } else if (regWhen() && !mine && today <= regEnd()) {
     const n = regGap(today, CFG.REGISTRATION_OPENS);
     head = n > 0 ? `Opens ${regOpensText()} · in ${regPlural(n, 'day')}` : 'Registration is open'; add = true;
+  } else if (regWhen() && !mine && regRound() === 2) {
+    head = 'Round 2 is open'; sub = `till ${regMD(CFG.REGISTRATION_ROUND2_ENDS)}`; add = true;   /* registration-round2 (2026-10-30) */
   }
+  if (m && regR() === 2) sub = ['Round 2', sub].filter(Boolean).join(' · ');
   const line2 = head ? [sub, u].filter(Boolean).join(' · ') : `What matters most: ${w}`;
   const label = `${head || u}.${add ? ' Add your day.' : ''} ${line2}. Edit your registration day, units and what matters most`;
   const card = `<button class="pla-reg pl-tc${m || !head ? ' mine' : ''}" data-a="plTermOpen" aria-label="${esc(label)}">${ic('cal', 18, 2.4)}<span class="grow"><b class="pl-tc-h">${esc(head || u)}</b><span class="pl-tc-s">${esc(line2)}</span></span>${add ? `<span class="pla-add">Add your day${ic('chevR', 14, 2.6)}</span>` : ic('chevR', 15, 2.4)}</button>`;
@@ -9461,6 +9901,7 @@ function plRegFriends(m) {
 /* On a friend's page: "Registers Wed, Oct 21 · 8a · 2 days before you" */
 function regFriendRow(id) {
   if (!regWhen()) return '';
+  regSyncSoon();
   if (!TC.regFr && !TC.regFrBusy) setTimeout(() => loadRegFriends(), 0);
   const x = regFrRows().find(r => r.id === id), today = sloISO();
   if (!x || x.day < today) return '';
@@ -9470,6 +9911,7 @@ function regFriendRow(id) {
 }
 SCREENS.regDays = () => {
   const head = `<div class="topbtns mehd"><button class="iconbtn" data-a="back" aria-label="Back">${ic('chevL', 22, 2.4)}</button><div class="mehd-t">Registration days</div><span style="width:44px"></span></div>`;
+  regSyncSoon();
   const F = TC.regFr, today = sloISO();
   let body;
   if (!regWhen()) body = `<div class="empty"><b>Registration days show while you’re planning ${esc(CFG.REGISTRATION_TERM)}</b></div>`;
@@ -9494,21 +9936,21 @@ SCREENS.regDays = () => {
 };
 /* "When do you register?" — Round 1's weekdays, a time, and whether friends see it */
 SHEETS.regDay = sh => {
-  const today = sloISO(), days = regRoundDays(), busy = !!UI.busy.regDay;
+  const today = sloISO(), days = regRoundGrid(), busy = !!UI.busy.regDay;
   const lead = days.length ? (new Date(days[0] + 'T12:00:00Z').getUTCDay() + 6) % 7 : 0;
   let prev = '';
   const cells = Array.from({ length: lead }, () => '<span></span>').concat(days.map(d => {
     const lab = prev && d.slice(5, 7) !== prev ? regDayText(d).split(', ')[1] : String(+d.slice(8)); prev = d.slice(5, 7);
-    const on = d === sh.day, past = d < today;
+    const on = d === sh.day, past = d < today || !!regSkip(d);
     return `<button class="rd-d${on ? ' on' : ''}" data-a="regPickDay" data-x="${d}" aria-pressed="${on}" aria-label="${esc(regDayText(d, true))}"${past ? ' disabled' : ''}>${esc(lab)}</button>`;
   }));
   const span = days.length ? `${regDayText(days[0]).split(', ')[1]} – ${regDayText(days[days.length - 1]).split(', ')[1]}` : '';
   return `<div class="row sb"><h3>When do you register?</h3><button class="xbtn" data-a="closeSheet" aria-label="Close">${ic('x', 16, 2.4)}</button></div>
   <div class="muted b" style="font-size:13.5px;margin:2px 0 12px;line-height:1.4">Cal Poly Portal › Student Center › Enrollment Dates</div>
-  <div class="rd-h">Round 1 · ${esc(span)}</div>
+  <div class="rd-h">Round ${regRound() === 1 ? 1 : 2} · ${esc(span)}</div>
   <div class="rd-grid" role="group" aria-label="Your day"><span class="rd-w" aria-hidden="true">Mon</span><span class="rd-w" aria-hidden="true">Tue</span><span class="rd-w" aria-hidden="true">Wed</span><span class="rd-w" aria-hidden="true">Thu</span><span class="rd-w" aria-hidden="true">Fri</span>${cells.join('')}</div>
   <label class="rd-row"><span class="grow b" style="font-size:15px">Time</span><input id="rd-time" type="time" step="300" value="${esc(sh.time || '')}"></label>
-  <div class="rd-row"><span class="grow"><span class="b" style="display:block;font-size:15px">Friends can see your day</span><span class="muted b" style="display:block;font-size:12.5px">Only your friends · the day and time</span></span><button class="toggle ${sh.shared ? 'on' : 'off'}" data-a="regShareToggle" role="switch" aria-checked="${!!sh.shared}" aria-label="Friends can see your day"><i></i></button></div>
+  <div class="rd-row"><span class="grow"><span class="b" style="display:block;font-size:15px">Friends can see your day</span><span class="muted b" style="display:block;font-size:12.5px">${regRound() === 1 ? 'Only your friends · the day and time' : 'Only your friends · the day'}</span></span><button class="toggle ${sh.shared ? 'on' : 'off'}" data-a="regShareToggle" role="switch" aria-checked="${!!sh.shared}" aria-label="Friends can see your day"><i></i></button></div>
   ${sh.err ? `<div class="tc-err">${esc(sh.err)}</div>` : ''}
   <button class="btn" style="margin-top:14px" data-a="regDaySave" ${busy || !sh.day ? 'disabled' : ''}>${busy ? 'Saving…' : 'Save'}</button>
   ${TC.regDay ? `<button class="btn soft" style="margin-top:8px" data-a="regDayRemove" ${busy ? 'disabled' : ''}>Remove my day</button>` : ''}`;
@@ -9837,21 +10279,21 @@ SHEETS.plTerm = sh => {
   const opt = (k, ico, bg) => { const n = rk.indexOf(k) + 1; return `<button class="pp-opt ${n ? 'on' : ''}" data-a="plPrefPick" data-x="${k}" aria-pressed="${!!n}" aria-label="${esc(PREF_LABEL[k])}${n ? ', number ' + n : ', not ranked'}"><span class="pp-ic" style="background:${bg}">${ico}</span>${esc(PREF_LABEL[k])}<span class="pp-ck pp-n">${n || ''}</span></button>`; };
   let reg = '';
   if (regWhen()) {
-    const today = sloISO(), days = regRoundDays();
+    const today = sloISO(), days = regRoundGrid();
     const lead = days.length ? (new Date(days[0] + 'T12:00:00Z').getUTCDay() + 6) % 7 : 0;
     let prev = '';
     const cells = Array.from({ length: lead }, () => '<span></span>').concat(days.map(d => {
       const lab = prev && d.slice(5, 7) !== prev ? regDayText(d).split(', ')[1] : String(+d.slice(8)); prev = d.slice(5, 7);
-      const on = d === sh.day, past = d < today;
+      const on = d === sh.day, past = d < today || !!regSkip(d);
       return `<button class="rd-d${on ? ' on' : ''}" data-a="regPickDay" data-x="${d}" aria-pressed="${on}" aria-label="${esc(regDayText(d, true))}"${past ? ' disabled' : ''}>${esc(lab)}</button>`;
     }));
     const span = days.length ? `${regDayText(days[0]).split(', ')[1]} – ${regDayText(days[days.length - 1]).split(', ')[1]}` : '';
     reg = `<div class="b pt-h">Your registration day</div>
   <div class="muted b" style="font-size:12.5px;margin:-4px 0 8px;line-height:1.4">Cal Poly Portal › Student Center › Enrollment Dates</div>
-  <div class="rd-h">Round 1 · ${esc(span)}</div>
+  <div class="rd-h">Round ${regRound() === 1 ? 1 : 2} · ${esc(span)}</div>
   <div class="rd-grid" role="group" aria-label="Your day"><span class="rd-w" aria-hidden="true">Mon</span><span class="rd-w" aria-hidden="true">Tue</span><span class="rd-w" aria-hidden="true">Wed</span><span class="rd-w" aria-hidden="true">Thu</span><span class="rd-w" aria-hidden="true">Fri</span>${cells.join('')}</div>
   <label class="rd-row"><span class="grow b" style="font-size:15px">Time</span><input id="rd-time" type="time" step="300" value="${esc(sh.time || '')}"></label>
-  <div class="rd-row"><span class="grow"><span class="b" style="display:block;font-size:15px">Friends can see your day</span><span class="muted b" style="display:block;font-size:12.5px">Only your friends · the day and time</span></span><button class="toggle ${sh.shared ? 'on' : 'off'}" data-a="regShareToggle" role="switch" aria-checked="${!!sh.shared}" aria-label="Friends can see your day"><i></i></button></div>
+  <div class="rd-row"><span class="grow"><span class="b" style="display:block;font-size:15px">Friends can see your day</span><span class="muted b" style="display:block;font-size:12.5px">${regRound() === 1 ? 'Only your friends · the day and time' : 'Only your friends · the day'}</span></span><button class="toggle ${sh.shared ? 'on' : 'off'}" data-a="regShareToggle" role="switch" aria-checked="${!!sh.shared}" aria-label="Friends can see your day"><i></i></button></div>
   ${TC.regDay ? `<button class="link b pt-rm" data-a="regDayRemove" ${busy ? 'disabled' : ''}>Remove my day</button>` : ''}`;
   }
   return `<div class="row sb"><h3>${esc(CFG.TERM_LABEL)}</h3><button class="xbtn" data-a="closeSheet" aria-label="Close">${ic('x', 16, 2.4)}</button></div>
@@ -9898,26 +10340,51 @@ SHEETS.pickWhy = sh => {
   <div class="muted b" style="font-size:12px;margin-top:6px">${wline}</div>
   <div class="pw-acts">${sec ? `<button class="btn" data-a="addPlanSheet" data-x="${esc(sec.id)}">${c.inPlan ? 'In Plan ' + c.inPlan + ' · change' : 'Add to Plan ' + (/^[ABC]$/.test(UI.plPlan) ? UI.plPlan : 'A')}</button>` : '<span></span>'}<button class="btn soft" data-a="openClass" data-x="${esc(c.code)}">Class</button></div>`;
 };
-/* One tap = this class is on your record, with no term (the history list files it under "Earlier"). */
+/* The term a class is filed under when nobody picked one: the most recent finished term — Fall, Winter or Spring
+   (summer skipped) before the term people are in now. Log a class starts on it too. (2026-10-30) */
+function lcDefault() { return lastDoneTerm(); }
+/* log-class-last-term (2026-10-30): the newest term that's over. The term you're in once it has ended; until then the
+   regular term before it (semesters from Fall 2026: Fall, Spring; the quarters before them had Winter). Summer is never
+   the guess. */
+function lastDoneTerm() {
+  const [t, y0] = String(nowTerm().label || '').split(' '), y = +y0;
+  if (!y || !HT_ORD[t]) { const d = new Date(), late = d.getMonth() >= 6; return { term: late ? 'Spring' : 'Fall', year: late ? d.getFullYear() : d.getFullYear() - 1 }; }
+  if (!nowTermOn()) return { term: t, year: y };
+  if (t === 'Fall' || t === 'Summer') return { term: 'Spring', year: y };
+  if (t === 'Spring') return y <= 2026 ? { term: 'Winter', year: y } : { term: 'Fall', year: y - 1 };
+  return { term: 'Fall', year: y - 1 };
+}
+/* Cal Poly has had no Winter term since semesters began (Fall 2026) */
+const noWinter = (t, y) => t === 'Winter' && +y >= 2027;
+const NO_WINTER_SAY = 'Cal Poly has no Winter term from 2027 — semesters are Fall, Spring and Summer.';
+/* The row a one-tap made (✓ again takes it off): lcDefault()'s term with no professor, or an older one with no term. */
+function quickRowOf(code) {
+  const dt = lcDefault(), rows = (TC.myHistory || []).filter(h => window.TCPL && TCPL.canon(h.code) === code);
+  return rows.find(h => !h.term && !h.year) || rows.find(h => h.term === dt.term && +h.year === dt.year && !h.professor) || null;
+}
+/* One tap = this class is on your record, filed under lcDefault()'s term (production's class_history needs a term
+   and a year: a term-less row is refused). The class sheet changes the term. */
 async function quickLog(code, id) {
   if (window.TCPL) { const cur = TCPL.canon(code); if (cur) code = cur; }
   /* already on the record once (a repeatable class): a second, term-less row could collide with it — ask for the term */
   if ((TC.myHistory || []).some(h => TCPL.canon(h.code) === code)) { UI.lc = { code, err: `${code} is already on your record once — add the term you took it again.` }; UI.sheet = { type: 'logClass' }; return render(true); }
   UI.busy.tick = id; render(true);
-  const r = await TC.client().from('class_history').insert({ user_id: TC.user.id, code, term: null, year: null, professor: null });
+  const dt = lcDefault();
+  const r = await TC.client().from('class_history').insert({ user_id: TC.user.id, code, term: dt.term, year: dt.year, professor: null });
   UI.busy.tick = 0;
-  if (r.error && (r.error.code === '23502' || /null value/i.test(r.error.message || ''))) { UI.lc = { code, err: 'Add the term you took it, then save.' }; UI.sheet = { type: 'logClass' }; return render(true); }
+  if (r.error && (r.error.code === '23502' || r.error.code === '23505' || /null value|duplicate/i.test(r.error.message || ''))) { UI.lc = { code, err: 'Add the term you took it, then save.' }; UI.sheet = { type: 'logClass' }; return render(true); }
   if (r.error) { toast(dbSay(r.error, 'Couldn’t save that class.')); return render(true); }
   const fresh = await TC.reloadHistory(); loadRateList(); render(true);
-  toast(fresh ? `${code} is on your record · tap ✓ to undo` : `${code} saved — pull down to refresh your record`);
+  toast(fresh ? `${code} is on your record for ${dt.term} ${dt.year} · tap ✓ to undo` : `${code} saved — pull down to refresh your record`);
 }
 async function quickUnlog(code, id) {
-  const row = (TC.myHistory || []).find(h => TCPL.canon(h.code) === code && !h.term && !h.year); if (!row) return;
+  const rows = (TC.myHistory || []).filter(h => TCPL.canon(h.code) === code), row = quickRowOf(code);
+  if (!row) { if (rows.length) { UI.sheet = { type: 'pcClass', key: pcKey(rows[0]) }; return render(true); } toast(`${code} counts from your degree report or a waiver`); return; }
   UI.busy.tick = id; render(true);
-  const r = await TC.client().from('class_history').delete().eq('user_id', TC.user.id).eq('code', row.code).is('term', null).is('year', null);
+  let e = null; try { e = await TC.removeHistory(row.code, row); } catch (x) { e = 'Couldn’t undo that — check your connection.'; }
   UI.busy.tick = 0;
-  if (r.error) { toast(dbSay(r.error, 'Couldn’t undo that.')); return render(true); }
-  await TC.reloadHistory(); loadRateList(); render(true);
+  if (e) { toast(e); return render(true); }
+  render(true);
   const L = TCPL.ledger(), s = L && L.grid.flatMap(t => t.slots).find(x => x.id === id);
   toast(s && s.state === 'done' ? `${code} still counts — it’s on your degree report or a waiver` : `${code} taken off your record`);
 }
@@ -9926,8 +10393,8 @@ SHEETS.logClass = () => {
   return `<div class="row sb"><h3>Log a class</h3><button class="xbtn" data-a="closeSheet">${ic('x', 16, 2.4)}</button></div>
  <form class="tc-form" data-submit="logClass" style="margin-top:10px">
   <label>Class code<input id="lc-code" placeholder="e.g. BUS 3431" value="${esc(f.code || '')}" autocapitalize="characters" autocomplete="off" required></label>
-  <div class="row" style="gap:10px"><label class="grow">Term<select id="lc-term">${['Fall', 'Winter', 'Spring', 'Summer'].map(t => `<option ${t === (f.term || 'Spring') ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
-  <label class="grow">Year<select id="lc-year">${Array.from({ length: 8 }, (_, i) => y + 1 - i).filter(v => v >= 2015).map(v => `<option ${v === (f.year || y) ? 'selected' : ''}>${v}</option>`).join('')}</select></label></div>
+  <div class="row" style="gap:10px"><label class="grow">Term<select id="lc-term">${['Fall', 'Winter', 'Spring', 'Summer'].map(t => `<option ${t === (f.term || lcDefault().term) ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+  <label class="grow">Year<select id="lc-year">${Array.from({ length: 8 }, (_, i) => y + 1 - i).filter(v => v >= 2015).map(v => `<option ${v === (+f.year || lcDefault().year) ? 'selected' : ''}>${v}</option>`).join('')}</select></label></div>
   <label>Professor <span class="muted" style="font-weight:600">(optional)</span><input id="lc-prof" value="${esc(f.prof || '')}" autocomplete="off" placeholder="First and last name"></label>
   ${f.err ? `<div class="tc-err">${esc(f.err)}</div>` : ''}
   <button class="btn" ${UI.busy.lc ? 'disabled' : ''}>${UI.busy.lc ? 'Saving…' : 'Add to past classes'}</button></form>`;
@@ -10250,7 +10717,7 @@ function pcSlot(s) {
   const c = s.state === 'cant' ? [c0[0], 'var(--ink4)', c0[2], c0[3]] : c0;
   const code = cls || (s.code && !s.choice ? ((s.codes && s.codes[0]) || s.code) : '');
   const name = cls ? (courseName(cls) || (s.title && !codeLike(s.title) ? s.title : '')) : s.choice ? s.title : code ? (courseName(code) || (codeLike(s.title) ? '' : s.title)) : String(s.title || '').replace(/\s*·\s*/g, ' ');
-  const quick = s.state === 'done' && s.by && (TC.myHistory || []).some(h => TCPL.canon(h.code) === s.by && !h.term && !h.year);
+  const quick = s.state === 'done' && s.by && !!quickRowOf(s.by);   /* the one-tap's row, dated since 2026-10-30 */
   const tickable = (s.state === 'need' && (s.code || s.choice)) || quick;
   /* no class to log (a GE area, an elective) or one we can't check: the circle checks the row off (flowchart-mark-done, 2026-10-09) */
   const markable = !tickable && !s.choice && (s.mine || s.state === 'cant' || (s.state === 'need' && !s.code));
@@ -10556,7 +11023,7 @@ Object.assign(A, {
   },
   plRetryPlans: async () => { if (UI.busy.plans) return; UI.busy.plans = 1; render(true); try { await loadPlans(); } catch (e) { TC.err.plans = String(e && e.message || e); } finally { UI.busy.plans = 0; render(true); } },
   plPrefsOpen: () => { UI.sheet = { type: 'plPrefs' }; render(true); },
-  plTermOpen: () => { const m = TC.regDay; UI.sheet = { type: 'plTerm', units: (TC.prefs && TC.prefs.units) || 16, rank: prefOrder().slice(), day: m ? m.day : '', time: m ? m.time : '', shared: m ? m.shared !== false : true }; render(true); },
+  plTermOpen: () => { const m = TC.regDay; UI.sheet = { type: 'plTerm', units: (TC.prefs && TC.prefs.units) || 16, rank: prefOrder().slice(), day: m ? m.day : '', time: m ? m.time : '', shared: m ? m.shared !== false : !TC.regDay1 || TC.regDay1.shared !== false }; render(true); },
   plTermSave: async () => {
     const sh = UI.sheet; if (!sh || sh.type !== 'plTerm' || UI.busy.prefs || UI.busy.regDay) return;
     regReadTime(sh); sh.err = null;
@@ -10586,7 +11053,7 @@ Object.assign(A, {
     toast(re || (regChanged && TC.err.regDay === 'missing' ? 'Saved on this phone' : 'Saved')); render(true);
   },
   /* reg-day (2026-10-11) */
-  regDayOpen: () => { if (!regWhen()) return; const m = TC.regDay; UI.sheet = { type: 'regDay', day: m ? m.day : '', time: m ? m.time : '', shared: m ? m.shared !== false : true }; render(true); },
+  regDayOpen: () => { if (!regWhen()) return; const m = TC.regDay; UI.sheet = { type: 'regDay', day: m ? m.day : '', time: m ? m.time : '', shared: m ? m.shared !== false : !TC.regDay1 || TC.regDay1.shared !== false }; render(true); },
   regPickDay: d => { const sh = UI.sheet; if (!sh || (sh.type !== 'regDay' && sh.type !== 'plTerm') || !regRoundDays().includes(d) || d < sloISO()) return; regReadTime(sh); sh.day = d; sh.err = null; render(true); },
   regShareToggle: () => { const sh = UI.sheet; if (!sh || (sh.type !== 'regDay' && sh.type !== 'plTerm')) return; regReadTime(sh); sh.shared = !sh.shared; render(true); },
   regDaySave: async () => {
@@ -10696,6 +11163,7 @@ Object.assign(A, {
     const sh = UI.sheet, h = sh && pcRow(sh.key); if (!h || UI.busy.pct) return;
     const term = (document.getElementById('pc-term') || {}).value, year = parseInt((document.getElementById('pc-year') || {}).value, 10);
     if (!term || !year) { sh.err = 'Choose the term and the year.'; return render(true); }
+    if (noWinter(term, year)) { sh.err = NO_WINTER_SAY; return render(true); }
     UI.busy.pct = 1; render(true);
     try {
       const e = await TC.updateHistory(h, { term, year });
@@ -10809,6 +11277,7 @@ const _post = A.postRating;
 A.postRating = async () => {
   const d = S.draft; if (!d || !d.editing) return _post();
   if (!d.stars || !d.code || UI.busy.rate) return;
+  const tab0 = S.tab, st0 = S.stack[tab0], form = st0[st0.length - 1];   /* (2026-10-30) */
   const words = wordCount(d.review); if (words > 300) { d.err = 'That’s ' + words + ' words — the limit is 300.'; return render(true); }
   const bad = wfHit(d.review || ''); if (bad) { d.err = 'Reviews are public, so “' + bad + '” can’t go in one.'; return render(true); }
   UI.busy.rate = 1; render(true);
@@ -10820,7 +11289,8 @@ A.postRating = async () => {
   UI.busy.rate = 0;
   if (e) { d.err = e; return render(true); }
   let fe = null; if (TC.favOn && !!d.fav !== !!d.fav0) fe = await TC.setFav(d.favKey, !!d.fav);
-  S.draft = null; toast(fe ? 'Review updated. ' + fe : 'Review updated'); loadReviews().then(() => render(true)); back();
+  S.draft = null; toast(fe ? 'Review updated. ' + fe : 'Review updated'); loadReviews().then(() => render(true));
+  if (S.tab === tab0 && cur() === form) back(); else { const i = st0.indexOf(form); if (i > 0 && form.s === 'rateForm') st0.splice(i, 1); render(true); }
 };
 Object.assign(SUBMIT, {
   deleteAccount: async form => {
@@ -10847,6 +11317,7 @@ Object.assign(SUBMIT, {
     const code = canonCode(form.querySelector('#lc-code').value), term = form.querySelector('#lc-term').value, year = parseInt(form.querySelector('#lc-year').value, 10), prof = form.querySelector('#lc-prof').value.trim();
     UI.lc = { code: form.querySelector('#lc-code').value, term, year, prof, err: '' };
     if (!code) { UI.lc.err = 'Enter a class code like BUS 3431.'; return render(true); }
+    if (noWinter(term, year)) { UI.lc.err = NO_WINTER_SAY; return render(true); }
     UI.busy.lc = 1; render(true);
     const e = await TC.addHistory(code, term, year, prof); UI.busy.lc = 0;
     if (e) { UI.lc.err = e; return render(true); }
@@ -11519,7 +11990,9 @@ async function pushPerm() {
   try { const r = await p.checkPermissions(); PUSH.state = r.receive; } catch (e) { PUSH.state = 'unknown'; }
   return PUSH.state;
 }
-async function pushRegister() { const p = PUSH.plug(); if (!p) return; try { await p.register(); } catch (e) {} }
+/* (2026-10-30) once per resume: pushInit's foreground listener and pushAfterLoad (end of the refresh) both ask; one goes.
+   force = a permission just granted. */
+async function pushRegister(force) { const p = PUSH.plug(); if (!p) return; if (!force && Date.now() - (PUSH.regAt || 0) < 60000) return; PUSH.regAt = Date.now(); try { await p.register(); } catch (e) {} }
 async function pushSaveToken(tok) {
   if (!tok) return;
   if (!TC.user || TC.phase !== 'ok') { PUSH.pendingToken = tok; return; }
@@ -11619,7 +12092,7 @@ function pushForeground(n) {
   } catch (e) {}
   /* back from iPhone Settings: pick up a permission they just turned on */
   document.addEventListener('visibilitychange', () => { if (document.visibilityState !== 'visible' || TC.phase !== 'ok') return;
-    const was = PUSH.state; pushPerm().then(st => { if (st === 'granted') pushRegister(); if (st !== was) render(true); }); });
+    const was = PUSH.state; pushPerm().then(st => { if (st === 'granted') pushRegister(was !== 'granted' && was !== 'unknown'); if (st !== was) render(true); }); });
 })();
 function refocusBtn(a, x) { const b = [...document.querySelectorAll(`[data-a="${a}"]`)].find(el => el.dataset.x === x && el.offsetParent); if (b) b.focus(); }
 Object.assign(A, {
@@ -11627,7 +12100,7 @@ Object.assign(A, {
     if (UI.sheet && UI.sheet.type === 'pushAsk') UI.sheet = null;
     render(true);
     const p = PUSH.plug(); if (!p) return;
-    try { const r = await p.requestPermissions(); PUSH.state = r.receive; if (r.receive === 'granted') { await pushRegister(); toast('Notifications on. Choose which in Settings.'); } } catch (e) {}
+    try { const r = await p.requestPermissions(); PUSH.state = r.receive; if (r.receive === 'granted') { await pushRegister(true); toast('Notifications on. Choose which in Settings.'); } } catch (e) {}
     render(true);
   },
   pushLater: () => { try { localStorage.setItem(PUSH_SNOOZE_KEY, String(Date.now() + 7 * 864e5)); } catch (e) {} A.closeSheet(); },

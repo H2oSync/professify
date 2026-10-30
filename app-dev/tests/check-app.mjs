@@ -4979,13 +4979,13 @@ tests.plannerQuickTick = async () => {
   // one tap: on your record, no term, nothing else to do
   await click(page, '.pc-row:has(.pc-cc:text("BUS 1100")) .tc-tick'); await tick(page, 600);
   let w = log.writes.filter(x => x.table === 'class_history');
-  ok(w.length === 1 && w[0].m === 'POST' && w[0].body.code === 'BUS 1100' && w[0].body.term === null && w[0].body.year === null && w[0].body.user_id === FX.ME.id && await page.locator('#sheet .tc-form').count() === 0, 'one tap: the class goes on your record with no term, and nothing opens', w);
+  ok(w.length === 1 && w[0].m === 'POST' && w[0].body.code === 'BUS 1100' && w[0].body.term === 'Spring' && w[0].body.year === 2026 && w[0].body.user_id === FX.ME.id && await page.locator('#sheet .tc-form').count() === 0, 'one tap: the class goes on your record under the last finished term (Spring 2026 — production needs a term), and nothing opens', w);
   let after = (await withLeft(page)).match(/(\d+) filled\s*(?:\d+ in progress\s*)?\d+ left on your flowchart/)[1];
   const c1 = page.locator('.pc-row:has(.pc-cc:text("BUS 1100"))');
   ok(+after === +before + 1 && /✓/.test(await c1.locator('.pc-dot').innerText()) && /^Undo/.test(await c1.locator('.tc-tick').getAttribute('aria-label')), 'one tap: the slot is ✓ and the count moves', { before, after });
   await click(page, '.pc-row:has(.pc-cc:text("BUS 1100")) .tc-tick'); await tick(page, 600);
   w = log.writes.filter(x => x.table === 'class_history' && x.m === 'DELETE');
-  ok(w.length === 1 && /code=eq\.BUS(\+|%20)1100/.test(w[0].query) && /term=is\.null/.test(w[0].query) && /year=is\.null/.test(w[0].query) && (await withLeft(page)).match(/(\d+) filled\s*(?:\d+ in progress\s*)?\d+ left on your flowchart/)[1] === before, 'one tap: ✓ again undoes it — only the term-less record', w);
+  ok(w.length === 1 && /code=eq\.BUS(\+|%20)1100/.test(w[0].query) && /term=eq\.Spring/.test(w[0].query) && /year=eq\.2026/.test(w[0].query) && (await withLeft(page)).match(/(\d+) filled\s*(?:\d+ in progress\s*)?\d+ left on your flowchart/)[1] === before, 'one tap: ✓ again undoes it — only the one-tap’s own row', w);
   ok(await page.locator('.pc-row:has(.pc-cc:text("BUS 1100")) .pc-main[data-a="plLogSlot"]').count() === 1, 'one tap: the row itself still opens Log a class for the term and professor');
   // a choice slot: one question, which one
   const ch = page.locator('.pc-row:has-text("Calculus for Data Science I or Business Calculus")').first();
@@ -4998,7 +4998,7 @@ tests.plannerQuickTick = async () => {
   const fAfter = +(await withLeft(page)).match(/(\d+) filled\s*(?:\d+ in progress\s*)?\d+ left on your flowchart/)[1];
   w = log.writes.filter(x => x.table === 'class_history' && x.m === 'POST');
   const chDone = await page.locator('.pc-row.done:has(.pc-cc:text("MATH 1267"))').count();
-  ok(w.length === 2 && w[1].body.code === 'MATH 1267' && w[1].body.term === null && chDone === 1 && fAfter === fBefore + 1, 'choice: the pick goes on your record and fills exactly one slot', { w: w.map(x => x.body && x.body.code), fBefore, fAfter });
+  ok(w.length === 2 && w[1].body.code === 'MATH 1267' && w[1].body.term === 'Spring' && w[1].body.year === 2026 && chDone === 1 && fAfter === fBefore + 1, 'choice: the pick goes on your record and fills exactly one slot', { w: w.map(x => x.body && x.body.code), fBefore, fAfter });
   ok((await page.locator('.pc-row.done:has(.pc-cc:text("MATH 1267")) .pc-main').innerText()).trim() === 'MATH 1267  Business Calculus'.replace('  ', ' ') || /^MATH 1267\s*Business Calculus$/.test((await page.locator('.pc-row.done:has(.pc-cc:text("MATH 1267")) .pc-main').innerText()).trim()), 'choice: the filled slot names the class taken, not the “… or …” line');
   const posts = log.writes.filter(x => x.table === 'class_history' && x.m === 'POST').length;
   await page.evaluate(() => quickLog('PHIL 3331', 'rep')); await tick(page, 400);
@@ -5220,7 +5220,7 @@ tests.pastClassSheet = async () => {
   ok(await page.evaluate(() => UI.sheet && UI.sheet.type) === 'pcClass' && /Term\s*Fall 2025/.test(sh), 'class sheet: back on the class, with the new term', sh);
   /* a one-tap row (no term): Term starts blank — Save asks for a choice rather than writing one */
   await click(page, '#sheet [data-a="closeSheet"]');
-  await page.evaluate(() => quickLog('BUS 1100', 'x')); await tick(page, 600);
+  await page.evaluate(async () => { await TC.client().from('class_history').insert({ user_id: TC.user.id, code: 'BUS 1100', term: null, year: null, professor: null }); await TC.reloadHistory(); render(true); }); await tick(page, 600);   /* a term-less row from before 2026-10-30 */
   await click(page, '[data-a="pcOpen"][data-x="BUS 1100||"]'); await tick(page, 200);
   ok(/Term\s*Add/.test(await page.locator('#sheet').innerText()), 'class sheet: a class logged without a term says Term · Add');
   await click(page, '#sheet [data-a="pcTerm"]'); await tick(page, 200);
@@ -9283,7 +9283,11 @@ tests.registrationDayStates = async () => {
   await o.close();
   o = await regOpenPlanner({ time: '2026-11-04T09:00:00-08:00' });
   v = await regLine(o.page);
-  ok(/^\d+ units · What matters most: /.test(v.line) && !v.units && v.fr === null, 'regday states: Round 1 over, no day — just your units', v);
+  ok(v.line === 'Round 2 is open · till Nov 17 Add your day' && v.units > 0 && v.fr === null, 'regday states: Round 1 over, no day — Round 2 is open, Add your day (registration-round2 (2026-10-30))', v);
+  await o.close();
+  o = await regOpenPlanner({ time: '2026-11-18T09:00:00-08:00' });
+  v = await regLine(o.page);
+  ok(/^\d+ units · What matters most: /.test(v.line) && !v.units && v.fr === null, 'regday states: both rounds over (Open Enrollment), no day — just your units', v);
   await o.close();
   /* before RUN 17: no table, no function — kept on the phone, friends' days don't show */
   const gap = (url, m) => /\/rest\/v1\/registration_days/.test(url.pathname) ? { status: 404, body: JSON.stringify({ code: 'PGRST205', message: 'Could not find the table \'public.registration_days\' in the schema cache' }) } : null;

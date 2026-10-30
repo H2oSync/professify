@@ -6131,9 +6131,11 @@ function prereqChipHtml(code, plannedBefore){
 async function loadCoursePrereqData(){
   try{
     if(typeof backendReady!=='function'||!backendReady()||!sb)return;
-    var eq=await sb.from('course_equiv').select('legacy_code,current_code');
+    /* paged (scale, 2026-10-30): both tables are bigger than one 1000-row PostgREST page */
+    async function catAll(table,cols,ord){ var out=[],err=null; for(var off=0;off<40000;off+=1000){ var q=sb.from(table).select(cols); ord.forEach(function(c){ q=q.order(c); }); var r=await q.range(off,off+999); if(!r||r.error||!Array.isArray(r.data)){ err=(r&&r.error)||{message:'no rows'}; break; } out=out.concat(r.data); if(r.data.length<1000)break; } return {data:out,error:out.length?null:err}; }
+    var eq=await catAll('course_equiv','legacy_code,current_code',['legacy_code','current_code']);
     if(eq&&!eq.error&&Array.isArray(eq.data)&&eq.data.length){ eq.data.forEach(function(r){ var l=normCourse(r.legacy_code),c=normCourse(r.current_code); if(l&&c)COURSE_EQUIV_SEED[l]=c; }); buildEquivIndex(); }
-    var pr=await sb.from('course_prereqs').select('course_code,prereq_json');
+    var pr=await catAll('course_prereqs','course_code,prereq_json',['course_code']);
     if(pr&&!pr.error&&Array.isArray(pr.data)&&pr.data.length){ pr.data.forEach(function(r){ var c=normCourse(r.course_code),j=r.prereq_json; if(c&&j){ try{ COURSE_PREREQS_SEED[c]=(typeof j==='string')?JSON.parse(j):j; }catch(_e){} } }); buildPrereqIndex(); }
     try{ var ve=document.getElementById('view-explore'); if(ve&&ve.classList.contains('active')&&typeof renderExplore==='function')renderExplore(); if(typeof renderRoadmap==='function'&&document.getElementById('roadmapOut'))renderRoadmap(); }catch(_e){}
   }catch(e){ console.warn('[professify] prereq/equiv load:',e&&e.message||e); }
@@ -33480,7 +33482,7 @@ async function pushWatchSecToDb(code,s,added){
   try{
     if(added){
       secPendMark('watch',s.class_nbr);
-      var r=await sb.from('watch_sections').upsert({user_id:sbUser.id,term:mcTerm(),code:code,class_nbr:String(s.class_nbr),section:s.section||null,instructor:s.name||null,days:(typeof _secTime==='function'?_secTime(s):s.days)||null});
+      var r=await sb.from('watch_sections').upsert({user_id:sbUser.id,term:mcTerm(),code:code,class_nbr:String(s.class_nbr),section:s.section||null,instructor:s.name||null,days:(typeof _secTime==='function'?_secTime(s):s.days)||null},{onConflict:'user_id,class_nbr,term'});
       if(r&&!r.error)secPendClear('watch',s.class_nbr);
     }
     else{ secPendClear('watch',s.class_nbr); await sb.from('watch_sections').delete().eq('user_id',sbUser.id).eq('class_nbr',String(s.class_nbr)).eq('term',mcTerm()); }
