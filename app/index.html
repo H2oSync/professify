@@ -1262,6 +1262,7 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--blue);outline-offse
 .pc-nm{font-size:14.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .pc-row.done .pc-nm{color:var(--ink)}
 .pc-pf{font-size:13px;font-weight:800;color:var(--muted);margin:-4px 0 6px}
+.pc-took{font:inherit;font-weight:900;color:var(--blue-t,var(--blue));background:none;border:0;padding:10px 4px;margin:-10px 0}
 .pc-add{font-size:13px;font-weight:900;color:var(--blue-t,var(--blue));min-height:44px;margin:-12px 0 -6px;padding:0 12px 0 0}
 .pc-oth{margin-top:14px;padding:12px 16px}
 .pc-hd{display:flex;justify-content:space-between;align-items:baseline;font-size:17px;font-weight:900;padding:4px 0}
@@ -2728,10 +2729,10 @@ TC.joinWaitlist = async function (email) {
    classes are yours; my_sections adds the section (the desktop's pushMySecToDb shape). ---- */
 TC.addMyClass = async function (code, secId) {
   const sb = TC.client(), me = TC.user.id, s = secId ? SEC[secId] : null;
-  let r = await sb.from('saved_classes').upsert({ user_id: me, term: CFG.TERM, code });
+  let r = await sb.from('saved_classes').upsert({ user_id: me, term: CFG.TERM, code }, { onConflict: 'user_id,code,term' });
   if (r.error) return dbSay(r.error, 'Couldn’t add ' + code + '.');
   if (s) {
-    r = await sb.from('my_sections').upsert({ user_id: me, term: CFG.TERM, code, class_nbr: String(s.id), section: s.sec || null, instructor: s.instructor || null, days: s.rawDays || null, status: 'enrolled', wl_pos: null });
+    r = await sb.from('my_sections').upsert({ user_id: me, term: CFG.TERM, code, class_nbr: String(s.id), section: s.sec || null, instructor: s.instructor || null, days: s.rawDays || null, status: 'enrolled', wl_pos: null }, { onConflict: 'user_id,class_nbr,term' });
     if (r.error) { await loadMine(); return dbSay(r.error, code + ' is added, but its section didn’t save — pick it again from the class page.'); }
   }
   await loadMine(); return null;
@@ -2741,10 +2742,10 @@ TC.addMyClass = async function (code, secId) {
    class number, so a failure never leaves the class with no section. */
 TC.addMySection = async function (s, o) {
   const sb = TC.client(), me = TC.user.id; o = o || {};
-  let r = await sb.from('saved_classes').upsert({ user_id: me, term: CFG.TERM, code: s.code });
+  let r = await sb.from('saved_classes').upsert({ user_id: me, term: CFG.TERM, code: s.code }, { onConflict: 'user_id,code,term' });
   if (r.error) return dbSay(r.error, 'Couldn’t add ' + s.code + '.');
   const wl = o.status === 'waitlisted';
-  r = await sb.from('my_sections').upsert({ user_id: me, term: CFG.TERM, code: s.code, class_nbr: String(s.id), section: s.sec || null, instructor: s.instructor || null, days: s.rawDays || null, status: wl ? 'waitlisted' : 'enrolled', wl_pos: wl && o.wlPos ? o.wlPos : null });
+  r = await sb.from('my_sections').upsert({ user_id: me, term: CFG.TERM, code: s.code, class_nbr: String(s.id), section: s.sec || null, instructor: s.instructor || null, days: s.rawDays || null, status: wl ? 'waitlisted' : 'enrolled', wl_pos: wl && o.wlPos ? o.wlPos : null }, { onConflict: 'user_id,class_nbr,term' });
   if (r.error) {
     /* the class wasn't saved before: take the new saved row back too, so it never shows as "No section yet" */
     if (o.hadSaved === false) await sb.from('saved_classes').delete().eq('user_id', me).eq('term', CFG.TERM).eq('code', s.code);
@@ -2770,11 +2771,11 @@ TC.restoreMyCode = async function (code, snap, added) {
   const back = snap.rows.filter(x => x.class_nbr != null && String(x.class_nbr) !== '');
   let r = { error: null };
   for (const x of back) {
-    r = await sb.from('my_sections').upsert({ user_id: me, term: CFG.TERM, code: x.code, class_nbr: String(x.class_nbr), section: x.section == null ? null : x.section, instructor: x.instructor == null ? null : x.instructor, days: x.days == null ? null : x.days, status: x.status || 'enrolled', wl_pos: x.wl_pos == null ? null : x.wl_pos });
+    r = await sb.from('my_sections').upsert({ user_id: me, term: CFG.TERM, code: x.code, class_nbr: String(x.class_nbr), section: x.section == null ? null : x.section, instructor: x.instructor == null ? null : x.instructor, days: x.days == null ? null : x.days, status: x.status || 'enrolled', wl_pos: x.wl_pos == null ? null : x.wl_pos }, { onConflict: 'user_id,class_nbr,term' });
     if (r.error) break;
   }
   if (!r.error && added && !back.some(x => String(x.class_nbr) === String(added))) r = await sb.from('my_sections').delete().eq('user_id', me).eq('term', CFG.TERM).eq('code', code).eq('class_nbr', String(added));
-  if (!r.error) r = snap.saved ? await sb.from('saved_classes').upsert({ user_id: me, term: CFG.TERM, code }) : await sb.from('saved_classes').delete().eq('user_id', me).eq('term', CFG.TERM).eq('code', code);
+  if (!r.error) r = snap.saved ? await sb.from('saved_classes').upsert({ user_id: me, term: CFG.TERM, code }, { onConflict: 'user_id,code,term' }) : await sb.from('saved_classes').delete().eq('user_id', me).eq('term', CFG.TERM).eq('code', code);
   await loadMine(); return r.error ? dbSay(r.error, 'Couldn’t undo that.') : null;
 };
 function mineSnap(code) {
@@ -8407,11 +8408,11 @@ TC.saveDpr = async function (r) {
     if (q.error) return dbSay(q.error, 'Couldn’t save your past classes — nothing was added.');
   }
   if (now.length) {
-    const q = await TC.client().from('saved_classes').upsert(now.map(x => ({ user_id: TC.user.id, term: nowTerm().code, code: x.cur })));
+    const q = await TC.client().from('saved_classes').upsert(now.map(x => ({ user_id: TC.user.id, term: nowTerm().code, code: x.cur })), { onConflict: 'user_id,code,term' });
     if (q.error) { await TC.reloadHistory(); return dbSay(q.error, 'Past classes saved, but this term’s classes didn’t — add them from Explore (tap + on a class).'); }
   }
   if (next.length) {
-    const q = await TC.client().from('saved_classes').upsert(next.map(x => ({ user_id: TC.user.id, term: CFG.TERM, code: x.cur })));
+    const q = await TC.client().from('saved_classes').upsert(next.map(x => ({ user_id: TC.user.id, term: CFG.TERM, code: x.cur })), { onConflict: 'user_id,code,term' });
     if (q.error) { await Promise.all([TC.reloadHistory(), loadMine()]); return dbSay(q.error, `Saved the rest, but your ${CFG.TERM_LABEL} classes didn’t — add them from Explore (tap + on a class).`); }
   }
   await Promise.all([TC.reloadHistory(), loadMine()]); loadRateList();
@@ -10254,7 +10255,7 @@ function pcSlot(s) {
   /* no class to log (a GE area, an elective) or one we can't check: the circle checks the row off (flowchart-mark-done, 2026-10-09) */
   const markable = !tickable && !s.choice && (s.mine || s.state === 'cant' || (s.state === 'need' && !s.code));
   const dot = markable
-    ? `<button class="pc-dot tc-tick tc-mark ${s.state}" style="color:${c[1]};background:${c[2]}" data-a="plMark" data-x="${esc(s.id)}" aria-pressed="${!!s.mine}" aria-label="Mark ${esc(code || name || s.title)} done" ${(UI.busyMarks || {})[s.id] ? 'disabled' : ''}>${c[0]}</button>`
+    ? `<button class="pc-dot tc-tick tc-mark ${s.state}" style="color:${c[1]};background:${c[2]}" data-a="plMark" data-x="${esc(s.id)}" aria-pressed="${!!s.mine}" aria-label="I took ${esc(code || name || s.title)}" ${(UI.busyMarks || {})[s.id] ? 'disabled' : ''}>${c[0]}</button>`
     : tickable
     ? `<button class="pc-dot tc-tick ${s.state}" style="color:${c[1]};background:${c[2]}" data-a="plTick" data-x="${esc(s.id)}" aria-label="${quick ? 'Undo: ' + esc(s.by) + ' taken' : 'I took ' + esc(s.choice ? s.title : code)}" ${UI.busy.tick === s.id ? 'disabled' : ''}>${c[0]}</button>`
     : `<span class="pc-dot ${s.state}" style="color:${c[1]};background:${c[2]}" role="img" aria-label="${c[3]}">${c[0]}</span>`;
@@ -10268,7 +10269,8 @@ function pcSlot(s) {
   const cn = String(s.note || '').replace(/\s*concentration\s*$/i, ''), nOpt = (s.choice || []).length;
   const kind = s.ck === 'req' ? `Required · ${esc(cn)}` : s.ck === 'one' ? `Required · ${esc(cn)} · either one` : s.ck === 'el' ? `Elective · ${esc(cn)}${nOpt > 1 ? ` · any of ${nOpt}` : s.hint && !nOpt ? ` · ${esc(s.hint)}` : ''}` : s.ck === 'conc' ? `Concentration · ${esc(cn)}` : '';
   const kindTag = kind ? `<span class="pc-kind">${kind}</span>` : '';
-  const line = s.mine ? '<span class="pc-pf tc-mine">Marked done by you</span>' : s.rep ? '<span class="pc-pf">On your report</span>' : (s.state === 'done' || s.state === 'taking') && cls ? pcLine(pcK(cls), s.state, row) : '';
+  const took = !s.mine && s.selfMark && s.state === 'need' ? `<span class="pc-pf">Not taken yet · <button class="pc-took" data-a="plMark" data-x="${esc(s.id)}">I took this</button></span>` : '';
+  const line = took || s.mine ? took || `<span class="pc-pf tc-mine">Marked done by you · <button class="pc-took" data-a="plMark" data-x="${esc(s.id)}">Undo</button></span>` : s.rep ? '<span class="pc-pf">On your report</span>' : (s.state === 'done' || s.state === 'taking') && cls ? pcLine(pcK(cls), s.state, row) : '';
   const pick = s.choice && s.state === 'need' && UI.plPick === s.id
     ? `<div class="tc-pick"><div class="muted b" style="font-size:12.5px;width:100%">Which one did you take?</div>${s.choice.map(o => `<button class="tc-pickb" data-a="plTickCode" data-x="${esc(o)}" data-y="${esc(s.id)}"><span class="tc-ccode">${esc(o)}</span>${esc(courseName(o))}</button>`).join('')}</div>` : '';
   return `<div class="pc-row ${s.state}">${dot}<div class="pc-tx">${act ? `<button class="pc-main" ${act}>${main}</button>` : `<div class="pc-main">${main}</div>`}${kindTag}${line}</div></div>${pick}`;

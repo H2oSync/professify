@@ -33401,7 +33401,7 @@ async function loadMySavedClasses(){
   }
   try{
     const ops=[];
-    if(toPush.length)ops.push(sb.from('saved_classes').upsert(toPush));
+    if(toPush.length)ops.push(sb.from('saved_classes').upsert(toPush, { onConflict: 'user_id,code,term' }));
     /* THE BULK DELETE IS GONE — 2026-09-12. It read:
            if(toDrop.length)ops.push(sb.from('saved_classes').delete()
              .eq('user_id',sbUser.id).in('code',toDrop));
@@ -33429,7 +33429,7 @@ async function pushMyClassToDb(code,add){
   if(!backendReady()||typeof sbUser==='undefined'||!sbUser)return true;
   try{
     const {error}= add
-      ? await sb.from('saved_classes').upsert({user_id:sbUser.id,term:mcTerm(),code})
+      ? await sb.from('saved_classes').upsert({user_id:sbUser.id,term:mcTerm(),code}, { onConflict: 'user_id,code,term' })
       : await sb.from('saved_classes').delete().eq('user_id',sbUser.id).in('code',[code].concat((window._mcRawCode&&window._mcRawCode[code])?[window._mcRawCode[code]]:[])).eq('term',mcTerm());
     return !error;
   }catch(e){ return false; }
@@ -33443,7 +33443,7 @@ async function syncSavedSection(code){
     var m=(typeof myClassMeta!=='undefined')?myClassMeta[code]:null;
     var crn=(m&&Array.isArray(m.secs)&&m.secs[0]&&m.secs[0].crn)?String(m.secs[0].crn):null;
     if(!crn)return;
-    await sb.from('saved_classes').upsert({user_id:sbUser.id,term:mcTerm(),code:code,class_nbr:crn});
+    await sb.from('saved_classes').upsert({user_id:sbUser.id,term:mcTerm(),code:code,class_nbr:crn}, { onConflict: 'user_id,code,term' });
   }catch(e){ /* class_nbr column not added yet — ignore; course-level row is unaffected */ }
 }
 /* ============ SECTION SYNC (my_sections + watch_sections) ============
@@ -33465,7 +33465,7 @@ async function pushMySecToDb(code,rec){
   if(!backendReady()||typeof sbUser==='undefined'||!sbUser||!rec||!rec.crn)return;
   secPendMark('my',rec.crn);
   try{
-    var r=await sb.from('my_sections').upsert({user_id:sbUser.id,term:mcTerm(),code:code,class_nbr:String(rec.crn),section:rec.section||null,instructor:rec.prof||null,days:rec.days||null,status:(rec.status==='waitlisted'?'waitlisted':'enrolled'),wl_pos:(rec.status==='waitlisted'?(rec.wlPos||null):null)});
+    var r=await sb.from('my_sections').upsert({user_id:sbUser.id,term:mcTerm(),code:code,class_nbr:String(rec.crn),section:rec.section||null,instructor:rec.prof||null,days:rec.days||null,status:(rec.status==='waitlisted'?'waitlisted':'enrolled'),wl_pos:(rec.status==='waitlisted'?(rec.wlPos||null):null)}, { onConflict: 'user_id,class_nbr,term' });
     if(r&&!r.error)secPendClear('my',rec.crn);
   }
   catch(e){ /* table may not exist yet */ }
@@ -36093,7 +36093,7 @@ window.confirmDprImport=async function(){
       _nowRows.forEach(function(r){ var c=r.cur||r.code; if(c&&NOW_MINE.classes.indexOf(c)<0&&_add.indexOf(c)<0)_add.push(c); });
       if(_add.length){
         try{
-          var _w=await sb.from('saved_classes').upsert(_add.map(function(c){ return {user_id:sbUser.id,term:_nt,code:c}; }));
+          var _w=await sb.from('saved_classes').upsert(_add.map(function(c){ return {user_id:sbUser.id,term:_nt,code:c}; }), { onConflict: 'user_id,code,term' });
           if(_w.error)throw _w.error;
           _add.forEach(function(c){ NOW_MINE.classes.push(c); }); addedNow+=_add.length;
           try{ localStorage.setItem(nowMineKey(),JSON.stringify(NOW_MINE)); }catch(e){} try{ nowAfterLoad(); }catch(e){}
@@ -37548,7 +37548,7 @@ async function wlPush(code,pos){
     if(typeof sb==='undefined'||!sb||typeof sbUser==='undefined'||!sbUser)return 'signedout';
     var slow={__slow:1};
     var r=await Promise.race([
-      sb.from('saved_classes').upsert({user_id:sbUser.id,term:mcTerm(),code:code,waitlist_pos:pos}),
+      sb.from('saved_classes').upsert({user_id:sbUser.id,term:mcTerm(),code:code,waitlist_pos:pos}, { onConflict: 'user_id,code,term' }),
       new Promise(function(res){ setTimeout(function(){res(slow);},WL_PUSH_MS); })
     ]);
     if(r===slow)return 'slow';

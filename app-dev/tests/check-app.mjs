@@ -4698,7 +4698,7 @@ tests.planner = async () => {
   let t = await withLeft(page);
   /* 2026-10-10 (Tate's option A, simple): one number and one bar — the desktop's ledger behind it */
   const lg = await page.evaluate(() => { const L = TCPL.ledger(), c = (() => { const g = plGate(); if (g.html) return null; const L = g.L, X = auditLines(TC.audit, L), R = L ? planRank(L) : X ? { audit: true, X, all: [], bare: true } : null; if (!R || R.done) return null; const o = document.getElementById('__lc'); if (o) o.remove(); const d = document.createElement('div'); d.id = '__lc'; d.style.cssText = 'position:absolute;left:-10000px;top:0;width:390px'; const ro = UI.plReqOpen; UI.plReqOpen = new Proxy({}, { get: () => true, has: () => true }); try { d.innerHTML = plLeftCard(R, L, /^[ABC]$/.test(UI.plPlan) ? UI.plPlan : 'A'); } finally { UI.plReqOpen = ro; } document.body.appendChild(d); const c0 = d.firstElementChild; if (c0) [...d.children].slice(1).forEach(x => c0.appendChild(x)); return c0; })(), bar = c && c.querySelector('.pll-bar'), b = bar && bar.querySelector('i.f'); setTimeout(() => document.getElementById('__lc')?.remove()); return { F: L.F, N: L.N, T: L.T, cant: L.grid.flatMap(x => x.slots).filter(s => s.state === 'cant').length, w: b && b.style.width, label: bar && bar.getAttribute('aria-label') }; });
-  ok(/2 filled\s*4 in progress\s*27 left on your flowchart/.test(t) && lg.F === 2 && lg.N === 33 && lg.T === 4 && lg.w === '6.1%' && lg.label === '2 filled, 4 in progress, 27 left on your flowchart of 33', 'planner: the desktop’s ledger — 2 filled (31 + the 2 choice slots, checked since 2026-10-02), 4 in progress (one via the ENGL 1134 waiver), 27 left of 33; the bar’s filled part is 2/33', lg);
+  ok(/2 filled\s*4 in progress\s*30 left on your flowchart/.test(t) && lg.F === 2 && lg.N === 36 && lg.T === 4 && lg.w === '5.6%' && lg.label === '2 filled, 4 in progress, 30 left on your flowchart of 36', 'planner: the desktop’s ledger — 2 filled (31 + the 2 choice slots, checked since 2026-10-02), 4 in progress (one via the ENGL 1134 waiver), 30 left of 36 (the 3 spots we can’t check count as not taken since 2026-10-30); the bar’s filled part is 2/36', lg);
   ok(!/requirements filled|We can’t check/.test(t) && !/in progress/.test(t.replace(/\+ \d+ in progress|· \d+ in progress|\b\d+ in progress\b/g, '')), 'past: no legend or can’t-check lines — the number, then Major · GE · Concentration · Electives (in progress only as a row’s “+ N in progress”, Tate 2026-10-11)', (t.match(/[\s\S]{0,60}(in progress|We can’t)[\s\S]{0,60}/) || [''])[0]);
   /* 2026-10-06: the ledger, flowchart and record are Past classes; the full Still need list is folded at the foot of the Planner */
   await click(page, '[data-a="schedTab"][data-x="planner"]'); await tick(page, 600);
@@ -4710,7 +4710,7 @@ tests.planner = async () => {
   for (let i = 0; i < 6; i++) { const closed = page.locator('[data-a="plYear"][aria-expanded="false"]'); if (!(await closed.count())) break; await closed.first().click(); await tick(page, 150); }
   /* no key any more: each mark says what it is to a screen reader, and the can't-check spots are rows, not a list */
   const marks = await page.evaluate(() => ({ done: [...document.querySelectorAll('.pc-row.done .pc-dot')].map(d => d.innerText + '|' + d.getAttribute('aria-label')), taking: [...document.querySelectorAll('.pc-row.taking .pc-dot')].map(d => d.innerText + '|' + d.getAttribute('aria-label')), cant: [...document.querySelectorAll('.pc-row.cant .pc-dot')].map(d => d.innerText + '|' + d.getAttribute('aria-label')), key: !!document.querySelector('.tc-key') }));
-  ok(!marks.key && marks.done.length && marks.done.every(x => x === '✓|Done') && marks.taking.length === 4 && marks.taking.every(x => x === '◐|In progress') && marks.cant.length === lg.cant && lg.cant === 10 && marks.cant.every(x => /^\?\|Mark .+ done$/.test(x)), 'past: ✓ Done, ◐ In progress (all 4), ? Can’t check (all 10, as rows, each a circle to check off) — no key', marks);
+  ok(!marks.key && marks.done.length && marks.done.every(x => x === '✓|Done') && marks.taking.length === 4 && marks.taking.every(x => x === '◐|In progress') && marks.cant.length === lg.cant && lg.cant === 7 && marks.cant.every(x => /^\?\|I took .+$/.test(x)), 'past: ✓ Done, ◐ In progress (all 4), ? only on the 7 spots of a concentration not chosen yet (the others are not taken since 2026-10-30), each a circle to check off — no key', marks);
   ok(await page.evaluate(() => { const r = [...document.querySelectorAll('.pc-row.cant')]; return r.length > 0 && r.every(x => { const e = x.querySelector('.pc-sr'); return !!e && /we can’t check this from your record/.test(e.textContent) && e.getBoundingClientRect().width <= 1; }); }), 'past: a can’t-check row says so to a screen reader (no words on screen)');
   /* (2026-10-13) the Still need card's shapes, labels and prerequisite line left with it */
   const t3 = await text(page);
@@ -4728,7 +4728,7 @@ tests.planner = async () => {
   const w = log.writes.filter(x => x.table === 'class_history');
   ok(w.length === 1 && w[0].m === 'POST' && w[0].body.code === 'BUS 2214' && w[0].body.term === 'Fall' && w[0].body.year === 2025 && w[0].body.user_id === FX.ME.id && !('grade' in w[0].body), 'planner: logging a class upserts the desktop’s class_history row (no grade)', w);
   t = await withLeft(page);
-  ok(/3 filled\s*4 in progress\s*26 left on your flowchart/.test(t), 'planner: the ledger moves when a class is logged (3 filled, 26 left)', (t.match(/\d+ filled\s*\d+ in progress\s*\d+ left/) || [''])[0]);
+  ok(/3 filled\s*4 in progress\s*29 left on your flowchart/.test(t), 'planner: the ledger moves when a class is logged (3 filled, 29 left)', (t.match(/\d+ filled\s*\d+ in progress\s*\d+ left/) || [''])[0]);
   await click(page, '[data-a="pcOpen"][data-x="PHIL 3331|Spring|2026"]'); await tick(page, 200);
   await click(page, '#sheet [data-a="pcAskRemove"][data-x="PHIL 3331|Spring|2026"]');
   ok(/Remove PHIL 3331, Spring 2026\?/.test(await page.locator('#sheet').innerText()), 'planner: Remove names the class and its term');
@@ -5027,11 +5027,11 @@ tests.flowchartMarks = async () => {
   const cell = id => o.page.locator(`.pc-row:has([data-a="plMark"][data-x="${id}"])`);
   const b0 = await filled(o.page);
   const lab0 = await cell(g.ge.id).locator('.tc-mark').getAttribute('aria-label');
-  ok(await cell(g.ge.id).count() === 1 && /^Mark .* done$/.test(lab0) && await cell(g.ge.id).locator('.tc-mark').getAttribute('aria-pressed') === 'false', 'marks: a GE area to do has a circle to check off (a toggle, not pressed)', lab0);
+  ok(await cell(g.ge.id).count() === 1 && /^I took .+$/.test(lab0) && await cell(g.ge.id).locator('.tc-mark').getAttribute('aria-pressed') === 'false', 'marks: a GE area to do has a circle to check off (a toggle, not pressed)', lab0);
   await click(o.page, `[data-a="plMark"][data-x="${g.ge.id}"]`); await tick(o.page, 600);
   let w = o.log.writes.filter(x => x.table === 'flowchart_marks');
   const c1 = await cell(g.ge.id).evaluate(e => ({ done: e.classList.contains('done'), dot: e.querySelector('.tc-mark').innerText.trim(), mine: (e.querySelector('.tc-mine') || {}).textContent || '', pressed: e.querySelector('.tc-mark').getAttribute('aria-pressed'), label: e.querySelector('.tc-mark').getAttribute('aria-label') }));
-  ok(c1.done && c1.dot === '✓' && c1.mine === 'Marked done by you' && c1.pressed === 'true' && c1.label === lab0, 'marks: one tap — ✓, “Marked done by you”, pressed (same label)', c1);
+  ok(c1.done && c1.dot === '✓' && /^Marked done by you/.test(c1.mine) && c1.pressed === 'true' && c1.label === lab0, 'marks: one tap — ✓, “Marked done by you”, pressed (same label)', c1);
   ok(await cell(g.ge.id).evaluate(e => !e.querySelector('.pc-add') && e.querySelector('.pc-main').tagName === 'DIV' && !e.querySelector('.pc-main').hasAttribute('data-a')), 'marks: a checked-off row is not a class — no sheet to open, no “+ Professor”');
   ok(await filled(o.page) === b0 + 1, 'marks: the requirements count moves by one', { b0, now: await filled(o.page) });
   ok(w.length === 2 && w[0].m === 'DELETE' && new RegExp('slot_id=eq\\.' + g.ge.id).test(w[0].query) && w[1].m === 'POST' && w[1].body.user_id === FX.ME.id && w[1].body.major === g.major && w[1].body.slot_id === g.ge.id && w[1].body.label === g.ge.title, 'marks: saved to the account with the row’s words (any old row for it replaced first)', w.map(x => [x.m, x.body, x.query]));
@@ -5114,7 +5114,7 @@ tests.plannerGrid = async () => {
   ok(bub.join('|') === 'FALL|SPRING', 'grid: an open year shows its Fall and Spring as bubbles', bub);
   const heads = await page.locator('.pc-year').allInnerTexts();
   const judged = heads.reduce((a, h) => a + (+((h.match(/of (\d+)/) || [])[1] || 0)), 0);
-  ok(judged === 33 && heads.every(h => /^Year \d\s*\d+ of \d+$/.test(h.trim())), 'grid: the years add up to the ledger’s 33 — each just “Year N · d of n”', heads);
+  ok(judged === 36 && heads.every(h => /^Year \d\s*\d+ of \d+$/.test(h.trim())), 'grid: the years add up to the ledger’s 36 — each just “Year N · d of n”', heads);
   ok(await page.locator('.pc-open').count() === 1 && await page.locator('[data-a="plYear"][data-x="2"]').getAttribute('aria-expanded') === 'false', 'grid: later years start folded');
   await click(page, '[data-a="plYear"][data-x="2"]');
   ok(await page.locator('.pc-open').count() === 2 && await page.locator('.pc-open').nth(1).locator('.pc-row').count() > 3, 'grid: tapping a year opens it');
@@ -5146,7 +5146,7 @@ tests.pastSimple = async () => {
   ok(phil && phil.pf === 'Dov Mockridge' && !phil.add, 'past: a class with its professor shows the name, no button', phil);
   const taking = rows.filter(r => r.st === 'taking');
   ok(taking.length && taking.every(r => !r.add), 'past: taking now has nothing to add', taking);
-  ok(rows.filter(r => r.st === 'need' || r.st === 'cant').every(r => !r.pf && !r.add), 'past: spots still to take, and ones it can’t check, are one line', rows.filter(r => (r.st === 'need' || r.st === 'cant') && (r.pf || r.add)));
+  ok(rows.filter(r => r.st === 'need' || r.st === 'cant').every(r => (!r.pf || r.pf === 'Not taken yet · I took this') && !r.add) && rows.filter(r => r.pf === 'Not taken yet · I took this').length === 3, 'past: spots still to take, and ones it can’t check, are one line — except the 3 we can’t check, which say “Not taken yet · I took this” (2026-10-30)', rows.filter(r => (r.st === 'need' || r.st === 'cant') && (r.pf || r.add)));
   /* Other classes: the record's classes with no spot; four, then See all */
   const oth = await page.evaluate(() => { const c = document.querySelector('.pc-oth'); return c && { head: c.querySelector('.pc-hd').innerText.replace(/\s+/g, ' '), rows: [...c.querySelectorAll('.pc-orow')].map(r => ({ main: r.querySelector('.pc-main').innerText.replace(/\s+/g, ' '), add: !!r.querySelector('.pc-add'), btn: r.querySelector('.pc-main').tagName })), more: (c.querySelector('[data-a="pcAll"]') || {}).innerText || '' }; });
   const n = oth && +oth.head.replace(/\D+/g, '');

@@ -2644,11 +2644,20 @@ var PDFJS_BASE='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/';
           return;
         }
         if (!slotCheckable(sl)) {
-          if (isConc) {
+          /* a concentration not chosen yet: no row of its own until it is */
+          if (isConc && /^Concentration course$/i.test(String(sl.title || ''))) {
             concUnchosen++;
             if (!concNote) concNote = sl.note || '';
             if (!concLabel) { var tl = String(sl.title || ''); concLabel = /^Concentration course$/i.test(tl) ? 'Concentration' : tl.replace(/\s*course\s*$/i, ''); }
-          } else cant.push(sl);
+            return;
+          }
+          /* (Tate, 2026-10-30) anything else we can't check is NOT taken until the student says so —
+             an empty circle in its row and in "left", that one tap ("I took this") checks off */
+          var rowX;
+          if (isConc) { var cnX = String(sl.note || '').replace(/\s*concentration\s*$/i, ''); if (!rows.conc) rows.conc = { label: (cnX ? cnX + ' concentration' : 'Concentration'), f: 0, t: 0, n: 0 }; else if (rows.conc.label === 'Concentration' && cnX) rows.conc.label = cnX + ' concentration'; rowX = rows.conc; }
+          else rowX = sl.type === 'ge' ? rows.ge : sl.type === 'course' ? rows.major : rows.el;
+          rowX.n++; cell.state = 'need'; cell.selfMark = true;
+          needU.push({ title: sl.title || '', type: sl.type, id: sl.id, ti: ti, area: null, units: sl.units, mark: true });
           return;
         }
         var row;
