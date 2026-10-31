@@ -158,11 +158,18 @@ const noOverflow = p => p.evaluate(() => { const w = document.documentElement.cl
   ok(!(await page.evaluate(() => UI.sheet)) && s1.snooze - now > 29.9 * 864e5 && s1.snooze - now <= 30 * 864e5, 'Not now: closes, and not again for 30 days', s1);
   ok(await page.evaluate(() => ctAsk('later')) === false, 'Not now: a later ask does nothing');
   await page.evaluate(() => ctSet({ snooze: Date.now() - 1 }));
+  ok(await page.evaluate(() => ctAsk('later')) === false, 'one pop-up a day: not again the same day');
+  await page.evaluate(() => localStorage.removeItem('tc_pop_day'));
   ok(await page.evaluate(() => ctAsk('later')) === true, '30 days later it may ask once more');
   await click(page, '[data-a="ctConnect"]'); await settle(page, 600);
   ok((await st(page)).on === true && await page.evaluate(() => UI.sheet.type) === 'ctResults', 'Connect from the pop-up: results');
   await page.evaluate(() => { UI.sheet = null; render(true); ctSet({ snooze: 0 }); });
   ok(await page.evaluate(() => ctAsk('later')) === false, 'connected: never asks again');
+  await page.evaluate(() => { localStorage.removeItem('tc_pop_day'); ctSet({ on: false, snooze: 0, k: 3 }); });
+  ok(await page.evaluate(() => ctAsk('later')) === false && await page.evaluate(() => TC.pops[0].due('open')) === null, 'asked 3 times in all: never again');
+  await page.evaluate(() => { ctSet({ k: 2 }); localStorage.setItem('tc_pop_day', popToday()); });
+  ok(await page.evaluate(() => ctAsk('onboarding')) === true, 'end of sign-up: may follow the notifications pop-up the same day');
+  await page.evaluate(() => { UI.sheet = null; render(true); });
   ok(log.errors.length === 0, 'part 4: no page errors', log.errors);
   await close();
 }

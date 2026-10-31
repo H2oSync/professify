@@ -16,3 +16,5 @@ check-native-open-settings-2026-10-30.py   app-dev/tests/check-native.mjs
 edit-tests-contacts-2026-10-30.py          app-dev/tests/check-app.mjs
 edit-tests-dpr-stress-contacts-2026-10-30.py app-dev/tests/check-app.mjs
 ios-contacts-wiring-2026-10-30.py      ios-app (on the Mac, then npm install && npx cap sync ios)
+popup-limits-2026-10-30.py             app/index.html
+edit-tests-popup-limits-2026-10-30.py  app-dev/tests

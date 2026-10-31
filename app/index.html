@@ -12060,6 +12060,11 @@ const PUSH_ASK = {
 PUSH_ASK.mute = PUSH_ASK.chat;
 const PUSH_OPENS_KEY = 'tc_app_opens', PUSH_SHOWN_KEY = 'tc_push_ask_n', PUSH_OFF_KEY = 'tc_push_off_at';
 const PUSH_ASK_MAX = 3, PUSH_OFF_EVERY = 30 * 864e5, POP_AWAY = 30 * 60000;
+/* (2026-10-30) one pop-up a day, and caps: "Notifications are off" twice in all, "Connect contacts" three times */
+const POP_DAY_KEY = 'tc_pop_day', PUSH_OFFN_KEY = 'tc_push_off_n', PUSH_OFF_MAX = 2, CT_ASK_MAX = 3;
+function popToday() { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+function popDayUsed() { try { return localStorage.getItem(POP_DAY_KEY) === popToday(); } catch (e) { return false; } }
+function popMarkDay() { try { localStorage.setItem(POP_DAY_KEY, popToday()); } catch (e) {} }
 function lsNum(k) { try { return +localStorage.getItem(k) || 0; } catch (e) { return 0; } }
 function lsSet(k, v) { try { localStorage.setItem(k, String(v)); } catch (e) {} }
 /* ---- One pop-up per app open (2026-10-30) ----
@@ -12072,6 +12077,7 @@ const POPS = [], POPQ = { open: 0, shown: -1, busy: 0 };
 function popClear(at) {
   if (!TC.ready || TC.phase !== 'ok' || UI.sheet || UI.champ) return false;
   if (at === 'onboarding') return true;
+  if (popDayUsed()) return false;
   const st = S.stack[S.tab] || [];
   return st.length === 1 && !Object.values(S.stack).some(x => x.some(e => e.s === 'onb'));   /* a tab's own screen, not mid-setup */
 }
@@ -12093,7 +12099,8 @@ TC.popQueue = async function (at, kind) {
 TC.pops = POPS;
 function popAppOpened() { POPQ.open++; lsSet(PUSH_OPENS_KEY, lsNum(PUSH_OPENS_KEY) + 1); setTimeout(() => TC.popQueue('open'), 1200); }
 function pushAskShow(reason) {
-  if (reason === 'off') lsSet(PUSH_OFF_KEY, Date.now());
+  popMarkDay();
+  if (reason === 'off') { lsSet(PUSH_OFF_KEY, Date.now()); lsSet(PUSH_OFFN_KEY, lsNum(PUSH_OFFN_KEY) + 1); }
   else { lsSet(PUSH_SNOOZE_KEY, Date.now() + 7 * 864e5); if (reason === 'onboarding') lsSet(PUSH_SHOWN_KEY, lsNum(PUSH_SHOWN_KEY) + 1); }
   UI.sheet = { type: 'pushAsk', reason }; render(true);
 }
@@ -12103,7 +12110,7 @@ POPS.push({ kind: 'push',
     if (at === 'open' && !popLaterOpen()) return null;
     const st = await pushPerm();
     if (st === 'prompt' || st === 'prompt-with-rationale') return Date.now() >= lsNum(PUSH_SNOOZE_KEY) && lsNum(PUSH_SHOWN_KEY) < PUSH_ASK_MAX ? 'onboarding' : null;
-    if (st === 'denied') return Date.now() - lsNum(PUSH_OFF_KEY) >= PUSH_OFF_EVERY ? 'off' : null;
+    if (st === 'denied') return lsNum(PUSH_OFFN_KEY) < PUSH_OFF_MAX && Date.now() - lsNum(PUSH_OFF_KEY) >= PUSH_OFF_EVERY ? 'off' : null;
     return null;
   },
   show: reason => pushAskShow(reason) });
@@ -12111,8 +12118,9 @@ TC.pushAsk = async function (reason) {
   if (!PUSH.native() || !TC.ready) return;
   if (reason === 'onboarding') return TC.popQueue('onboarding');   /* end of setup: through the queue, so it and "Connect contacts" take turns */
   const st = await pushPerm();
-  if (UI.sheet || UI.champ) return;
+  if (UI.sheet || UI.champ || popDayUsed()) return;
   if (st === 'denied') {
+    if (lsNum(PUSH_OFFN_KEY) >= PUSH_OFF_MAX) return;
     /* right after a tap that needs them: watching a seat or unmuting a chat says so once a run; a sent message, once a month */
     if (reason === 'seat' || reason === 'mute' ? PUSH.offAsked : Date.now() - lsNum(PUSH_OFF_KEY) < PUSH_OFF_EVERY) return;
     PUSH.offAsked = 1; pushAskShow('off'); return;
@@ -12343,8 +12351,9 @@ function ctLast4() { try { return localStorage.getItem('tc_ct_last4:' + (TC.user
 /* The pop-up: once, and only where Connect can work (the iPhone app, or the preview). */
 function ctAsk(why) {
   if (!TC.user || TC.phase !== 'ok' || !ctAvail() || UI.sheet || UI.champ) return false;
-  const st = ctState(); if (st.on || Date.now() < (+st.snooze || 0)) return false;
-  ctSet({ snooze: Date.now() + CT_SNOOZE, asked: Date.now(), why });   /* closing it any way counts as "Not now" */
+  const st = ctState(); if (st.on || Date.now() < (+st.snooze || 0) || (+st.k || 0) >= CT_ASK_MAX) return false;
+  if (why !== 'onboarding' && popDayUsed()) return false;
+  ctSet({ snooze: Date.now() + CT_SNOOZE, asked: Date.now(), why, k: (+st.k || 0) + 1 }); popMarkDay();   /* closing it any way counts as "Not now" */
   UI.ct = null; UI.sheet = { type: 'ctConnect', pop: true }; render(true); return true;
 }
 async function onbAsks() {
@@ -12361,7 +12370,7 @@ function ctLater() {
 /* on a later open it takes its turn in the pop-up queue, ahead of notifications (one pop-up per open) */
 POPS.unshift({ kind: 'contacts',
   due: at => { if (at !== 'open' || !TC.user || TC.phase !== 'ok' || UI.sheetNext) return null; const st = ctState(), e = cur();
-    return (+st.n || 0) >= 2 && !st.on && Date.now() >= (+st.snooze || 0) && ctAvail() && S.tab === 'home' && e && e.s === 'home' ? 'later' : null; },
+    return (+st.n || 0) >= 2 && !st.on && (+st.k || 0) < CT_ASK_MAX && Date.now() >= (+st.snooze || 0) && ctAvail() && S.tab === 'home' && e && e.s === 'home' ? 'later' : null; },
   show: why => ctAsk(why) });
 { const pal = TC.pushAfterLoad; TC.pushAfterLoad = async function () { const r = await pal.apply(this, arguments); try { ctLater(); } catch (e) {} return r; }; }
 { const pa = A.pushAllow; A.pushAllow = async function () { UI.sheetHold = 1; try { return await pa.apply(this, arguments); } finally { UI.sheetHold = 0; if (UI.sheetNext && !UI.sheet && !UI.champ) sheetNextSoon(); } }; }
