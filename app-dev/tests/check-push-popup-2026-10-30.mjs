@@ -25,7 +25,7 @@ const shim = (perm, { createdDaysAgo = null, ls = {} } = {}) => `
   window.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'ios', Plugins: { PushNotifications: P, StatusBar: { setStyle: () => Promise.resolve() } } };
   window.__vis = 'visible';
   /* the real "Connect contacts" pop-up (contacts-2026-10-30) also queues on an app open — these tests are about notifications, so it's done */
-  try { const s0 = JSON.parse(localStorage.getItem('sb-rqkndeqbcahozidniesn-auth-token') || 'null'); if (s0 && s0.user) localStorage.setItem('tc_ct:' + s0.user.id, JSON.stringify({ on: true })); } catch (e) {}
+  try { const s0 = JSON.parse(localStorage.getItem('sb-rqkndeqbcahozidniesn-auth-token') || 'null'); if (s0 && s0.user) localStorage.setItem('tc_ct:' + s0.user.id, JSON.stringify({ on: true, phOk: 1 })); } catch (e) {}   /* (2026-10-31) and "Add your number" is done */
   try { Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => window.__vis }); } catch (e) {}
   ${createdDaysAgo == null ? '' : `try { const k = 'sb-rqkndeqbcahozidniesn-auth-token', s = JSON.parse(localStorage.getItem(k)); s.user.created_at = new Date(${T0} - ${createdDaysAgo} * 864e5).toISOString(); localStorage.setItem(k, JSON.stringify(s)); } catch (e) {}`}
   ${Object.keys(ls).length ? `if (!sessionStorage.getItem('__lsDone')) { sessionStorage.setItem('__lsDone', '1'); const L = ${JSON.stringify(ls)}; for (const k in L) localStorage.setItem(k, String(${T0} + L[k])); }` : ''}
@@ -248,7 +248,7 @@ console.log('# Settings › Notifications when off: a button, not directions');
 
 console.log('# web (no Capacitor): never');
 {
-  const { page, close, log } = await openApp({ port: +(process.env.APP_PORT || 9061), init: "try{const k='sb-rqkndeqbcahozidniesn-auth-token',s=JSON.parse(localStorage.getItem(k));s.user.created_at='2026-01-01T00:00:00Z';localStorage.setItem(k,JSON.stringify(s));localStorage.setItem('tc_ct:'+s.user.id,JSON.stringify({on:true}));}catch(e){}" });
+  const { page, close, log } = await openApp({ port: +(process.env.APP_PORT || 9061), init: "try{const k='sb-rqkndeqbcahozidniesn-auth-token',s=JSON.parse(localStorage.getItem(k));s.user.created_at='2026-01-01T00:00:00Z';localStorage.setItem(k,JSON.stringify(s));localStorage.setItem('tc_ct:'+s.user.id,JSON.stringify({on:true,phOk:1}));}catch(e){}" });
   await readyOf(page); await run(page, 2500); await relaunch(page);
   ok(await sheetType(page) === null, 'web, 2nd open, old account: no pop-up');
   await page.evaluate(() => { TC.pushAsk('seat'); TC.pushAsk('onboarding'); TC.popQueue('open'); }); await run(page, 500);

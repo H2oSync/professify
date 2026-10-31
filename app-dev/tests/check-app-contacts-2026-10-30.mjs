@@ -47,14 +47,13 @@ const noOverflow = p => p.evaluate(() => { const w = document.documentElement.cl
   ok(sent.length === 1 && hashes.length === 9 && hashes.every(h => /^[0-9a-f]{64}$/.test(h)), 'connect: one call, 9 hashes (the sample book), all SHA-256 hex', { n: sent.length, h: hashes.length });
   ok(['+18055550101', '+18055550103', '+16195550105', '+17605550106', '+18585550107'].every(e => hashes.includes(sha(e))), 'connect: (805) 555-0101, +1 805 555 0103, 760.555.0106, 1 (858) 555-0107 → E.164 before hashing');
   ok(!/555|Jordan|Priya|Rivera/.test(JSON.stringify(sent)), 'connect: no number or name leaves the phone');
-  ok(/Your contacts/.test(t) && /On TermChamp · 4/.test(t) && /Invite · 6/.test(t), 'results: On TermChamp · 4 and Invite · 6 (matched people left out of Invite)', t);
+  ok(/^Contacts/.test(t) && /On TermChamp\s*4/.test(t) && /Invite to TermChamp/.test(t) && await page.locator('#sheet [data-a="ctInvite"]').count() === 6, 'results (2026-10-31, list A): On TermChamp 4 and 6 to invite (matched people left out of Invite)', t);
   ok(/@jrivera/.test(t) && /Friends/.test(t) && /Accept/.test(t) && await page.locator('#sheet [data-a="addFriend"]').count() === 2 && await page.locator('#sheet [data-a="ctAddAll"]').count() === 1, 'results: Add ×2, Friends, Accept, and Add all', t);
-  ok(await page.locator('#sheet [data-a="ctInvite"]').count() === 5 && /See all 6/.test(t), 'results: 5 to invite, then See all 6', t);
+  ok(await page.locator('#sheet [data-a="ctInvite"]').count() === 6 && !/See all/.test(t), 'results (2026-10-31): every contact to invite, A to Z (no See all)', t);
   ok(await page.locator('#sheet .ct-mine').count() === 1 && /Add your number so friends can find you too/.test(t), 'results: number not added → the one small row', t);
-  await page.locator('#sheet .sheet').screenshot({ path: SHOTS + '/results-sheet-light.png' });
+  await page.locator('#sheet .fullpg').screenshot({ path: SHOTS + '/results-sheet-light.png' });
   ok((await noOverflow(page)).bad.length === 0, 'results: nothing wider than 375px', await noOverflow(page));
-  await click(page, '#sheet [data-a="ctAll"]');
-  ok(await page.locator('#sheet [data-a="ctInvite"]').count() === 6 && !/See all/.test(await sheetText(page)), 'See all shows all 6');
+  ok(await page.locator('#sheet [data-a="ctInvite"]').count() === 6 && !/See all/.test(await sheetText(page)), 'all 6 listed without a See all');
   /* Add one, then Add all */
   await click(page, `#sheet [data-a="addFriend"][data-x="${NEWBIE.id}"]`); await settle(page, 500);
   let fr = log.writes.filter(w => w.table === 'friend_requests' && w.m === 'POST');
@@ -97,7 +96,7 @@ const noOverflow = p => p.evaluate(() => { const w = document.documentElement.cl
   ok(n.ask === 1 && n.reads === 1 && n.proj.phones && n.proj.emails && n.proj.name && !n.proj.image, 'native: asks iOS once, then reads names, numbers and emails (no photos)', n);
   ok(hashes.length === 5 && [sha('+18055550101'), sha('jr@example.com'), sha('+18055550199'), sha('+442079460958'), sha('nonum@calpoly.edu')].every(h => hashes.includes(h)), 'native: ext dropped, +44 kept, email lower-cased + trimmed, 911 and junk email dropped', hashes.length);
   let t = await sheetText(page);
-  ok(/On TermChamp · 1/.test(t) && /Invite · 1/.test(t) && /Quinn Ashby/.test(t) && !/No Number/.test(t), 'native: Jordan matched by email; Quinn to invite; an email-only contact can’t get a text', t);
+  ok(/On TermChamp\s*1/.test(t) && await page.locator('#sheet [data-a="ctInvite"]').count() === 1 && /Quinn Ashby/.test(t) && !/No Number/.test(t), 'native: Jordan matched by email; Quinn to invite; an email-only contact can’t get a text', t);
   ok(await page.locator('#sheet .ct-mine').count() === 0, 'number already saved → no "add your number" row');
   await page.evaluate(() => { window.__go = []; TC.ctGo = u => window.__go.push(u); });
   await click(page, '#sheet [data-a="ctInvite"]');
@@ -125,7 +124,7 @@ const noOverflow = p => p.evaluate(() => { const w = document.documentElement.cl
   const { page, close, log } = await openApp({ hook: (u, m) => { if (u.pathname === '/rest/v1/rpc/match_contacts') nMatch++; return missing('match_contacts')(u, m) || missing('my_phone_saved')(u, m); } });
   await click(page, '[data-a="tab"][data-x="friends"]'); await click(page, '[data-a="ctOpen"]'); await click(page, '[data-a="ctConnect"]'); await settle(page, 800);
   const t = await sheetText(page);
-  ok(/Contact matching isn’t available yet\./.test(t) && /Invite · 9/.test(t) && !/On TermChamp/.test(t) && !/Couldn’t/.test(t), 'RPC missing (404 PGRST202): "isn’t available yet", and the Invite list still works', t);
+  ok(/Contact matching isn’t available yet\./.test(t) && await page.locator('#sheet [data-a="ctInvite"]').count() === 9 && /Invite to TermChamp/.test(t) && !/On TermChamp/.test(t) && !/Couldn’t/.test(t), 'RPC missing (404 PGRST202): "isn’t available yet", and the Invite list still works', t);
   ok(await page.locator('#sheet .ct-mine').count() === 0, 'RPC missing: no "add your number" row either');
   await page.evaluate(() => { TC.ctPreview = () => false; ctSet({ on: false }); UI.sheet = { type: 'ctConnect' }; render(true); });
   await settle(page);
@@ -201,9 +200,9 @@ const noOverflow = p => p.evaluate(() => { const w = document.documentElement.cl
   await page.evaluate(() => { S.stack.home.push({ s: 'onb', p: { step: 'confirm' } }); UI.onbPre = { major: 'Business Administration', standing: 'Junior', conc: '' }; render(); }); await settle(page, 1500);
   await click(page, '[data-a="onbConfirmDone"]'); await settle(page, 800);
   let t = await page.locator('#scroll').innerText();
-  ok(/Help friends find you/.test(t) && /Friends who have your number saved will see you on TermChamp\./.test(t) && /Only used to find friends\. Never shown on your profile\./.test(t) && /Continue/.test(t) && /Skip/.test(t), 'sign-up: "Help friends find you" right after year and major', t.slice(0, 400));
+  ok(/What’s your number\?/.test(t) && /Friends who have you saved will find you on TermChamp\. It’s never shown on your profile\./.test(t) && /Continue/.test(t) && /Not now/.test(t) && !/Skip/.test(t), 'sign-up (2026-10-31, 1a): "What’s your number?" right after year and major, Continue + Not now', t.slice(0, 400));
   const inp = await page.evaluate(() => { const i = document.getElementById('ob-phone'); return i && { type: i.type, im: i.inputMode, ac: i.autocomplete, cc: i.parentElement.querySelector('.at').textContent }; });
-  ok(inp && inp.type === 'tel' && inp.im === 'tel' && inp.ac === 'tel' && inp.cc === '+1', 'phone field: +1, type/inputmode/autocomplete tel', inp);
+  ok(inp && inp.type === 'tel' && inp.im === 'tel' && inp.ac === 'tel' && /\+1$/.test(inp.cc), 'phone field: +1, type/inputmode/autocomplete tel', inp);
   await page.screenshot({ path: SHOTS + '/onboarding-phone-step-light.png' });
   ok(await page.evaluate(() => JSON.parse(localStorage.getItem('termchamp_app_onb')).step) === 'phone', 'the step is remembered if the app closes');
   await page.locator('#ob-phone').fill('805 55'); await click(page, '.onb .foot .btn');
@@ -268,9 +267,9 @@ const noOverflow = p => p.evaluate(() => { const w = document.documentElement.cl
   await page.locator('#sheet .sheet').screenshot({ path: SHOTS + '/connect-sheet-dark.png' });
   await click(page, '[data-a="ctConnect"]'); await settle(page, 800);
   ok((await noOverflow(page)).bad.length === 0 && (await noOverflow(page)).sw <= 375, 'dark 375px: results fit', await noOverflow(page));
-  await page.locator('#sheet .sheet').screenshot({ path: SHOTS + '/results-sheet-dark.png' });
+  await page.locator('#sheet .fullpg').screenshot({ path: SHOTS + '/results-sheet-dark.png' });
   await page.evaluate(() => { UI.sheet = null; S.stack.home.push({ s: 'onb', p: { step: 'phone' } }); S.tab = 'home'; render(); }); await settle(page, 600);
-  ok(/Help friends find you/.test(await page.locator('#scroll').innerText()) && (await page.evaluate(() => document.documentElement.scrollWidth)) <= 375, 'dark 375px: the phone step (onboarding stays light, as all of it does)');
+  ok(/What’s your number\?/.test(await page.locator('#scroll').innerText()) && (await page.evaluate(() => document.documentElement.scrollWidth)) <= 375, 'dark 375px: the phone step (onboarding stays light, as all of it does)');
   await page.screenshot({ path: SHOTS + '/onboarding-phone-step-375-dark.png' });
   ok(log.errors.length === 0, 'part 8: no page errors', log.errors);
   await close();

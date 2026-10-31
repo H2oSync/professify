@@ -2387,7 +2387,7 @@ tests.springWall = async () => {
   ok(w.meNowCodes.includes('BUS 3438') && w.meNow.every(id => /^(n|xn):/.test(id)) && w.meSpring === 0 && w.b38title !== 'BUS 3438', 'wall: your Fall classes are drawn from Fall’s own rows, never from Spring’s list (same class number, other term)', w);
   const reads = log.reads.map(r => decodeURIComponent(r));
   const fallSeat = reads.filter(r => /^course_seats\?term=eq\.2268/.test(r)), springSeat = reads.filter(r => /^course_seats\?term=eq\.2274/.test(r));
-  ok(springSeat.length > 0 && fallSeat.length > 0 && fallSeat.every(r => /class_nbr=in\.\(/.test(r)), 'wall: Spring’s whole list is read; Fall is read only by the class numbers people are in', { fallSeat: fallSeat.slice(0, 2) });
+  ok(springSeat.length > 0 && fallSeat.length > 0 && fallSeat.every(r => /class_nbr=in\.\(|course_code=in\.\(/.test(r)), 'wall: Spring’s whole list is read; Fall is read only by the class numbers people are in (and, 2026-10-31, by the codes of classes saved with no section)', { fallSeat: fallSeat.slice(0, 2) });
   /* Home: the newest real thing per friend, with a tag */
   const cards = await page.evaluate(ids => ids.map(id => { const c = document.getElementById('hf-' + id); return c && { tag: (c.querySelector('.fview') || {}).textContent || '', plan: !!c.querySelector('.plancol.plan-A'), blocks: [...c.querySelectorAll('.g-b')].map(b => b.dataset.x) }; }), FX.FRIENDS.map(f => f.id));
   ok(cards[0] && cards[0].tag === 'Spring 2027 classes' && cards[0].blocks.every(x => x === 'BUS 4401') && cards[0].blocks.length > 0, 'home: a friend with Spring classes shows them, tagged', cards[0]);
@@ -2568,10 +2568,11 @@ tests.exploreTerm = async () => {
     const reads = () => o2.log.reads.map(r => decodeURIComponent(r)).filter(r => /^course_seats\?term=eq\.2268/.test(r) && !/class_nbr=in/.test(r));
     /* a friend's page › Fall › a class in their list */
     const fr = await pg2.evaluate(() => TC.friends.find(f => nowSecs(f).some(s => /^n:/.test(s.id)) && !personSecs(f).length && !(PEOPLE[f].unplaced || []).length) || TC.friends.find(f => nowSecs(f).some(s => /^n:/.test(s.id))));
+    const r0 = reads().length;   /* (2026-10-31) the Anytime look-up at open (codes saved with no section) came before */
     await pg2.evaluate(id => A.openFriend(id), fr); await settle(pg2);
     if (await pg2.locator('.fsw button[data-y="now"]').count()) await click(pg2, '.fsw button[data-y="now"]');
     await click(pg2, '.li[data-a="openClass"][data-y="now"]');
-    const c1 = await chip(), r1 = reads();
+    const c1 = await chip(), r1 = reads().slice(r0);
     ok(c1 === 'Fall 2026', 'tap: a class in a friend’s Fall list opens its Fall page', c1);
     ok(r1.length === 1 && /course_code=in\./.test(r1[0]), 'tap: that reads just this class from Fall, not the whole term', r1);
     /* My Classes › Fall */
@@ -5336,11 +5337,13 @@ tests.pastProfPicker = async () => {
   await g.close();
 };
 /* Right after a report is saved: "Who taught these?" — the three latest terms' classes, never transfer credit */
+/* (2026-10-31) the report's "Pick your sections" step, when it opens: Skip for now (it's checked in check-anytime-sections-2026-10-31.mjs) */
+async function skipPick(page) { if (await page.evaluate(() => !!(UI.sheet && UI.sheet.type === 'dprPick'))) { await click(page, '#sheet .dpk-foot [data-a="dprPickSkip"]'); await tick(page, 600); } }
 tests.pastWhoTaught = async () => {
   const { page, close, log } = await openApp({ tables: NOREC() });
   await toPlanner(page);
   await uploadDpr(page, '.tc-dpr input[data-in="dprfile"]');
-  await click(page, '[data-a="dprSave"]'); await tick(page, 2500);
+  await click(page, '[data-a="dprSave"]'); await tick(page, 2500); await skipPick(page);
   const got = await page.evaluate(() => UI.sheet && UI.sheet.type === 'pcWho' ? UI.sheet.keys : null);
   const hist = await page.evaluate(() => (TC.myHistory || []).map(h => [TCPL.canon(h.code) || h.code, h.term, h.year, h.professor]));
   const TO = { Winter: 0, Spring: 1, Summer: 2, Fall: 3 };
@@ -5434,6 +5437,7 @@ tests.dprTransferContinuing = async () => {
   ok(hist.length === 14 && JSON.stringify(x) === JSON.stringify(['AP 300', 'BUS 1TR', 'BUS 2201', 'COMS 1101', 'ECON 2030', 'ENGL 1134', 'MATH 1221', 'PHIL 1T1B']) && JSON.stringify(cp) === JSON.stringify(['BUS 2207', 'BUS 2212', 'BUS 3346', 'BUS 3387', 'BUS 3391', 'STAT 2170']),
     'transfer, a year on: the record keeps 8 transfer (marked) and 6 Cal Poly classes', { x, cp });
   ok(JSON.stringify(mine.map(r => r.code).sort()) === JSON.stringify(['BUS 3431', 'BUS 3438', 'BUS 4401']), 'transfer, a year on: My Classes gets the 3 he’s taking — not this term’s study-abroad placeholder (AP 300, no grade, transfer icon)', mine);
+  await skipPick(page);
   const who = await page.evaluate(() => UI.sheet && UI.sheet.type === 'pcWho' ? UI.sheet.keys.slice().sort() : null);
   ok(JSON.stringify(who) === JSON.stringify(['BUS 2207|Fall|2025', 'BUS 2212|Fall|2025', 'BUS 3346|Spring|2026', 'BUS 3387|Spring|2026', 'BUS 3391|Spring|2026', 'STAT 2170|Fall|2025']),
     'transfer, a year on: “Who taught these?” asks only about his Cal Poly classes — not BUS 2201 or MATH 1221, which he took at a community college the same term', who);
@@ -5842,7 +5846,11 @@ tests.dprRead = async () => {
   const prof = log.writes.filter(x => x.table === 'profiles' && x.m === 'PATCH');
   ok(!prof.some(x => x.body && 'major' in x.body), 'save: the report’s plan code (“BUS”) never becomes the profile’s major', prof.map(x => x.body));
   const after = await page.evaluate(() => ({ tab: S.tab, sub: S.schedTab, sheet: UI.sheet && UI.sheet.type, prefs: !!document.querySelector('#sheet [data-a="plPrefsSave"]'), busy: UI.busy.dpr }));
-  ok(after.tab === 'schedule' && after.sub === 'planner' && after.sheet === 'pcWho' && !after.busy, 'save: lands on the Planner, with “Who taught these?” over it first', after);
+  /* (2026-10-31) first the report's new step, Pick your sections (BUS 4488 has three: nothing picked for you) — Skip for now */
+  ok(after.tab === 'schedule' && after.sub === 'planner' && after.sheet === 'dprPick' && !after.busy, 'save: lands on the Planner, with “Pick your sections” over it first', after);
+  ok(await page.evaluate(() => UI.sheet.groups.length === 1 && UI.sheet.groups[0].classes.join() === 'BUS 4488' && !Object.keys(UI.sheet.groups[0].sel).length), 'save: … this term’s class, no section picked for you (three fit)');
+  await click(page, '#sheet .dpk-foot [data-a="dprPickSkip"]'); await tick(page, 600);
+  ok(await page.evaluate(() => UI.sheet && UI.sheet.type) === 'pcWho', 'save: Skip for now → “Who taught these?”, as before');
   await click(page, '#sheet [data-a="pcWhoDone"].btn'); await tick(page, 600);
   const after2 = await page.evaluate(() => ({ sheet: UI.sheet && UI.sheet.type, prefs: !!document.querySelector('#sheet [data-a="plPrefsSave"]') }));
   ok(after2.sheet === 'plPrefs' && after2.prefs, 'save: then the Planner asks what matters most (first open)', after2);
@@ -6386,7 +6394,11 @@ tests.onbReportLast = async () => {
   await click(page, '[data-a="dprSave"]'); await tick(page, 2500);
   const end = await page.evaluate(() => ({ tab: S.tab, sub: S.schedTab, onb: S.stack.home.some(x => x.s === 'onb'), key: localStorage.getItem('termchamp_app_onb') }));
   ok(end.tab === 'schedule' && end.sub === 'planner' && !end.onb && !end.key, 'onboarding: after the report, onboarding is over (not remembered as unfinished) and the Planner is open', end);
-  ok(await page.evaluate(() => UI.sheet && UI.sheet.type === 'pcWho'), 'onboarding: the report’s classes ask who taught them first');
+  /* (2026-10-31) Pick your sections comes first now; Skip for now, then who taught them, then the notification ask */
+  ok(await page.evaluate(() => UI.sheet && UI.sheet.type === 'dprPick'), 'onboarding: the report’s classes ask for their sections first');
+  await tick(page, 900); const held0 = await page.evaluate(() => window.__asks.length);
+  await click(page, '#sheet .dpk-foot [data-a="dprPickSkip"]'); await tick(page, 600);
+  ok(held0 === 0 && await page.evaluate(() => UI.sheet && UI.sheet.type === 'pcWho'), 'onboarding: then who taught them (no notification ask yet)', held0);
   await tick(page, 900); const held = await page.evaluate(() => window.__asks.slice());
   await click(page, '#sheet [data-a="pcWhoDone"].btn'); await tick(page, 900);
   const asked = await page.evaluate(() => window.__asks.slice());
@@ -6612,7 +6624,7 @@ tests.signup = async () => {
   const up = log.writes.filter(w => w.table === 'profiles' && w.m === 'PATCH').pop();
   ok(up && up.body.class_standing === 'Junior' && up.body.major === 'Business Administration' && /id=eq\./.test(up.query), 'confirm: saves year and major to your profile', up && up.body);
   t = await text(page);
-  ok(/Help friends find you/.test(t) && await page.locator('#ob-phone[type="tel"]').count() === 1 && await page.locator('[data-a="ctPhoneSkip"]').count() === 1, 'onboard: then the optional phone step, with Skip', t.slice(0, 200));
+  ok(/What’s your number\?/.test(t) && await page.locator('#ob-phone[type="tel"]').count() === 1 && /Not now/.test(await page.locator('[data-a="ctPhoneSkip"]').innerText()), 'onboard: then the optional phone step, with Not now (2026-10-31)', t.slice(0, 200));
   await click(page, '[data-a="ctPhoneSkip"]');
   ok(!log.rpcs.some(r => r.fn === 'set_my_phone'), 'onboard: Skip sends no number');
   t = await text(page);
@@ -8444,7 +8456,7 @@ const ledgerAddsUp = v => !!v && v.n > 0 && (v.leg.f || 0) + (v.leg.p || 0) + (v
 const withLeft = async page => (await text(page)) + '\n' + (await page.evaluate(() => { const c = (() => { const g = plGate(); if (g.html) return null; const L = g.L, X = auditLines(TC.audit, L), R = L ? planRank(L) : X ? { audit: true, X, all: [], bare: true } : null; if (!R || R.done) return null; const o = document.getElementById('__lc'); if (o) o.remove(); const d = document.createElement('div'); d.id = '__lc'; d.style.cssText = 'position:absolute;left:-10000px;top:0;width:390px'; const ro = UI.plReqOpen; UI.plReqOpen = new Proxy({}, { get: () => true, has: () => true }); try { d.innerHTML = plLeftCard(R, L, /^[ABC]$/.test(UI.plPlan) ? UI.plPlan : 'A'); } finally { UI.plReqOpen = ro; } document.body.appendChild(d); const c0 = d.firstElementChild; if (c0) [...d.children].slice(1).forEach(x => c0.appendChild(x)); return c0; })(); const t = c ? c.innerText : ''; document.getElementById('__lc')?.remove(); return t; }));
 const pcSum = page => page.evaluate(() => { const c = (() => { const g = plGate(); if (g.html) return null; const L = g.L, X = auditLines(TC.audit, L), R = L ? planRank(L) : X ? { audit: true, X, all: [], bare: true } : null; if (!R || R.done) return null; const o = document.getElementById('__lc'); if (o) o.remove(); const d = document.createElement('div'); d.id = '__lc'; d.style.cssText = 'position:absolute;left:-10000px;top:0;width:390px'; const ro = UI.plReqOpen; UI.plReqOpen = new Proxy({}, { get: () => true, has: () => true }); try { d.innerHTML = plLeftCard(R, L, /^[ABC]$/.test(UI.plPlan) ? UI.plPlan : 'A'); } finally { UI.plReqOpen = ro; } document.body.appendChild(d); const c0 = d.firstElementChild; if (c0) [...d.children].slice(1).forEach(x => c0.appendChild(x)); return c0; })(); return c && { num: (c => { const g = {}; [...c.querySelectorAll('.pll-leg > span')].forEach(e => { g[e.className] = +e.textContent.trim().split(' ')[0]; }); const n = +((((c.querySelector('.pll-bar') || { getAttribute: () => '' }).getAttribute('aria-label') || '').match(/of (\d+)$/) || [])[1] || '').split(' ')[0] || 0; return n ? `${(g.f || 0) + (g.p || 0)} of ${n} filled` : ''; })(c), link: (c.querySelector('.pc-link') || {}).textContent || '', left: ((c.querySelector('.pll-leg .l') || {}).textContent || '').replace(/\s+/g, ' ').replace(/^(\d+)(?=[a-z])/, '$1 ').trim(), cat: (() => { const d = document.createElement('div'); try { d.innerHTML = plannerView(); } catch (e) { return 'ERR ' + e.message; } return (d.querySelector('.pl-top .pl-cat') || {}).textContent || ''; })(), inCard: !!c.querySelector('.pc-catc'), past: !!document.querySelector('#scroll .pc-left, #scroll .pc-num, #scroll .pc-go'), _: document.getElementById('__lc')?.remove() }; });
 const openGroups = async page => { for (let i = 0; i < 6; i++) { const c = page.locator('[data-a="pcGroup"][aria-expanded="false"]'); if (!(await c.count())) break; await c.first().click(); await tick(page, 150); } };
-const saveReport = async page => { await click(page, '[data-a="dprSave"]'); await tick(page, 2500); await page.evaluate(() => { TC.prefs = TC.prefs || { priority: 'degree', units: 16 }; if (UI.sheet && UI.sheet.type === 'pcWho') UI.sheet = null; render(true); }); };
+const saveReport = async page => { await click(page, '[data-a="dprSave"]'); await tick(page, 2500); await skipPick(page); await page.evaluate(() => { TC.prefs = TC.prefs || { priority: 'degree', units: 16 }; if (UI.sheet && UI.sheet.type === 'pcWho') UI.sheet = null; render(true); }); };
 const toPastTab = async page => { await page.evaluate(() => { document.getElementById('scroll').scrollTop = 0; }); await click(page, '[data-a="schedTab"][data-x="past"]'); await tick(page, 1500); };
 
 /* 1. A senior on the Fall Quarter 2023 catalog: the old layout, lettered GE, quarter numbers with their pairs, a
@@ -8595,7 +8607,7 @@ tests.rowRatings = async () => {
 
 tests.dprStressQuarter = async () => {
   const { page, close, log } = await openApp({ tables: XFER_T('Business Administration', 'Senior'), height: 2600 });
-  await page.addInitScript(() => { try { const s0 = JSON.parse(localStorage.getItem('sb-rqkndeqbcahozidniesn-auth-token') || 'null'); if (s0 && s0.user) localStorage.setItem('tc_ct:' + s0.user.id, JSON.stringify({ on: true })); } catch (e) {} });
+  await page.addInitScript(() => { try { const s0 = JSON.parse(localStorage.getItem('sb-rqkndeqbcahozidniesn-auth-token') || 'null'); if (s0 && s0.user) localStorage.setItem('tc_ct:' + s0.user.id, JSON.stringify({ on: true, phOk: 1 })); } catch (e) {} });
   await toPlanner(page); await uploadFile(page, 'dpr-stress-quarter.pdf');
   ok(await readPills(page) === '36 filled|3 left|5 transfer', 'quarter catalog: Report read — 33 Satisfied + 3 in progress = 36 filled, 3 left (the Senior Project is its own line, 2026-10-12), 5 transfer (ART 3TC1, DUD 3TR, PORT 1TC2, BUS 401, TRAN 302)', await readPills(page));
   await saveReport(page);

@@ -744,6 +744,48 @@ html.pz .onb .majorlist{max-height:calc(46vh / var(--pz,1))!important}
 .ct-tel .cc{font-weight:900;color:var(--muted)}
 .ct-tel input{flex:1;min-width:0;height:100%;border:0;background:none;font-size:17px;font-weight:800;color:var(--ink);outline:none}
 .ct-set .pbtn{flex:none}
+/* (2026-10-31) contacts list A: a full page on the app background (the status bar is that colour too); the top (title + search) sticks, letters stick under it */
+.ctp{min-height:100%;background:var(--bg);padding:0 16px calc(env(safe-area-inset-bottom,0px) + 28px);color:var(--ink)}
+.ctp-top{position:sticky;top:0;z-index:3;background:var(--bg);margin:0 -16px;padding:calc(var(--sb) + 6px) 16px 10px;height:calc(var(--sb) + 108px)}
+.ctp-hd{display:flex;align-items:center;justify-content:space-between;height:44px;margin-bottom:8px}
+.ctp-t{font-size:28px;font-weight:900;letter-spacing:-.01em;margin:0}
+.ctp .xbtn{background:var(--card);box-shadow:inset 0 0 0 1px var(--line)}
+.ctp-q{display:flex;align-items:center;gap:8px;height:40px;border-radius:12px;background:var(--card);box-shadow:inset 0 0 0 1px var(--line);padding:0 12px;color:var(--muted)}
+.ctp-q:focus-within{box-shadow:0 0 0 2px var(--blue)}
+.ctp-q input{flex:1;min-width:0;height:100%;font-size:16px;font-weight:700;color:var(--ink);-webkit-appearance:none;appearance:none}
+.ctp-q input::placeholder{color:var(--muted)}
+.ctp-q input::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none}
+.ct-idx{position:absolute;right:0;top:calc(100% + 6px);width:24px;display:flex;flex-direction:column;align-items:center;touch-action:none;user-select:none;-webkit-user-select:none;padding:4px 0}
+.ct-idx button{width:24px;height:15px;font-size:10.5px;font-weight:900;line-height:15px;text-align:center;color:var(--blue-t,var(--blue))}
+.ct-idx button.off{color:var(--muted2);opacity:.55}
+.ctp.q .ct-idx{display:none}
+.ctp.idx #ctBody{padding-right:14px}
+.ct-sec{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:900;margin:14px 0 4px;min-height:32px}
+.ct-sec .grow{flex:1}
+.ct-n{display:inline-grid;place-items:center;min-width:22px;height:20px;padding:0 7px;border-radius:999px;background:var(--green-wash);color:var(--green-ink3);font-size:12px;font-weight:900}
+.ct-addall{color:var(--blue-t,var(--blue));font-weight:900;font-size:14px;min-height:36px;padding:0 4px}
+.ctp .ct-row{display:flex;align-items:center;gap:12px;height:60px;padding:0;border-top:0}
+.ctp .ct-row .nm{font-size:15.5px;font-weight:900;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ctp .ct-row .sub{font-size:13px;font-weight:700;color:var(--ink4);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ctp .ct-row .grow{flex:1;min-width:0}
+.ct-av{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;font-weight:900;font-size:14px;color:#0F172A;flex:none;overflow:hidden}
+.ct-av .av{border-radius:50%}
+.ct-av.iv{background:var(--fill2);color:var(--ink4)}
+.ctp .pbtn{height:32px;padding:0 15px;border-radius:999px;font-size:13.5px}
+.ctp .pbtn.done{background:none;color:var(--ink4);box-shadow:inset 0 0 0 1.5px var(--line2)}
+.ctp .pbtn.ct-inv{background:none;color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--line2)}
+.ctp .pbtn.ct-inv.done{color:var(--ink4);font-weight:800}
+.ct-grp{content-visibility:auto}
+.ct-lh{position:sticky;top:calc(var(--sb) + 108px);z-index:1;height:28px;display:flex;align-items:center;background:var(--bg);font-size:12.5px;font-weight:900;letter-spacing:.06em;color:var(--ink4);border-bottom:1px solid var(--line)}
+.ctp .ct-mine{margin:8px 0 2px}
+.ctp .ct-none{font-size:14px;font-weight:700;color:var(--ink4);padding:4px 0 8px;line-height:1.45}
+/* (2026-10-31) 1b: the small "Add your number" pop-up */
+.ctpp-hd{display:flex;align-items:center;gap:12px}
+.ctpp-hd .grow{flex:1;min-width:0}
+.ctpp-hd h3{margin:0;font-size:19px;line-height:1.2}
+.ctpp-ic{width:44px;height:44px;border-radius:14px;background:var(--blue-soft);color:var(--blue-t,var(--blue));display:grid;place-items:center;flex:none}
+.ctpp .ct-tel{margin:16px 0 4px}
+.ctpp .btn.ghost.ctpp-no{color:var(--muted);height:44px;font-size:15px}
 .fhdr+.fsearch{margin-top:2px}
 .freq-h{display:flex;align-items:center;gap:8px;color:var(--ink)}
 .freq-h .n{display:inline-grid;place-items:center;min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:#DC2626;color:#fff;font-size:12.5px;letter-spacing:0}
@@ -1650,6 +1692,50 @@ button.pll-h svg{margin-left:auto;align-self:center}
 .dr-rct span{font-size:13px;font-weight:800;color:var(--muted)}
 .dr-foot .btn{height:52px;border-radius:18px}
 .dr-link{height:36px;font-size:15px;font-weight:900;color:var(--muted);background:none}
+/* (2026-10-31) Anytime: add times, the once-only question, picking a section. --any-mut: muted text that keeps 4.5:1 on
+   --bg too (a section row and the report's step sit on --bg, where --muted is 4.4:1 in light) */
+:root{--any-mut:#5B6B80}:root[data-theme="dark"]{--any-mut:var(--muted)}
+.any-card{margin:12px 12px 0;padding:14px 16px;position:relative}
+.any-card.any-times{padding:0}
+.any-cmain{display:flex;align-items:center;gap:12px;width:100%;min-height:64px;padding:12px 52px 12px 14px;text-align:left}
+.any-ic{width:40px;height:40px;flex:none;border-radius:13px;display:grid;place-items:center;background:var(--blue-soft);color:var(--blue-ink)}
+.any-ct{display:block;font-size:15.5px;font-weight:900;color:var(--ink);line-height:1.3}
+.any-cs{display:block;font-size:13px;font-weight:700;color:var(--muted);margin-top:2px;line-height:1.35}
+.any-cx{position:absolute;top:10px;right:8px;width:44px;height:44px}
+.any-cb{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.any-cb .pbtn{height:44px;border-radius:22px}
+.any-cb .pbtn.soft,.any-cmain .pbtn.soft{background:var(--bg);color:var(--ink2)}
+.any-hid{margin:10px 16px 0;font-size:13px;font-weight:800;color:var(--any-mut);display:flex;align-items:center;flex-wrap:wrap;gap:0 4px}
+.any-hrm{font-size:13px;font-weight:900;color:var(--blue-t,var(--blue));min-height:44px;padding:0 4px}
+.any-home{display:flex;align-items:center;gap:12px;width:calc(100% - 2 * var(--hg,16px));margin:12px var(--hg,16px) 0;padding:12px 14px;min-height:64px;text-align:left}
+.any-home .chev{color:var(--muted);flex:none}
+.any-pc{margin-top:16px}
+.any-pch{gap:8px;min-height:44px}
+.any-pcn{font-size:15px;font-weight:900;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.any-skip{min-height:44px;padding:0 10px;font-size:14px;font-weight:900;color:var(--ink3);flex:none}
+.secrow.any-sec{width:100%;text-align:left;min-height:56px;gap:10px}
+.any-sb{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.secrow .any-sb .t{flex:none}
+.any-sm{font-size:13px;font-weight:800;color:var(--any-mut)}
+.any-sx{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;margin-top:2px}
+.any-fr{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:900;color:var(--purple-ink)}
+.any-cl{font-size:12.5px;font-weight:900;color:var(--amber-ink)}
+.any-tag{align-self:flex-start;font-size:11.5px;font-weight:900;color:var(--teal-t,var(--teal));background:var(--teal-soft);padding:2px 8px;border-radius:8px;margin-top:2px}
+.any-rd{width:24px;height:24px;flex:none;border-radius:50%;display:grid;place-items:center;box-shadow:inset 0 0 0 2px var(--ink5,var(--muted));color:#fff}
+.secrow.any-sec.on{box-shadow:inset 0 0 0 2px var(--blue)}
+.any-sec.on .any-rd{background:var(--blue);box-shadow:none}
+.any-codes{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;max-height:180px;overflow:auto}
+.any-bfoot{display:grid;gap:8px;margin:14px 0 -20px;position:sticky;bottom:-20px;background:var(--card);padding:8px 0 20px}   /* over .sbody's 20px bottom padding */
+/* (2026-10-31) the report's "Pick your sections" step */
+.dpk-why{font-size:14px;font-weight:700;color:var(--any-mut);line-height:1.45;margin:10px 0 2px}
+.dpk .dr-sub,.dpk .at-kick,.dpk .dr-link,.dpk-term{color:var(--any-mut)}
+.dpk-term{font-size:12px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;margin:20px 2px 0}
+.dpk-one{display:flex;gap:8px;align-items:center;margin-top:12px;padding:10px 12px;border-radius:14px;background:var(--teal-soft);color:var(--teal-t,var(--teal));font-size:13.5px;font-weight:900;line-height:1.35}
+.dpk-c{padding:12px;margin-top:12px}
+.dpk-h{display:flex;align-items:center;gap:8px;min-width:0;min-height:32px}
+.dpk-h b{font-size:15px;font-weight:900;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.dpk-foot{margin-top:18px;position:sticky;bottom:0;background:var(--bg);padding:10px 0 4px}
+.dpk-foot .dr-link{height:44px}
 .dr-check{padding-top:calc(var(--sb) + 2px)}
 .dr-seg{margin:8px 0 14px;display:flex;gap:4px}
 .dr-seg button{flex:1}
@@ -2272,6 +2358,12 @@ button.mrname{min-height:44px}
 /* DPR flow 2026-10-08: the report step and the first-year state */
 .onb .onb-ico{width:72px;height:72px;border-radius:22px;background:var(--blue);color:#fff;display:grid;place-items:center}
 .onb .onb-ico.teal{background:#0F766E}
+/* (2026-10-31) 1a: the sign-up step */
+.onb .onb-ico.ct-ph{width:64px;height:64px;border-radius:20px;background:var(--blue-soft);color:var(--blue)}
+.onb .unwrap.cc2 .at{gap:6px;top:14px;height:24px;padding-right:10px;border-right:1.5px solid var(--track)}
+.onb .unwrap.cc2 .at .fl{font-size:17px;line-height:1}
+.onb .unwrap.cc2 .input{padding-left:86px}
+.onb .foot .ghost.ct-later{font-size:14px;min-height:40px}
 .onb .steps .row small{display:block;font-size:12.5px;font-weight:700;color:var(--muted);margin-top:2px}
 .onb .onb-fy{gap:10px}
 .onb .onb-fy .row{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:800;min-height:28px}
@@ -3105,6 +3197,7 @@ async function loadAll() {
   loadRegFriends(true);
   loadSuggestions(); loadRateList(); loadFriendPlans(); loadNowSeats();
   UI.storyOrder = null; TC.ready = true; TC.loadDone = Date.now(); render(true);
+  anyOpen();   /* (2026-10-31) one-section classes become your section */
   dlTry();
   if (pendingInvite()) TC.processInvite().catch(() => {});
   startRealtime();
@@ -3580,7 +3673,7 @@ async function loadTermMine(code) {
 /* Another term's classes from the student's own rows alone. This term's seat feed (SEC) is never
    consulted: the same class number is a different section in a different term. */
 function termSecs(code) {
-  if (splitTerms() && code === nowTerm().code && TC.nowMineRows) return { secs: nowSecs('me'), unplaced: nowUnplaced('me') };   /* spring-wall */
+  if (splitTerms() && code === nowTerm().code && TC.nowMineRows) return { secs: nowSecs('me'), unplaced: nowUnplaced('me'), hidden: PEOPLE.me.nowHidden || [] };   /* spring-wall */
   const box = TC.termMine[code]; if (!box || !box.rows) return null;
   const out = [], keep = new Set(box.saved), unplaced = [];
   box.rows.forEach(r => {
@@ -3589,20 +3682,21 @@ function termSecs(code) {
     const pk = profKeyOf(r.instructor); if (pk) ensureProf(pk);
     out.push({ id: 't:' + code + ':' + c + ':' + (r.class_nbr == null ? '' : r.class_nbr), code: c, sec: r.section || '', prof: pk, days: m.days, s: m.s, e: m.e, async: false, seats: null, status: 'unknown', offFeed: true });
   });
-  keep.forEach(c => { if (!out.some(x => x.code === c)) unplaced.push(c); });
-  return { secs: out, unplaced };
+  const done = anyDone('me', code), hidden = [];   /* (2026-10-31) */
+  keep.forEach(c => { if (out.some(x => x.code === c)) return; if (done && done.has(c) && !box.rows.some(r => canonCode(r.code) === c)) hidden.push(c); else unplaced.push(c); });
+  return { secs: out, unplaced, hidden };
 }
 async function loadMine() {
   TC.termMine = {}; TC.termGen++;
   const sb = TC.client(), me = TC.user.id;
   const [codes, secs] = await Promise.all([
-    sb.from('saved_classes').select('code').eq('user_id', me).eq('term', CFG.TERM),
+    sb.from('saved_classes').select('code,created_at').eq('user_id', me).eq('term', CFG.TERM),   /* created_at (2026-10-31): a whole plan saved at once */
     sb.from('my_sections').select('code,class_nbr,section,instructor,days,status,wl_pos').eq('user_id', me).eq('term', CFG.TERM)
   ]);
   if (codes.error) { TC.err.mine = codes.error.message; if (splitTerms()) { await loadNowMine(); relinkPeople(); } return; }
   delete TC.err.mine;
   const mine = [...new Set((codes.data || []).map(r => canonCode(r.code)).filter(Boolean))];
-  TC.mineRows = { secs: secs.error ? [] : (secs.data || []), saved: mine };
+  TC.mineRows = { secs: secs.error ? [] : (secs.data || []), saved: mine, at: (codes.data || []).map(r => r.created_at).filter(Boolean) };
   if (splitTerms()) await loadNowMine(); else { TC.nowMineRows = null; delete TC.err.nowMine; }
   relinkPeople();
   if (splitTerms() && TC.ready) loadNowSeats();
@@ -3614,20 +3708,20 @@ async function loadNowMine() {
   let codes, secs;
   try {
     [codes, secs] = await Promise.all([
-      sb.from('saved_classes').select('code').eq('user_id', me).eq('term', t),
+      sb.from('saved_classes').select('code,created_at').eq('user_id', me).eq('term', t),
       sb.from('my_sections').select('code,class_nbr,section,instructor,days,status,wl_pos').eq('user_id', me).eq('term', t)
     ]);
   } catch (e) { codes = { error: { message: String(e) } }; }
   if (codes.error) { TC.err.nowMine = codes.error.message || 'error'; return; }
   delete TC.err.nowMine;
-  TC.nowMineRows = { secs: secs && !secs.error ? (secs.data || []) : [], saved: [...new Set((codes.data || []).map(r => canonCode(r.code)).filter(Boolean))] };
+  TC.nowMineRows = { secs: secs && !secs.error ? (secs.data || []) : [], saved: [...new Set((codes.data || []).map(r => canonCode(r.code)).filter(Boolean))], at: (codes.data || []).map(r => r.created_at).filter(Boolean) };
 }
 /* A person's classes as section objects. A class number we have in the seat feed uses the real
    section (real times, real professor). A row the feed does not have but that carries its own
    meeting string gets a section built from that string alone. A row with neither is listed by
    code only and never drawn on a week. */
-function secsFromRows(uid, rows, saved, look, idp) {
-  const out = [], unplaced = [], keep = new Set(saved || []), L = look || (n => SEC[n]);   /* look: the now-term's sections (spring-wall) */
+function secsFromRows(uid, rows, saved, look, idp, term) {
+  const out = [], unplaced = [], hidden = [], keep = new Set(saved || []), L = look || (n => SEC[n]);   /* look: the now-term's sections (spring-wall) */
   (rows || []).forEach(r => {
     const code = canonCode(r.code); if (!code || !keep.has(code)) return;
     const nbr = r.class_nbr != null ? String(r.class_nbr) : '';
@@ -3636,19 +3730,193 @@ function secsFromRows(uid, rows, saved, look, idp) {
     const m = parseMeet(r.days);
     if (m) { const pk = profKeyOf(r.instructor); if (pk) ensureProf(pk); out.push({ id: (idp || 'x') + ':' + uid + ':' + code + ':' + nbr, code, sec: r.section || '', prof: pk, days: m.days, s: m.s, e: m.e, async: false, seats: null, status: 'unknown', offFeed: true, mineWl: r.status === 'waitlisted', wlPos: r.wl_pos == null ? null : r.wl_pos }); return; }
   });
-  /* A saved class with no usable section is still one of their classes: listed, never drawn. */
-  keep.forEach(code => { if (!out.some(s => s.code === code)) unplaced.push(code); });
-  return { secs: out, unplaced };
+  /* A saved class with no usable section is still one of their classes: listed, never drawn.
+     (2026-10-31) With NO my_sections row at all, in a term we know (term): finished before that term => hidden; the
+     course's only section that term => that section, marked oneSec (the owner's app saves it, anyQuiet). Never 2+. */
+  const done = term ? anyDone(uid, term) : null, has = new Set((rows || []).map(r => canonCode(r.code)));
+  keep.forEach(code => {
+    if (out.some(s => s.code === code)) return;
+    if (done && !has.has(code)) {
+      if (done.has(code)) { hidden.push(code); return; }
+      const one = anyOneSec(term, code);
+      if (one) { out.push(Object.assign({}, one, { oneSec: true })); return; }
+    }
+    unplaced.push(code);
+  });
+  return { secs: out, unplaced, hidden };
 }
-function relinkPeople() {
-  if (TC.mineRows) { const m = secsFromRows('me', TC.mineRows.secs, TC.mineRows.saved); TC.mySecs = m.secs; TC.myUnplaced = m.unplaced; PEOPLE.me.secs = m.secs; PEOPLE.me.unplaced = m.unplaced; }
-  (TC.friendRows ? Object.keys(TC.friendRows) : []).forEach(uid => { if (!PEOPLE[uid]) return; const m = secsFromRows(uid, TC.friendRows[uid].secs, TC.friendRows[uid].saved); PEOPLE[uid].secs = m.secs; PEOPLE[uid].unplaced = m.unplaced; });
+function relinkPeople() { relinkPeople0(); anyTick(); }   /* (2026-10-31) then the Anytime work: Fall sections to look up, quiet saves */
+function relinkPeople0() {
+  TC.anySigs = { now: {} };   /* (2026-10-31) what this relink made of the rows: anyChanged() relinks only when a late arrival changes that */
+  if (TC.mineRows) { const m = secsFromRows('me', TC.mineRows.secs, TC.mineRows.saved, null, null, CFG.TERM); TC.mySecs = m.secs; TC.myUnplaced = m.unplaced; PEOPLE.me.secs = m.secs; PEOPLE.me.unplaced = m.unplaced; PEOPLE.me.hidden = m.hidden; TC.anySigs.me = anySig(m); }
+  (TC.friendRows ? Object.keys(TC.friendRows) : []).forEach(uid => { if (!PEOPLE[uid]) return; const m = secsFromRows(uid, TC.friendRows[uid].secs, TC.friendRows[uid].saved, null, null, CFG.TERM); PEOPLE[uid].secs = m.secs; PEOPLE[uid].unplaced = m.unplaced; });
   /* the term people are in right now (spring-wall): its own rows, looked up only in NOW_SEC */
   if (!splitTerms()) return;
   const nowLook = n => NOW_SEC[n] || null;
-  if (TC.nowMineRows) { const m = secsFromRows('me', TC.nowMineRows.secs, TC.nowMineRows.saved, nowLook, 'xn'); PEOPLE.me.nowSecs = m.secs; PEOPLE.me.nowUnplaced = m.unplaced; }
-  Object.keys(TC.friendNowRows || {}).forEach(uid => { if (!PEOPLE[uid]) return; const m = secsFromRows(uid, TC.friendNowRows[uid].secs, TC.friendNowRows[uid].saved, nowLook, 'xn'); PEOPLE[uid].nowSecs = m.secs; PEOPLE[uid].nowUnplaced = m.unplaced; });
+  if (TC.nowMineRows) { const m = secsFromRows('me', TC.nowMineRows.secs, TC.nowMineRows.saved, nowLook, 'xn', nowTerm().code); PEOPLE.me.nowSecs = m.secs; PEOPLE.me.nowUnplaced = m.unplaced; PEOPLE.me.nowHidden = m.hidden; TC.anySigs.nowMe = anySig(m); }
+  Object.keys(TC.friendNowRows || {}).forEach(uid => { if (!PEOPLE[uid]) return; const m = secsFromRows(uid, TC.friendNowRows[uid].secs, TC.friendNowRows[uid].saved, nowLook, 'xn', nowTerm().code); PEOPLE[uid].nowSecs = m.secs; PEOPLE[uid].nowUnplaced = m.unplaced; TC.anySigs.now[uid] = anySig(m, true); });
 }
+/* ---- (2026-10-31) Anytime fixes (Tate approved). A My Classes class with no section: what it shows, never an invented section.
+   · finished in an EARLIER term (the person's own class_history, a finished row) => hidden as a class of this term, everywhere
+     (own and friends' views); never deleted here — the owner's My Classes offers Remove (Undo)
+   · the course has exactly ONE section that term => that section's real times (own and friends'); the owner's app saves it as
+     their section when it opens (anyQuiet: TC.addMySection / TC.setNowSection, the usual writes) so it's real data after
+   · 2+ sections => never picked for anyone; the owner gets a card (anyPickList) — not a pop-up, so the pop-up limits don't apply
+   · a term with more than 10 of them, or 12+ classes saved in 10 minutes (a degree plan dumped in) => asked once (anyBulk) ---- */
+const ANY_ORD = { Winter: 1, Spring: 2, Summer: 3, Fall: 4 };
+const anyOrd = (t, y) => ANY_ORD[t] && +y ? (+y) * 10 + ANY_ORD[t] : null;
+function anyTermLabel(t) {
+  t = String(t || ''); if (!t) return '';
+  if (t === String(CFG.TERM)) return CFG.TERM_LABEL;
+  const n = nowTerm(); if (t === String(n.code)) return n.label;
+  return (myTerms().find(x => x.code === t) || {}).label || '';
+}
+/* the classes uid finished before term t: a dated class_history row of an earlier term that isn't still in progress */
+function anyDone(uid, t) {   /* null while their record isn't known (not loaded, or failed): nothing hidden, nothing filled in */
+  const out = new Set(), H = uid === 'me' ? (TC.err.history ? null : TC.myHistory) : (TC.friendHist ? (TC.friendHist[uid] || []) : null);
+  const [tt, ty] = anyTermLabel(t).split(' '), o = anyOrd(tt, ty);
+  if (!Array.isArray(H) || o == null) return null;
+  H.forEach(h => { const k = anyOrd(h.term, h.year); if (k != null && k < o && !histNotDone(h)) { const c = canonCode(h.code); if (c) out.add(c); } });
+  return out;
+}
+const anySecSort = (a, b) => String(a.sec).localeCompare(String(b.sec), undefined, { numeric: true });
+/* a course's sections in term t, or null while they aren't known (the plan term: its seat list; the now-term: NOWT) */
+function anySecsOf(t, code) {
+  t = String(t);
+  if (splitTerms() && t === String(nowTerm().code)) {
+    if (!(nowAllReady() || (NOWT.term === t && NOWT.codes[code] === 'done'))) return null;
+    return (NOWT.byCode[code] || []).slice().sort(anySecSort);
+  }
+  if (t !== String(CFG.TERM) || !TC.seatsLoaded || LENS_NOW) return null;
+  return (SECS_BY_CODE[code] || []).slice().sort(anySecSort);
+}
+function anyOneSec(t, code) { const l = anySecsOf(t, code); return l && l.length === 1 ? l[0] : null; }
+function anyTitle(t, code) {
+  const now = splitTerms() && String(t) === String(nowTerm().code);
+  const ti = (now ? ((NOWT.courses[code] || {}).title || NOW_TITLES[code]) : '') || courseName(code) || ((COURSES[code] || {}).title) || '';
+  return ti && ti !== code ? ti : '';
+}
+/* this phone's notes, per account: skipped classes, quiet saves done, the once-only question */
+function anyLS(k, v) {
+  const key = 'tc_any_' + k + ':' + ((TC.user && TC.user.id) || '');
+  try { if (v === undefined) return JSON.parse(localStorage.getItem(key) || 'null'); localStorage.setItem(key, JSON.stringify(v)); } catch (e) {}
+  return null;
+}
+const anySkipped = () => new Set(anyLS('skip') || []);
+function anySkipSet(keys, on) { const s = anySkipped(); keys.forEach(k => { if (on) s.add(k); else s.delete(k); }); anyLS('skip', [...s].slice(-400)); }
+/* the owner's classes in term t (the plan term or the now-term), or null while loading */
+function anyMine(t) {
+  t = String(t);
+  if (t === String(CFG.TERM)) return TC.mineRows ? { box: TC.mineRows, secs: personSecs('me'), unplaced: PEOPLE.me.unplaced || [], hidden: PEOPLE.me.hidden || [] } : null;
+  if (splitTerms() && t === String(nowTerm().code)) return TC.nowMineRows && !TC.err.nowMine ? { box: TC.nowMineRows, secs: nowSecs('me'), unplaced: nowUnplaced('me'), hidden: PEOPLE.me.nowHidden || [] } : null;
+  return null;
+}
+/* (d) the classes to ask about, once: more than 10 with no section, or 12+ classes saved in the term within 10 minutes */
+function anyBulk(t) {
+  t = String(t); const m = anyMine(t); if (!m || (anyLS('bulk') || {})[t]) return null;
+  const list = [...new Set(m.unplaced.concat(m.secs.filter(x => x.oneSec).map(x => x.code)))];
+  if (list.length < 2) return null;
+  const at = (m.box.at || []).map(x => Date.parse(x)).filter(x => !isNaN(x)).sort((a, b) => a - b);
+  let burst = false;
+  for (let i = 0, j = 0; j < at.length && !burst; j++) { while (at[j] - at[i] > 10 * 60000) i++; burst = j - i + 1 >= 12; }
+  return list.length > 10 || burst ? list : null;
+}
+function anyBulkSet(t, v) { const b = anyLS('bulk') || {}; b[String(t)] = v; anyLS('bulk', b); }
+/* (c) the owner's classes in t with 2+ sections there, not skipped — none while the question above is open */
+function anyPickList(t) {
+  t = String(t); const m = anyMine(t); if (!m || anyBulk(t)) return [];
+  const sk = anySkipped();
+  return m.unplaced.filter(c => !sk.has(t + ':' + c)).map(c => ({ code: c, secs: anySecsOf(t, c) })).filter(x => x.secs && x.secs.length >= 2);
+}
+/* the now-term's sections for classes with none (own and friends'), in batches — so (b) and (c) know how many there are */
+async function anyNowFetch(codes) {
+  if (!splitTerms() || nowAllReady()) return;
+  const t = nowTerm().code; nowReset(t);
+  const list = [...new Set(codes || [])].filter(c => c && !NOWT.codes[c]); if (!list.length) return;
+  list.forEach(c => { NOWT.codes[c] = 'loading'; });
+  const base = CFG.SUPABASE_URL.replace(/\/$/, ''), hdr = { apikey: CFG.SUPABASE_ANON_KEY, Authorization: 'Bearer ' + CFG.SUPABASE_ANON_KEY };
+  const sel = 'course_code,title,section,instructor,days,status,capacity,available,waitlist_total,class_nbr';
+  for (let i = 0; i < list.length; i += 20) {
+    const part = list.slice(i, i + 20), P = new Set(part), forms = [...new Set([].concat(...part.map(c => [c, c.replace(' ', '')])))].map(c => '"' + c + '"').join(',');
+    let rows = null;
+    try {
+      const res = await fetch(base + '/rest/v1/course_seats?term=eq.' + encodeURIComponent(t) + '&course_code=in.(' + encodeURIComponent(forms) + ')&select=' + sel + '&order=class_nbr.asc&limit=1000', { headers: hdr });
+      if (res.ok) { const j = await res.json(); if (Array.isArray(j)) rows = j; }
+    } catch (e) {}
+    if (NOWT.term !== t) return;
+    if (!rows) { part.forEach(c => { NOWT.codes[c] = 'err'; }); continue; }
+    if (!NOWT.ready) addNowRows(NOWT, rows.filter(r => P.has(canonCode(r.course_code))), t);
+    part.forEach(c => { NOWT.codes[c] = 'done'; });
+  }
+}
+async function anyNowLoad() {
+  if (anyNowLoad.run || !splitTerms() || nowAllReady()) return;
+  const t = nowTerm().code, want = [].concat(nowUnplaced('me'), ...(TC.friends || []).map(f => nowUnplaced(f))).filter(c => !(NOWT.term === t && NOWT.codes[c]));
+  if (!want.length) return;
+  anyNowLoad.run = true;
+  try { await anyNowFetch(want); } catch (e) {} finally { anyNowLoad.run = false; }
+  matchPolyRatings(); if (anyChanged(true)) relinkPeople(); else anyTick(); render(true);
+}
+/* did a late arrival (your record; the now-term's sections) change what anyone's classes look like? Only then is
+   everything relinked — so nothing is redrawn or re-sorted for no reason. me: your own classes only; now: the now-term's.
+   Compared with what the last relink made (TC.anySigs), not with PEOPLE, which views may have reshaped since. */
+function anySig(m, noHid) { return [(m.secs || []).map(x => x.id + (x.oneSec ? '*' : '')).join(), (m.unplaced || []).join(), noHid ? '' : (m.hidden || []).join()].join('|'); }
+function anyChanged(now) {
+  const G = TC.anySigs || { now: {} }, nowLook = n => NOW_SEC[n] || null, nt = splitTerms() ? nowTerm().code : null;
+  if (!now && TC.mineRows && anySig(secsFromRows('me', TC.mineRows.secs, TC.mineRows.saved, null, null, CFG.TERM)) !== G.me) return true;
+  if (!nt) return false;
+  if (TC.nowMineRows && anySig(secsFromRows('me', TC.nowMineRows.secs, TC.nowMineRows.saved, nowLook, 'xn', nt)) !== G.nowMe) return true;
+  return !!now && Object.keys(TC.friendNowRows || {}).some(uid => PEOPLE[uid] && anySig(secsFromRows(uid, TC.friendNowRows[uid].secs, TC.friendNowRows[uid].saved, nowLook, 'xn', nt), true) !== G.now[uid]);
+}
+const anyNowWaiting = () => splitTerms() && !nowAllReady() && nowUnplaced('me').some(c => NOWT.term !== nowTerm().code || !NOWT.codes[c] || NOWT.codes[c] === 'loading');
+/* the app opened: each term's one-section classes are saved once their sections are known */
+function anyOpen() { TC.anyDue = {}; TC.anyDue[CFG.TERM] = 1; if (splitTerms()) TC.anyDue[nowTerm().code] = 1; anyTick(); }
+function anyTick() {
+  if (!TC.ready || !TC.user) return;
+  if (splitTerms() && !nowAllReady()) anyNowLoad();
+  if (TC.anyDue && Object.keys(TC.anyDue).length && !anyQuiet.run) { clearTimeout(anyTick.t); anyTick.t = setTimeout(anyQuiet, 0); }
+}
+async function anyQuiet() {
+  if (anyQuiet.run || !TC.anyDue || !TC.ready || !TC.user || UI.dprPicking) return;   /* the report's own step picks them (dpr-pick) */
+  anyQuiet.run = true; let wrote = 0;
+  try {
+    for (const t of Object.keys(TC.anyDue)) {
+      const plan = t === String(CFG.TERM), now = !plan && splitTerms() && t === String(nowTerm().code);
+      if (!plan && !now) { delete TC.anyDue[t]; continue; }
+      if (plan ? !(TC.seatsLoaded && TC.mineRows) : !(TC.nowMineRows && !anyNowWaiting())) continue;   /* not known yet: next relink */
+      if (!Array.isArray(TC.myHistory) && !TC.err.history) continue;   /* your record first: a class you've finished is hidden, never saved */
+      delete TC.anyDue[t];
+      if (anyBulk(t)) continue;   /* maybe a whole degree plan: asked first, then saved */
+      const done = new Set(anyLS('one') || []);
+      for (const x of (plan ? personSecs('me') : nowSecs('me')).filter(y => y.oneSec)) {
+        const k = t + ':' + x.code; if (done.has(k)) continue;   /* saved once already: a section taken off since stays off */
+        const c = Object.assign({}, x); delete c.oneSec;   /* the section itself: setNowSection keeps what it's given in NOW_SEC */
+        const e = plan ? await TC.addMySection(c, { hadSaved: true }) : await TC.setNowSection(c);
+        if (e) break;
+        wrote++; done.add(k); anyLS('one', [...done].slice(-400));
+      }
+    }
+  } catch (e) {} finally { anyQuiet.run = false; }
+  if (wrote) { UI.storyOrder = null; relinkPeople(); render(true); }
+}
+function anyQuietAgain(t) { TC.anyDue = TC.anyDue || {}; TC.anyDue[String(t)] = 1; anyTick(); }
+/* several classes off a term at once (taken ones, or the ones not ticked), and back for Undo */
+TC.anyRemoveCodes = async function (t, codes) {
+  const sb = TC.client(), me = TC.user.id;
+  const a = await sb.from('saved_classes').delete().eq('user_id', me).eq('term', t).in('code', codes);
+  if (a.error) return dbSay(a.error, 'Couldn’t remove those classes.');
+  await sb.from('my_sections').delete().eq('user_id', me).eq('term', t).in('code', codes);
+  await loadMine(); return null;
+};
+TC.anyRestoreCodes = async function (t, snaps) {
+  const sb = TC.client(), me = TC.user.id, codes = Object.keys(snaps);
+  const saved = codes.filter(c => snaps[c].saved).map(c => ({ user_id: me, term: t, code: c }));
+  let r = saved.length ? await sb.from('saved_classes').upsert(saved, { onConflict: 'user_id,code,term' }) : { error: null };
+  const rows = [];
+  codes.forEach(c => snaps[c].rows.forEach(x => { if (x.class_nbr != null && String(x.class_nbr) !== '') rows.push({ user_id: me, term: t, code: x.code, class_nbr: String(x.class_nbr), section: x.section == null ? null : x.section, instructor: x.instructor == null ? null : x.instructor, days: x.days == null ? null : x.days, status: x.status || 'enrolled', wl_pos: x.wl_pos == null ? null : x.wl_pos }); }));
+  if (!r.error && rows.length) r = await sb.from('my_sections').upsert(rows, { onConflict: 'user_id,class_nbr,term' });
+  await loadMine(); return r.error ? dbSay(r.error, 'Couldn’t undo that.') : null;
+};
 
 /* ---- Friends, requests, and their classes. ---------------------------------------------------- */
 function personFrom(p) {
@@ -3702,7 +3970,8 @@ async function loadFriends() {
     else TC.err.friendSecs = saved.error.message;
     /* What friends have already TAKEN, with the professor they named — the only source for
        "friends who took this professor". A row with no professor is not guessed at. */
-    TC.took = {}; TC.tookCode = {};
+    TC.took = {}; TC.tookCode = {}; TC.friendHist = hist.error ? null : {};
+    if (!hist.error) (hist.data || []).forEach(h => { if (TC.friendRows[h.user_id]) (TC.friendHist[h.user_id] = TC.friendHist[h.user_id] || []).push(h); });   /* (2026-10-31) */
     /* Friends' past classes by class — "who took this before you" (friends only, Tate 2026-09-29). */
     if (!hist.error) (hist.data || []).forEach(h => { const c = canonCode(h.code); if (c && TC.friendRows[h.user_id]) (TC.tookCode[c] = TC.tookCode[c] || []).includes(h.user_id) || TC.tookCode[c].push(h.user_id); });
     if (!hist.error) (hist.data || []).forEach(h => {
@@ -4300,7 +4569,7 @@ async function loadRateList() {
     const r = await TC.client().from('class_history').select('code,term,year,professor').eq('user_id', TC.user.id);
     if (r.error) TC.err.history = r.error.message;
     if (!r.error) {
-      delete TC.err.history; TC.myHistory = r.data || [];
+      delete TC.err.history; TC.myHistory = r.data || []; if (anyChanged()) relinkPeople(); else anyTick();   /* (2026-10-31) finished classes hide */
       const groups = {};
       (r.data || []).forEach(h => {
         const pk = profKeyOf(h.professor); const code = canonCode(h.code); if (!pk || !code || seen[pk]) return;
@@ -5039,7 +5308,7 @@ SCREENS.home = () => {
   <button class="iconbtn" data-a="sheet" data-x="notifs" aria-label="Notifications">${ic('bell', 22)}${unread && S.notifSeen !== bellKey ? '<span class="dot"></span>' : ''}</button>
   ${meBtn()}</div>
  <div class="stories">${stories}${TC.friends.length || !TC.ready || friendsErr ? '' : addStory}</div>
- ${hptr()}<div class="hfeed${UI.feedOut ? ' fout' : fin ? ' fin' : ''}">${feed}</div>
+ ${anyHomeRow()}${hptr()}<div class="hfeed${UI.feedOut ? ' fout' : fin ? ' fin' : ''}">${feed}</div>
  ${sug ? `<div class="mightknow"><div class="mk-t">You might know</div>
   <div class="row">${pav(sug, 52, 17)}<div class="grow"><div style="font-weight:900;font-size:17px">${esc(PEOPLE[sug].name)}</div>
    ${PEOPLE[sug].sub ? `<div class="muted b" style="font-size:13px;margin-top:3px">${esc(PEOPLE[sug].sub)}</div>` : ''}</div>
@@ -5364,11 +5633,11 @@ function otherTermMine(terms, tm) {
   if (!box) { loadTermMine(tm.code); return loadingCard('Loading your ' + tm.label + ' classes…'); }
   if (box.loading) return loadingCard('Loading your ' + tm.label + ' classes…');
   if (box.err) return errCard('Couldn’t load your ' + tm.label + ' classes.', 'mineTermRetry');
-  const ts = termSecs(tm.code), later = terms.findIndex(x => x.label === tm.label) > terms.findIndex(x => x.code === CFG.TERM);
-  if (!ts.secs.length && !ts.unplaced.length) return `<div class="empty" style="margin-top:6px"><b>No ${L} classes yet</b>${later ? (window.TC_NATIVE ? `Once you’ve registered, your ${L} classes go here.` : `Once you’ve registered, import your ${L} schedule on ${webLink('termchamp.com', '/')} and it shows up here.`) : `There are no ${L} classes on your account.`}</div>`;
+  const ts = termSecs(tm.code), later = terms.findIndex(x => x.label === tm.label) > terms.findIndex(x => x.code === CFG.TERM), top = anyMineTop(tm.code);
+  if (!ts.secs.length && !ts.unplaced.length) return top + `<div class="empty" style="margin-top:6px"><b>No ${L} classes yet</b>${later ? (window.TC_NATIVE ? `Once you’ve registered, your ${L} classes go here.` : `Once you’ve registered, import your ${L} schedule on ${webLink('termchamp.com', '/')} and it shows up here.`) : `There are no ${L} classes on your account.`}</div>`;
   const byCode = {}; ts.secs.forEach(x => { (byCode[x.code] = byCode[x.code] || []).push(x); });
   const name = code => courseName(code) || course(code).title;
-  return mineAgenda(ts.secs, ts.unplaced, { now: isNowT, other: !isNowT, label: tm.label, grid: { sel: S.schedDay, act: 'schedDay', blockAct: isNowT ? 'secSheet' : 'openClass', H: 330, noNow: true } });
+  return top + mineAgenda(ts.secs, ts.unplaced, { now: isNowT, other: !isNowT, label: tm.label, grid: { sel: S.schedDay, act: 'schedDay', blockAct: isNowT ? 'secSheet' : 'openClass', H: 330, noNow: true } });
 }
 /* (2026-10-11) Plans' and My Classes' day cards fold (Tate: "make these all collapsable like just showing the days and
    then when you click it opens up each day you click that one opens up" · "make that the same for my classes"):
@@ -5432,7 +5701,7 @@ SCREENS.schedule = () => {
     const terms = myTerms(), tm = mineTerm();
     const chips = `<div class="pad" style="margin-top:14px"><div class="seg terms" role="group" aria-label="Term">${terms.map(x => `<button class="${x.label === tm.label ? 'on' : ''}" data-a="pickMineTerm" data-x="${esc(x.label)}" aria-pressed="${x.label === tm.label}">${esc(x.label)}</button>`).join('')}</div></div>`;
     if (tm.code !== CFG.TERM) inner = chips + otherTermMine(terms, tm);
-    else inner = chips + `
+    else inner = chips + anyMineTop(CFG.TERM) + `
   ${TC.err.mine ? errCard('Couldn’t load your classes.', 'refresh') : !TC.mineRows ? loadingCard('Loading your classes…') : ''}
   ${TC.mineRows && !secs.length && !unplaced.length ? (splitTerms() ? `<div class="empty"><b>No ${esc(CFG.TERM_LABEL)} classes yet</b>Once you’ve registered, add them from Explore (tap + on a class), or upload your Degree Progress Report.</div>` : `<div class="empty"><b>No classes yet</b>Find your classes in Explore and tap + to add them.</div>`) : ''}
   ${secs.length || unplaced.length || TC.commits.length ? mineAgenda(secs, unplaced, { label: CFG.TERM_LABEL, grid: { sel: S.schedDay, act: 'schedDay', blockAct: 'secSheet', H: 330, faces: true } }) : ''}`;
@@ -7780,6 +8049,7 @@ const A = {
   fofRetry: () => { const e = cur(); if (e && e.p && e.p.id) { loadFof(e.p.id, true); render(true); } },
   sheet: type => { UI.sheet = { type }; UI.champ = false; if (type === 'notifs') { S.notifSeen = TC.requests.join(',') + '|' + TC.threads.filter(isUnread).map(t => t.id + (t.last && t.last.created_at)).join(','); save(); } if (type === 'addFriend' && UI.peopleQ) runPeople(UI.peopleQ); render(true); },
   closeSheet: () => { if (UI.sheet && UI.sheet.type === 'plPrefs' && !TC.prefs) return;
+    if (UI.sheet && UI.sheet.type === 'dprPick') { A.dprPickSkip(); return; }   /* (2026-10-31) */
     if (UI.sheet && (UI.sheet.type === 'pcProf' || UI.sheet.type === 'pcTerm' || UI.sheet.type === 'dprDiff') && UI.sheet.ret) { pcBack(UI.sheet); render(true); return; } UI.sheet = null; UI.champ = false; render(true); setBars(false); },
   shareOpen: what => { if (!TC.seatsLoaded || (what === 'now' && (!TC.nowMineRows || TC.err.nowMine))) { toast('Still loading your classes — try again in a moment'); return; } UI.sheet = { type: 'share' }; shPrepare(what === 'mine' || what === 'now' || /^[ABC]$/.test(what) ? what : 'mine'); },
   /* Called straight from the tap: iOS only opens its share sheet inside the gesture, so nothing is awaited here. */
@@ -8621,7 +8891,7 @@ TC.loadWaivers = async function () {
 TC.reloadHistory = async function () {
   const r = await TC.client().from('class_history').select('code,term,year,professor').eq('user_id', TC.user.id);
   if (r.error) { TC.err.history = r.error.message; return false; }
-  delete TC.err.history; TC.myHistory = r.data || []; return true;
+  delete TC.err.history; TC.myHistory = r.data || []; if (anyChanged()) relinkPeople(); else anyTick(); return true;
 };
 TC.addHistory = async function (code, term, year, professor) {
   if (window.TCPL) { const cur = TCPL.canon(code); if (cur) code = cur; }
@@ -11455,7 +11725,7 @@ Object.assign(A, {
   dprRc: key => { const r = UI.dpr; if (!r) return; r.rcOff = r.rcOff || new Set(); if (r.rcOff.has(key)) r.rcOff.delete(key); else r.rcOff.add(key); render(true); },
   dprSave: async () => {
     const r = UI.dpr; if (!r || UI.busy.dpr) return;
-    r.saveErr = null; UI.busy.dpr = 1; render(true);
+    r.saveErr = null; UI.busy.dpr = 1; UI.dprPicking = 1; render(true);
     const notes = [];
     try {
       r.rows.forEach(x => { if (x.flag) x.pick = false; });
@@ -11483,9 +11753,12 @@ Object.assign(A, {
       if (!e2 && UI.dprDiff && !UI.dprDiff.same) UI.sheet = { type: 'dprDiff', d: UI.dprDiff, ret: UI.sheet };
       else if (!e2 && UI.dprDiff && UI.dprDiff.same) notes.push('Your report says the same as before.');
       UI.dprDiff = null;
+      /* (2026-10-31) the report's classes for this term and next have no section yet: pick them now, then the sheet that was next */
+      const pk = await dprPickBuild(r).catch(() => null);
+      if (pk) UI.sheet = Object.assign(pk, { ret: UI.sheet });
       S.tab = 'schedule'; S.schedTab = 'planner'; save();
     } catch (err) { r.saveErr = 'Couldn’t save that — try again.'; }
-    finally { UI.busy.dpr = 0; if (notes.length) toast(notes.join(' ')); render(true); }
+    finally { UI.busy.dpr = 0; if (!(UI.sheet && UI.sheet.type === 'dprPick')) UI.dprPicking = 0; if (notes.length) toast(notes.join(' ')); render(true); if (!UI.dprPicking) anyTick(); }
   },
   askRemoveHistory: code => { UI.sheet = { type: 'confirm', title: 'Remove ' + code + '?', body: 'It comes off your past classes and stops counting toward your requirements.', yes: 'Remove', act: 'removeHistory', x: code }; render(true); },
   removeHistory: async code => { UI.sheet = null; const e = await TC.removeHistory(code); toast(e || `Removed ${code}`); render(true); },
@@ -12053,8 +12326,195 @@ const onbDprSave = A.dprSave;
 A.dprSave = async () => {
   const wasOnb = (() => { const top = cur(); return !!(top && top.s === 'onb' && top.p && top.p.step === 'degree'); })();
   await onbDprSave();
-  if (wasOnb && (!UI.sheet || UI.sheet.type === 'pcWho') && !(UI.dpr && UI.dpr.saveErr)) { onbRemember(null); S.stack.home = [{ s: 'home' }]; UI.onbPre = null; UI.onbProgram = null; S.tab = 'schedule'; S.schedTab = 'planner'; save(); render(); if (UI.sheet && UI.sheet.type === 'pcWho') UI.sheet.onb = true; else setTimeout(() => onbAsks(), 600); }
+  const pkOk = sh => !!sh && sh.type === 'dprPick' && (!sh.ret || sh.ret.type === 'pcWho');   /* (2026-10-31) */
+  if (wasOnb && (!UI.sheet || UI.sheet.type === 'pcWho' || pkOk(UI.sheet)) && !(UI.dpr && UI.dpr.saveErr)) { onbRemember(null); S.stack.home = [{ s: 'home' }]; UI.onbPre = null; UI.onbProgram = null; S.tab = 'schedule'; S.schedTab = 'planner'; save(); render(); if (UI.sheet && (UI.sheet.type === 'pcWho' || UI.sheet.type === 'dprPick')) UI.sheet.onb = true; else setTimeout(() => onbAsks(), 600); }
 };
+/* ---- (2026-10-31) Anytime: the card and note on My Classes, the row on Home (owner only), the two sheets ---- */
+function anyMineTop(t) {
+  if (!TC.user || !TC.ready) return '';
+  t = String(t); const L = anyTermLabel(t), m = anyMine(t), hid = m ? m.hidden : ((termSecs(t) || {}).hidden || []);
+  let out = '';
+  const bulk = anyBulk(t), pick = bulk ? [] : anyPickList(t);
+  if (bulk) out += `<div class="card any-card any-bulk" role="group" aria-label="${esc(L)}: check these classes"><div class="any-ct">Are you taking all ${bulk.length} of these in ${esc(L)}?</div><div class="any-cs">They came in together with no times. Keep the ones you’re taking.</div><div class="any-cb"><button class="pbtn" data-a="anyBulkYes" data-x="${esc(t)}">Yes</button><button class="pbtn soft" data-a="anyBulkPick" data-x="${esc(t)}">Pick the ones I’m taking</button></div></div>`;
+  else if (pick.length) out += `<div class="card any-card any-times" role="group" aria-label="${esc(L)}: add times"><button class="any-cmain" data-a="anyPickOpen" data-x="${esc(t)}"><span class="any-ic">${ic('clock', 20, 2.4)}</span><span class="grow"><span class="any-ct">Add times to ${pick.length} class${pick.length === 1 ? '' : 'es'}</span><span class="any-cs">Pick your section and it goes on your week.</span></span><span class="pbtn">Pick</span></button><button class="xbtn any-cx" data-a="anyPickNo" data-x="${esc(t)}" aria-label="Not now">${ic('x', 14, 2.4)}</button></div>`;
+  if (hid.length) out += `<div class="any-hid"><span>${hid.length === 1 ? '1 class you’ve already taken is hidden' : hid.length + ' classes you’ve already taken are hidden'}</span><span aria-hidden="true">·</span><button class="any-hrm" data-a="anyHidRm" data-x="${esc(t)}"${UI.busy.anyHid ? ' disabled' : ''}>Remove ${hid.length === 1 ? 'it' : 'them'}</button></div>`;
+  return out;
+}
+function anyHomeRow() {
+  if (!TC.ready || !TC.user) return '';
+  const terms = (splitTerms() ? [nowTerm().code, CFG.TERM] : [CFG.TERM]).map(String);
+  const row = (a, t, h, sub) => `<button class="card any-home" data-a="${a}" data-x="${esc(t)}"><span class="any-ic">${ic('clock', 20, 2.4)}</span><span class="grow"><span class="any-ct">${esc(h)}</span><span class="any-cs">${esc(sub)}</span></span><span class="chev">${ic('chevR', 18)}</span></button>`;
+  for (const t of terms) { const b = anyBulk(t); if (b) return row('anyBulkOpen', t, `Are you taking all ${b.length} ${anyTermLabel(t)} classes?`, 'Tap to check them'); }
+  for (const t of terms) { const p = anyPickList(t); if (p.length) return row('anyPickOpen', t, `Add times to ${p.length} class${p.length === 1 ? '' : 'es'}`, `${anyTermLabel(t)} · pick your sections`); }
+  return '';
+}
+/* one section as a tappable row: days and times, professor and rating, seats, friends in it, what it overlaps */
+function anySecBtn(s, o) {
+  const when = s.async ? 'Online, self-paced' : s.noTime ? 'Time not posted' : daysLabel(s.days) + ' ' + range(s);
+  const f = o.fr || [], cl = [...new Set((o.clash || []).map(x => x.code))], sl = secLabel(s.sec) || 'this section';
+  const frT = f.length ? `<span class="any-fr">${avStack(f, 22)}<span>${f.length} friend${f.length === 1 ? '' : 's'} in ${esc(sl)}</span></span>` : '';
+  const clT = cl.length ? `<span class="any-cl">Overlaps ${esc(cl.join(', '))}</span>` : '';
+  const lab = [(s.sec ? secLabel(s.sec) + ', ' : '') + when, profName(s.prof), f.length ? f.length + ' friend' + (f.length === 1 ? '' : 's') + ' in it' : '', cl.length ? 'overlaps ' + cl.join(', ') : '', o.radio ? '' : 'pick this section'].filter(Boolean).join(', ');
+  return `<button class="secrow any-sec${o.on ? ' on' : ''}" data-a="${o.act}" data-x="${esc(o.x)}"${o.radio ? ` aria-pressed="${!!o.on}"` : ''} aria-label="${esc(lab)}"${o.busy || ''}>${o.radio ? `<span class="any-rd" aria-hidden="true">${o.on ? ic('check', 13, 3.4) : ''}</span>` : ''}<span class="any-sb">${secRowT(s)}<span class="any-sm">${rowProf(s.prof)} · ${secSeatText(s)}</span>${frT || clT ? `<span class="any-sx">${frT}${clT}</span>` : ''}${o.tag ? `<span class="any-tag">${esc(o.tag)}</span>` : ''}</span>${o.radio ? '' : '<span class="pbtn" style="height:32px;padding:0 12px;font-size:13px">Pick</span>'}</button>`;
+}
+const anyFriendsIn = (t, s) => TC.friends.filter(f => (String(t) === String(CFG.TERM) ? personSecs(f) : nowSecs(f)).some(x => String(x.id) === String(s.id)));
+SHEETS.anyPick = sh => {
+  const t = sh.term, L = anyTermLabel(t), list = anyPickList(t), mine = ((anyMine(t) || {}).secs || []).filter(onWeekSec);
+  const busy = UI.busy.anyPick ? ' disabled' : '';
+  const cls = x => `<div class="any-pc"><div class="row sb any-pch"><span class="row" style="gap:8px;min-width:0"><span class="code">${esc(x.code)}</span><b class="any-pcn">${esc(anyTitle(t, x.code))}</b></span><button class="any-skip" data-a="anySkip" data-x="${esc(t + '|' + x.code)}" aria-label="Skip ${esc(x.code)}"${busy}>Skip</button></div>${x.secs.map(s2 => anySecBtn(s2, { act: 'anyChoose', x: t + '|' + x.code + '|' + s2.id, fr: anyFriendsIn(t, s2), clash: mine.filter(m => m.code !== s2.code && secClash(s2, m)), busy })).join('')}</div>`;
+  return `<div class="row sb"><h3>Add times to your classes</h3>${pcX()}</div><div class="muted b" style="font-size:14px;margin-top:4px">${esc(L)} · tap the section you’re in</div>${list.length ? list.map(cls).join('') : '<div class="muted b" style="margin-top:14px;font-size:14px">All set.</div>'}`;
+};
+SHEETS.anyBulk = sh => {
+  const t = sh.term, L = anyTermLabel(t);
+  if (!sh.list) {
+    const b = anyBulk(t) || [];
+    return `<div class="row sb"><h3>Are you taking all ${b.length} of these in ${esc(L)}?</h3>${pcX()}</div><div class="muted b" style="font-size:14px;margin-top:6px;line-height:1.45">They came into ${esc(L)} together, with no times. If that was your whole plan, keep just the ones you’re taking.</div><div class="any-codes">${b.map(c => `<span class="code">${esc(c)}</span>`).join('')}</div><div style="display:grid;gap:8px;margin-top:16px"><button class="btn" data-a="anyBulkYes" data-x="${esc(t)}">Yes, I’m taking all ${b.length}</button><button class="btn soft" data-a="anyBulkPick" data-x="${esc(t)}">Pick the ones I’m taking</button></div>`;
+  }
+  const keep = sh.list.length - sh.off.length;
+  return `<div class="row sb"><h3>Which are you taking in ${esc(L)}?</h3>${pcX()}</div><div class="muted b" style="font-size:14px;margin-top:6px;line-height:1.45">Untick the ones you’re not taking. They come off ${esc(L)}.</div>
+  <div style="margin-top:8px">${sh.list.map(c => { const on = !sh.off.includes(c), ti = anyTitle(t, c); return `<button class="dr-rcr" data-a="anyBulkTog" data-x="${esc(c)}" aria-pressed="${on}"><span class="dr-rcb" aria-hidden="true">${on ? ic('check', 14, 3.4) : ''}</span><span class="dr-rct"><b>${esc(c)}</b>${ti ? `<span>${esc(ti)}</span>` : ''}</span></button>`; }).join('')}</div>
+  <div class="any-bfoot"><button class="btn" data-a="anyBulkSave"${UI.busy.anyBulk ? ' disabled' : ''}>${UI.busy.anyBulk ? 'Saving…' : sh.off.length ? `Keep ${keep} · remove ${sh.off.length}` : `Keep all ${keep}`}</button></div>`;
+};
+Object.assign(A, {
+  anyPickOpen: t => { if (!t) return; UI.champ = false; UI.sheet = { type: 'anyPick', term: String(t) }; render(true); },
+  anyPickNo: t => { const l = anyPickList(t); if (!l.length) return; anySkipSet(l.map(x => t + ':' + x.code), true); render(true); toastUndo('Okay — they stay in Anytime', () => { anySkipSet(l.map(x => t + ':' + x.code), false); render(true); }); },
+  anySkip: v => {
+    const [t, code] = String(v || '').split('|'); if (!t || !code) return;
+    anySkipSet([t + ':' + code], true);
+    if (UI.sheet && UI.sheet.type === 'anyPick' && !anyPickList(t).length) UI.sheet = null;
+    render(true); toastUndo(`${code} stays in Anytime`, () => { anySkipSet([t + ':' + code], false); render(true); });
+  },
+  anyChoose: async v => {
+    const [t, code, id] = String(v || '').split('|'); if (UI.busy.anyPick || !t || !code || !id) return;
+    const plan = t === String(CFG.TERM), s = (anySecsOf(t, code) || []).find(x => String(x.id) === id); if (!s) return;
+    const snap = mineSnapIn(code, t); UI.busy.anyPick = 1; render(true);
+    let e = null; try { e = plan ? await TC.addMySection(s, { hadSaved: true }) : await TC.setNowSection(s); } catch (x) { e = 'Couldn’t save that — check your connection.'; } finally { UI.busy.anyPick = 0; }
+    if (e) { toast(e); return render(true); }
+    UI.storyOrder = null; relinkPeople();
+    if (UI.sheet && UI.sheet.type === 'anyPick' && !anyPickList(t).length) UI.sheet = null;
+    render(true);
+    toastUndo(`${code}${secLabel(s.sec) ? ' ' + secLabel(s.sec) : ''} is on your week`, async () => { const r = await TC.restoreMyCodeIn(code, t, snap, plan ? s.id : s.nbr); relinkPeople(); render(true); toast(r || 'Undone'); });
+  },
+  anyHidRm: async t => {
+    if (UI.busy.anyHid || !t) return; t = String(t);
+    const m = anyMine(t), codes = (m ? m.hidden : ((termSecs(t) || {}).hidden || [])).slice(); if (!codes.length) return;
+    const snaps = {}; codes.forEach(c => { snaps[c] = mineSnapIn(c, t); });
+    UI.busy.anyHid = 1; render(true);
+    let e = null; try { e = await TC.anyRemoveCodes(t, codes); } catch (x) { e = 'Couldn’t remove those — check your connection.'; } finally { UI.busy.anyHid = 0; }
+    if (e) { toast(e); return render(true); }
+    relinkPeople(); render(true);
+    toastUndo(`Removed ${codes.length} class${codes.length === 1 ? '' : 'es'} you’ve taken`, async () => { const r = await TC.anyRestoreCodes(t, snaps); relinkPeople(); render(true); toast(r || 'Undone'); });
+  },
+  anyBulkOpen: t => { if (!t || !anyBulk(t)) return; UI.champ = false; UI.sheet = { type: 'anyBulk', term: String(t) }; render(true); },
+  anyBulkYes: t => { if (!t) return; anyBulkSet(t, 'yes'); if (UI.sheet && UI.sheet.type === 'anyBulk') UI.sheet = null; render(true); toast('Got it — keeping them all'); anyQuietAgain(t); },
+  anyBulkPick: t => { const l = anyBulk(t); if (!l) return; UI.champ = false; UI.sheet = { type: 'anyBulk', term: String(t), list: l.slice(), off: [] }; render(true); },
+  anyBulkTog: code => { const sh = UI.sheet; if (!sh || sh.type !== 'anyBulk' || !sh.list) return; const i = sh.off.indexOf(code); if (i >= 0) sh.off.splice(i, 1); else sh.off.push(code); render(true); },
+  anyBulkSave: async () => {
+    const sh = UI.sheet; if (!sh || sh.type !== 'anyBulk' || !sh.list || UI.busy.anyBulk) return;
+    const t = sh.term, L = anyTermLabel(t), gone = sh.off.filter(c => sh.list.includes(c));
+    if (!gone.length) { anyBulkSet(t, 'picked'); UI.sheet = null; render(true); toast(`Keeping all ${sh.list.length}`); anyQuietAgain(t); return; }
+    const snaps = {}; gone.forEach(c => { snaps[c] = mineSnapIn(c, t); });
+    UI.busy.anyBulk = 1; render(true);
+    let e = null; try { e = await TC.anyRemoveCodes(t, gone); } catch (x) { e = 'Couldn’t remove those — check your connection.'; } finally { UI.busy.anyBulk = 0; }
+    if (e) { toast(e); return render(true); }
+    anyBulkSet(t, 'picked'); if (UI.sheet === sh) UI.sheet = null;
+    relinkPeople(); render(true);
+    toastUndo(`Removed ${gone.length} class${gone.length === 1 ? '' : 'es'} from ${L}`, async () => { const r = await TC.anyRestoreCodes(t, snaps); relinkPeople(); render(true); toast(r || 'Undone'); });
+    anyQuietAgain(t);
+  }
+});
+/* ---- (2026-10-31) the report's "Pick your sections" step ----
+   Combinations: one section per class, none overlapping each other or the student's other timed classes that term. Counted
+   up to 2 (all that matters: exactly one or not); a search that runs too long counts as "not exactly one". */
+function anyCombos(lists, fixed, budget) {
+  let n = 0, first = null, steps = 0; const chosen = [], B = budget || 200000;
+  const order = lists.map((l, i) => i).sort((a, b) => lists[a].length - lists[b].length);
+  (function go(k) {
+    if (n >= 2 || steps > B) return;
+    if (k === order.length) { n++; if (!first) first = chosen.slice(); return; }
+    const i = order[k];
+    for (const x of lists[i]) {
+      if (++steps > B || n >= 2) return;
+      if (fixed.some(f => secClash(x, f)) || chosen.some(c => c && secClash(x, c))) continue;
+      chosen[i] = x; go(k + 1); chosen[i] = undefined;
+    }
+  })(0);
+  return { n: steps > B ? -1 : n, pick: first };
+}
+async function dprPickBuild(r) {
+  if (!TC.ready || !TC.user) return null;
+  const want = {};
+  (r.rows || []).forEach(x => { if (x.skip || x.flag || !(x._now || x._next) || !x.cur) return; const t = String(x._now ? nowTerm().code : CFG.TERM); (want[t] = want[t] || []).includes(x.cur) || want[t].push(x.cur); });
+  const groups = [];
+  for (const t of Object.keys(want)) {
+    if (t !== String(CFG.TERM)) await anyNowFetch(want[t]);
+    relinkPeople();
+    const m = anyMine(t); if (!m) continue;
+    const unp = new Set(m.unplaced), one1 = new Set(m.secs.filter(x => x.oneSec).map(x => x.code));
+    const classes = want[t].filter(c => unp.has(c) || one1.has(c)).map(c => ({ code: c, secs: anySecsOf(t, c) || [] })).filter(x => x.secs.length);
+    if (!classes.length) continue;
+    const fixed = m.secs.filter(x => onWeekSec(x) && !classes.some(c => c.code === x.code));
+    const k = anyCombos(classes.map(c => c.secs), fixed), sel = {};
+    if (k.n === 1) classes.forEach((c, i) => { sel[c.code] = String(k.pick[i].id); });
+    else classes.forEach(c => { if (c.secs.length === 1) sel[c.code] = String(c.secs[0].id); });
+    groups.push({ term: t, label: anyTermLabel(t), classes: classes.map(c => c.code), sel, unique: k.n === 1, combos: k.n });
+  }
+  return groups.length ? { type: 'dprPick', groups } : null;
+}
+SHEETS.dprPick = sh => {
+  const all = sh.groups.reduce((n, g) => n + g.classes.length, 0), nSel = sh.groups.reduce((n, g) => n + Object.keys(g.sel).length, 0);
+  const sub = sh.groups.map(g => g.label).join(' and ') + ' · ' + all + ' class' + (all === 1 ? '' : 'es');
+  const busy = UI.busy.dpk ? ' disabled' : '';
+  const grp = (g, gi) => {
+    const m = anyMine(g.term) || { secs: [] }, fixed = m.secs.filter(x => onWeekSec(x) && !g.classes.includes(x.code));
+    const chosen = g.classes.map(c => g.sel[c] && (anySecsOf(g.term, c) || []).find(x => String(x.id) === g.sel[c])).filter(Boolean);
+    return `${sh.groups.length > 1 ? `<div class="dpk-term">${esc(g.label)}</div>` : ''}${g.unique && g.classes.some(c => (anySecsOf(g.term, c) || []).length > 1) ? `<div class="dpk-one">${ic('check', 14, 3)}<span>Only one set of sections fits together, so we picked it. Check it and save.</span></div>` : ''}${g.classes.map(c => {
+      const secs = anySecsOf(g.term, c) || [];
+      return `<div class="card dpk-c" role="group" aria-label="${esc(c)} sections"><div class="dpk-h"><span class="code">${esc(c)}</span><b>${esc(anyTitle(g.term, c))}</b></div>${secs.map(x => anySecBtn(x, { act: 'dprPickSec', x: gi + '|' + c + '|' + x.id, on: g.sel[c] === String(x.id), radio: true, fr: anyFriendsIn(g.term, x), clash: fixed.concat(chosen.filter(y => y.code !== c)).filter(y => secClash(x, y)), tag: secs.length === 1 ? 'Only section' : '', busy })).join('')}</div>`;
+    }).join('')}`;
+  };
+  const allUnique = sh.groups.every(g => g.unique) && nSel === all;
+  return `<div class="dr dpk"><div class="at-top"><span class="at-kick">DEGREE PROGRESS REPORT</span><button class="xbtn" data-a="dprPickSkip" aria-label="Skip for now">${ic('x', 16, 2.4)}</button></div>
+  <h1 class="dr-h1">Pick your sections</h1><div class="dr-sub">${esc(sub)}</div>
+  <div class="dpk-why">Your report doesn’t say which section you’re in. Tap yours and it goes on your week.</div>
+  ${sh.groups.map(grp).join('')}${sh.err ? `<div class="tc-err" style="margin-top:12px">${esc(sh.err)}</div>` : ''}
+  <div class="dr-foot dpk-foot"><button class="btn" data-a="dprPickSave"${nSel && !UI.busy.dpk ? '' : ' disabled'}>${UI.busy.dpk ? 'Saving…' : !nSel ? 'Tap a section to pick it' : allUnique ? 'Save these sections' : `Save ${nSel} section${nSel === 1 ? '' : 's'}`}</button><button class="dr-link" data-a="dprPickSkip"${busy}>Skip for now</button></div></div>`;
+};
+SHEETS.dprPick.full = true; SHEETS.dprPick.label = 'Pick your sections';
+function dprPickClose(sh) {
+  const ret = (sh && sh.ret) || null;
+  if (ret && sh.onb && ret.type === 'pcWho') ret.onb = true;
+  UI.sheet = ret; UI.dprPicking = 0; relinkPeople(); render(true);
+  if (sh && sh.onb && !ret) setTimeout(() => onbAsks(), 600);
+}
+Object.assign(A, {
+  dprPickSec: v => {
+    const sh = UI.sheet; if (!sh || sh.type !== 'dprPick' || UI.busy.dpk) return;
+    const [gi, code, id] = String(v || '').split('|'), g = sh.groups[+gi]; if (!g || !g.classes.includes(code)) return;
+    if (g.sel[code] === id) delete g.sel[code]; else g.sel[code] = id;
+    render(true);
+  },
+  dprPickSkip: () => { const sh = UI.sheet; if (!sh || sh.type !== 'dprPick' || UI.busy.dpk) return; dprPickClose(sh); toast('They’re in My Classes with no times — add them any time'); },
+  dprPickSave: async () => {
+    const sh = UI.sheet; if (!sh || sh.type !== 'dprPick' || UI.busy.dpk) return;
+    UI.busy.dpk = 1; sh.err = ''; render(true);
+    let n = 0, err = null;
+    try {
+      for (const g of sh.groups) {
+        const plan = g.term === String(CFG.TERM);
+        for (const c of g.classes) {
+          const id = g.sel[c]; if (!id || err) continue;
+          const x = (anySecsOf(g.term, c) || []).find(y => String(y.id) === id); if (!x) continue;
+          err = plan ? await TC.addMySection(x, { hadSaved: true }) : await TC.setNowSection(x);
+          if (!err) { n++; delete g.sel[c]; g.classes = g.classes.filter(y => y !== c); }
+        }
+      }
+    } catch (e) { err = 'Couldn’t save that — check your connection.'; } finally { UI.busy.dpk = 0; }
+    UI.storyOrder = null;
+    if (err) { sh.groups = sh.groups.filter(g => g.classes.length); sh.err = err + (n ? ` (${n} saved)` : ''); if (!sh.groups.length) dprPickClose(sh); else { relinkPeople(); render(true); } return; }
+    dprPickClose(sh); toast(`${n} class${n === 1 ? '' : 'es'} on your week`);
+  }
+});
 /* "Send the link to my laptop" — from onboarding's last step and the empty Planner. */
 A.plLaptop = async () => {
   if (UI.busy.laptop) return; UI.busy.laptop = 1; render(true);
@@ -12492,12 +12952,14 @@ async function ctRead() {
   if (plug) { const r = await plug.getContacts({ projection: { name: true, phones: true, emails: true } }); list = (r && r.contacts) || []; }
   else list = CT_SAMPLE;
   const people = [], phoneH = [], mailH = [], byHash = {}, seenPhone = new Set();
-  for (const c of list) {
+  /* (2026-10-31) named cards first: a number saved twice (with a name and without) is listed once, under the name */
+  const named = list.filter(c => ctName(c)), bare = list.filter(c => !ctName(c));
+  for (const c of named.concat(bare)) {
     const phones = [...new Set((c.phones || []).map(x => ctE164(x && x.number)).filter(Boolean))];
     const mails = [...new Set((c.emails || []).map(x => ctEmail(x && x.address)).filter(Boolean))];
     if (!phones.length && !mails.length) continue;
-    const name = ctName(c) || (phones[0] ? ctShowPhone(phones[0]) : mails[0]);
-    const k = people.length; people.push({ k, name, phone: phones.find(x => !seenPhone.has(x)) || '', hit: false });
+    const nm = ctName(c), name = nm || (phones[0] ? ctShowPhone(phones[0]) : mails[0]);
+    const k = people.length; people.push({ k, name, named: !!nm, phone: phones.find(x => !seenPhone.has(x)) || '', hit: false });
     phones.forEach(x => seenPhone.add(x));
     for (const x of phones) { const h = await ctSha(x); (byHash[h] = byHash[h] || []).push(k); phoneH.push(h); }
     for (const x of mails) { const h = await ctSha(x); (byHash[h] = byHash[h] || []).push(k); mailH.push(h); }
@@ -12508,7 +12970,7 @@ async function ctRead() {
 /* Load (or reload) the results sheet. A newer load wins; an older one's answer is dropped. */
 async function ctLoad() {
   const gen = (UI.ctGen = (UI.ctGen || 0) + 1);
-  const st = UI.ct = { busy: 1, rows: [], invite: [], err: '', unavail: false, limited: false, all: (UI.ct && UI.ct.all) || false, invited: (UI.ct && UI.ct.invited) || {} };
+  const st = UI.ct = { busy: 1, rows: [], invite: [], err: '', unavail: false, limited: false, all: (UI.ct && UI.ct.all) || false, invited: (UI.ct && UI.ct.invited) || {}, q: '' };
   render(true);
   if (TC.phoneSaved === undefined) ctPhoneLoad();
   const plug = TC.ctPlugin();
@@ -12539,7 +13001,7 @@ async function ctLoad() {
     Object.values(rows).forEach(x => { (x.matched || []).forEach(h => (book.byHash[h] || []).forEach(k => { book.people[k].hit = true; })); if (!PEOPLE[x.id] || !TC.friends.includes(x.id)) PEOPLE[x.id] = Object.assign(PEOPLE[x.id] || {}, personFrom(x)); });
     const rank = id => ({ '': 0, incoming: 1, sent: 2, friends: 3 })[TC.relation(id)] || 0;
     st.rows = Object.keys(rows).sort((a, b) => rank(a) - rank(b) || PEOPLE[a].name.localeCompare(PEOPLE[b].name));
-    st.invite = book.people.filter(x => !x.hit && x.phone).sort((a, b) => a.name.localeCompare(b.name));
+    st.invite = ctSortBook(book.people.filter(x => !x.hit && x.phone));   /* (2026-10-31) A to Z, bare numbers last */
   } catch (e) {
     if (gen !== UI.ctGen) return;
     st.err = 'Couldn’t read your contacts — try again.';
@@ -12589,25 +13051,104 @@ SHEETS.ctConnect = sh => {
  <div style="display:grid;gap:8px"><button class="btn" data-a="ctConnect">Connect contacts</button>${sh.pop ? '<button class="btn ghost" data-a="ctNotNow">Not now</button>' : ''}</div>
  <div class="muted b ct-fine">You can turn this off any time in Settings.</div>`;
 };
+/* ---- The contacts list (2026-10-31, Tate's pick "A") ----
+   A full page. Named contacts A to Z (Intl.Collator: case and accents ignored, numbers in order), then names
+   that don't start with a letter under "#", then number-only contacts under "Other numbers". */
+const CT_ABC = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ#~', CT_IDX_MIN = 15;
+let CT_COLL = null;
+function ctColl() { if (!CT_COLL) { try { CT_COLL = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true }); } catch (e) { CT_COLL = { compare: (a, b) => a.localeCompare(b) }; } } return CT_COLL; }
+function ctFold(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
+function ctLetter(name) { const c = ctFold(name).replace(/^[^\p{L}\p{N}]+/u, '').charAt(0).toUpperCase(); return /^[A-Z]$/.test(c) ? c : '#'; }
+function ctSortBook(list) {
+  const co = ctColl();
+  list.forEach(x => { x.L = x.named ? ctLetter(x.name) : '~'; x.f = ctFold(x.name); x.d = String(x.phone || '').replace(/\D/g, ''); x.s = x.name.replace(/^[^\p{L}\p{N}]+/u, ''); });   /* "Coach" Reed sorts as Coach */
+  return list.sort((a, b) => CT_ABC.indexOf(a.L) - CT_ABC.indexOf(b.L) || (a.named ? co.compare(a.s, b.s) : a.d.localeCompare(b.d)) || a.k - b.k);
+}
+/* search: every word in the name (case and accents ignored), or 3+ digits anywhere in the number */
+function ctMatcher(q) {
+  const w = ctFold(q).trim().split(/\s+/).filter(Boolean), dg = String(q || '').replace(/\D/g, '');
+  if (!w.length) return null;
+  return (txt, digits) => w.every(x => txt.includes(x)) || (dg.length >= 3 && !!digits && digits.includes(dg));
+}
+function ctMutual(id) { let n = 0; (TC.friends || []).forEach(f => { const o = TC.fof && TC.fof[f]; if (o && o.ids && o.ids.includes(id)) n++; }); return n; }
+function ctOnBtn(id) {
+  const rel = TC.relation(id), nm = esc(PEOPLE[id].name);
+  return rel === 'friends' ? '<span class="pbtn done">Friends</span>' : rel === 'incoming' ? `<button class="pbtn pink" data-a="acceptReq" data-x="${esc(id)}">Accept</button>`
+    : rel === 'sent' ? `<button class="pbtn done" data-a="addFriend" data-x="${esc(id)}" aria-label="Cancel friend request to ${nm}">Requested</button>` : `<button class="pbtn" data-a="addFriend" data-x="${esc(id)}" aria-label="Add ${nm}">Add</button>`;
+}
+function ctOnRow(id) {
+  const p = PEOPLE[id], img = safeImg(p.avatar), mu = p.major ? '' : ctMutual(id);
+  const av = img ? `<span class="ct-av">${pav(id, 42, 14)}</span>` : `<span class="ct-av" style="background:${p.color || colorFor(id)}" aria-hidden="true">${esc(p.ini || initialsOf(p.name))}</span>`;
+  const sub = [p.handle ? '@' + esc(p.handle) : '', p.major ? esc(p.major) : mu ? mu + ' mutual' : ''].filter(Boolean).join(' · ');
+  return `<div class="ct-row">${av}<div class="grow"><div class="nm">${esc(p.name)}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div>${ctOnBtn(id)}</div>`;
+}
+function ctIvRow(c, done) {
+  const ini = c.named ? esc(initialsOf(c.name)) : ic('phone', 18, 2.3);
+  return `<div class="ct-row"><span class="ct-av iv" aria-hidden="true">${ini}</span><div class="grow"><div class="nm">${esc(c.name)}</div>${c.named ? `<div class="sub">${esc(ctShowPhone(c.phone))}</div>` : ''}</div><button class="pbtn ct-inv${done ? ' done' : ''}" data-a="ctInvite" data-x="${c.k}" aria-label="Invite ${esc(c.name)}">${done ? 'Invited' : 'Invite'}</button></div>`;
+}
+/* the invite groups, built once per search / invite (1,000+ rows stay cheap on every other render) */
+function ctInviteHTML(st, m) {
+  const inv = st.invited || {}, key = (st.q || '') + '|' + Object.keys(inv).length + '|' + st.invite.length;
+  if (st._ivKey === key && st._iv) return st._iv;
+  const list = m ? st.invite.filter(c => m(c.f, c.d)) : st.invite, groups = [];
+  let g = null;
+  for (const c of list) { if (!g || g.L !== c.L) groups.push(g = { L: c.L, rows: [] }); g.rows.push(c); }
+  const html = groups.map(x => `<div class="ct-grp" data-l="${x.L}" style="contain-intrinsic-size:auto ${28 + x.rows.length * 60}px"><div class="ct-lh" role="heading" aria-level="3">${x.L === '~' ? 'Other numbers' : x.L}</div>${x.rows.map(c => ctIvRow(c, inv[c.phone])).join('')}</div>`).join('');
+  st._ivKey = key; st._iv = html; st._ivN = list.length;
+  return html;
+}
+function ctBodyHTML(st) {
+  if (st.busy) return loadingCard('Checking your contacts…');
+  const m = ctMatcher(st.q), ivH = st.invite.length ? ctInviteHTML(st, m) : '', ivN = st.invite.length ? st._ivN : 0;
+  const inv = ivN ? `<div class="ct-sec">Invite to TermChamp</div>${ivH}` : '';
+  if (st.err) return `<div class="tc-err" role="alert">${esc(st.err)}</div><button class="btn soft" style="margin-top:8px" data-a="ctRetry">Try again</button>` + inv;
+  const rows = m ? (st.rows || []).filter(id => { const p = PEOPLE[id]; return m(ctFold(p.name + ' ' + (p.handle || '')), ''); }) : (st.rows || []);
+  const addable = rows.filter(id => TC.relation(id) === '').length;
+  const on = st.unavail ? (m ? '' : '<div class="ct-note" role="status">Contact matching isn’t available yet.</div>')
+    : rows.length ? `<div class="ct-sec"><span>On TermChamp</span><span class="ct-n">${rows.length}</span><span class="grow"></span>${addable > 1 && !m ? `<button class="ct-addall" data-a="ctAddAll" ${UI.busy.ctAll ? 'disabled' : ''}>${UI.busy.ctAll ? 'Adding…' : 'Add all'}</button>` : ''}</div>${rows.map(ctOnRow).join('')}`
+    : m ? '' : '<div class="ct-sec">On TermChamp</div><div class="ct-none">None of your contacts are on TermChamp yet. Invite a few below.</div>';
+  const mine = !m && TC.phoneSaved === false && !st.unavail ? `<button class="ct-mine" data-a="ctPhoneSheet" data-x="ctResults">${ic('phone', 18, 2.3)}<span class="grow">Add your number so friends can find you too</span>${ic('chevR', 16, 2.6)}</button>` : '';
+  const lim = !m && st.limited ? '<div class="muted b" style="font-size:12.5px;line-height:1.4;margin-top:8px">You shared some of your contacts. Change which in your iPhone’s Settings › TermChamp › Contacts.</div>' : '';
+  const none = m && !rows.length && !ivN ? `<div class="ct-none" role="status" style="padding-top:14px">No contacts match “${esc(String(st.q).trim())}”.</div>` : '';
+  return on + mine + lim + inv + none;
+}
+function ctIdxHTML(st) {
+  if (st.busy || st.invite.length < CT_IDX_MIN) return '';
+  const has = new Set(st.invite.map(c => c.L === '~' ? '#' : c.L));   /* letters come from the whole list */
+  return `<div class="ct-idx" aria-hidden="true">${CT_ABC.slice(0, 27).split('').map(L => `<button type="button" tabindex="-1" class="${has.has(L) ? '' : 'off'}" data-a="ctJump" data-x="${L}">${L}</button>`).join('')}</div>`;
+}
 SHEETS.ctResults = () => {
-  const st = UI.ct || { busy: 1, rows: [], invite: [] };
-  const btn = id => { const rel = TC.relation(id);
-    return rel === 'friends' ? '<span class="pbtn done">Friends</span>' : rel === 'incoming' ? `<button class="pbtn pink" data-a="acceptReq" data-x="${esc(id)}">Accept</button>`
-      : rel === 'sent' ? `<button class="pbtn done" data-a="addFriend" data-x="${esc(id)}" aria-label="Cancel friend request to ${esc(PEOPLE[id].name)}">Requested</button>` : `<button class="pbtn pink" data-a="addFriend" data-x="${esc(id)}" aria-label="Add ${esc(PEOPLE[id].name)}">Add</button>`; };
-  const addable = (st.rows || []).filter(id => TC.relation(id) === '').length;
-  const on = st.unavail ? '<div class="ct-note" role="status">Contact matching isn’t available yet.</div>'
-    : `<div class="ct-h"><span>On TermChamp · ${st.rows.length}</span>${addable > 1 ? `<button class="pbtn pink" data-a="ctAddAll" ${UI.busy.ctAll ? 'disabled' : ''}>${UI.busy.ctAll ? 'Adding…' : 'Add all'}</button>` : ''}</div>
- ${st.rows.length ? st.rows.map(id => { const p = PEOPLE[id]; return `<div class="row ct-row">${pav(id, 44, 15)}<div class="grow"><div class="b nm">${esc(p.name)}</div>${p.handle ? `<div class="muted b" style="font-size:13px">@${esc(p.handle)}</div>` : ''}</div>${btn(id)}</div>`; }).join('')
-      : '<div class="muted b" style="font-size:14px;padding:4px 0 8px">None of your contacts are on TermChamp yet. Invite a few below.</div>'}`;
-  const mine = TC.phoneSaved === false ? `<button class="ct-mine" data-a="ctPhoneSheet" data-x="ctResults">${ic('phone', 18, 2.3)}<span class="grow">Add your number so friends can find you too</span>${ic('chevR', 16, 2.6)}</button>` : '';
-  const shown = st.all ? st.invite : st.invite.slice(0, 5);
-  const inv = `<div class="ct-h"><span>Invite · ${st.invite.length}</span></div>
- ${shown.map(c => { const done = st.invited && st.invited[c.phone]; return `<div class="row ct-row"><span class="ct-ini" style="background:${colorFor(c.name)}">${esc(initialsOf(c.name))}</span><div class="grow"><div class="b nm">${esc(c.name)}</div></div><button class="pbtn ${done ? 'done' : ''}" data-a="ctInvite" data-x="${c.k}" aria-label="Invite ${esc(c.name)}">${done ? 'Invited' : 'Invite'}</button></div>`; }).join('')}
- ${!st.all && st.invite.length > 5 ? `<button class="ct-all" data-a="ctAll">See all ${st.invite.length}</button>` : ''}`;
-  return `<div class="row sb"><h3>Your contacts</h3><button class="xbtn" data-a="closeSheet" aria-label="Close">${ic('x', 16, 2.4)}</button></div>
- <div class="ct">${st.busy ? loadingCard('Checking your contacts…') : st.err ? `<div class="tc-err" role="alert">${esc(st.err)}</div><button class="btn soft" style="margin-top:8px" data-a="ctRetry">Try again</button>` + (st.invite.length ? inv : '')
-    : on + mine + (st.limited ? '<div class="muted b" style="font-size:12.5px;line-height:1.4;margin-top:8px">You shared some of your contacts. Change which in your iPhone’s Settings › TermChamp › Contacts.</div>' : '') + (st.invite.length ? inv : '')}</div>`;
+  const st = UI.ct || { busy: 1, rows: [], invite: [] }, idx = ctIdxHTML(st), q = String(st.q || '');
+  return `<div class="ctp${idx ? ' idx' : ''}${q.trim() ? ' q' : ''}"><div class="ctp-top"><div class="ctp-hd"><h2 class="ctp-t">Contacts</h2><button class="xbtn" data-a="closeSheet" aria-label="Close">${ic('x', 16, 2.4)}</button></div>
+ <label class="ctp-q">${ic('search', 17, 2.5)}<input id="ctQ" data-in="ctQ" type="search" enterkeyhint="search" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="Search contacts" aria-label="Search contacts" value="${esc(q)}" ${st.busy ? 'disabled' : ''}></label>${idx}</div>
+ <div id="ctBody" class="ct">${ctBodyHTML(st)}</div></div>`;
 };
+SHEETS.ctResults.full = true; SHEETS.ctResults.label = 'Contacts';
+/* typing repaints only the list, so the field (and the iPhone keyboard) stays put */
+document.addEventListener('input', ev => {
+  const t = ev.target; if (!t || !t.dataset || t.dataset.in !== 'ctQ' || !UI.ct) return;
+  UI.ct.q = t.value;
+  const b = document.getElementById('ctBody'), pg = document.querySelector('#sheet .ctp'); if (!b || !pg) return render(true);
+  b.innerHTML = ctBodyHTML(UI.ct); pg.classList.toggle('q', !!t.value.trim());
+  const fp = pg.closest('.fullpg'); if (fp) fp.scrollTop = 0;
+});
+/* the A-Z scrubber: tap a letter, or drag along it (a letter with nobody goes to the next one that has someone) */
+function ctJump(L) {
+  const fp = document.querySelector('#sheet .fullpg'), top = fp && fp.querySelector('.ctp-top'); if (!top) return false;
+  const want = CT_ABC.indexOf(L), g = [...fp.querySelectorAll('.ct-grp[data-l]')].find(x => CT_ABC.indexOf(x.dataset.l) >= want); if (!g) return false;
+  fp.scrollTop += g.getBoundingClientRect().top - top.getBoundingClientRect().bottom;
+  return g.dataset.l;
+}
+const CTX = { el: null, last: '' };
+function ctIdxAt(el, y) {
+  const r = el.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, y), b = hit && hit.closest && hit.closest('.ct-idx button');
+  if (b && el.contains(b)) return b.dataset.x;
+  const bs = el.querySelectorAll('button'); return y < r.top + r.height / 2 ? (bs[0] || {}).dataset.x : (bs[bs.length - 1] || {}).dataset.x;   /* past either end */
+}
+/* the finger goes down: jump there, then follow it (captured, so the drag doesn't scroll the list) */
+document.addEventListener('pointerdown', ev => { const el = ev.target && ev.target.closest && ev.target.closest('.ct-idx'); if (!el) return; CTX.el = el; CTX.last = ctIdxAt(el, ev.clientY); if (CTX.last) ctJump(CTX.last); try { el.setPointerCapture(ev.pointerId); } catch (e) {} });
+document.addEventListener('pointermove', ev => { if (!CTX.el) return; const L = ctIdxAt(CTX.el, ev.clientY); if (L && L !== CTX.last) { CTX.last = L; ctJump(L); } });
+['pointerup', 'pointercancel'].forEach(t => document.addEventListener(t, () => { CTX.el = null; }));
 /* Your own number: the sign-up step and this sheet (from the results row and Settings). */
 function ctTelField(id, v) {
   return `<label class="ct-tel"><span class="cc" aria-hidden="true">+1</span><input id="${id}" data-in="ctPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(805) 555-0134" aria-label="Your phone number" value="${esc(v || '')}" maxlength="20"></label>`;
@@ -12619,14 +13160,14 @@ SHEETS.ctPhone = sh => `<form data-submit="ctPhone"><div class="row sb"><h3>Help
  <div style="display:grid;gap:8px;margin-top:12px"><button class="btn" ${UI.busy.ctPhone ? 'disabled' : ''}>${UI.busy.ctPhone ? 'Saving…' : 'Continue'}</button><button type="button" class="btn ghost" data-a="ctPhoneBack">Skip</button></div>
  <div class="muted b ct-fine">Only used to find friends. Never shown on your profile.</div></form>`;
 function onbPhone() {
+  /* (2026-10-31) stronger (Tate's 1a): the question as the title, a big Continue, a quiet "Not now" — still skippable (Apple 5.1.1) */
   const saved = TC.phoneSaved === true;
   return `<form class="scr" data-submit="ctPhoneOnb" novalidate>${onbTop({ progress: 2 })}<div class="body">
-    <div class="stack"><div class="onb-ico">${ic('users', 36, 2.2)}</div><h1>Help friends find you</h1><p class="lead">Friends who have your number saved will see you on TermChamp.</p></div>
-    ${saved ? `<div class="banner" role="status">${ONB_I.check}Your number is saved</div>` : `<div class="field"><label class="label" for="ob-phone">Phone number</label><div class="unwrap cc"><span class="at" aria-hidden="true">+1</span><input class="input" id="ob-phone" data-in="ctPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(805) 555-0134" maxlength="20" value="${esc(UI.ctPhoneVal || '')}"></div>
-    <div class="hint bad" role="alert" id="ob-phoneerr">${esc(UI.ctPhoneErr || '')}</div></div>`}
-    <div class="lock"><span class="dot">${ONB_I.lock}</span>Only used to find friends. Never shown on your profile.</div></div>
+    <div class="stack"><div class="onb-ico ct-ph">${ic('phone', 30, 2.2)}</div><h1>What’s your number?</h1><p class="lead">Friends who have you saved will find you on TermChamp. It’s never shown on your profile.</p></div>
+    ${saved ? `<div class="banner" role="status">${ONB_I.check}Your number is saved</div>` : `<div class="field"><div class="unwrap cc cc2"><span class="at" aria-hidden="true"><span class="fl">🇺🇸</span>+1</span><input class="input" id="ob-phone" data-in="ctPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(805) 555-0134" aria-label="Phone number" maxlength="20" value="${esc(UI.ctPhoneVal || '')}"></div>
+    <div class="hint bad" role="alert" id="ob-phoneerr">${esc(UI.ctPhoneErr || '')}</div></div>`}</div>
     <div class="foot"><button class="btn" type="submit" ${UI.busy.ctPhone ? 'disabled' : ''}>${UI.busy.ctPhone ? 'Saving…' : 'Continue'}</button>
-    <button type="button" class="ghost" data-a="ctPhoneSkip">Skip</button></div></form>`;
+    <button type="button" class="ghost ct-later" data-a="ctPhoneSkip">Not now</button></div></form>`;
 }
 document.addEventListener('input', ev => { if (ev.target && ev.target.dataset && ev.target.dataset.in === 'ctPhone') UI.ctPhoneVal = ev.target.value; });
 /* '' = nothing typed; null = not a number; otherwise E.164 */
@@ -12641,7 +13182,7 @@ async function ctSaveMine(v) {
 SUBMIT.ctPhoneOnb = async () => {
   if (UI.busy.ctPhone) return;
   const v = (document.getElementById('ob-phone') || {}).value || UI.ctPhoneVal || '';
-  if (TC.phoneSaved === true || !String(v).trim()) { UI.ctPhoneErr = ''; return onbGo('people'); }
+  if (TC.phoneSaved === true || !String(v).trim()) { UI.ctPhoneErr = ''; if (TC.phoneSaved !== true) ctSet({ phSkip: Date.now() }); return onbGo('people'); }
   UI.busy.ctPhone = 1; UI.ctPhoneErr = ''; render(true);
   const r = await ctSaveMine(v); UI.busy.ctPhone = 0;
   if (r.err) { UI.ctPhoneErr = r.err; return render(true); }
@@ -12689,7 +13230,7 @@ Object.assign(A, {
   },
   ctPhoneSheet: ret => { UI.ctPhoneErr = ''; UI.sheet = { type: 'ctPhone', ret: ret || '' }; render(true); setTimeout(() => { const el = document.getElementById('ctPhoneIn'); if (el) try { el.focus({ preventScroll: true }); } catch (e) {} }, 60); },
   ctPhoneBack: () => { const ret = UI.sheet && UI.sheet.ret; UI.ctPhoneErr = ''; if (ret === 'ctResults') { UI.sheet = { type: 'ctResults' }; return render(true); } A.closeSheet(); },
-  ctPhoneSkip: () => { UI.ctPhoneErr = ''; UI.ctPhoneVal = ''; onbGo('people'); },
+  ctPhoneSkip: () => { UI.ctPhoneErr = ''; UI.ctPhoneVal = ''; ctSet({ phSkip: Date.now() }); onbGo('people'); },
   ctPhoneRemove: async () => {
     if (UI.busy.ctPhone) return; UI.busy.ctPhone = 1; render(true);
     let r; try { r = await TC.client().rpc('set_my_phone', { p_hash: '' }); } catch (e) { r = { error: e }; }
@@ -12700,6 +13241,46 @@ Object.assign(A, {
   },
   ctForget: () => { ctSet({ on: false }); TC.ctCache = null; UI.ct = null; render(true); toast(TC.ctPlugin() ? 'Contacts disconnected. To remove access too, turn off Contacts for TermChamp in iPhone Settings.' : 'Contacts disconnected'); }
 });
+/* ---- "Add your number" (2026-10-31, Tate's 1b) ----
+   For students already signed up with no number saved (TC.phoneSaved === false; never when the server
+   can't say: null = the SQL isn't there, undefined = the read failed). It waits its turn in the pop-up queue,
+   right after "Connect contacts" (on the iPhone it shows only once contacts is connected or has been asked)
+   and before notifications: on an app open, on Home, the day's one pop-up, twice in all, 7+ days apart
+   (and 7+ days after a "Not now" at sign-up). Settings › Contacts always has it too. */
+const CT_PH_MAX = 2, CT_PH_GAP = 7 * 864e5;
+POPS.splice(POPS.findIndex(k => k.kind === 'contacts') + 1, 0, { kind: 'phone',
+  due: async at => {
+    if (at !== 'open' || !TC.user || TC.phase !== 'ok' || UI.sheetNext || !popLaterOpen()) return null;
+    const st = ctState(), e = cur();
+    if (S.tab !== 'home' || !e || e.s !== 'home' || st.phOk || (+st.pk || 0) >= CT_PH_MAX) return null;
+    if (Date.now() - Math.max(+st.pat || 0, +st.phSkip || 0) < CT_PH_GAP) return null;
+    if (ctAvail() && !st.on && !(+st.k || 0)) return null;   /* "Connect contacts" goes first */
+    if (TC.phoneSaved === undefined) await ctPhoneLoad();
+    if (TC.phoneSaved === true) ctSet({ phOk: 1 });   /* saved (maybe on another phone): never asks again here */
+    return TC.phoneSaved === false ? 'later' : null;
+  },
+  show: () => ctPhonePop() });
+function ctPhonePop() {
+  if (!TC.user || TC.phase !== 'ok' || UI.sheet || UI.champ || TC.phoneSaved !== false) return false;
+  const st = ctState(); ctSet({ pk: (+st.pk || 0) + 1, pat: Date.now() }); popMarkDay();   /* closing it any way counts as "Not now" */
+  UI.ctPhoneErr = ''; UI.sheet = { type: 'ctPhonePop' }; render(true); return true;
+}
+SHEETS.ctPhonePop = () => `<form class="ctpp" data-submit="ctPhonePop"><div class="ctpp-hd"><span class="ctpp-ic">${ic('phone', 22, 2.3)}</span><div class="grow"><h3>Add your number</h3><div class="muted b" style="font-size:14px">So friends can find you</div></div><button type="button" class="xbtn" data-a="closeSheet" aria-label="Close">${ic('x', 16, 2.4)}</button></div>
+ <label class="ct-tel"><span class="cc" aria-hidden="true">+1</span><input id="ctPopIn" data-in="ctPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="Phone number" aria-label="Your phone number" value="${esc(UI.ctPhoneVal || '')}" maxlength="20"></label>
+ <div class="tc-err" role="alert" style="${UI.ctPhoneErr ? '' : 'display:none'}">${esc(UI.ctPhoneErr || '')}</div>
+ <div style="display:grid;gap:4px;margin-top:12px"><button class="btn" ${UI.busy.ctPhone ? 'disabled' : ''}>${UI.busy.ctPhone ? 'Saving…' : 'Save'}</button><button type="button" class="btn ghost ctpp-no" data-a="closeSheet">Not now</button></div></form>`;
+SUBMIT.ctPhonePop = async () => {
+  if (UI.busy.ctPhone) return;
+  const v = (document.getElementById('ctPopIn') || {}).value || UI.ctPhoneVal || '';
+  if (!String(v).trim()) { UI.ctPhoneErr = 'Enter your number, or tap Not now.'; return render(true); }
+  UI.busy.ctPhone = 1; UI.ctPhoneErr = ''; render(true);
+  const r = await ctSaveMine(v); UI.busy.ctPhone = 0;
+  if (r.err) { UI.ctPhoneErr = r.err; return render(true); }
+  UI.ctPhoneVal = ''; if (UI.sheet && UI.sheet.type === 'ctPhonePop') UI.sheet = null;
+  if (r.ok) ctSet({ phOk: 1 });
+  toast(r.missing ? 'Saving numbers isn’t switched on yet — add it later in Settings' : 'Number saved. Friends who have it can find you.'); render(true);
+};
+A.ctJump = L => { ctJump(L); };
 /* Settings › Contacts */
 function ctSettings() {
   if (TC.phoneSaved === undefined) ctPhoneLoad();

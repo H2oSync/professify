@@ -23,3 +23,11 @@ calendar-2026-27-2026-10-30.py         app/index.html
 edit-tests-calendar-2026-27-2026-10-30.py  (run from repo root)
 privacy-contacts-2026-10-30.py         index.html AND app/planner.js
 edit-tests-privacy-contacts-2026-10-30.py app-dev/tests/check-app.mjs
+
+# 2026-10-31 (branch anytime-sections-2026-10-31), on top of the above:
+anytime-fixes-2026-10-31.py            app/index.html
+dpr-pick-sections-2026-10-31.py        app/index.html
+edit-tests-anytime-2026-10-31.py       <repo root>
+contacts-v2-2026-10-31.py              app/index.html
+edit-tests-contacts-v2-2026-10-31.py   app-dev/tests
+(new tests: check-anytime-sections-2026-10-31.mjs, check-contacts-v2-2026-10-31.mjs)
