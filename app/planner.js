@@ -1837,7 +1837,7 @@ function slotCheckable(sl){
   return false;
 }
 var LEGAL_UPDATED='4 October 2026';
-var LEGAL_UPDATED_PRIVACY='6 October 2026';
+var LEGAL_UPDATED_PRIVACY='30 October 2026';
 var LEGAL_CONTACT='support@termchamp.com';
 var LEGAL_DOCS={
   terms:{title:'Terms of Service',html:
@@ -1916,7 +1916,7 @@ var LEGAL_DOCS={
     +'<li><b>Messages</b> — what you send in a direct or group conversation, who is in it, and when each message was sent. A class or professor you suggest is stored as the course code or the professor, not as a copy of what was on your screen.</li>'
     +'<li><b>Professors you suggest</b> — the professor, and that it was you. There is no score attached; a suggestion cannot move anyone’s rating.</li>'
     +'<li><b>Your birth year is asked at sign-up and not kept.</b> The Terms say TermChamp is for 13 and over, so the sign-up form asks the year you were born, compares it, and drops it. There is no field for it on your profile and it never reaches the database.</li>'
-    +'<li><b>No phone number, in any form.</b> Contact matching was retired, and on 7 September the hashing that went with it was deleted too \u2014 it used a fixed prefix that was visible in the page source, which made it readable to anyone who ever held the table. There was no reason to keep a stored secret that was not secret.</li>'
+    +'<li><b>Your phone number \u2014 only if you add it.</b> It is optional (at sign-up, or in Settings \u203a Contacts in the iPhone app) and lets friends who have your number saved find you. It is never stored as a number: the app turns it into a one-way code on your phone, and the server scrambles that again with a secret key kept in the database\u2019s vault, which the app and this site never see. It is never shown on your profile or to anyone, one number can belong to only one account, and you can remove it in Settings at any time. (An earlier version of contact matching was retired on 7 September because its hashing used a prefix visible in the page source; this one does not.)</li>'
     +'</ul>'
     +'<h4>Counting, and what it deliberately cannot do</h4>'
     +'<p>TermChamp counts which professor pages are opened and which are shown on screen, so it can '
@@ -2010,6 +2010,10 @@ var LEGAL_DOCS={
     +'<p>Messages are not end-to-end encrypted. They are encrypted in transit and stored in the database like everything else, which means whoever holds the database keys could read them — today that is one student maintaining this project. Do not put anything in TermChamp you would not put in a group text. If that changes, this page changes with it.</p>'
     +'<h4>Where it lives</h4>'
     +'<p>In a Supabase-hosted Postgres database on servers in the United States. Traffic is encrypted in transit. Photos are stored in Supabase Storage; a photo you upload is publicly reachable by its URL, so treat it as public.</p>'
+    +'<h4>Find friends from your contacts (iPhone app)</h4>'
+    +'<p>Only if you tap <b>Connect contacts</b> and allow it in iOS. The app reads the phone numbers and email addresses in your contacts <b>on your phone</b>, turns each one into a one-way code there, and sends only those codes to TermChamp\u2019s server. The server compares them with students at your school and sends back who matched, so you can add them; the names in your contacts never leave your phone.</p>'
+    +'<p><b>Your address book is not stored.</b> The codes are compared and forgotten \u2014 no names, numbers, emails or codes from your contacts are kept, and nobody is told that you looked them up. Only students at your school can match, never anyone you have blocked or who has blocked you, and never an account being deleted. Each account can check contacts a limited number of times an hour and a day, so the feature cannot be used to test lists of numbers.</p>'
+    +'<p>Being straight about the limit: a one-way code of a phone number or email can in principle be worked out by someone who tries every possible number. That is why the codes your phone sends are never kept, and why the number you add yourself is scrambled again with a key only the server holds. Turn it off any time in Settings \u203a Contacts, or in your iPhone\u2019s Settings \u203a TermChamp \u203a Contacts.</p>'
     +'<h4>Notifications</h4>'
     +'<p>If you turn on notifications, TermChamp stores what is needed to deliver them: in the iPhone app, the device token Apple gives your phone; in a browser, the push address and keys your browser gives it. They are linked to your account so a notification reaches you, and are used for nothing else. Signing out of the iPhone app removes that phone\u2019s token; deleting your account removes all of them.</p>'
     +'<p>Notifications are only about things that involve you: a seat opening in a section you watch or have in a plan, a planned section filling up, registration opening, a friend request, a friend joining a class you are in, a message or a like in your chats, and being added to a group. You choose which in Settings \u203a Notifications, and you can mute any chat. A message notification shows who sent it and what it says, so that text goes through Apple to your phone. TermChamp keeps a record of each notification, so the same one is not sent twice: 7 days for messages and likes, about a year for the rest.</p>'
@@ -2057,7 +2061,7 @@ var LEGAL_DOCS={
     +'<ul>'
     +'<li>No advertising trackers. Google Analytics counts visits, as Privacy explains; it is never told what you look at or type.</li>'
     +'<li>No selling or sharing of personal data.</li>'
-    +'<li>No phone numbers, and passwords only as a hash.</li>'
+    +'<li>No phone numbers in readable form: one you add for Connect contacts is kept only as a keyed one-way code, and contacts you check are compared and forgotten. Passwords only as a hash.</li>'
     +'<li>No reading of your Cal Poly account — the class data comes from Cal Poly’s public class search, not from your portal. TermChamp never asks for your Cal Poly password, and you should never give it to us or anyone else.</li>'
     +'</ul>'
     +'<h4>Honest limits</h4>'
