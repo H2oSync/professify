@@ -1,4 +1,4 @@
-/* A class_history row of the term you're in is "being taken" until THAT term's last day — Spring 2027's own (May 21),
+/* A class_history row of the term you're in is "being taken" until THAT term's last day — Spring 2027's own (May 25),
    not Fall's (Dec 22). Fails on 1658ca4: from Jan 25 2027 every Spring 2027 row counted as finished (prereqs met). */
 import { openApp } from '/home/claude/tc/app-icon/app-dev/tests/app-harness.mjs';
 import { ok, liveTables, FX, done, nextPort } from './lib.mjs';
@@ -13,7 +13,8 @@ const cases = [
   ['2027-01-26T12:00:00-08:00', false, true, 'Jan 26 (Spring’s second day)'],
   ['2027-03-22T12:00:00-07:00', false, true, 'Mar 22 (mid-Spring)'],
   ['2027-05-21T12:00:00-07:00', false, true, 'May 21 (Spring’s last final)'],
-  ['2027-05-24T12:00:00-07:00', false, false, 'May 24 (Spring over)'],
+  ['2027-05-25T12:00:00-07:00', false, true, 'May 25 (Spring’s end of term)'],
+  ['2027-05-26T12:00:00-07:00', false, false, 'May 26 (Spring over)'],
 ];
 for (const [time, fall, spring, name] of cases) {
   const { page, close, log } = await openApp({ terms: 'live', tables: T, time, port: nextPort() });

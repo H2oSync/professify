@@ -6,10 +6,16 @@ import { ok, tick, liveTables, done, nextPort } from './lib.mjs';
 const cases = [
   ['2026-11-10', '-08:00', null, 'a normal Tuesday in Fall'],
   ['2026-11-11', '-08:00', 'Veterans Day', 'Veterans Day'],
+  ['2026-11-24', '-08:00', 'Thanksgiving break', 'Thanksgiving week (Fall Break, Nov 23-29)'],
+  ['2026-12-10', '-08:00', null, 'Fall’s second-to-last day of classes'],
+  ['2026-12-15', '-08:00', 'Finals week', 'Fall finals (Dec 12, 14-18)'],
+  ['2026-12-21', '-08:00', 'Winter break', 'faculty workday after finals (Dec 21)'],
   ['2026-12-23', '-08:00', 'Winter break', 'the day after Fall’s last day (Dec 22)'],
   ['2027-01-05', '-08:00', 'Winter break', 'January, before Spring starts'],
   ['2027-01-26', '-08:00', null, 'Spring’s second day'],
+  ['2027-02-15', '-08:00', 'Presidents’ Day', 'Presidents’ Day'],
   ['2027-03-16', '-07:00', 'Spring break', 'Spring break'],
+  ['2027-03-31', '-07:00', 'César Chávez Day', 'César Chávez Day (Farmworkers Day)'],
   ['2027-05-18', '-07:00', 'Finals week', 'Spring finals'],
   ['2027-05-25', '-07:00', 'Summer break', 'after Spring’s last final'],
 ];

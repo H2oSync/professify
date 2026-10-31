@@ -57,10 +57,10 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'scrape = normal pull | discover_term = resolve a term code against the live page | bench = measure search strategies'
+        description: 'scrape = normal pull | discover_term = resolve a term code against the live page | bench = measure search strategies | freshness = only check how stale the seat data is'
         default: 'scrape'
         type: choice
-        options: ['scrape', 'discover_term', 'bench']
+        options: ['scrape', 'discover_term', 'bench', 'freshness']
       term_label:
         description: 'For discover_term, and required for ignore_calendar: the term, e.g. "Spring 2027"'
         default: 'Spring 2027'
@@ -102,6 +102,7 @@ jobs:
       discover_labels: ${{ steps.clock.outputs.discover_labels }}
       horizon:  ${{ steps.clock.outputs.horizon }}
       unknown:  ${{ steps.clock.outputs.unknown_terms }}
+      freshness_check: ${{ steps.clock.outputs.freshness_check }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -184,6 +185,32 @@ jobs:
           echo "happening, and on an enrolment phase is a term of students seeing no seats."
           exit 1
 
+  # -------------------------------------------------------- red when seats are stale ----
+  # THE ALARM (2026-10-30). Before this, rows could sit un-refreshed for weeks — 678 Fall sections
+  # filed under Spring, 354 cancelled sections, whole subjects searching their neighbour — and
+  # every run was green. This fails the run when a term that SHOULD be scraped right now (any phase
+  # but dark) has a stale term, a stale subject, or rows the dropped-section rule should have
+  # removed. A dark term (Fall 2026 after Oct 28) is never reported.
+  #
+  # Once per 3-hour Pacific block (plan.mjs freshness_check), not every 10 minutes: a standing
+  # problem is ~8 red runs a day. Red runs email the account that STARTED the run — for the
+  # Supabase-dispatched runs, the owner of the github_seats_token PAT (Settings → Notifications →
+  # Actions must have email on). Dispatch by hand with mode=freshness to check right now.
+  freshness:
+    needs: plan
+    if: needs.plan.outputs.freshness_check == 'true' || github.event.inputs.mode == 'freshness'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Are the seats as fresh as the calendar requires?
+        working-directory: seats
+        env:
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node freshness.mjs
+
   # ------------------------------------------------- red when a term is unknowable ----
   # This job exists only to fail. `plan` deliberately exits 0 so the terms it CAN dispatch still
   # run; this turns the run red so nobody has to notice a warning in a log.
@@ -257,7 +284,7 @@ jobs:
   # ------------------------------------------------------------------ the sweep ----
   scrape:
     needs: plan
-    if: needs.plan.outputs.scrape == 'true'
+    if: needs.plan.outputs.scrape == 'true' && github.event.inputs.mode != 'freshness'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false            # one bad lane never cancels the others
@@ -327,6 +354,13 @@ jobs:
           # Carried per TERM by the gate, so a manual override applies to the term it named and
           # leaves the calendar in force for every other term in the same sweep.
           CP_IGNORE_CALENDAR:   ${{ matrix.term.force }}
+          # 2026-10-30: each subject's results are checked by date (right term?) and course code
+          # (right subject?), retried once on a fresh form, and a subject that still fails makes
+          # this lane exit 3 AFTER writing everything good — so a bad sweep is a red run, not a
+          # green one with wrong rows. Sections unseen for 24h+ by complete sweeps are deleted.
+          # Kill switches, if either misbehaves: CP_PRUNE=0, CP_FAIL_ON_INCOMPLETE=0.
+          CP_PRUNE:             ${{ vars.CP_PRUNE || '1' }}
+          CP_FAIL_ON_INCOMPLETE: ${{ vars.CP_FAIL_ON_INCOMPLETE || '1' }}
         run: node scrape-seats.mjs
 
       - name: Upload diagnostics (screenshots + page text)
@@ -338,5 +372,6 @@ jobs:
             seats/diag-*.png
             seats/diag-*.txt
             seats/seats.json
+            seats/sweep-report.json
           if-no-files-found: ignore
           retention-days: 7

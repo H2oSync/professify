@@ -27,7 +27,7 @@
    SPRING 2027 CANNOT BE CONFIRMED BEFORE OCT 5 — the term is not in the public lookup, so
    discover_term has nothing to find. That is a scheduling fact, not a defect: see
    claude/term-code-2026-09-16.md. */
-import {termCandidates, parseLabel, matchesTerm, termsNamedIn, resolveTerm} from '/home/claude/repo/seats/term.mjs';
+import {termCandidates, parseLabel, matchesTerm, termsNamedIn, resolveTerm} from './term.mjs';
 const R=[]; const ok=(c,n,d='')=>R.push({n,c:!!c,d});
 
 /* ---- 1. the convention, against four live codes --------------------------------------------- */
