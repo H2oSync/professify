@@ -7657,7 +7657,7 @@ tests.legalText = async () => {
   const doc = async w => { await page.evaluate(w => A.openLegal(w), w); await tick(page, 800); return text(page); };
   const terms = await doc('terms'), guide = await doc('guidelines'), priv = await doc('privacy'), sec = await doc('security');
   const all = terms + guide + priv + sec;
-  ok(/Last updated 4 October 2026/.test(terms) && /Last updated 6 October 2026/.test(priv) && /support@termchamp\.com/.test(all) && !/tdogtate/.test(all), 'legal: terms dated 4 October, privacy 6 October 2026 (notifications), contact support@termchamp.com');
+  ok(/Last updated 4 October 2026/.test(terms) && /Last updated 30 October 2026/.test(priv) && /Find friends from your contacts/.test(priv) && !/No phone number, in any form/.test(priv) && /support@termchamp\.com/.test(all) && !/tdogtate/.test(all), 'legal: terms dated 4 October, privacy 30 October 2026 (contacts), contact support@termchamp.com');
   ok(/<?Notifications/.test(priv) && /device token/.test(priv) && /does not load Google Analytics/.test(priv), 'legal: privacy says what push stores, and that the iPhone app has no Google Analytics');
   ok(/There is no tolerance for objectionable content or abusive users/.test(terms) && /There is no tolerance for objectionable content or abusive users/.test(guide), 'legal: zero tolerance in the Terms and the Guidelines');
   ok(/a person looks at every report within 24 hours/i.test(terms) && /A person looks at every report within 24 hours/.test(guide) && !/nine reasons/.test(guide) && /group chat names/.test(guide), 'legal: reports looked at within 24 hours; what can be reported is what the app offers');

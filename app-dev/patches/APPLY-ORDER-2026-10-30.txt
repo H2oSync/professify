@@ -22,3 +22,4 @@ smaller-downloads-2026-10-30.py        app/index.html
 calendar-2026-27-2026-10-30.py         app/index.html
 edit-tests-calendar-2026-27-2026-10-30.py  (run from repo root)
 privacy-contacts-2026-10-30.py         index.html AND app/planner.js
+edit-tests-privacy-contacts-2026-10-30.py app-dev/tests/check-app.mjs
