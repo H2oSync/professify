@@ -6,3 +6,13 @@ app/index.html: render-empty-stack, addto-prefer-mine, plan-dead-ids, rate-post-
 index.html (website): scale-watch-onconflict (with the app), website-catalog-paged
 tests: edit-tests-registration-round2 app-dev/tests/check-app.mjs; edit-tests-quick-log-term <repo-dir>
 SQL (needs approval to run on production): sql/2026-10-30-watch-sections-primary-key.sql, sql/2026-10-30-last-messages.sql
+
+# Pop-ups (2026-10-30, after the audit fixes)
+pushask-popup-2026-10-30.py            app/index.html
+contacts-2026-10-30.py                 app/index.html
+contacts-into-popqueue-2026-10-30.py   app/index.html
+onb-phone-skip-when-off-2026-10-30.py  app/index.html
+check-native-open-settings-2026-10-30.py   app-dev/tests/check-native.mjs
+edit-tests-contacts-2026-10-30.py          app-dev/tests/check-app.mjs
+edit-tests-dpr-stress-contacts-2026-10-30.py app-dev/tests/check-app.mjs
+ios-contacts-wiring-2026-10-30.py      ios-app (on the Mac, then npm install && npx cap sync ios)

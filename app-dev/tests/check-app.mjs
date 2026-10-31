@@ -2969,8 +2969,8 @@ tests.friendsSearch = async () => {
   ok(red === 'rgb(220, 38, 38)', 'friends tab: the count is red', red);
   await click(page, '[data-a="tab"][data-x="friends"]');
   ok(await page.locator('#fq').getAttribute('placeholder') === 'Find friends by name or @handle' && await page.locator('.plusbtn').count() === 0, 'friends: one full-width search at the top, no + button');
-  const sb = await page.locator('.fsearch').boundingBox(), ib = await page.locator('.fhdr .invpill').boundingBox(), tb = await page.locator('.fhdr .title').boundingBox(), hb = await page.locator('.fhdr').boundingBox();
-  ok(sb && ib && tb && ib.y + ib.height <= sb.y && Math.abs((ib.y + ib.height / 2) - (tb.y + tb.height / 2)) < 8 && 390 - (ib.x + ib.width) <= 20 && ib.width < 140 && ib.height >= 44 && /^Invite$/.test((await page.locator('.invpill').innerText()).trim()) && await page.locator('.invbtn').count() === 0, 'friends: Invite is a small button at the top right, beside the title — nothing big between the title and the search', { sb, ib, tb });
+  const sb = await page.locator('.fsearch').boundingBox(), ib = await page.locator('.fhdr .invpill[data-x="invite"]').boundingBox(), tb = await page.locator('.fhdr .title').boundingBox(), hb = await page.locator('.fhdr').boundingBox();
+  ok(sb && ib && tb && ib.y + ib.height <= sb.y && Math.abs((ib.y + ib.height / 2) - (tb.y + tb.height / 2)) < 8 && 390 - (ib.x + ib.width) <= 20 && ib.width < 140 && ib.height >= 44 && /^Invite$/.test((await page.locator('.invpill[data-x="invite"]').innerText()).trim()) && await page.locator('.invbtn').count() === 0, 'friends: Invite is a small button at the top right, beside the title — nothing big between the title and the search', { sb, ib, tb });
   ok(sb.y - (hb.y + hb.height) < 12, 'friends: the search sits right under the title row', { sb, hb });
   const secsBefore = await page.evaluate(id => personSecs(id).length, FX.FRIENDS[0].id);
   await page.locator('#fq').pressSequentially('a'); await tick(page, 600);
@@ -2997,7 +2997,7 @@ tests.friendsSearch = async () => {
   await page.locator('#fq').fill('study'); await tick(page, 800);
   ok(/GROUP CHATS[\s\S]*Fixture Study Group/i.test(await page.locator('#fbody').innerText()), 'friends search: group chats that match are found too');
   await page.locator('#fq').fill(''); await tick(page);
-  await click(page, '.invpill');
+  await click(page, '.invpill[data-x="invite"]');
   const url = await page.locator('#sheet .invurl').innerText();
   ok(url === 'https://termchamp.com/invite?add=' + FX.ME.id + '&to=app', 'invite: the desktop’s own link (/invite?add=<your id>), not ?invite=<username>, opening the phone app (to=app)', url);
   const qr = await page.locator('#sheet .invqr svg').count(), qrb = await page.locator('#sheet .invqr').boundingBox();
@@ -6612,6 +6612,10 @@ tests.signup = async () => {
   const up = log.writes.filter(w => w.table === 'profiles' && w.m === 'PATCH').pop();
   ok(up && up.body.class_standing === 'Junior' && up.body.major === 'Business Administration' && /id=eq\./.test(up.query), 'confirm: saves year and major to your profile', up && up.body);
   t = await text(page);
+  ok(/Help friends find you/.test(t) && await page.locator('#ob-phone[type="tel"]').count() === 1 && await page.locator('[data-a="ctPhoneSkip"]').count() === 1, 'onboard: then the optional phone step, with Skip', t.slice(0, 200));
+  await click(page, '[data-a="ctPhoneSkip"]');
+  ok(!log.rpcs.some(r => r.fn === 'set_my_phone'), 'onboard: Skip sends no number');
+  t = await text(page);
   ok(/People you may know/.test(t) && /Invite a friend/.test(t), 'onboard: people you may know');
   await page.reload(); await tick(page, 2500); await tick(page, 1500);
   ok(/People you may know/.test(await text(page)), 'onboard: closing the app mid-way comes back to the same step');
@@ -8591,6 +8595,7 @@ tests.rowRatings = async () => {
 
 tests.dprStressQuarter = async () => {
   const { page, close, log } = await openApp({ tables: XFER_T('Business Administration', 'Senior'), height: 2600 });
+  await page.addInitScript(() => { try { const s0 = JSON.parse(localStorage.getItem('sb-rqkndeqbcahozidniesn-auth-token') || 'null'); if (s0 && s0.user) localStorage.setItem('tc_ct:' + s0.user.id, JSON.stringify({ on: true })); } catch (e) {} });
   await toPlanner(page); await uploadFile(page, 'dpr-stress-quarter.pdf');
   ok(await readPills(page) === '36 filled|3 left|5 transfer', 'quarter catalog: Report read — 33 Satisfied + 3 in progress = 36 filled, 3 left (the Senior Project is its own line, 2026-10-12), 5 transfer (ART 3TC1, DUD 3TR, PORT 1TC2, BUS 401, TRAN 302)', await readPills(page));
   await saveReport(page);
