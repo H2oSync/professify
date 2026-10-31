@@ -111,7 +111,7 @@ console.log('# iPhone app, said no before');
   const { page, close } = await openApp({ width: 390, height: 844, port: 8191, init: nativeShim('denied') });
   await settings(page); await tick(page, 300);
   const body = await page.locator('#scroll').innerText();
-  ok(/Settings › TermChamp › Notifications/.test(body) && await page.locator('#scroll [data-a="pushAllow"]').count() === 0, 'native: denied → points to iPhone Settings, no dead button');
+  ok(/Notifications are off for TermChamp/.test(body) && await page.locator('#scroll [data-a="pushOpenIOS"]').count() === 1 && await page.locator('#scroll [data-a="pushAllow"]').count() === 0, 'native: denied → an Open Settings button to iPhone Settings, no dead button');
   await close();
 }
 

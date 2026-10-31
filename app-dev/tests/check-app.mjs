@@ -2969,8 +2969,8 @@ tests.friendsSearch = async () => {
   ok(red === 'rgb(220, 38, 38)', 'friends tab: the count is red', red);
   await click(page, '[data-a="tab"][data-x="friends"]');
   ok(await page.locator('#fq').getAttribute('placeholder') === 'Find friends by name or @handle' && await page.locator('.plusbtn').count() === 0, 'friends: one full-width search at the top, no + button');
-  const sb = await page.locator('.fsearch').boundingBox(), ib = await page.locator('.fhdr .invpill').boundingBox(), tb = await page.locator('.fhdr .title').boundingBox(), hb = await page.locator('.fhdr').boundingBox();
-  ok(sb && ib && tb && ib.y + ib.height <= sb.y && Math.abs((ib.y + ib.height / 2) - (tb.y + tb.height / 2)) < 8 && 390 - (ib.x + ib.width) <= 20 && ib.width < 140 && ib.height >= 44 && /^Invite$/.test((await page.locator('.invpill').innerText()).trim()) && await page.locator('.invbtn').count() === 0, 'friends: Invite is a small button at the top right, beside the title — nothing big between the title and the search', { sb, ib, tb });
+  const sb = await page.locator('.fsearch').boundingBox(), ib = await page.locator('.fhdr .invpill[data-x="invite"]').boundingBox(), tb = await page.locator('.fhdr .title').boundingBox(), hb = await page.locator('.fhdr').boundingBox();
+  ok(sb && ib && tb && ib.y + ib.height <= sb.y && Math.abs((ib.y + ib.height / 2) - (tb.y + tb.height / 2)) < 8 && 390 - (ib.x + ib.width) <= 20 && ib.width < 140 && ib.height >= 44 && /^Invite$/.test((await page.locator('.invpill[data-x="invite"]').innerText()).trim()) && await page.locator('.invbtn').count() === 0, 'friends: Invite is a small button at the top right, beside the title — nothing big between the title and the search', { sb, ib, tb });
   ok(sb.y - (hb.y + hb.height) < 12, 'friends: the search sits right under the title row', { sb, hb });
   const secsBefore = await page.evaluate(id => personSecs(id).length, FX.FRIENDS[0].id);
   await page.locator('#fq').pressSequentially('a'); await tick(page, 600);
@@ -2997,7 +2997,7 @@ tests.friendsSearch = async () => {
   await page.locator('#fq').fill('study'); await tick(page, 800);
   ok(/GROUP CHATS[\s\S]*Fixture Study Group/i.test(await page.locator('#fbody').innerText()), 'friends search: group chats that match are found too');
   await page.locator('#fq').fill(''); await tick(page);
-  await click(page, '.invpill');
+  await click(page, '.invpill[data-x="invite"]');
   const url = await page.locator('#sheet .invurl').innerText();
   ok(url === 'https://termchamp.com/invite?add=' + FX.ME.id + '&to=app', 'invite: the desktop’s own link (/invite?add=<your id>), not ?invite=<username>, opening the phone app (to=app)', url);
   const qr = await page.locator('#sheet .invqr svg').count(), qrb = await page.locator('#sheet .invqr').boundingBox();
@@ -4698,7 +4698,7 @@ tests.planner = async () => {
   let t = await withLeft(page);
   /* 2026-10-10 (Tate's option A, simple): one number and one bar — the desktop's ledger behind it */
   const lg = await page.evaluate(() => { const L = TCPL.ledger(), c = (() => { const g = plGate(); if (g.html) return null; const L = g.L, X = auditLines(TC.audit, L), R = L ? planRank(L) : X ? { audit: true, X, all: [], bare: true } : null; if (!R || R.done) return null; const o = document.getElementById('__lc'); if (o) o.remove(); const d = document.createElement('div'); d.id = '__lc'; d.style.cssText = 'position:absolute;left:-10000px;top:0;width:390px'; const ro = UI.plReqOpen; UI.plReqOpen = new Proxy({}, { get: () => true, has: () => true }); try { d.innerHTML = plLeftCard(R, L, /^[ABC]$/.test(UI.plPlan) ? UI.plPlan : 'A'); } finally { UI.plReqOpen = ro; } document.body.appendChild(d); const c0 = d.firstElementChild; if (c0) [...d.children].slice(1).forEach(x => c0.appendChild(x)); return c0; })(), bar = c && c.querySelector('.pll-bar'), b = bar && bar.querySelector('i.f'); setTimeout(() => document.getElementById('__lc')?.remove()); return { F: L.F, N: L.N, T: L.T, cant: L.grid.flatMap(x => x.slots).filter(s => s.state === 'cant').length, w: b && b.style.width, label: bar && bar.getAttribute('aria-label') }; });
-  ok(/2 filled\s*4 in progress\s*27 left on your flowchart/.test(t) && lg.F === 2 && lg.N === 33 && lg.T === 4 && lg.w === '6.1%' && lg.label === '2 filled, 4 in progress, 27 left on your flowchart of 33', 'planner: the desktop’s ledger — 2 filled (31 + the 2 choice slots, checked since 2026-10-02), 4 in progress (one via the ENGL 1134 waiver), 27 left of 33; the bar’s filled part is 2/33', lg);
+  ok(/2 filled\s*4 in progress\s*30 left on your flowchart/.test(t) && lg.F === 2 && lg.N === 36 && lg.T === 4 && lg.w === '5.6%' && lg.label === '2 filled, 4 in progress, 30 left on your flowchart of 36', 'planner: the desktop’s ledger — 2 filled (31 + the 2 choice slots, checked since 2026-10-02), 4 in progress (one via the ENGL 1134 waiver), 30 left of 36 (the 3 spots we can’t check count as not taken since 2026-10-30); the bar’s filled part is 2/36', lg);
   ok(!/requirements filled|We can’t check/.test(t) && !/in progress/.test(t.replace(/\+ \d+ in progress|· \d+ in progress|\b\d+ in progress\b/g, '')), 'past: no legend or can’t-check lines — the number, then Major · GE · Concentration · Electives (in progress only as a row’s “+ N in progress”, Tate 2026-10-11)', (t.match(/[\s\S]{0,60}(in progress|We can’t)[\s\S]{0,60}/) || [''])[0]);
   /* 2026-10-06: the ledger, flowchart and record are Past classes; the full Still need list is folded at the foot of the Planner */
   await click(page, '[data-a="schedTab"][data-x="planner"]'); await tick(page, 600);
@@ -4710,7 +4710,7 @@ tests.planner = async () => {
   for (let i = 0; i < 6; i++) { const closed = page.locator('[data-a="plYear"][aria-expanded="false"]'); if (!(await closed.count())) break; await closed.first().click(); await tick(page, 150); }
   /* no key any more: each mark says what it is to a screen reader, and the can't-check spots are rows, not a list */
   const marks = await page.evaluate(() => ({ done: [...document.querySelectorAll('.pc-row.done .pc-dot')].map(d => d.innerText + '|' + d.getAttribute('aria-label')), taking: [...document.querySelectorAll('.pc-row.taking .pc-dot')].map(d => d.innerText + '|' + d.getAttribute('aria-label')), cant: [...document.querySelectorAll('.pc-row.cant .pc-dot')].map(d => d.innerText + '|' + d.getAttribute('aria-label')), key: !!document.querySelector('.tc-key') }));
-  ok(!marks.key && marks.done.length && marks.done.every(x => x === '✓|Done') && marks.taking.length === 4 && marks.taking.every(x => x === '◐|In progress') && marks.cant.length === lg.cant && lg.cant === 10 && marks.cant.every(x => /^\?\|Mark .+ done$/.test(x)), 'past: ✓ Done, ◐ In progress (all 4), ? Can’t check (all 10, as rows, each a circle to check off) — no key', marks);
+  ok(!marks.key && marks.done.length && marks.done.every(x => x === '✓|Done') && marks.taking.length === 4 && marks.taking.every(x => x === '◐|In progress') && marks.cant.length === lg.cant && lg.cant === 7 && marks.cant.every(x => /^\?\|I took .+$/.test(x)), 'past: ✓ Done, ◐ In progress (all 4), ? only on the 7 spots of a concentration not chosen yet (the others are not taken since 2026-10-30), each a circle to check off — no key', marks);
   ok(await page.evaluate(() => { const r = [...document.querySelectorAll('.pc-row.cant')]; return r.length > 0 && r.every(x => { const e = x.querySelector('.pc-sr'); return !!e && /we can’t check this from your record/.test(e.textContent) && e.getBoundingClientRect().width <= 1; }); }), 'past: a can’t-check row says so to a screen reader (no words on screen)');
   /* (2026-10-13) the Still need card's shapes, labels and prerequisite line left with it */
   const t3 = await text(page);
@@ -4728,7 +4728,7 @@ tests.planner = async () => {
   const w = log.writes.filter(x => x.table === 'class_history');
   ok(w.length === 1 && w[0].m === 'POST' && w[0].body.code === 'BUS 2214' && w[0].body.term === 'Fall' && w[0].body.year === 2025 && w[0].body.user_id === FX.ME.id && !('grade' in w[0].body), 'planner: logging a class upserts the desktop’s class_history row (no grade)', w);
   t = await withLeft(page);
-  ok(/3 filled\s*4 in progress\s*26 left on your flowchart/.test(t), 'planner: the ledger moves when a class is logged (3 filled, 26 left)', (t.match(/\d+ filled\s*\d+ in progress\s*\d+ left/) || [''])[0]);
+  ok(/3 filled\s*4 in progress\s*29 left on your flowchart/.test(t), 'planner: the ledger moves when a class is logged (3 filled, 29 left)', (t.match(/\d+ filled\s*\d+ in progress\s*\d+ left/) || [''])[0]);
   await click(page, '[data-a="pcOpen"][data-x="PHIL 3331|Spring|2026"]'); await tick(page, 200);
   await click(page, '#sheet [data-a="pcAskRemove"][data-x="PHIL 3331|Spring|2026"]');
   ok(/Remove PHIL 3331, Spring 2026\?/.test(await page.locator('#sheet').innerText()), 'planner: Remove names the class and its term');
@@ -4979,13 +4979,13 @@ tests.plannerQuickTick = async () => {
   // one tap: on your record, no term, nothing else to do
   await click(page, '.pc-row:has(.pc-cc:text("BUS 1100")) .tc-tick'); await tick(page, 600);
   let w = log.writes.filter(x => x.table === 'class_history');
-  ok(w.length === 1 && w[0].m === 'POST' && w[0].body.code === 'BUS 1100' && w[0].body.term === null && w[0].body.year === null && w[0].body.user_id === FX.ME.id && await page.locator('#sheet .tc-form').count() === 0, 'one tap: the class goes on your record with no term, and nothing opens', w);
+  ok(w.length === 1 && w[0].m === 'POST' && w[0].body.code === 'BUS 1100' && w[0].body.term === 'Spring' && w[0].body.year === 2026 && w[0].body.user_id === FX.ME.id && await page.locator('#sheet .tc-form').count() === 0, 'one tap: the class goes on your record under the last finished term (Spring 2026 — production needs a term), and nothing opens', w);
   let after = (await withLeft(page)).match(/(\d+) filled\s*(?:\d+ in progress\s*)?\d+ left on your flowchart/)[1];
   const c1 = page.locator('.pc-row:has(.pc-cc:text("BUS 1100"))');
   ok(+after === +before + 1 && /✓/.test(await c1.locator('.pc-dot').innerText()) && /^Undo/.test(await c1.locator('.tc-tick').getAttribute('aria-label')), 'one tap: the slot is ✓ and the count moves', { before, after });
   await click(page, '.pc-row:has(.pc-cc:text("BUS 1100")) .tc-tick'); await tick(page, 600);
   w = log.writes.filter(x => x.table === 'class_history' && x.m === 'DELETE');
-  ok(w.length === 1 && /code=eq\.BUS(\+|%20)1100/.test(w[0].query) && /term=is\.null/.test(w[0].query) && /year=is\.null/.test(w[0].query) && (await withLeft(page)).match(/(\d+) filled\s*(?:\d+ in progress\s*)?\d+ left on your flowchart/)[1] === before, 'one tap: ✓ again undoes it — only the term-less record', w);
+  ok(w.length === 1 && /code=eq\.BUS(\+|%20)1100/.test(w[0].query) && /term=eq\.Spring/.test(w[0].query) && /year=eq\.2026/.test(w[0].query) && (await withLeft(page)).match(/(\d+) filled\s*(?:\d+ in progress\s*)?\d+ left on your flowchart/)[1] === before, 'one tap: ✓ again undoes it — only the one-tap’s own row', w);
   ok(await page.locator('.pc-row:has(.pc-cc:text("BUS 1100")) .pc-main[data-a="plLogSlot"]').count() === 1, 'one tap: the row itself still opens Log a class for the term and professor');
   // a choice slot: one question, which one
   const ch = page.locator('.pc-row:has-text("Calculus for Data Science I or Business Calculus")').first();
@@ -4998,7 +4998,7 @@ tests.plannerQuickTick = async () => {
   const fAfter = +(await withLeft(page)).match(/(\d+) filled\s*(?:\d+ in progress\s*)?\d+ left on your flowchart/)[1];
   w = log.writes.filter(x => x.table === 'class_history' && x.m === 'POST');
   const chDone = await page.locator('.pc-row.done:has(.pc-cc:text("MATH 1267"))').count();
-  ok(w.length === 2 && w[1].body.code === 'MATH 1267' && w[1].body.term === null && chDone === 1 && fAfter === fBefore + 1, 'choice: the pick goes on your record and fills exactly one slot', { w: w.map(x => x.body && x.body.code), fBefore, fAfter });
+  ok(w.length === 2 && w[1].body.code === 'MATH 1267' && w[1].body.term === 'Spring' && w[1].body.year === 2026 && chDone === 1 && fAfter === fBefore + 1, 'choice: the pick goes on your record and fills exactly one slot', { w: w.map(x => x.body && x.body.code), fBefore, fAfter });
   ok((await page.locator('.pc-row.done:has(.pc-cc:text("MATH 1267")) .pc-main').innerText()).trim() === 'MATH 1267  Business Calculus'.replace('  ', ' ') || /^MATH 1267\s*Business Calculus$/.test((await page.locator('.pc-row.done:has(.pc-cc:text("MATH 1267")) .pc-main').innerText()).trim()), 'choice: the filled slot names the class taken, not the “… or …” line');
   const posts = log.writes.filter(x => x.table === 'class_history' && x.m === 'POST').length;
   await page.evaluate(() => quickLog('PHIL 3331', 'rep')); await tick(page, 400);
@@ -5027,11 +5027,11 @@ tests.flowchartMarks = async () => {
   const cell = id => o.page.locator(`.pc-row:has([data-a="plMark"][data-x="${id}"])`);
   const b0 = await filled(o.page);
   const lab0 = await cell(g.ge.id).locator('.tc-mark').getAttribute('aria-label');
-  ok(await cell(g.ge.id).count() === 1 && /^Mark .* done$/.test(lab0) && await cell(g.ge.id).locator('.tc-mark').getAttribute('aria-pressed') === 'false', 'marks: a GE area to do has a circle to check off (a toggle, not pressed)', lab0);
+  ok(await cell(g.ge.id).count() === 1 && /^I took .+$/.test(lab0) && await cell(g.ge.id).locator('.tc-mark').getAttribute('aria-pressed') === 'false', 'marks: a GE area to do has a circle to check off (a toggle, not pressed)', lab0);
   await click(o.page, `[data-a="plMark"][data-x="${g.ge.id}"]`); await tick(o.page, 600);
   let w = o.log.writes.filter(x => x.table === 'flowchart_marks');
   const c1 = await cell(g.ge.id).evaluate(e => ({ done: e.classList.contains('done'), dot: e.querySelector('.tc-mark').innerText.trim(), mine: (e.querySelector('.tc-mine') || {}).textContent || '', pressed: e.querySelector('.tc-mark').getAttribute('aria-pressed'), label: e.querySelector('.tc-mark').getAttribute('aria-label') }));
-  ok(c1.done && c1.dot === '✓' && c1.mine === 'Marked done by you' && c1.pressed === 'true' && c1.label === lab0, 'marks: one tap — ✓, “Marked done by you”, pressed (same label)', c1);
+  ok(c1.done && c1.dot === '✓' && /^Marked done by you/.test(c1.mine) && c1.pressed === 'true' && c1.label === lab0, 'marks: one tap — ✓, “Marked done by you”, pressed (same label)', c1);
   ok(await cell(g.ge.id).evaluate(e => !e.querySelector('.pc-add') && e.querySelector('.pc-main').tagName === 'DIV' && !e.querySelector('.pc-main').hasAttribute('data-a')), 'marks: a checked-off row is not a class — no sheet to open, no “+ Professor”');
   ok(await filled(o.page) === b0 + 1, 'marks: the requirements count moves by one', { b0, now: await filled(o.page) });
   ok(w.length === 2 && w[0].m === 'DELETE' && new RegExp('slot_id=eq\\.' + g.ge.id).test(w[0].query) && w[1].m === 'POST' && w[1].body.user_id === FX.ME.id && w[1].body.major === g.major && w[1].body.slot_id === g.ge.id && w[1].body.label === g.ge.title, 'marks: saved to the account with the row’s words (any old row for it replaced first)', w.map(x => [x.m, x.body, x.query]));
@@ -5114,7 +5114,7 @@ tests.plannerGrid = async () => {
   ok(bub.join('|') === 'FALL|SPRING', 'grid: an open year shows its Fall and Spring as bubbles', bub);
   const heads = await page.locator('.pc-year').allInnerTexts();
   const judged = heads.reduce((a, h) => a + (+((h.match(/of (\d+)/) || [])[1] || 0)), 0);
-  ok(judged === 33 && heads.every(h => /^Year \d\s*\d+ of \d+$/.test(h.trim())), 'grid: the years add up to the ledger’s 33 — each just “Year N · d of n”', heads);
+  ok(judged === 36 && heads.every(h => /^Year \d\s*\d+ of \d+$/.test(h.trim())), 'grid: the years add up to the ledger’s 36 — each just “Year N · d of n”', heads);
   ok(await page.locator('.pc-open').count() === 1 && await page.locator('[data-a="plYear"][data-x="2"]').getAttribute('aria-expanded') === 'false', 'grid: later years start folded');
   await click(page, '[data-a="plYear"][data-x="2"]');
   ok(await page.locator('.pc-open').count() === 2 && await page.locator('.pc-open').nth(1).locator('.pc-row').count() > 3, 'grid: tapping a year opens it');
@@ -5146,7 +5146,7 @@ tests.pastSimple = async () => {
   ok(phil && phil.pf === 'Dov Mockridge' && !phil.add, 'past: a class with its professor shows the name, no button', phil);
   const taking = rows.filter(r => r.st === 'taking');
   ok(taking.length && taking.every(r => !r.add), 'past: taking now has nothing to add', taking);
-  ok(rows.filter(r => r.st === 'need' || r.st === 'cant').every(r => !r.pf && !r.add), 'past: spots still to take, and ones it can’t check, are one line', rows.filter(r => (r.st === 'need' || r.st === 'cant') && (r.pf || r.add)));
+  ok(rows.filter(r => r.st === 'need' || r.st === 'cant').every(r => (!r.pf || r.pf === 'Not taken yet · I took this') && !r.add) && rows.filter(r => r.pf === 'Not taken yet · I took this').length === 3, 'past: spots still to take, and ones it can’t check, are one line — except the 3 we can’t check, which say “Not taken yet · I took this” (2026-10-30)', rows.filter(r => (r.st === 'need' || r.st === 'cant') && (r.pf || r.add)));
   /* Other classes: the record's classes with no spot; four, then See all */
   const oth = await page.evaluate(() => { const c = document.querySelector('.pc-oth'); return c && { head: c.querySelector('.pc-hd').innerText.replace(/\s+/g, ' '), rows: [...c.querySelectorAll('.pc-orow')].map(r => ({ main: r.querySelector('.pc-main').innerText.replace(/\s+/g, ' '), add: !!r.querySelector('.pc-add'), btn: r.querySelector('.pc-main').tagName })), more: (c.querySelector('[data-a="pcAll"]') || {}).innerText || '' }; });
   const n = oth && +oth.head.replace(/\D+/g, '');
@@ -5220,7 +5220,7 @@ tests.pastClassSheet = async () => {
   ok(await page.evaluate(() => UI.sheet && UI.sheet.type) === 'pcClass' && /Term\s*Fall 2025/.test(sh), 'class sheet: back on the class, with the new term', sh);
   /* a one-tap row (no term): Term starts blank — Save asks for a choice rather than writing one */
   await click(page, '#sheet [data-a="closeSheet"]');
-  await page.evaluate(() => quickLog('BUS 1100', 'x')); await tick(page, 600);
+  await page.evaluate(async () => { await TC.client().from('class_history').insert({ user_id: TC.user.id, code: 'BUS 1100', term: null, year: null, professor: null }); await TC.reloadHistory(); render(true); }); await tick(page, 600);   /* a term-less row from before 2026-10-30 */
   await click(page, '[data-a="pcOpen"][data-x="BUS 1100||"]'); await tick(page, 200);
   ok(/Term\s*Add/.test(await page.locator('#sheet').innerText()), 'class sheet: a class logged without a term says Term · Add');
   await click(page, '#sheet [data-a="pcTerm"]'); await tick(page, 200);
@@ -6612,6 +6612,10 @@ tests.signup = async () => {
   const up = log.writes.filter(w => w.table === 'profiles' && w.m === 'PATCH').pop();
   ok(up && up.body.class_standing === 'Junior' && up.body.major === 'Business Administration' && /id=eq\./.test(up.query), 'confirm: saves year and major to your profile', up && up.body);
   t = await text(page);
+  ok(/Help friends find you/.test(t) && await page.locator('#ob-phone[type="tel"]').count() === 1 && await page.locator('[data-a="ctPhoneSkip"]').count() === 1, 'onboard: then the optional phone step, with Skip', t.slice(0, 200));
+  await click(page, '[data-a="ctPhoneSkip"]');
+  ok(!log.rpcs.some(r => r.fn === 'set_my_phone'), 'onboard: Skip sends no number');
+  t = await text(page);
   ok(/People you may know/.test(t) && /Invite a friend/.test(t), 'onboard: people you may know');
   await page.reload(); await tick(page, 2500); await tick(page, 1500);
   ok(/People you may know/.test(await text(page)), 'onboard: closing the app mid-way comes back to the same step');
@@ -7653,7 +7657,7 @@ tests.legalText = async () => {
   const doc = async w => { await page.evaluate(w => A.openLegal(w), w); await tick(page, 800); return text(page); };
   const terms = await doc('terms'), guide = await doc('guidelines'), priv = await doc('privacy'), sec = await doc('security');
   const all = terms + guide + priv + sec;
-  ok(/Last updated 4 October 2026/.test(terms) && /Last updated 6 October 2026/.test(priv) && /support@termchamp\.com/.test(all) && !/tdogtate/.test(all), 'legal: terms dated 4 October, privacy 6 October 2026 (notifications), contact support@termchamp.com');
+  ok(/Last updated 4 October 2026/.test(terms) && /Last updated 30 October 2026/.test(priv) && /Find friends from your contacts/.test(priv) && !/No phone number, in any form/.test(priv) && /support@termchamp\.com/.test(all) && !/tdogtate/.test(all), 'legal: terms dated 4 October, privacy 30 October 2026 (contacts), contact support@termchamp.com');
   ok(/<?Notifications/.test(priv) && /device token/.test(priv) && /does not load Google Analytics/.test(priv), 'legal: privacy says what push stores, and that the iPhone app has no Google Analytics');
   ok(/There is no tolerance for objectionable content or abusive users/.test(terms) && /There is no tolerance for objectionable content or abusive users/.test(guide), 'legal: zero tolerance in the Terms and the Guidelines');
   ok(/a person looks at every report within 24 hours/i.test(terms) && /A person looks at every report within 24 hours/.test(guide) && !/nine reasons/.test(guide) && /group chat names/.test(guide), 'legal: reports looked at within 24 hours; what can be reported is what the app offers');
@@ -8591,6 +8595,7 @@ tests.rowRatings = async () => {
 
 tests.dprStressQuarter = async () => {
   const { page, close, log } = await openApp({ tables: XFER_T('Business Administration', 'Senior'), height: 2600 });
+  await page.addInitScript(() => { try { const s0 = JSON.parse(localStorage.getItem('sb-rqkndeqbcahozidniesn-auth-token') || 'null'); if (s0 && s0.user) localStorage.setItem('tc_ct:' + s0.user.id, JSON.stringify({ on: true })); } catch (e) {} });
   await toPlanner(page); await uploadFile(page, 'dpr-stress-quarter.pdf');
   ok(await readPills(page) === '36 filled|3 left|5 transfer', 'quarter catalog: Report read — 33 Satisfied + 3 in progress = 36 filled, 3 left (the Senior Project is its own line, 2026-10-12), 5 transfer (ART 3TC1, DUD 3TR, PORT 1TC2, BUS 401, TRAN 302)', await readPills(page));
   await saveReport(page);
@@ -9283,7 +9288,11 @@ tests.registrationDayStates = async () => {
   await o.close();
   o = await regOpenPlanner({ time: '2026-11-04T09:00:00-08:00' });
   v = await regLine(o.page);
-  ok(/^\d+ units · What matters most: /.test(v.line) && !v.units && v.fr === null, 'regday states: Round 1 over, no day — just your units', v);
+  ok(v.line === 'Round 2 is open · till Nov 17 Add your day' && v.units > 0 && v.fr === null, 'regday states: Round 1 over, no day — Round 2 is open, Add your day (registration-round2 (2026-10-30))', v);
+  await o.close();
+  o = await regOpenPlanner({ time: '2026-11-18T09:00:00-08:00' });
+  v = await regLine(o.page);
+  ok(/^\d+ units · What matters most: /.test(v.line) && !v.units && v.fr === null, 'regday states: both rounds over (Open Enrollment), no day — just your units', v);
   await o.close();
   /* before RUN 17: no table, no function — kept on the phone, friends' days don't show */
   const gap = (url, m) => /\/rest\/v1\/registration_days/.test(url.pathname) ? { status: 404, body: JSON.stringify({ code: 'PGRST205', message: 'Could not find the table \'public.registration_days\' in the schema cache' }) } : null;

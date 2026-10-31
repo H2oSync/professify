@@ -11,7 +11,7 @@
  *   node plan.mjs --at ISO   # ask what it would do at another moment (for testing the gate)
  */
 import { appendFileSync } from 'node:fs';
-import { planFor, describe, daysBetween, loadCalendar } from './cadence.mjs';
+import { planFor, describe, daysBetween, loadCalendar, SLOT_TOLERANCE } from './cadence.mjs';
 
 const atArg = process.argv.indexOf('--at');
 const now = atArg > -1 && process.argv[atArg + 1] ? new Date(process.argv[atArg + 1]) : new Date();
@@ -85,6 +85,7 @@ console.log(describe(plan));
  * itself unusable: a calendar whose every term ended over a month ago (3), a half-specified
  * manual override (4), and a value that would corrupt GITHUB_OUTPUT (5).
  */
+const FRESHNESS_EVERY = 180;
 const rank = { appointments: 0, open_enrollment: 1, add_drop: 2, published: 3, quiet: 4, unknown: 5 };
 const ordered = [...plan.due].sort((a, b) => (rank[a.phase] ?? 9) - (rank[b.phase] ?? 9));
 
@@ -159,6 +160,12 @@ const out = {
   discover_labels: blocked.map(t => t.label).join('; '),
   unknown_terms: plan.unknown.join(','),
   horizon: plan.horizon || '',
+  /* FRESHNESS ALARM SLOT (2026-10-30). The freshness job fails the run when a term that should be
+     scraped has stale rows (freshness.mjs). It runs on the first firing of every 3-hour Pacific
+     block — the same aligned-slot rule as the pulls, so with a 10-minute clock exactly one run
+     per block gets it. A persistent problem is therefore ~8 red runs a day, not 144: loud enough
+     to be seen, not so loud it becomes wallpaper. */
+  freshness_check: plan.pacific.minutesSinceMidnight % FRESHNESS_EVERY < SLOT_TOLERANCE ? 'true' : 'false',
 };
 
 if (dispatch.length > 1) console.log(`  => ${dispatch.length} terms dispatched: ${dispatch.map(t => `${t.label}/${t.code}`).join(', ')}`);

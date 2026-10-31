@@ -144,7 +144,14 @@ export async function openApp({ signedIn = true, width = 390, height = 844, tabl
                 if (ex) { if (!/ignore-duplicates/.test(prefer)) Object.assign(ex, r, { id: ex.id, created_at: ex.created_at }); } else fresh.push(r);
               }
               T[table] = (T[table] || []).concat(fresh); rows = arr;
-            } else { T[table] = (T[table] || []).concat(arr); rows = arr; }
+            } else {
+              /* (2026-10-30) production's saved_classes and my_sections have no primary key, only these UNIQUE
+                 indexes, so an upsert that doesn't name them is a plain INSERT and a repeat is 23505 — as live */
+              const UQ = { saved_classes: ['user_id', 'code', 'term'], my_sections: ['user_id', 'class_nbr', 'term'] }[table];
+              const dup = UQ && arr.some((r, k) => (T[table] || []).concat(arr.slice(0, k)).some(x => UQ.every(c => String(x[c]) === String(r[c]))));
+              if (dup) return route.fulfill({ status: 409, headers: cors, contentType: 'application/json', body: JSON.stringify({ code: '23505', details: null, hint: null, message: `duplicate key value violates unique constraint "${table}_pkey_term"` }) });
+              T[table] = (T[table] || []).concat(arr); rows = arr;
+            }
           }
           const accept = req.headers()['accept'] || '';
           if (/return=representation/.test(prefer)) {

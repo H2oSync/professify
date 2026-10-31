@@ -6131,9 +6131,11 @@ function prereqChipHtml(code, plannedBefore){
 async function loadCoursePrereqData(){
   try{
     if(typeof backendReady!=='function'||!backendReady()||!sb)return;
-    var eq=await sb.from('course_equiv').select('legacy_code,current_code');
+    /* paged (scale, 2026-10-30): both tables are bigger than one 1000-row PostgREST page */
+    async function catAll(table,cols,ord){ var out=[],err=null; for(var off=0;off<40000;off+=1000){ var q=sb.from(table).select(cols); ord.forEach(function(c){ q=q.order(c); }); var r=await q.range(off,off+999); if(!r||r.error||!Array.isArray(r.data)){ err=(r&&r.error)||{message:'no rows'}; break; } out=out.concat(r.data); if(r.data.length<1000)break; } return {data:out,error:out.length?null:err}; }
+    var eq=await catAll('course_equiv','legacy_code,current_code',['legacy_code','current_code']);
     if(eq&&!eq.error&&Array.isArray(eq.data)&&eq.data.length){ eq.data.forEach(function(r){ var l=normCourse(r.legacy_code),c=normCourse(r.current_code); if(l&&c)COURSE_EQUIV_SEED[l]=c; }); buildEquivIndex(); }
-    var pr=await sb.from('course_prereqs').select('course_code,prereq_json');
+    var pr=await catAll('course_prereqs','course_code,prereq_json',['course_code']);
     if(pr&&!pr.error&&Array.isArray(pr.data)&&pr.data.length){ pr.data.forEach(function(r){ var c=normCourse(r.course_code),j=r.prereq_json; if(c&&j){ try{ COURSE_PREREQS_SEED[c]=(typeof j==='string')?JSON.parse(j):j; }catch(_e){} } }); buildPrereqIndex(); }
     try{ var ve=document.getElementById('view-explore'); if(ve&&ve.classList.contains('active')&&typeof renderExplore==='function')renderExplore(); if(typeof renderRoadmap==='function'&&document.getElementById('roadmapOut'))renderRoadmap(); }catch(_e){}
   }catch(e){ console.warn('[professify] prereq/equiv load:',e&&e.message||e); }
@@ -13883,8 +13885,10 @@ function authFriendlyErr(msg){
   var m=String(msg||'');
   if(/not authorized|Email address .* not authorized|is not authorized/i.test(m))
     return 'We can’t send a code to that address. Use your Cal Poly, SDSU or UCSB email — if that’s what you entered, let Tate know and he’ll check the sender.';
+  var wait=/after (\d+) second/i.exec(m);
+  if(wait) return 'A code was just sent \u2014 wait '+wait[1]+' seconds before asking for another. Check your Junk folder too.';
   if(/rate limit|too many requests|only request this after|429/i.test(m))
-    return 'Too many codes requested just now — there’s an hourly limit on verification emails. Wait a minute and hit resend.';
+    return 'Too many codes requested just now. Wait a minute, check your Junk folder, then tap Resend.';
   if(/signups not allowed|Signups not allowed/i.test(m))
     return 'New sign-ups are switched off for this project right now.';
   if(/invalid|malformed/i.test(m)&&/email/i.test(m))
@@ -14216,6 +14220,7 @@ function authCodeStep(email){
   document.getElementById('authBody').innerHTML=
     '<div class="auth-k">Check your inbox</div><h2 class="auth-h">Enter your code</h2>'
     +'<p class="auth-sub">We emailed a verification code to <b>'+escapeHtml(email)+'</b>.</p>'
+    +'<p class="auth-sub" id="authJunk" style="margin-top:-4px;font-size:13px">Not there? Check your <b>Junk</b> or <b>Spam</b> folder for \u201cYour TermChamp code\u201d from noreply@termchamp.com.</p>'
     +'<input id="authCode" class="auth-input" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="Enter code" style="letter-spacing:5px;text-align:center;font-size:20px;font-weight:700" oninput="authCheckCode()">'
     +'<div id="authErr" class="auth-err"></div>'
     +'<button id="authVerifyBtn" class="auth-submit" disabled onclick="authVerify(\''+esc+'\')">Verify &amp; continue</button>'
@@ -14225,7 +14230,7 @@ function authCodeStep(email){
     +'<button class="auth-alt" id="authResend" onclick="authResend(\''+esc+'\')">Didn\u2019t get it? Resend code</button>'
     +'<button class="auth-alt" onclick="authEmailStep()">Use a different email</button>';
   setTimeout(function(){var c=document.getElementById('authCode');if(c)c.focus();},50);
-  authResendCooldown(45);
+  authResendCooldown(60);
 }
 var _authResendT=null;
 function authResendCooldown(sec){
@@ -14252,10 +14257,11 @@ async function authResend(email){
     authSay('');
     var note=document.querySelector('#authBody .auth-sub');
     if(note)note.innerHTML='New code sent to <b>'+escapeHtml(email)+'</b>. The older one stops working.';
-    authResendCooldown(45);
+    authResendCooldown(60);
   }catch(e){
     authErr(e&&e.message,'Could not resend the code. Try again in a minute.');
-    authResendCooldown(20);
+    var w=/after (\d+) second/i.exec(String(e&&e.message||''));
+    authResendCooldown(w?Number(w[1])+1:60);
   }
 }
 function authCheckCode(){ var el=document.getElementById('authCode'); var v=(el.value||'').replace(/\D/g,''); if(el.value!==v)el.value=v; var b=document.getElementById('authVerifyBtn'); if(b)b.disabled=v.length<6; }
@@ -33397,7 +33403,7 @@ async function loadMySavedClasses(){
   }
   try{
     const ops=[];
-    if(toPush.length)ops.push(sb.from('saved_classes').upsert(toPush));
+    if(toPush.length)ops.push(sb.from('saved_classes').upsert(toPush, { onConflict: 'user_id,code,term' }));
     /* THE BULK DELETE IS GONE — 2026-09-12. It read:
            if(toDrop.length)ops.push(sb.from('saved_classes').delete()
              .eq('user_id',sbUser.id).in('code',toDrop));
@@ -33425,7 +33431,7 @@ async function pushMyClassToDb(code,add){
   if(!backendReady()||typeof sbUser==='undefined'||!sbUser)return true;
   try{
     const {error}= add
-      ? await sb.from('saved_classes').upsert({user_id:sbUser.id,term:mcTerm(),code})
+      ? await sb.from('saved_classes').upsert({user_id:sbUser.id,term:mcTerm(),code}, { onConflict: 'user_id,code,term' })
       : await sb.from('saved_classes').delete().eq('user_id',sbUser.id).in('code',[code].concat((window._mcRawCode&&window._mcRawCode[code])?[window._mcRawCode[code]]:[])).eq('term',mcTerm());
     return !error;
   }catch(e){ return false; }
@@ -33439,7 +33445,7 @@ async function syncSavedSection(code){
     var m=(typeof myClassMeta!=='undefined')?myClassMeta[code]:null;
     var crn=(m&&Array.isArray(m.secs)&&m.secs[0]&&m.secs[0].crn)?String(m.secs[0].crn):null;
     if(!crn)return;
-    await sb.from('saved_classes').upsert({user_id:sbUser.id,term:mcTerm(),code:code,class_nbr:crn});
+    await sb.from('saved_classes').upsert({user_id:sbUser.id,term:mcTerm(),code:code,class_nbr:crn}, { onConflict: 'user_id,code,term' });
   }catch(e){ /* class_nbr column not added yet — ignore; course-level row is unaffected */ }
 }
 /* ============ SECTION SYNC (my_sections + watch_sections) ============
@@ -33461,7 +33467,7 @@ async function pushMySecToDb(code,rec){
   if(!backendReady()||typeof sbUser==='undefined'||!sbUser||!rec||!rec.crn)return;
   secPendMark('my',rec.crn);
   try{
-    var r=await sb.from('my_sections').upsert({user_id:sbUser.id,term:mcTerm(),code:code,class_nbr:String(rec.crn),section:rec.section||null,instructor:rec.prof||null,days:rec.days||null,status:(rec.status==='waitlisted'?'waitlisted':'enrolled'),wl_pos:(rec.status==='waitlisted'?(rec.wlPos||null):null)});
+    var r=await sb.from('my_sections').upsert({user_id:sbUser.id,term:mcTerm(),code:code,class_nbr:String(rec.crn),section:rec.section||null,instructor:rec.prof||null,days:rec.days||null,status:(rec.status==='waitlisted'?'waitlisted':'enrolled'),wl_pos:(rec.status==='waitlisted'?(rec.wlPos||null):null)}, { onConflict: 'user_id,class_nbr,term' });
     if(r&&!r.error)secPendClear('my',rec.crn);
   }
   catch(e){ /* table may not exist yet */ }
@@ -33476,7 +33482,7 @@ async function pushWatchSecToDb(code,s,added){
   try{
     if(added){
       secPendMark('watch',s.class_nbr);
-      var r=await sb.from('watch_sections').upsert({user_id:sbUser.id,term:mcTerm(),code:code,class_nbr:String(s.class_nbr),section:s.section||null,instructor:s.name||null,days:(typeof _secTime==='function'?_secTime(s):s.days)||null});
+      var r=await sb.from('watch_sections').upsert({user_id:sbUser.id,term:mcTerm(),code:code,class_nbr:String(s.class_nbr),section:s.section||null,instructor:s.name||null,days:(typeof _secTime==='function'?_secTime(s):s.days)||null},{onConflict:'user_id,class_nbr,term'});
       if(r&&!r.error)secPendClear('watch',s.class_nbr);
     }
     else{ secPendClear('watch',s.class_nbr); await sb.from('watch_sections').delete().eq('user_id',sbUser.id).eq('class_nbr',String(s.class_nbr)).eq('term',mcTerm()); }
@@ -36089,7 +36095,7 @@ window.confirmDprImport=async function(){
       _nowRows.forEach(function(r){ var c=r.cur||r.code; if(c&&NOW_MINE.classes.indexOf(c)<0&&_add.indexOf(c)<0)_add.push(c); });
       if(_add.length){
         try{
-          var _w=await sb.from('saved_classes').upsert(_add.map(function(c){ return {user_id:sbUser.id,term:_nt,code:c}; }));
+          var _w=await sb.from('saved_classes').upsert(_add.map(function(c){ return {user_id:sbUser.id,term:_nt,code:c}; }), { onConflict: 'user_id,code,term' });
           if(_w.error)throw _w.error;
           _add.forEach(function(c){ NOW_MINE.classes.push(c); }); addedNow+=_add.length;
           try{ localStorage.setItem(nowMineKey(),JSON.stringify(NOW_MINE)); }catch(e){} try{ nowAfterLoad(); }catch(e){}
@@ -36906,7 +36912,7 @@ var LEGAL_UPDATED='4 October 2026';
    third party that sets its own cookie is the most material change this document has carried —
    the sentence "that is the whole list" was true of the counting above and would have been a
    false statement the moment the tag loaded. */
-var LEGAL_UPDATED_PRIVACY='6 October 2026';
+var LEGAL_UPDATED_PRIVACY='30 October 2026';
 var LEGAL_CONTACT='support@termchamp.com';
 var LEGAL_DOCS={
   terms:{title:'Terms of Service',html:
@@ -36985,7 +36991,7 @@ var LEGAL_DOCS={
     +'<li><b>Messages</b> — what you send in a direct or group conversation, who is in it, and when each message was sent. A class or professor you suggest is stored as the course code or the professor, not as a copy of what was on your screen.</li>'
     +'<li><b>Professors you suggest</b> — the professor, and that it was you. There is no score attached; a suggestion cannot move anyone’s rating.</li>'
     +'<li><b>Your birth year is asked at sign-up and not kept.</b> The Terms say TermChamp is for 13 and over, so the sign-up form asks the year you were born, compares it, and drops it. There is no field for it on your profile and it never reaches the database.</li>'
-    +'<li><b>No phone number, in any form.</b> Contact matching was retired, and on 7 September the hashing that went with it was deleted too \u2014 it used a fixed prefix that was visible in the page source, which made it readable to anyone who ever held the table. There was no reason to keep a stored secret that was not secret.</li>'
+    +'<li><b>Your phone number \u2014 only if you add it.</b> It is optional (at sign-up, or in Settings \u203a Contacts in the iPhone app) and lets friends who have your number saved find you. It is never stored as a number: the app turns it into a one-way code on your phone, and the server scrambles that again with a secret key kept in the database\u2019s vault, which the app and this site never see. It is never shown on your profile or to anyone, one number can belong to only one account, and you can remove it in Settings at any time. (An earlier version of contact matching was retired on 7 September because its hashing used a prefix visible in the page source; this one does not.)</li>'
     +'</ul>'
     +'<h4>Counting, and what it deliberately cannot do</h4>'
     +'<p>TermChamp counts which professor pages are opened and which are shown on screen, so it can '
@@ -37079,6 +37085,10 @@ var LEGAL_DOCS={
     +'<p>Messages are not end-to-end encrypted. They are encrypted in transit and stored in the database like everything else, which means whoever holds the database keys could read them — today that is one student maintaining this project. Do not put anything in TermChamp you would not put in a group text. If that changes, this page changes with it.</p>'
     +'<h4>Where it lives</h4>'
     +'<p>In a Supabase-hosted Postgres database on servers in the United States. Traffic is encrypted in transit. Photos are stored in Supabase Storage; a photo you upload is publicly reachable by its URL, so treat it as public.</p>'
+    +'<h4>Find friends from your contacts (iPhone app)</h4>'
+    +'<p>Only if you tap <b>Connect contacts</b> and allow it in iOS. The app reads the phone numbers and email addresses in your contacts <b>on your phone</b>, turns each one into a one-way code there, and sends only those codes to TermChamp\u2019s server. The server compares them with students at your school and sends back who matched, so you can add them; the names in your contacts never leave your phone.</p>'
+    +'<p><b>Your address book is not stored.</b> The codes are compared and forgotten \u2014 no names, numbers, emails or codes from your contacts are kept, and nobody is told that you looked them up. Only students at your school can match, never anyone you have blocked or who has blocked you, and never an account being deleted. Each account can check contacts a limited number of times an hour and a day, so the feature cannot be used to test lists of numbers.</p>'
+    +'<p>Being straight about the limit: a one-way code of a phone number or email can in principle be worked out by someone who tries every possible number. That is why the codes your phone sends are never kept, and why the number you add yourself is scrambled again with a key only the server holds. Turn it off any time in Settings \u203a Contacts, or in your iPhone\u2019s Settings \u203a TermChamp \u203a Contacts.</p>'
     +'<h4>Notifications</h4>'
     +'<p>If you turn on notifications, TermChamp stores what is needed to deliver them: in the iPhone app, the device token Apple gives your phone; in a browser, the push address and keys your browser gives it. They are linked to your account so a notification reaches you, and are used for nothing else. Signing out of the iPhone app removes that phone\u2019s token; deleting your account removes all of them.</p>'
     +'<p>Notifications are only about things that involve you: a seat opening in a section you watch or have in a plan, a planned section filling up, registration opening, a friend request, a friend joining a class you are in, a message or a like in your chats, and being added to a group. You choose which in Settings \u203a Notifications, and you can mute any chat. A message notification shows who sent it and what it says, so that text goes through Apple to your phone. TermChamp keeps a record of each notification, so the same one is not sent twice: 7 days for messages and likes, about a year for the rest.</p>'
@@ -37126,7 +37136,7 @@ var LEGAL_DOCS={
     +'<ul>'
     +'<li>No advertising trackers. Google Analytics counts visits, as Privacy explains; it is never told what you look at or type.</li>'
     +'<li>No selling or sharing of personal data.</li>'
-    +'<li>No phone numbers, and passwords only as a hash.</li>'
+    +'<li>No phone numbers in readable form: one you add for Connect contacts is kept only as a keyed one-way code, and contacts you check are compared and forgotten. Passwords only as a hash.</li>'
     +'<li>No reading of your Cal Poly account — the class data comes from Cal Poly’s public class search, not from your portal. TermChamp never asks for your Cal Poly password, and you should never give it to us or anyone else.</li>'
     +'</ul>'
     +'<h4>Honest limits</h4>'
@@ -37544,7 +37554,7 @@ async function wlPush(code,pos){
     if(typeof sb==='undefined'||!sb||typeof sbUser==='undefined'||!sbUser)return 'signedout';
     var slow={__slow:1};
     var r=await Promise.race([
-      sb.from('saved_classes').upsert({user_id:sbUser.id,term:mcTerm(),code:code,waitlist_pos:pos}),
+      sb.from('saved_classes').upsert({user_id:sbUser.id,term:mcTerm(),code:code,waitlist_pos:pos}, { onConflict: 'user_id,code,term' }),
       new Promise(function(res){ setTimeout(function(){res(slow);},WL_PUSH_MS); })
     ]);
     if(r===slow)return 'slow';

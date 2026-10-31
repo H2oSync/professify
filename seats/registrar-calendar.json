@@ -148,11 +148,50 @@
       "label": "Summer 2027",
       "term_code": null,
       "term_code_confirmed": null,
-      "source": "https://registrar.calpoly.edu/academic-calendar",
+      "source": "https://registrar.calpoly.edu/summer-2027-planning-calendar",
       "schedule_available": "2027-02-22",
-      "windows": [],
-      "last_day_anything_can_change": null,
-      "last_day_note": "PLACEHOLDER — the Summer 2027 planning calendar was not published as of 2026-09-14. Only the schedule-available date (Feb 22, stated on the Spring calendar) and first/last day of instruction (Jun 1 / Aug 6, from the academic calendar) are known, and NO registration window is published. windows is EMPTY ON PURPOSE: cadence.mjs reports this term as UNKNOWN rather than silently treating it as dark. Fill it in when the Registrar publishes."
+      "windows": [
+        {
+          "kind": "appointments",
+          "from": "2027-03-01",
+          "to": "2027-03-05",
+          "note": "All three session tables: 'March 1 ... Student Center opens for registration appointments. Students can enroll in 15 units and waitlist for 12 units.' (10-week: 'Registration opens for registration appointment rotations ( for continuing students) with a 15 unit enrollment limit.') … 'March 5 End of Registration appointments for continuing students'."
+        },
+        {
+          "kind": "open_enrollment",
+          "from": "2027-03-06",
+          "to": "2027-05-28",
+          "note": "10-WEEK and FIRST 5-WEEK: 'March 6 Open Enrollment begins (12:00 a.m.)' / 'Enrollment limit increases to 20 units at 8 a.m.' … 'May 28 Open Enrollment Ends' / 'Wait list runs for the last time at noon' (first 5-week: 'Waitlist process runs for the last time in the morning. Open Enrollment Ends')."
+        },
+        {
+          "kind": "open_enrollment",
+          "from": "2027-03-06",
+          "to": "2027-07-02",
+          "note": "SECOND 5-WEEK SESSION: 'March 6 Open Enrollment begins (12:00 a.m.)' … 'July 2 Open Enrollment Ends' / 'Wait list runs for the last time at noon.' Start shared with the other sessions; OVERLAPS them."
+        },
+        {
+          "kind": "add_drop",
+          "from": "2027-06-01",
+          "to": "2027-06-14",
+          "deadlines": [
+            "2027-06-06",
+            "2027-06-07"
+          ],
+          "note": "10-WEEK and FIRST 5-WEEK (identical rows): 'June 1 Summer 2027 Classes Begin' … 'June 6 Last day to drop or swap classes via Student Center (11:59 p.m.)' … 'June 7 Last day to add classes with a permission number. (11:59 p.m.)' … 'June 8 Late Enrollment Appeal period begins' / 'June 14 Last day to submit Late Enrollment Appeal (5:00 p.m.)'. No 'last day to enroll without a permission number' row is published, so none is listed (rule 8)."
+        },
+        {
+          "kind": "add_drop",
+          "from": "2027-07-06",
+          "to": "2027-07-19",
+          "deadlines": [
+            "2027-07-11",
+            "2027-07-12"
+          ],
+          "note": "SECOND 5-WEEK SESSION: 'July 6 Summer 2027 Classes Begin' … 'July 11 Last day to drop or swap classes via Student Center. (11:59 p.m.)' … 'July 12 Last day to add classes with a permission number. (11:59 p.m.)' … 'July 13 Late Enrollment Appeal period begins' / 'July 19 Last day to submit Late Enrollment Appeal (5:00 p.m.)'."
+        }
+      ],
+      "last_day_anything_can_change": "2027-07-19",
+      "last_day_note": "Second 5-week session's late enrolment appeal deadline (summer-2027-planning-calendar, read 2026-10-30)."
     }
   ]
 }

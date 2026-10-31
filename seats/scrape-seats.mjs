@@ -19,10 +19,11 @@
  */
 import { chromium } from 'playwright';
 import { writeFile } from 'node:fs/promises';
-import { planFor, describe } from './cadence.mjs';
+import { planFor, describe, loadCalendar } from './cadence.mjs';
 import { resolveTerm, termCandidates, matchesTerm, termsNamedIn } from './term.mjs';
 import { buildUpsertRows, dedupeByClassNbr, confirmTerm } from './rows.mjs';
 import { indexableAgainstPage, bandPlan, mergeBands } from './bands.mjs';
+import { classesBegin, termCheck, subjectCheck, relabelBySubject, sweepVerdict, dropGraceMinutes, pruneDropped } from './sweep.mjs';
 
 const CFG = {
   URL: process.env.CP_URL || 'https://cmsweb.pscs.calpoly.edu/psc/CSLOPRD/EMPLOYEE/SA/c/COMMUNITY_ACCESS.CLASS_SEARCH.GBL',
@@ -41,6 +42,13 @@ const CFG = {
   IGNORE_CALENDAR: process.env.CP_IGNORE_CALENDAR === '1',
   /* Resolve the term code against the live page and print it, without scraping anything. */
   DISCOVER_ONLY: process.env.CP_DISCOVER_TERM === '1' || process.argv.includes('--discover-term'),
+  /* DROPPED SECTIONS (2026-10-30, sweep.mjs). After a COMPLETE, verified sweep of a subject, rows of
+     that subject no sweep has seen for the grace period are deleted. CP_PRUNE=0 turns it off. */
+  PRUNE: process.env.CP_PRUNE !== '0',
+  /* A subject whose sweep FAILED (wrong term, wrong subject, error, uncoverable) makes the lane exit
+     3 after writing everything that was good — so the run goes red and GitHub emails whoever
+     started it. CP_FAIL_ON_INCOMPLETE=0 keeps the old always-green behaviour. */
+  FAIL_ON_INCOMPLETE: process.env.CP_FAIL_ON_INCOMPLETE !== '0',
 };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -294,6 +302,7 @@ async function run() {
 
      Exit 0, not an error: "nothing to do" is a correct outcome, and a red run for it teaches
      everyone to ignore red runs. */
+  let cadenceEvery = null;                 // this term's pull interval, for the dropped-section grace
   if (!CFG.IGNORE_CALENDAR && !CFG.DISCOVER_ONLY) {
     const plan = planFor(new Date());
     console.log(describe(plan));
@@ -307,6 +316,7 @@ async function run() {
       console.log(`• Skipping: ${mine.why}. Set CP_IGNORE_CALENDAR=1 to override.`);
       return;
     }
+    if (mine) cadenceEvery = mine.every;
     /* THIS CHECKS THE PHASE, NOT THE SLOT — and that distinction is the whole point.
        plan.mjs decides whether this MINUTE is a scheduled pull, using a five-minute tolerance
        around the aligned slot. By the time a lane reaches this line it has paid for a checkout,
@@ -326,17 +336,22 @@ async function run() {
   const page = await ctx.newPage();
   page.on('dialog', d => d.dismiss().catch(() => {}));
 
-  await page.goto(CFG.URL, { waitUntil: 'domcontentloaded' });
-  await page.addInitScript(PAGE_HELPERS);                 // for future navigations
-  await page.evaluate(PAGE_HELPERS);                      // and this page
-  // Wait for the search FORM (institution field, any $N$ index) to render.
-  await page.waitForFunction(() => !!document.querySelector('[id^="CLASS_SRCH_WRK2_INSTITUTION"]'), null, { timeout: 45000 })
-    .catch(() => {});
-  const gotForm = await page.evaluate(() => !!document.querySelector('[id^="CLASS_SRCH_WRK2_INSTITUTION"]'));
-  console.log(`• Loaded search form: ${gotForm ? 'yes' : 'NO'}  (title="${await page.title()}")`);
-  if (!gotForm) { await dumpDiag(page, 'noform'); }
-
-  await setField(page, 'CLASS_SRCH_WRK2_INSTITUTION', CFG.INSTITUTION, 'institution'); // populates subjects
+  await page.addInitScript(PAGE_HELPERS);                 // for every navigation, including a re-open
+  /* Load a FRESH search form and pick the institution. Called once at start, and again whenever a
+     subject's results prove the form's server-side state is not what we set (sweep.mjs) — a fresh
+     page is the only reset PeopleSoft offers. */
+  async function loadForm() {
+    await page.goto(CFG.URL, { waitUntil: 'domcontentloaded' });
+    await page.evaluate(PAGE_HELPERS);
+    // Wait for the search FORM (institution field, any $N$ index) to render.
+    await page.waitForFunction(() => !!document.querySelector('[id^="CLASS_SRCH_WRK2_INSTITUTION"]'), null, { timeout: 45000 })
+      .catch(() => {});
+    const gotForm = await page.evaluate(() => !!document.querySelector('[id^="CLASS_SRCH_WRK2_INSTITUTION"]'));
+    console.log(`• Loaded search form: ${gotForm ? 'yes' : 'NO'}  (title="${await page.title()}")`);
+    if (!gotForm) { await dumpDiag(page, 'noform'); }
+    await setField(page, 'CLASS_SRCH_WRK2_INSTITUTION', CFG.INSTITUTION, 'institution'); // populates subjects
+  }
+  await loadForm();
 
   /* ---- which term is this, really? -------------------------------------------------------
      A wrong STRM does not fail. The search accepts it, returns nothing, and the run goes green
@@ -369,15 +384,20 @@ async function run() {
     readField: () => readField(page, 'SLO_SS_DERIVED_STRM'),
   };
 
-  if (CFG.TERM && !CFG.DISCOVER_ONLY) {
+  async function setAndConfirmTerm() {
     await termIO.setTerm(CFG.TERM);
     /* rows.mjs decides; see the note there on why an UNREADABLE echo degrades while a
-       CONTRADICTING one refuses. */
+       CONTRADICTING one refuses. NOTE (2026-10-30): passing this does NOT prove PeopleSoft will
+       search this term — the read-back is our own write to the DOM. Each subject's RESULTS are
+       checked by date in the loop below (sweep.mjs termCheck); that is the check that holds. */
     const verdict = confirmTerm(
       { code: CFG.TERM, label: CFG.TERM_LABEL, echo: await termIO.readEcho(), back: await readField(page, 'SLO_SS_DERIVED_STRM') },
       termsNamedIn, matchesTerm);
     if (verdict.degraded) console.log(`::warning title=Term echo unreadable::${verdict.note}`);
     console.log(`• ${verdict.note}`);
+  }
+  if (CFG.TERM && !CFG.DISCOVER_ONLY) {
+    await setAndConfirmTerm();
   } else {
     const label = CFG.TERM_LABEL;
     if (!label) throw new Error('set CP_TERM, or CP_TERM_LABEL so the term code can be resolved');
@@ -393,6 +413,28 @@ async function run() {
     if (CFG.DISCOVER_ONLY) { await browser.close(); return; }
   }
   console.log(`• After setup — institution="${await readField(page, 'CLASS_SRCH_WRK2_INSTITUTION')}" term="${await readField(page, 'SLO_SS_DERIVED_STRM')}"`);
+
+  /* What the calendar knows about this term: when its classes begin (the date check) and how
+     often it is pulled (the dropped-section grace). Either may be missing; both degrade safely —
+     no begin date means no date check AND no pruning, never a guessed one. */
+  let calTerm = null;
+  try { calTerm = (loadCalendar().terms || []).find(t => (t.term_code && t.term_code === CFG.TERM) || (CFG.TERM_LABEL && t.label === CFG.TERM_LABEL)) || null; } catch (e) {}
+  const BEGIN = classesBegin(calTerm);
+  if (cadenceEvery == null) { try { const m = planFor(new Date()).terms.find(t => t.term_code === CFG.TERM); if (m) cadenceEvery = m.every; } catch (e) {} }
+  const GRACE_MIN = dropGraceMinutes(cadenceEvery);
+  const SWEEP_STARTED = new Date().toISOString();
+  console.log(`• Results are checked against classes beginning ${BEGIN || '(unknown — date check OFF, pruning OFF)'}; dropped sections pruned after ${Math.round(GRACE_MIN / 60)}h unseen${CFG.PRUNE ? '' : ' (CP_PRUNE=0: pruning OFF)'}.`);
+
+  /* true while the browser sits on a search FORM (not a results page), so the next search must not
+     press "Modify Search" first. */
+  let onForm = true;
+  /* Re-open the form from scratch: new page load, institution, term, confirm. */
+  async function reopenForm(why) {
+    console.log(`    ↻ re-opening the search form (${why})`);
+    await loadForm();
+    await setAndConfirmTerm();
+    onForm = true;
+  }
 
   // ---- Cal Poly's hard 300-section search cap -------------------------------------------
   // PeopleSoft refuses outright to run a search whose result set would exceed 300 sections:
@@ -452,13 +494,29 @@ async function run() {
 
   // Run ONE search for a subject with one course-number band. Returns the parsed rows plus
   // whether the server refused the search for exceeding its 300-section cap.
-  async function searchOnce(subj, op, num, isFirstSearch) {
-    if (!isFirstSearch) await backToForm();
+  async function searchOnce(subj, op, num) {
+    if (!onForm) await backToForm();
+    onForm = false;
     await page.waitForFunction(() => {
       const s = document.querySelector('select[id^="SSR_CLSRCH_WRK_SUBJECT_SRCH"]');
       return s && s.options.length > 1;
     }, null, { timeout: 20000 }).catch(() => {});
-    await setField(page, 'SSR_CLSRCH_WRK_SUBJECT_SRCH', subj, 'subject');
+    /* IS THIS SUBJECT OFFERED THIS TERM AT ALL? (2026-10-30) Setting a <select> to a value it has
+       no option for leaves it blank, setField's three retries fail, and — because its result was
+       discarded — the search ran anyway on whatever subject the SERVER still held: the previous
+       one in the lane. That is how GSA came to hold all of CRP, WGS all of AG, HNRC all of UNIV.
+       A subject missing from a populated list is "nothing this term", said out loud. */
+    const offered = await page.evaluate(subj => {
+      const s = document.querySelector('select[id^="SSR_CLSRCH_WRK_SUBJECT_SRCH"]');
+      if (!s || s.options.length <= 1) return null;                    // list not loaded: unknown
+      return [...s.options].some(o => String(o.value).trim().toUpperCase() === subj.toUpperCase());
+    }, subj);
+    if (offered === false) {
+      onForm = true;                                                   // nothing was searched
+      return { notOffered: true, list: [], outcome: { results: false, msg: 'not-offered' }, diag: { rawLinks: 0, capNote: false }, criterionState: 'n/a', openOnlyState: 'n/a', overLimit: false };
+    }
+    const subjectSet = await setField(page, 'SSR_CLSRCH_WRK_SUBJECT_SRCH', subj, 'subject');
+    if (!subjectSet) throw new Mismatch('subject-not-set', `could not set the subject field to ${subj} (offered=${offered}) — refusing to search whatever subject the form still holds`);
     const criterionState = await setCourseNum(op, num);
 
     // Turn OFF "Show Open Classes Only" so FULL / WAITLISTED / CLOSED sections are included.
@@ -535,111 +593,176 @@ async function run() {
     if (missing) console.warn(`    !! ${label}: ${missing} of ${list.length} rows had no result link mid-loop — the page changed while counts were being fetched.`);
   }
 
-  const all = [];
+  /* A search whose RESULTS are not the term or subject we asked for (sweep.mjs). Thrown as soon as
+     a band's list comes back — before a single detail page is opened for it — so the lane spends
+     nothing enriching sections it is about to throw away. */
+  class Mismatch extends Error { constructor(kind, note) { super(note); this.kind = kind; } }
+  function checkBand(subj, res, where) {
+    if (!res || !res.list || !res.list.length) return;
+    const tc = termCheck(res.list, BEGIN);
+    if (tc.verdict === 'wrong-term') throw new Mismatch('wrong-term', `${subj} ${where}: ${tc.note}`);
+    const sc = subjectCheck(res.list, subj);
+    if (sc.verdict === 'wrong-subject') throw new Mismatch('wrong-subject', `${subj} ${where}: ${sc.note}`);
+  }
+
   let searchesRun = 0;
+  /* One subject, start to finish. `salvage` collects whole, already-enriched, already-CHECKED
+     bands, so a subject that dies half way can still write what it has. */
+  async function sweepSubject(subj, salvage) {
+    /* ENRICH EACH BAND WHILE ITS OWN RESULT PAGE IS LOADED.
+       The list index IS the DOM id suffix — `list[i]` is reached by clicking
+       `MTG_CLASS_NBR$i` — so a list and a page belong together and nothing else ties a row to
+       its link. The previous version concatenated both bands' lists and then walked the
+       combined list against whichever page happened to be loaded last, which wrote the high
+       band's seat counts onto the low band's rows and then spent twelve seconds per orphaned
+       index discovering there was nothing to click. See bands.mjs for the full trace.
+       So: search, CHECK, enrich, merge — in that order, per band, never across them. */
+    let r = await searchOnce(subj, 'G', 0); searchesRun++;
+    if (r.notOffered) return { notOffered: true, list: [], r, plan: { label: 'n/a', bands: [] }, msgs: [] };
+    const msgs = [r.outcome.msg];
+    const bandLists = [];
+    let plan = bandPlan(r.overLimit, []);
+
+    if (!r.overLimit) {
+      /* The common case, and the cheap one: one search, and its page is live right now. */
+      checkBand(subj, r, 'all');
+      await enrichLive(r.list, subj);
+      bandLists.push(r.list); salvage.push(r.list);
+    } else {
+      /* Over Cal Poly's 300 cap. Probe for a boundary list-only first — enriching a band we
+         might discard because its partner is still over the cap would be minutes wasted. */
+      const attempts = [];
+      for (const boundary of CAP_SPLITS) {
+        const lowHalf  = await searchOnce(subj, 'L', boundary - 1); searchesRun++;
+        checkBand(subj, lowHalf, `<=${boundary - 1}`);
+        const highHalf = await searchOnce(subj, 'G', boundary); searchesRun++;
+        checkBand(subj, highHalf, `>=${boundary}`);
+        attempts.push({ boundary, lowOverLimit: lowHalf.overLimit, highOverLimit: highHalf.overLimit });
+        if (!lowHalf.overLimit && !highHalf.overLimit) {
+          /* The HIGH band's page is the one loaded — it was the last search — so enrich it
+             here rather than paying for the same search twice. */
+          await enrichLive(highHalf.list, `${subj} >=${boundary}`);
+          bandLists.push(highHalf.list); salvage.push(highHalf.list);
+          msgs.length = 0; msgs.push(highHalf.outcome.msg);
+          r = highHalf;                                   // a real outcome, for the log line
+          break;
+        }
+        console.log(`    · ${subj}: split at ${boundary} still over the 300 cap (low=${lowHalf.overLimit ? 'over' : lowHalf.list.length}, high=${highHalf.overLimit ? 'over' : highHalf.list.length}) — trying a finer boundary`);
+      }
+      plan = bandPlan(true, attempts);
+      if (!plan.bands) {
+        // Never silently under-report: say so loudly and dump what the runner saw.
+        console.log(`  ${subj}: STILL over Cal Poly's 300-section cap after every split — this subject needs a finer band list (CAP_SPLITS).`);
+        await dumpDiag(page, subj.toLowerCase() + '-overlimit');
+      } else {
+        /* Now the LOW band, searched fresh so its own page is the one being indexed. */
+        const lo = plan.bands.find(x => x.op === 'L');
+        const loRes = await searchOnce(subj, lo.op, lo.num); searchesRun++;
+        checkBand(subj, loRes, lo.label);
+        await enrichLive(loRes.list, `${subj} ${lo.label}`);
+        bandLists.push(loRes.list); salvage.push(loRes.list);
+        msgs.push(loRes.outcome.msg);
+      }
+    }
+
+    const bandsUsed = plan.label;
+    /* Merge only after every band has its own numbers on it. Bands are disjoint by
+       construction, but a section that appeared twice would make Postgres reject the whole
+       lane's upsert, so the dedupe stays. */
+    const list = mergeBands(bandLists);
+
+    const codeSet = new Set(list.map(x => x.course_code).filter(Boolean));
+    const blanks = list.filter(x => !x.course_code).length;
+    const statusMix = list.reduce((m, x) => { const st = statusBadge(x.status_raw) || 'null'; m[st] = (m[st] || 0) + 1; return m; }, {});
+    console.log(`  ${subj}: ${list.length} sections / ${codeSet.size} courses  (bands=${bandsUsed}, crit=${r.criterionState}, open-only=${r.openOnlyState}, statuses=${JSON.stringify(statusMix)}${blanks ? `, ${blanks} BLANK-code` : ''}${r.diag.capNote ? ', CAP-NOTE!' : ''}, msg=${r.outcome.msg || 'none'})`);
+    if (list.length === 0) await dumpDiag(page, subj.toLowerCase());
+
+    /* INTEGRITY CHECK — the one that would have caught this the day it started.
+       A subject of any size that comes back 100% "Open" is not a subject where nothing is
+       full; it is a subject where the open-only filter leaked. Real ones are mixed: across
+       term 2268 about a quarter of all sections are Waitlist or Closed. HIST returned 41
+       sections, every single one Open, and nothing anywhere in the log said so — the run
+       looked completely healthy while the app was silently missing every full class in the
+       subject, which are exactly the ones a student needs a waitlist position for.
+       This does not throw: a partial subject is still worth writing. It makes the failure
+       VISIBLE and names the fix, which is what a nightly log is for. It also makes the subject
+       unsafe to prune: a section missing from a leaked search is not a dropped section. */
+    const nonOpen = list.filter(x => { const st = statusBadge(x.status_raw); return st && st !== 'Open'; }).length;
+    const openOnlyLeak = list.length >= 8 && nonOpen === 0;
+    if (openOnlyLeak) {
+      console.warn(`    !! ${subj}: ${list.length} sections and NOT ONE is full or waitlisted — "Show Open Classes Only" almost certainly leaked for this subject (open-only=${r.openOnlyState}). Every full section is missing from this lane. Re-run this subject.`);
+      await dumpDiag(page, subj.toLowerCase() + '-openonly-leak');
+    }
+    if (r.openOnlyState === 'STUCK-ON') {
+      console.warn(`    !! ${subj}: could not clear "Show Open Classes Only" after 4 attempts — this lane's data is open-classes-only and INCOMPLETE.`);
+    }
+    return { list, r, plan, msgs, openOnlyLeak, capNote: !!r.diag.capNote };
+  }
+
+  const all = [];
+  const report = [];        // one entry per subject: what happened, and whether it may prune
   for (let s = 0; s < CFG.SUBJECTS.length; s++) {
     const subj = CFG.SUBJECTS[s];
-    /* Bands that finished BEFORE an error, so a subject that dies half way still writes what it
-       already has. It holds whole bands, each already enriched against its own page — partial
-       data, never mismatched data. */
-    const salvage = [];
-    try {
-      /* ENRICH EACH BAND WHILE ITS OWN RESULT PAGE IS LOADED.
-         The list index IS the DOM id suffix — `list[i]` is reached by clicking
-         `MTG_CLASS_NBR$i` — so a list and a page belong together and nothing else ties a row to
-         its link. The previous version concatenated both bands' lists and then walked the
-         combined list against whichever page happened to be loaded last, which wrote the high
-         band's seat counts onto the low band's rows and then spent twelve seconds per orphaned
-         index discovering there was nothing to click. See bands.mjs for the full trace.
-         So: search, enrich, merge — in that order, per band, never across them. */
-      let r = await searchOnce(subj, 'G', 0, searchesRun++ === 0);
-      const bandLists = [];
-      let plan = bandPlan(r.overLimit, []);
+    let res = null, err = null, salvage = [], mismatch = null;
+    /* At most two goes. A wrong-term or wrong-subject result means the FORM's server-side state is
+       not what we set, so the second go starts from a freshly loaded page. A second mismatch is a
+       failed subject: nothing from it is written. */
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      res = null; err = null; mismatch = null; salvage = [];
+      try { res = await sweepSubject(subj, salvage); }
+      catch (e) { if (e instanceof Mismatch) mismatch = e; else err = e; }
+      if (!mismatch || attempt === 2) break;
+      console.warn(`    !! ${mismatch.message}`);
+      await dumpDiag(page, subj.toLowerCase() + '-' + mismatch.kind);
+      try { await reopenForm(mismatch.kind); } catch (e) { err = e; break; }
+    }
 
-      if (!r.overLimit) {
-        /* The common case, and the cheap one: one search, and its page is live right now. */
-        await enrichLive(r.list, subj);
-        bandLists.push(r.list); salvage.push(r.list);
-      } else {
-        /* Over Cal Poly's 300 cap. Probe for a boundary list-only first — enriching a band we
-           might discard because its partner is still over the cap would be minutes wasted. */
-        const attempts = [];
-        for (const boundary of CAP_SPLITS) {
-          const lowHalf  = await searchOnce(subj, 'L', boundary - 1, false); searchesRun++;
-          const highHalf = await searchOnce(subj, 'G', boundary,     false); searchesRun++;
-          attempts.push({ boundary, lowOverLimit: lowHalf.overLimit, highOverLimit: highHalf.overLimit });
-          if (!lowHalf.overLimit && !highHalf.overLimit) {
-            /* The HIGH band's page is the one loaded — it was the last search — so enrich it
-               here rather than paying for the same search twice. */
-            await enrichLive(highHalf.list, `${subj} >=${boundary}`);
-            bandLists.push(highHalf.list); salvage.push(highHalf.list);
-            r = highHalf;                                   // a real outcome, for the log line
-            break;
-          }
-          console.log(`    · ${subj}: split at ${boundary} still over the 300 cap (low=${lowHalf.overLimit ? 'over' : lowHalf.list.length}, high=${highHalf.overLimit ? 'over' : highHalf.list.length}) — trying a finer boundary`);
-        }
-        plan = bandPlan(true, attempts);
-        if (!plan.bands) {
-          // Never silently under-report: say so loudly and dump what the runner saw.
-          console.log(`  ${subj}: STILL over Cal Poly's 300-section cap after every split — this subject needs a finer band list (CAP_SPLITS).`);
-          await dumpDiag(page, subj.toLowerCase() + '-overlimit');
-        } else {
-          /* Now the LOW band, searched fresh so its own page is the one being indexed. */
-          const lo = plan.bands.find(x => x.op === 'L');
-          const loRes = await searchOnce(subj, lo.op, lo.num, false); searchesRun++;
-          await enrichLive(loRes.list, `${subj} ${lo.label}`);
-          bandLists.push(loRes.list); salvage.push(loRes.list);
-        }
-      }
-
-      const bandsUsed = plan.label;
-      /* Merge only after every band has its own numbers on it. Bands are disjoint by
-         construction, but a section that appeared twice would make Postgres reject the whole
-         lane's upsert, so the dedupe stays. */
-      const list = mergeBands(bandLists);
-
-      const codeSet = new Set(list.map(x => x.course_code).filter(Boolean));
-      const blanks = list.filter(x => !x.course_code).length;
-      const statusMix = list.reduce((m, x) => { const st = statusBadge(x.status_raw) || 'null'; m[st] = (m[st] || 0) + 1; return m; }, {});
-      console.log(`  ${subj}: ${list.length} sections / ${codeSet.size} courses  (bands=${bandsUsed}, crit=${r.criterionState}, open-only=${r.openOnlyState}, statuses=${JSON.stringify(statusMix)}${blanks ? `, ${blanks} BLANK-code` : ''}${r.diag.capNote ? ', CAP-NOTE!' : ''}, msg=${r.outcome.msg || 'none'})${CFG.FETCH_DETAILS && list.length ? ' — fetching counts…' : ''}`);
-      if (list.length === 0) await dumpDiag(page, subj.toLowerCase());
-
-      /* INTEGRITY CHECK — the one that would have caught this the day it started.
-         A subject of any size that comes back 100% "Open" is not a subject where nothing is
-         full; it is a subject where the open-only filter leaked. Real ones are mixed: across
-         term 2268 about a quarter of all sections are Waitlist or Closed. HIST returned 41
-         sections, every single one Open, and nothing anywhere in the log said so — the run
-         looked completely healthy while the app was silently missing every full class in the
-         subject, which are exactly the ones a student needs a waitlist position for.
-         This does not throw: a partial subject is still worth writing. It makes the failure
-         VISIBLE and names the fix, which is what a nightly log is for. */
-      const nonOpen = list.filter(x => { const st = statusBadge(x.status_raw); return st && st !== 'Open'; }).length;
-      if (list.length >= 8 && nonOpen === 0) {
-        console.warn(`    !! ${subj}: ${list.length} sections and NOT ONE is full or waitlisted — "Show Open Classes Only" almost certainly leaked for this subject (open-only=${r.openOnlyState}). Every full section is missing from this lane. Re-run this subject.`);
-        await dumpDiag(page, subj.toLowerCase() + '-openonly-leak');
-      }
-      if (r.openOnlyState === 'STUCK-ON') {
-        console.warn(`    !! ${subj}: could not clear "Show Open Classes Only" after 4 attempts — this lane's data is open-classes-only and INCOMPLETE.`);
-      }
-
-      /* STAMP EVERY ROW WITH ITS TERM, STATUS AND TIME. This line was lost in the 2026-09-17
-         refactor (6b344b8) when the band merge moved; only the salvage path below kept it. From
-         then on every lane sent term = null, course_seats.term is NOT NULL, and every upsert was
-         refused (23502) — so the table froze at 2026-09-16 while the runs kept going red.
-         rows.mjs now refuses a row with no term before it reaches Supabase. */
-      list.forEach(x => { x.status = statusBadge(x.status_raw); x.term = CFG.TERM; x.updated_at = new Date().toISOString(); });
-      all.push(...list);
-    } catch (e) {
-      console.error(`  ${subj}: ERROR — ${e.message.split('\n')[0]}`);
-      // Keep whatever this subject already produced instead of throwing the whole lane away.
-      const salvaged = mergeBands(salvage).filter(x => x && x.class_nbr);
-      if (salvaged.length) {
-        salvaged.forEach(x => { x.status = statusBadge(x.status_raw); x.term = CFG.TERM; x.updated_at = new Date().toISOString(); });
-        all.push(...salvaged);
-        console.log(`    · ${subj}: kept ${salvaged.length} sections collected before the error.`);
-      }
+    let list = [];
+    if (res) list = res.list;
+    else if (!mismatch) list = mergeBands(salvage).filter(x => x && x.class_nbr);   // error: keep checked, enriched bands
+    if (err) {
+      console.error(`  ${subj}: ERROR — ${String(err.message || err).split('\n')[0]}`);
+      if (list.length) console.log(`    · ${subj}: kept ${list.length} sections collected before the error.`);
       await dumpDiag(page, subj.toLowerCase() + '-error');
     }
+    if (mismatch) {
+      console.error(`::error title=Seat sweep: ${mismatch.kind} (${subj}, term ${CFG.TERM})::${mismatch.message} — on a freshly re-opened form too. Nothing from ${subj} was written.`);
+    }
+
+    const tc = termCheck(list, BEGIN), sc = subjectCheck(list, subj);
+    if (sc.verdict === 'mixed') console.warn(`    · ${subj}: ${sc.note}`);
+    if (tc.foreign && tc.verdict === 'ok') console.log(`    · ${subj}: ${tc.note}`);
+    if (res && res.notOffered) console.log(`  ${subj}: not offered for term ${CFG.TERM} (not in the subject list) — nothing to search.`);
+    const verdict = sweepVerdict({
+      notOffered: !!(res && res.notOffered),
+      error: err ? (err.message || String(err)) : (mismatch ? mismatch.message : null),
+      term: mismatch && mismatch.kind === 'wrong-term' ? { verdict: 'wrong-term', note: mismatch.message } : tc,
+      subject: mismatch && mismatch.kind === 'wrong-subject' ? { verdict: 'wrong-subject', note: mismatch.message } : sc,
+      uncoverable: !!(res && res.plan && res.plan.bands === null),
+      openOnly: res ? res.r.openOnlyState : null,
+      openOnlyLeak: !!(res && res.openOnlyLeak),
+      capNote: !!(res && res.capNote),
+      msgs: res ? res.msgs : [],
+      count: list.length,
+    });
+    if (err || mismatch) verdict.pruneSafe = false;
+
+    /* LABEL EACH ROW BY ITS OWN COURSE CODE, never by the loop variable (sweep.mjs).
+       STAMP EVERY ROW WITH ITS TERM, STATUS AND TIME. The stamp was lost in the 2026-09-17
+       refactor (6b344b8) when the band merge moved; from then on every lane sent term = null,
+       course_seats.term is NOT NULL, and every upsert was refused (23502) — so the table froze at
+       2026-09-16 while the runs kept going red. rows.mjs now refuses a row with no term before it
+       reaches Supabase. updated_at means "a sweep saw this section at this time" — it is stamped
+       whether or not anything changed, and dropped-section pruning depends on exactly that. */
+    relabelBySubject(list, subj);
+    list.forEach(x => { x.status = statusBadge(x.status_raw); x.term = CFG.TERM; x.updated_at = new Date().toISOString(); });
+    all.push(...list);
+    report.push({ subject: subj, sections: list.length, failed: verdict.failed, pruneSafe: verdict.pruneSafe, reasons: verdict.reasons,
+      seen: list.filter(x => x.subject === subj.toUpperCase()).map(x => String(x.class_nbr)) });
+
+    /* After anything went wrong, the next subject starts on a fresh form: whatever state broke
+       this one is still in the page. */
+    if ((err || mismatch) && s < CFG.SUBJECTS.length - 1) { try { await reopenForm('after a failed subject'); } catch (e) { console.error(`    · could not re-open the form: ${e.message}`); } }
   }
   await browser.close();
 
@@ -663,7 +786,40 @@ async function run() {
     }
   }
   await upsertCatalog([...catByCourse.values()]);
-  if (!all.length) { console.log('\n⚠  Zero sections — see the uploaded diag-*.png / diag-*.txt artifact to see what the runner saw.'); process.exit(2); }
+
+  /* Dropped sections go only AFTER the upsert succeeded (a failed upsert throws above and never
+     gets here), so every section this sweep saw already carries a fresh updated_at. */
+  const prune = await pruneDropped(report, {
+    enabled: CFG.PRUNE && !!CFG.SUPABASE_URL && !!CFG.SUPABASE_SERVICE_KEY,
+    base: CFG.SUPABASE_URL, key: CFG.SUPABASE_SERVICE_KEY, term: CFG.TERM,
+    begin: BEGIN, graceMin: GRACE_MIN, sweepStartedAt: SWEEP_STARTED });
+  await writeSweepReport(report, prune);
+
+  const notOffered = report.filter(r => /^not offered/.test(r.reasons[0] || '')).length;
+  if (!all.length && notOffered < report.length) { console.log('\n⚠  Zero sections — see the uploaded diag-*.png / diag-*.txt artifact to see what the runner saw.'); process.exit(2); }
+  /* A refused prune is NOT a red lane: it would repeat every sweep until a human acts. The rows it
+     protected stay unseen, and freshness.mjs reports them (at most ~8 red runs a day). */
+  if (prune.refused.length) console.log(`::warning title=Dropped-section prune refused (term ${CFG.TERM})::${prune.refused.join(' / ').slice(0, 900)}`);
+  const failed = report.filter(r => r.failed);
+  if (failed.length && CFG.FAIL_ON_INCOMPLETE) {
+    console.error(`\n✗ ${failed.length} subject(s) failed — everything that WAS good has been written. Exiting 3 so this run is red.`);
+    for (const r of failed) console.error(`::error title=Seat sweep failed: ${r.subject} (term ${CFG.TERM})::${r.reasons.join(' | ').slice(0, 900)}`);
+    process.exit(3);
+  }
+}
+
+/* What happened to every subject, for the run summary and the uploaded artifact. */
+async function writeSweepReport(report, prune) {
+  const doc = { term: CFG.TERM, label: CFG.TERM_LABEL, lane: CFG.SUBJECTS.join(','), at: new Date().toISOString(),
+    subjects: report.map(({ seen, ...r }) => r), pruned: prune.removed, prune_refused: prune.refused };
+  await writeFile('sweep-report.json', JSON.stringify(doc, null, 2));
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    const { appendFileSync } = await import('node:fs');
+    const rows = report.map(r => `| ${r.subject} | ${r.sections} | ${r.failed ? '**FAILED**' : r.pruneSafe ? 'complete' : 'partial'} | ${(r.reasons.join('; ') || '').replace(/\|/g, '/').slice(0, 200)} |`);
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+      `### Seats ${CFG.TERM_LABEL || CFG.TERM} — ${CFG.SUBJECTS.join(',')}\n\n| subject | sections | sweep | notes |\n|---|---|---|---|\n${rows.join('\n')}\n\n` +
+      `Pruned ${prune.removed.length} dropped section(s)${prune.refused.length ? `; **${prune.refused.length} prune(s) refused**: ${prune.refused.join(' / ')}` : ''}.\n\n`);
+  }
 }
 
 // Write per-course prerequisites + description to a SEPARATE table (course_catalog). Fully

@@ -1,0 +1,25 @@
+Apply order for the 2026-10-30 audit fixes (each: python3 <script> <file>), on top of commit 1658ca4:
+app/index.html: render-empty-stack, addto-prefer-mine, plan-dead-ids, rate-post-left, friends-double-tap, quick-log-term,
+  addto-mine-status, anytime-sheet-now-section, term-ends-by-term, no-class-days, registration-round2,
+  log-class-last-term-merged, scale-chat-newest, scale-thread-previews, scale-paged-reads, scale-clock-cache,
+  scale-watch-onconflict (app/index.html index.html), net-1-timeouts, net-2-jwt-refresh, net-3-plan-dirty, net-4-resume
+index.html (website): scale-watch-onconflict (with the app), website-catalog-paged
+tests: edit-tests-registration-round2 app-dev/tests/check-app.mjs; edit-tests-quick-log-term <repo-dir>
+SQL (needs approval to run on production): sql/2026-10-30-watch-sections-primary-key.sql, sql/2026-10-30-last-messages.sql
+
+# Pop-ups (2026-10-30, after the audit fixes)
+pushask-popup-2026-10-30.py            app/index.html
+contacts-2026-10-30.py                 app/index.html
+contacts-into-popqueue-2026-10-30.py   app/index.html
+onb-phone-skip-when-off-2026-10-30.py  app/index.html
+check-native-open-settings-2026-10-30.py   app-dev/tests/check-native.mjs
+edit-tests-contacts-2026-10-30.py          app-dev/tests/check-app.mjs
+edit-tests-dpr-stress-contacts-2026-10-30.py app-dev/tests/check-app.mjs
+ios-contacts-wiring-2026-10-30.py      ios-app (on the Mac, then npm install && npx cap sync ios)
+popup-limits-2026-10-30.py             app/index.html
+edit-tests-popup-limits-2026-10-30.py  app-dev/tests
+smaller-downloads-2026-10-30.py        app/index.html
+calendar-2026-27-2026-10-30.py         app/index.html
+edit-tests-calendar-2026-27-2026-10-30.py  (run from repo root)
+privacy-contacts-2026-10-30.py         index.html AND app/planner.js
+edit-tests-privacy-contacts-2026-10-30.py app-dev/tests/check-app.mjs
