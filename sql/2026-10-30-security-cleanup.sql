@@ -71,7 +71,8 @@ drop policy if exists "saved_classes_friends_read" on public.saved_classes; -- c
 
 drop index if exists public.fr_from_idx;                  -- = friend_requests_from_idx
 drop index if exists public.fr_to_idx;                    -- = friend_requests_to_idx
-drop index if exists public.review_helpful_one_per_review; -- = review_helpful_pkey
+-- review_helpful_one_per_review is a UNIQUE constraint identical to the primary key; left in place
+-- (sql/professify-lockdown.sql names it). Harmless duplicate.
 
 -- sanity: every table still has its rules
 do $$
