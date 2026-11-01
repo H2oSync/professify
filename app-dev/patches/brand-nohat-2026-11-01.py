@@ -2,8 +2,8 @@
 """2026-11-01 (after brand-i1): Tate: "we dont need the green hat"; then, of a fully redrawn version, "I dont like that",
 picking the Rubik version without the cap; then "this is the font [the icon's TC] ... have them all same level":
 then, of mixed letters, "the letters are inconsistent ... the spacing": the whole word in ONE font, Rubik 700 with
-+0.02em tracking, brand blue (design/app-icon/2026-11-01/wordmark-builder.py). 886x144 PNGs, shown so the word keeps
-its width: header 36 -> 30px (185px wide), welcome 48 -> 40px, website 36/32 -> 30/26px. Usage: <script> app/index.html [repo root]"""
++0.02em tracking, brand blue (design/app-icon/2026-11-01/wordmark-builder.py). 864x144 PNGs (icon T + C, Rubik lowercase, optically even spacing; design/app-icon/2026-11-01/wordmark-src/wm7.py), shown so the word keeps
+its width: header 36 -> 30px (180px wide), welcome 48 -> 40px, website 36/32 -> 30/26px. Usage: <script> app/index.html [repo root]"""
 import sys, re, base64, os
 path = sys.argv[1]; root = sys.argv[2] if len(sys.argv) > 2 else os.path.dirname(os.path.dirname(os.path.abspath(path)))
 D = os.path.join(root, 'design/app-icon/2026-11-01')

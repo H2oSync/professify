@@ -4762,8 +4762,8 @@ tests.wordmark = async () => {
   const L = await look();
   const srcHash = s => s ? md5(Buffer.from(s.replace(/^data:image\/png;base64,/, ''), 'base64')) : '';
   ok(L.label === 'TermChamp' && L.text === '' && L.n === 1 && L.alt === '' && !L.tile, 'logo: Home’s header is one picture, read out as “TermChamp” (no typed wordmark, not the tile)', L);
-  ok(L.loaded && srcHash(L.src) === want.light && L.nat[0] === 886 && L.nat[1] === 144, 'logo: light mode shows Tate’s logo exactly (the cut-out file, drawn from 3× pixels)', { got: srcHash(L.src), want: want.light, nat: L.nat });
-  ok(L.h === 30 && Math.abs(L.w - 185) <= 1, 'logo: 30px tall (no cap), its own proportions (185px wide)', L);
+  ok(L.loaded && srcHash(L.src) === want.light && L.nat[0] === 864 && L.nat[1] === 144, 'logo: light mode shows Tate’s logo exactly (the cut-out file, drawn from 3× pixels)', { got: srcHash(L.src), want: want.light, nat: L.nat });
+  ok(L.h === 30 && Math.abs(L.w - 180) <= 1, 'logo: 30px tall (no cap), its own proportions (180px wide)', L);
   await page.evaluate(() => { try { localStorage.setItem('tc-theme', 'dark'); } catch (e) {} applyTheme(true); }); await settle(page, 300);
   const D = await look();
   ok(D.n === 1 && D.loaded && srcHash(D.src) === want.dark && D.h === 30, 'logo: dark mode shows the dark cut (the brighter blue that reads on #0A0F1C)', { got: srcHash(D.src), want: want.dark });
@@ -4771,7 +4771,7 @@ tests.wordmark = async () => {
   ok(lm === 12, 'logo: starts 12px from the screen edge, like the stories', lm);
   await page.setViewportSize({ width: 320, height: 640 }); await settle(page, 300);
   const n = await page.evaluate(() => { const h = document.querySelector('.homehdr'), bs = [...h.querySelectorAll('button')].map(b => b.getBoundingClientRect()); const i = [...h.querySelectorAll('h1 img')].find(x => getComputedStyle(x).display !== 'none').getBoundingClientRect(); return { sw: document.getElementById('scroll').scrollWidth, cw: document.getElementById('scroll').clientWidth, imgW: Math.round(i.width), imgR: Math.round(i.right), btnL: Math.round(Math.min(...bs.map(r => r.left))), btnR: Math.round(Math.max(...bs.map(r => r.right))) }; });
-  ok(n.sw <= n.cw && Math.abs(n.imgW - 185) <= 1 && n.imgR < n.btnL && n.btnR <= 320, 'logo: at 320px it keeps its size, nothing overlaps, nothing runs off the screen', n);
+  ok(n.sw <= n.cw && Math.abs(n.imgW - 180) <= 1 && n.imgR < n.btnL && n.btnR <= 320, 'logo: at 320px it keeps its size, nothing overlaps, nothing runs off the screen', n);
   const cb = await page.evaluate(() => { const i = document.querySelector('.homehdr .tc-logo-i'), c = getComputedStyle(i); return { pe: c.pointerEvents, tc: c.webkitTouchCallout || c.getPropertyValue('-webkit-touch-callout') }; });
   ok(cb.pe === 'none', 'logo: a long press doesn’t offer Save Image (it isn’t a target)', cb);
   ok(log.errors.length === 0, 'logo: no page errors', log.errors);
