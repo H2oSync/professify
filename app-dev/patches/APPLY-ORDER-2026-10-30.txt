@@ -33,3 +33,5 @@ edit-tests-contacts-v2-2026-10-31.py   app-dev/tests
 (new tests: check-anytime-sections-2026-10-31.mjs, check-contacts-v2-2026-10-31.mjs)
 brand-i1-2026-11-01.py                 app/index.html <repo root>   (new header wordmark + sign-in logo; app icon & web icons are PNG files in the repo)
 edit-tests-brand-i1-2026-11-01.py      <repo root>
+brand-nohat-2026-11-01.py              app/index.html <repo root>
+edit-tests-brand-nohat-2026-11-01.py   <repo root>
