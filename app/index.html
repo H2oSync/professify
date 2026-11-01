@@ -1732,6 +1732,13 @@ button.pll-h svg{margin-left:auto;align-self:center}
 .dpk-term{font-size:12px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;margin:20px 2px 0}
 .dpk-one{display:flex;gap:8px;align-items:center;margin-top:12px;padding:10px 12px;border-radius:14px;background:var(--teal-soft);color:var(--teal-t,var(--teal));font-size:13.5px;font-weight:900;line-height:1.35}
 .dpk-c{padding:12px;margin-top:12px}
+.mp-note{margin:0 12px 12px;padding:12px 14px;font-size:14px;font-weight:700;line-height:1.4}
+.mp-parts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.mp-p{display:inline-flex;align-items:center;gap:4px;min-height:28px;padding:0 10px;border-radius:999px;border:1.5px solid var(--line);font-size:13px;font-weight:800;color:var(--muted)}
+.mp-p.on{background:var(--blue-soft);border-color:transparent;color:var(--blue-ink)}
+.mp-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:14px 2px 6px;font-size:15px;font-weight:900}
+.mp-h small{display:inline-flex;align-items:center;gap:3px;font-size:12.5px;font-weight:800;color:var(--muted)}
+.mp-left{margin-top:12px;font-size:14px;font-weight:800;color:var(--warn-ink,#9A5B00)}
 .dpk-h{display:flex;align-items:center;gap:8px;min-width:0;min-height:32px}
 .dpk-h b{font-size:15px;font-weight:900;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .dpk-foot{margin-top:18px;position:sticky;bottom:0;background:var(--bg);padding:10px 0 4px}
@@ -3826,7 +3833,9 @@ function anyBulkSet(t, v) { const b = anyLS('bulk') || {}; b[String(t)] = v; any
 function anyPickList(t) {
   t = String(t); const m = anyMine(t); if (!m || anyBulk(t)) return [];
   const sk = anySkipped();
-  return m.unplaced.filter(c => !sk.has(t + ':' + c)).map(c => ({ code: c, secs: anySecsOf(t, c) })).filter(x => x.secs && x.secs.length >= 2);
+  const has = c => m.secs.filter(x => x.code === c), part = [...new Set(m.secs.map(x => x.code))].filter(c => !m.unplaced.includes(c));
+  return m.unplaced.concat(part).filter(c => !sk.has(t + ':' + c)).map(c => ({ code: c, secs: anySecsOf(t, c), held: has(c) }))
+    .filter(x => x.secs && (m.unplaced.includes(x.code) ? x.secs.length >= 2 : partsMissing(x.secs, x.held).length > 0));   /* + a lecture still missing its lab (2026-11-01) */
 }
 /* the now-term's sections for classes with none (own and friends'), in batches — so (b) and (c) know how many there are */
 async function anyNowFetch(codes) {
@@ -5029,6 +5038,30 @@ function secFind(list, want) { const w = String(want == null ? '' : want).trim()
   const ex = list.find(x => { const r = String(x.sec || '').trim().toUpperCase(), l = secLabel(x.sec).toUpperCase(); return r === w || l === w || l === 'SEC ' + w; });
   if (ex) return ex; const k = secKey(w); if (!k) return undefined; const m = list.filter(x => secKey(x.sec) === k); return m.length === 1 ? m[0] : undefined; }
 function secLabel(v) { const t = String(v == null ? '' : v).trim().split(/[-\s]/)[0]; return /^\d/.test(t) ? 'Sec ' + t : t; }
+/* (2026-11-01) "Sec 11 Lab": the label plus its part, only for a class that has more than one part (a one-part class reads as before) */
+function secLab(s) { const b = secLabel(s && s.sec), p = secPart(s); if (!b || !p || !s || !s.code) return b; const l = isNowSecId(s.id) || s.nowTerm ? (NOWT.byCode[s.code] || []) : secsOf(s.code); return multiPart(l) ? b + ' ' + partName(p) : b; }
+/* (2026-11-01) Lecture + lab. A section's part, from Cal Poly's token ("02-LAB Regular" → LAB); '' when the row has no tag.
+   A class has one section PER PART: a swap only replaces the same part, and every picker asks for one of each. */
+const PART_NAME = { LEC: 'Lecture', LAB: 'Lab', ACT: 'Activity', SEM: 'Seminar', DIS: 'Discussion', IND: 'Independent study', SUP: 'Supervision', CLN: 'Clinical' };
+const PART_ORDER = ['LEC', 'SEM', 'DIS', 'LAB', 'ACT', 'IND'];
+function secPart(v) { const x = v && typeof v === 'object' ? (v.sec != null ? v.sec : v.section) : v; const m = String(x == null ? '' : x).trim().split(/\s/)[0].match(/-([A-Za-z]{2,4})$/); return m ? m[1].toUpperCase() : ''; }
+const partName = p => PART_NAME[p] || (p ? p.charAt(0) + p.slice(1).toLowerCase() : 'Section');
+function partsOf(list) { return [...new Set((list || []).map(x => secPart(x)))].sort((a, b) => ((PART_ORDER.indexOf(a) + 1) || 99) - ((PART_ORDER.indexOf(b) + 1) || 99) || a.localeCompare(b)); }
+const multiPart = list => { const ps = partsOf(list); return ps.length > 1 && !ps.includes(''); };   /* an untagged row: not enough to say */
+const samePart = (a, b) => secPart(a) === secPart(b);
+/* the parts a class has that `held` (sections or rows) has none of; [] for a one-part class */
+function partsMissing(list, held) { if (!multiPart(list)) return []; const h = new Set((held || []).map(x => secPart(x))); return partsOf(list).filter(p => !h.has(p)); }
+function partsWords(ps) { const n = ps.map(p => partName(p).toLowerCase()); return n.length < 2 ? (n[0] || '') : n.slice(0, -1).join(', ') + ' and ' + n[n.length - 1]; }
+const aPart = p => (/^[aeiou]/i.test(partName(p)) ? 'an ' : 'a ') + partName(p).toLowerCase();
+/* a picker's sections under one heading per part ("Lab · pick 1"); a one-part class is one plain group */
+function partGroups(list) { const ps = partsOf(list); return multiPart(list) ? ps.map(p => ({ p, name: partName(p), secs: list.filter(x => secPart(x) === p) })) : [{ p: '', name: '', secs: list }]; }
+const partHead = (g, held) => g.p ? `<div class="mp-h"><span>${esc(g.name)}</span><small>${held ? ic('check', 12, 3.4) + ' picked' : 'pick 1'}</small></div>` : '';
+/* "CHEM 1210 has a lecture and a lab. Add one of each." with a chip per part (✓ when held) — class pages */
+function partsNote(code, list, held) {
+  if (!multiPart(list)) return '';
+  const ps = partsOf(list), h = new Set((held || []).map(x => secPart(x)));
+  return `<div class="card mp-note" role="note"><div>${esc(code)} has ${esc(partsWords(ps))} sections. Add one of each.</div><div class="mp-parts">${ps.map(p => `<span class="mp-p${h.has(p) ? ' on' : ''}">${h.has(p) ? ic('check', 12, 3.4) + ' ' : ''}${esc(partName(p))}</span>`).join('')}</div></div>`;
+}
 function gridSpan(secs, minSpan) {
   /* The hours the axis covers: from the earliest start to the latest end among these sections,
      rounded out to the hour, and never less than six hours. A fixed 6a–10p left 50-minute classes
@@ -5434,7 +5467,7 @@ function classProfHead(pid, pf) {
       ? `<button class="profrow" data-a="openProf" data-x="${esc(pid)}">${profAv(pid, 44, 15)}<div class="grow"><div class="nm">${esc(profName(pid))}</div><div class="row b" style="gap:4px;font-size:14px">${ratingOf(pid) != null ? starI(13, rateTone(ratingOf(pid)).star) + `<span class="rt-${rateTone(ratingOf(pid)).k}" style="color:${rateTone(ratingOf(pid)).ink}">${ratingOf(pid).toFixed(1)}</span>` + `<span class="muted" style="font-weight:700">&nbsp;· ${nRatings(PROFS[pid].count)}</span>` : '<span class="muted">No ratings yet</span>'}</div></div><span style="color:var(--purple-t,var(--purple))">${ic('chevR', 20)}</span></button>`
       : `<div class="profrow">${avL('?', 44, 15)}<div class="grow"><div class="nm">Instructor not assigned</div><div class="muted b" style="font-size:13px">Listed as Staff for now</div></div></div>`;
 }
-const secRowT = s => `<span class="t"><b>${s.sec ? esc(secLabel(s.sec)) + ' ' : ''}${s.async ? 'Online' : s.noTime ? '' : daysLabel(s.days)}</b> <span class="nw">${s.async ? 'self-paced' : s.noTime ? 'Time not posted' : range(s)}</span></span>`;
+const secRowT = s => `<span class="t"><b>${s.sec ? esc(secLab(s)) + ' ' : ''}${s.async ? 'Online' : s.noTime ? '' : daysLabel(s.days)}</b> <span class="nw">${s.async ? 'self-paced' : s.noTime ? 'Time not posted' : range(s)}</span></span>`;
 const CLASS_SEC_H = '<div class="sec-h" style="padding-left:16px"><span>Sections</span></div>';
 SCREENS.classDetail = ({ code, term }) => {
   if (term && splitTerms() && term === nowTerm().code) return classDetailNow(code);
@@ -5456,7 +5489,7 @@ SCREENS.classDetail = ({ code, term }) => {
   }).join('');
   const seatsStat = cs.anyOpen ? (cs.open ? cs.open : 'Open') : cs.allFull ? 'Full' : '—';
   ensurePrereqs();
-  const pqTile = prereqTile(code);
+  const pqTile = prereqTile(code), mpNote = partsNote(code, secsOf(code), personSecs('me').filter(x => x.code === code));
   return {
     body: `${classTopBtns(code)}
  <div class="hero blue"><div class="row" style="gap:8px;flex-wrap:wrap"><span class="hchip" style="background:#fff;color:#1E40AF">${code}</span><span class="hchip" style="border:1.5px solid rgba(255,255,255,.5)">${esc(CFG.TERM_LABEL)}</span>${planCodes().has(code) ? `<span class="hchip" style="border:1.5px solid rgba(255,255,255,.5)">${ic('check', 14, 3)} Your class</span>` : ''}</div>
@@ -5464,7 +5497,7 @@ SCREENS.classDetail = ({ code, term }) => {
   <div class="stats has-pq"><div class="stat"><small>SECTIONS</small><b>${secsOf(code).length}</b></div>${pqTile}<div class="stat"><small>OPEN SEATS</small><b>${seatsStat}</b></div></div></div>
  ${fr.length ? `<div class="card row" style="margin:14px 12px 0;padding:12px 14px">${avStack(fr, 30)}<span class="b" style="font-size:14px">${fr.slice(0, 2).map(f => esc(PEOPLE[f].short)).join(', ')}${fr.length > 2 ? ` + ${fr.length - 2} more` : ''} ${fr.length > 1 ? 'are' : 'is'} taking this</span></div>` : ''}
  ${CLASS_SEC_H}
- ${profBlocks}<div class="spacer"></div>`, tabbar: true, fab: true
+ ${mpNote}${profBlocks}<div class="spacer"></div>`, tabbar: true, fab: true
   };
 };
 /* A class page for the term people are in now (2026-10-10): its sections under their professors, read-only —
@@ -5490,7 +5523,7 @@ function classDetailNow(code) {
       }).join('')}
   </div>`;
     }).join('');
-    const seatsStat = cs.anyOpen ? (cs.open ? cs.open : 'Open') : cs.allFull ? 'Full' : '—';
+    const seatsStat = cs.anyOpen ? (cs.open ? cs.open : 'Open') : cs.allFull ? 'Full' : '—', mpNote = partsNote(code, secsOf(code), nowSecs('me').filter(x => x.code === code));
     return {
       body: `${classTopBtns(code, false)}
  <div class="hero blue"><div class="row" style="gap:8px;flex-wrap:wrap"><span class="hchip" style="background:#fff;color:#1E40AF">${code}</span><span class="hchip" style="border:1.5px solid rgba(255,255,255,.5)">${esc(L)}</span>${mine ? `<span class="hchip" style="border:1.5px solid rgba(255,255,255,.5)">${ic('check', 14, 3)} Your class</span>` : ''}</div>
@@ -5498,7 +5531,7 @@ function classDetailNow(code) {
   <div class="stats"><div class="stat"><small>SECTIONS</small><b>${secsOf(code).length}</b></div><div class="stat"><small>FRIENDS</small><b>${fr.length}</b></div><div class="stat"><small>SEATS</small><b>${seatsStat}</b></div></div></div>
  ${fr.length ? `<div class="card row" style="margin:14px 12px 0;padding:12px 14px">${avStack(fr, 30)}<span class="b" style="font-size:14px">${fr.slice(0, 2).map(f => esc(PEOPLE[f].short)).join(', ')}${fr.length > 2 ? ` + ${fr.length - 2} more` : ''} ${fr.length > 1 ? 'are' : 'is'} taking this</span></div>` : ''}
  ${CLASS_SEC_H}
- ${profBlocks}<div class="spacer"></div>`, tabbar: true, fab: true
+ ${mpNote}${profBlocks}<div class="spacer"></div>`, tabbar: true, fab: true
     };
   });
 }
@@ -7200,14 +7233,15 @@ SHEETS.anyClass = sh => {
   const title = (now ? ((NOWT.courses[code] || {}).title || NOW_TITLES[code]) : '') || courseName(code) || ((COURSES[code] || {}).title !== code && (COURSES[code] || {}).title) || '';
   const off = (st === 'done' || !now) && !list.length && (now || choose);
   const busy = UI.busy.nm || UI.busy.anyRm ? ' disabled' : '';
-  const rows = now && list.length ? `<div class="sec-h" style="padding:16px 2px 6px;font-size:16px"><span>Which section are you in?</span></div>${list.map(x => {
-      const when = x.async ? 'Online, self-paced' : x.noTime ? 'Time not posted' : daysLabel(x.days) + ' ' + range(x);
-      return `<button class="secrow nowrow any-pick" data-a="nowMine" data-x="${esc(x.id)}" aria-label="${esc((x.sec ? secLabel(x.sec) + ', ' : '') + when + ', ' + profName(x.prof) + ' — this is my section')}"${busy}>${secRowT(x)}<span class="muted b" style="font-size:13px">${esc(profName(x.prof))}</span><span class="pbtn" style="height:32px;padding:0 12px;font-size:13px">Mine</span></button>`; }).join('')}` : '';
+  const held = now ? nowSecs('me').filter(x => x.code === code) : [], mp = multiPart(list);
+  const rows = now && list.length ? `<div class="sec-h" style="padding:16px 2px 6px;font-size:16px"><span>${mp ? 'Which sections are you in?' : 'Which section are you in?'}</span></div>${mp ? `<div class="muted b" style="font-size:13.5px;margin:-2px 2px 0">${esc(code)} has ${esc(partsWords(partsOf(list)))} sections — pick one of each.</div>` : ''}${partGroups(list).map(g => partHead(g, held.some(h => samePart(h, g.secs[0]))) + g.secs.map(x => {
+      const when = x.async ? 'Online, self-paced' : x.noTime ? 'Time not posted' : daysLabel(x.days) + ' ' + range(x), yours = held.some(h => h.nbr === x.nbr);
+      return `<button class="secrow nowrow any-pick${yours ? ' on' : ''}" data-a="nowMine" data-x="${esc(x.id)}" aria-label="${esc((x.sec ? secLabel(x.sec) + ', ' : '') + when + ', ' + profName(x.prof) + (yours ? ' — your section' : ' — this is my section'))}"${busy}>${secRowT(x)}<span class="muted b" style="font-size:13px">${esc(profName(x.prof))}</span><span class="pbtn${yours ? ' soft' : ''}" style="height:32px;padding:0 12px;font-size:13px">${yours ? ic('check', 12, 3.4) + ' Yours' : 'Mine'}</span></button>`; }).join('')).join('')}` : '';
   const wait = now && st !== 'done' && st !== 'err' ? `<div class="muted b" style="margin-top:14px;font-size:14px">Looking up ${esc(code)}’s ${esc(L)} sections…</div>`
     : now && st === 'err' ? `<div class="muted b" style="margin-top:14px;font-size:14px">Couldn’t load ${esc(code)}’s ${esc(L)} sections. <button class="link b" style="font-size:14px;padding:10px 4px;margin:-10px 0" data-a="anyRetry">Try again</button></div>` : '';
   const why = off ? `<div class="sec-fill no" style="margin-top:14px">${esc(code)} isn’t offered in ${esc(L)}, so it can’t get a time here.</div>` : '';
   return `<div class="row sb"><span class="code">${esc(code)}</span><button class="xbtn" data-a="closeSheet" aria-label="Close">${ic('x', 16, 2.4)}</button></div>
- <h3 style="margin-top:10px">${esc(title || code)}</h3><div class="b secwhen" style="margin-top:4px;font-size:14px"><span class="secterm">${esc(L)}</span> · <span class="muted">In My Classes · no section yet</span></div>
+ <h3 style="margin-top:10px">${esc(title || code)}</h3><div class="b secwhen" style="margin-top:4px;font-size:14px"><span class="secterm">${esc(L)}</span> · <span class="muted">${held.length ? (partsMissing(list, held).length ? 'In My Classes · ' + esc(partsWords(partsMissing(list, held))) + ' still to pick' : 'In My Classes') : 'In My Classes · no section yet'}</span></div>
  ${why}${wait}${rows}
  <div style="display:grid;gap:8px;margin-top:18px">${choose && list.length ? `<button class="btn" data-a="openClass" data-x="${esc(code)}">Pick a time</button>` : ''}${now && list.length ? `<button class="btn soft" data-a="openClass" data-x="${esc(code)}" data-y="now">View class</button>` : ''}
  <button class="btn soft" style="color:var(--red-ink)" data-a="anyRemove"${busy}>${UI.busy.anyRm ? 'Removing…' : 'Remove from My Classes'}</button></div>`;
@@ -7215,12 +7249,13 @@ SHEETS.anyClass = sh => {
 /* (2026-10-30) a now-term section's sheet: this is mine / switch / keep both, or remove it once it's yours */
 function nowSecActs(code, id, s) {
   if (!isNowSecId(id) || !TC.user || !TC.nowMineRows || TC.err.nowMine) return '';
-  const mineN = nowSecs('me').filter(x => x.code === code), isMine = mineN.some(x => x.id === id || (s.nbr && x.nbr === s.nbr));
+  const mineA = nowSecs('me').filter(x => x.code === code), mineN = mineA.filter(x => samePart(x, s)), isMine = mineA.some(x => x.id === id || (s.nbr && x.nbr === s.nbr));
   const busy = UI.busy.nm ? ' disabled' : '';
-  if (isMine) return `<div class="muted b" style="font-size:14px;text-align:center">${ic('check', 14, 3)} Your ${esc(nowTerm().label)} section</div><button class="btn soft" style="color:var(--red-ink)" data-a="nowSecRm" data-x="${esc(id)}"${busy}>${mineN.length > 1 ? 'Remove this section' : 'Remove from My Classes'}</button>`;
+  if (isMine) return `<div class="muted b" style="font-size:14px;text-align:center">${ic('check', 14, 3)} Your ${esc(nowTerm().label)} section</div><button class="btn soft" style="color:var(--red-ink)" data-a="nowSecRm" data-x="${esc(id)}"${busy}>${mineA.length > 1 ? 'Remove this section' : 'Remove from My Classes'}</button>`;
   /* only for a class on your list for that term (a friend's class you're not in keeps its plain sheet) */
   if (!s.nbr || String(id).startsWith('xn:') || !nowCodes().has(code)) return '';
   if (mineN.length) return `<button class="btn" data-a="nowMine" data-x="${esc(id)}"${busy}>Switch to this section</button><button class="at-alt" style="margin-top:-4px" data-a="nowMine" data-x="${esc(id)}" data-y="keep"${busy}>Keep both — add as another section</button>`;
+  if (mineA.length && secPart(s)) return `<button class="btn" data-a="nowMine" data-x="${esc(id)}" data-y="keep"${busy}>This is my ${esc(partName(secPart(s)).toLowerCase())} section</button>`;   /* the lab next to a lecture you have */
   return `<button class="btn" data-a="nowMine" data-x="${esc(id)}"${busy}>This is my section</button>`;
 }
 SHEETS.sec = sh => { const { code, id } = sh;
@@ -7229,12 +7264,16 @@ SHEETS.sec = sh => { const { code, id } = sh;
   const c = course(code), who = secPeople(code, id), inP = TC.plans[S.plan].includes(id), w = !!TC.watches[id];
   const termTag = splitTerms() ? `<span class="secterm">${esc(isNowSecId(id) ? nowTerm().label : CFG.TERM_LABEL)}</span> · ` : '';
   const nowActs = nowSecActs(code, id, s);
-  return `<div class="row sb"><span class="code">${code}${s.sec ? ' ' + esc(secLabel(s.sec)) : ''}</span><button class="xbtn" data-a="closeSheet">${ic('x', 16, 2.4)}</button></div>
+  /* (2026-11-01) your section of a multi-part class: say which part is still missing, one tap from the class page */
+  const mineHere = (isNowSecId(id) ? nowSecs('me') : personSecs('me')).filter(x => x.code === code), mpAll = isNowSecId(id) ? (NOWT.byCode[code] || []) : secsOf(code);
+  const mpLeft = mineHere.some(x => x.id === id) ? partsMissing(mpAll, mineHere) : [];
+  const mpLine = mpLeft.length ? `<div class="mp-left" role="note">No ${esc(partsWords(mpLeft))} section yet for ${esc(code)}.</div>` : '';
+  return `<div class="row sb"><span class="code">${code}${s.sec ? ' ' + esc(secLab(s)) : ''}</span><button class="xbtn" data-a="closeSheet">${ic('x', 16, 2.4)}</button></div>
  <h3 style="margin-top:10px">${esc(c.title)}</h3><div class="b secwhen" style="margin-top:4px;font-size:14px">${termTag}<span class="muted">${secWhen(s)}</span> · ${secSeatText(s)}</div>
- ${secProfRow(s.prof)}
+ ${secProfRow(s.prof)}${mpLine}
  ${secPeopleRow(who.here, 'In this section')}${secPeopleRow(who.other, 'Other sections')}
  ${sh.fill ? `<div class="sec-fill${sh.fits ? '' : ' no'}">${sh.fits ? `Fills ${esc(sh.fill)} · clear of Plan ${sh.k}${TC.commits.length ? ' and your ' + esc(cmWords()) : ''}` : `Fills ${esc(sh.fill)} · over a class in Plan ${sh.k} or your week`}</div>` : ''}
- <div style="display:grid;gap:8px;margin-top:18px">${nowActs}${sh.fill && !inP && SEC[id] ? `<button class="btn" data-a="addPlanSheet" data-x="${esc(id)}">Add to a plan</button>` : ''}<button class="btn${(sh.fill && !inP && SEC[id]) || nowActs ? ' soft' : ''}" data-a="openClass" data-x="${code}"${isNowSecId(id) ? ' data-y="now"' : ''}>View class</button>
+ <div style="display:grid;gap:8px;margin-top:18px">${nowActs}${sh.fill && !inP && SEC[id] ? `<button class="btn" data-a="addPlanSheet" data-x="${esc(id)}">Add to a plan</button>` : ''}<button class="btn${((sh.fill && !inP && SEC[id]) || nowActs) && !mpLeft.length ? ' soft' : ''}" data-a="openClass" data-x="${code}"${isNowSecId(id) ? ' data-y="now"' : ''}>${mpLeft.length ? 'Pick ' + esc(aPart(mpLeft[0])) + ' section' : 'View class'}</button>
  ${SEC[id] ? `<button class="btn soft" data-a="watch" data-x="${esc(id)}">${w ? 'Stop seat alerts' : 'Alert me about seats'}</button>` : ''}
  ${SEC[id] && !isNowSecId(id) && personSecs('me').some(x => x.id === id) ? `<button class="btn soft" data-a="addPlanSheet" data-x="${esc(id)}">${personSecs('me').find(x => x.id === id).mineWl ? 'Waitlisted · change or remove' : 'Enrolled · change or remove'}</button>` : ''}
  ${inP ? `<button class="btn soft" style="color:var(--red-ink)" data-a="removeSec" data-x="${esc(id)}">Remove from Plan ${S.plan}</button>` : ''}</div>`;
@@ -7293,7 +7332,7 @@ function findFriend(name) {
 const cc = c => canonCode(c);
 const pl = pk => pk ? `<b>${esc(profName(pk))}</b> (${ratingOf(pk) != null ? `★${ratingOf(pk).toFixed(1)} from ${nRatings(PROFS[pk].count)}` : 'no ratings yet'})` : '<b>Instructor not assigned</b>';
 const secLine = s => `<b>${s.code}${s.sec ? ' ' + esc(secLabel(s.sec)) : ''}</b> ${secWhen(s)} · ${esc(profName(s.prof))}${ratingOf(s.prof) != null ? ' ★' + ratingOf(s.prof).toFixed(1) : ''} · ${secSeatText(s)}`;
-function conflicts(planIds, sec) { return planIds.map(i => SEC[i]).filter(Boolean).filter(s => !s.async && !sec.async && s.s != null && sec.s != null && s.code !== sec.code && [...s.days].some(d => sec.days.includes(d)) && s.s < sec.e && sec.s < s.e); }
+function conflicts(planIds, sec) { return planIds.map(i => SEC[i]).filter(Boolean).filter(s => !s.async && !sec.async && s.s != null && sec.s != null && (s.code !== sec.code || !samePart(s, sec)) && [...s.days].some(d => sec.days.includes(d)) && s.s < sec.e && sec.s < s.e); }
 function clashWithMine(sec) { return personSecs('me').filter(s => s.s != null && sec.s != null && !sec.async && s.code !== sec.code && [...s.days].some(d => sec.days.includes(d)) && s.s < sec.e && sec.s < s.e); }
 
 /* ================= Champ answer cards (Tate, 2026-10-08: "the AI kind of fills in an image") =================
@@ -7889,7 +7928,7 @@ function addSec(id, slot) {
    closes with an Undo. sh.seq changes on every pick/phase, and an animation plays only on the first draw
    of a seq, so a background reload never replays it. */
 const AT_PLANS = ['A', 'B', 'C'];
-function atOverlaps(list, sec) { return list.filter(x => !x.async && !sec.async && x.s != null && sec.s != null && x.code !== sec.code && [...x.days].some(d => sec.days.includes(d)) && x.s < sec.e && sec.s < x.e); }
+function atOverlaps(list, sec) { return list.filter(x => !x.async && !sec.async && x.s != null && sec.s != null && (x.code !== sec.code || !samePart(x, sec)) && [...x.days].some(d => sec.days.includes(d)) && x.s < sec.e && sec.s < x.e); }
 function atNbr(x) { return x.offFeed ? String(x.id).split(':').pop() : String(x.id); }
 function atNames(ids) { const n = ids.map(f => esc((PEOPLE[f] || {}).short || 'A friend')); return n.length <= 2 ? n.join(' and ') : n.slice(0, 2).join(', ') + ' and ' + (n.length - 2) + ' more'; }
 function openAddTo(id) {
@@ -7909,21 +7948,29 @@ function atPlanOf(sh, s) {
   if (P) {
     const ids = TC.plans[P] || [], others = ids.map(x => SEC[x]).filter(Boolean).filter(x => x.id !== sh.id);
     o.inIt = ids.includes(sh.id);
-    o.repl = o.inIt ? [] : others.filter(x => x.code === s.code);
-    o.base = others.filter(x => x.code !== s.code || o.inIt);
+    o.repl = o.inIt ? [] : others.filter(x => x.code === s.code && samePart(x, s));   /* a lab never pushes out the lecture (2026-11-01) */
+    o.base = others.filter(x => x.code !== s.code || !samePart(x, s) || o.inIt);
     o.clash = o.inIt ? [] : conflicts(o.base.map(x => x.id), s);
     o.full = !o.inIt && !o.repl.length && ids.filter(x => SEC[x]).length >= 12;   /* numbers that left the list don't count (2026-10-30) */
     if (sh.replacing && !o.inIt && o.clash.length) { o.repl = o.repl.concat(o.clash); o.base = o.base.filter(x => !o.clash.includes(x)); o.clash = []; }
   } else if (mine) {
     const my = personSecs('me'), others = my.filter(x => x.id !== sh.id);
     o.inIt = my.some(x => x.id === sh.id);
-    o.repl = o.inIt || sh.keepBoth ? [] : others.filter(x => x.code === s.code && atNbr(x));
+    o.repl = o.inIt || sh.keepBoth ? [] : others.filter(x => x.code === s.code && samePart(x, s) && atNbr(x));
     o.base = others.filter(x => !o.repl.includes(x));
     o.clash = o.inIt ? [] : atOverlaps(o.base, s);
     o.needStatus = !o.inIt && (s.status === 'full' || s.status === 'wait') && !sh.status;
     if (sh.replacing && !o.inIt && o.clash.length) { o.repl = o.repl.concat(o.clash); o.base = o.base.filter(x => !o.clash.includes(x)); o.clash = []; }
   }
   return o;
+}
+/* (2026-11-01) "CHEM 1210 Lab" for a section of a multi-part class, the code alone otherwise */
+function atPartNm(s) { return s.code + (multiPart(secsOf(s.code)) && secPart(s) ? ' ' + partName(secPart(s)) : ''); }
+/* the parts of s's class the destination will still be missing once s is in */
+function atPartsLeft(o, s) {
+  const all = secsOf(s.code); if (!multiPart(all)) return [];
+  const have = o.P ? (TC.plans[o.P] || []).map(x => SEC[x]).filter(Boolean) : personSecs('me');
+  return partsMissing(all, have.filter(x => x.code === s.code).concat([s]));
 }
 /* "Replace BUS 4448 with this class": the button on a clash (Tate, 2026-10-11) */
 function atReplaceLabel(cl) { const codes = [...new Set(cl.map(x => x.code))]; return codes.length === 1 ? `Replace ${esc(codes[0])} with this class` : `Replace ${codes.length} classes with this one`; }
@@ -7933,7 +7980,7 @@ SHEETS.addTo = sh => {
   if (!s) return `<div class="addto dest-mine done">${top}<div class="empty"><b>That section is no longer listed.</b></div></div>`;
   const fx = sh.fxSeen !== sh.seq; sh.fxSeen = sh.seq;
   const o = atPlanOf(sh, s), terms = myTerms(), otherT = o.other ? terms.find(t => 'term:' + t.label === sh.dest) : null;
-  const nm = x => esc(x.code) + (secLabel(x.sec) ? ' ' + esc(secLabel(x.sec)) : '');
+  const nm = x => esc(x.code) + (secLabel(x.sec) ? ' ' + esc(secLab(x)) : '');
   const when = x => x.async ? 'Online · self-paced' : x.noTime ? 'Time not posted' : `${daysLabel(x.days)} · ${range(x)}`;
   /* the top: code + section, the name, when + seats, the professor, friends in it */
   const r = ratingOf(s.prof), tone = rateTone(r);
@@ -7941,7 +7988,7 @@ SHEETS.addTo = sh => {
   const ppl = fr.length ? `<div class="at-ppl">${avStack(fr, 24)}<span><b>${atNames(fr)}</b> ${fr.length === 1 ? 'is' : 'are'} in this section</span></div>`
     : oth.length ? `<div class="at-ppl">${avStack(oth, 24)}<span><b>${atNames(oth)}</b> ${oth.length === 1 ? 'is' : 'are'} in another section</span></div>` : '';
   const head = `<div class="at-head">
-  <div class="at-code"><span>${esc(s.code)}</span>${secLabel(s.sec) ? `<span class="at-sec">${esc(secLabel(s.sec))}</span>` : ''}</div>
+  <div class="at-code"><span>${esc(s.code)}</span>${secLabel(s.sec) ? `<span class="at-sec">${esc(secLab(s))}</span>` : ''}</div>
   <div class="at-title">${esc(courseName(s.code) || course(s.code).title)}</div>
   <div class="at-facts"><span>${when(s)}</span><span aria-hidden="true">·</span>${secSeatText(s)}</div>
   <div class="at-facts"><span>${esc(profName(s.prof))}</span>${tone ? `<span style="color:${tone.ink};font-weight:900">★ ${r.toFixed(1)}</span>` : ''}</div>
@@ -7993,7 +8040,7 @@ SHEETS.addTo = sh => {
   else if (o.P && o.full) { note = `Plan ${o.P} already has 12 sections.`; btn = off(`Plan ${o.P} is full`); }
   else if (o.P && o.repl.length) { note = `Swaps out ${nm(o.repl[0])} (${secWhen(o.repl[0])}).`; tn = 'warn'; btn = go(`Swap into Plan ${o.P}`, 'swap'); }
   else if (o.mine && o.needStatus) { note = 'This section is full — are you in it, or on the waitlist?'; btn = off('Enrolled or waitlisted?'); }
-  else if (o.mine && o.repl.length) { note = `You have ${o.repl.map(x => `${nm(x)} (${secWhen(x)})`).join(' and ')}. Swap ${o.repl.length > 1 ? 'them' : 'it'}, or keep both if one is a lab.${o.clash.length ? ` It also clashes with ${o.clash.map(c => `${nm(c)} · ${daysLabel(c.days)} ${range(c)}`).join(', ')}.` : ''}`; tn = o.clash.length ? 'bad' : 'warn'; btn = go(`Swap for ${esc(secLabel(s.sec) || 'this section')}`, 'swap'); alt = `<button class="at-alt" data-a="atBoth">Keep both — add as another section</button>`; }
+  else if (o.mine && o.repl.length) { note = `You have ${o.repl.map(x => `${nm(x)} (${secWhen(x)})`).join(' and ')}. Swap ${o.repl.length > 1 ? 'them' : 'it'}, or keep both.${o.clash.length ? ` It also clashes with ${o.clash.map(c => `${nm(c)} · ${daysLabel(c.days)} ${range(c)}`).join(', ')}.` : ''}`; tn = o.clash.length ? 'bad' : 'warn'; btn = go(`Swap for ${esc(secLabel(s.sec) || 'this section')}`, 'swap'); alt = `<button class="at-alt" data-a="atBoth">Keep both — add as another section</button>`; }
   else if (o.mine && o.clash.length) { note = `Clashes with ${o.clash.map(c => `${nm(c)} · ${daysLabel(c.days)} ${range(c)}`).join(', ')}.`; tn = 'bad'; btn = o.clash.every(atNbr) ? go(atReplaceLabel(o.clash), 'replace') : go('Add anyway', 'anyway'); if (o.clash.every(atNbr)) alt = `<button class="at-alt" data-a="atGo" data-x="anyway">Add anyway</button>`; }
   else { note = (o.mine ? 'Fits your week' : `Fits Plan ${o.P}`) + (untimed ? ` — ${whyAny}, so it goes under Anytime.` : '.'); tn = 'ok'; btn = go(`Add to ${o.where}`); }
   /* (2026-10-11) over your work or practice: say so and ask; with a class clash too, say both */
@@ -8002,6 +8049,7 @@ SHEETS.addTo = sh => {
     if (tn === 'ok') { note = `Overlaps your ${w}. Add it anyway?`; tn = 'warn'; btn = go(o.mine ? 'Add anyway' : `Add to Plan ${o.P} anyway`); alt = `<button class="at-alt" data-a="cmOpen" data-x="${esc(cmHit[0].id)}">Edit ${esc(cmLabel(cmHit[0]))}</button>`; }
     else note += ` It also overlaps your ${w}.`;
   }
+  if (!o.other && !o.inIt && !sh.err) { const left = atPartsLeft(o, s); if (left.length) note += ` ${esc(s.code)} also needs ${esc(aPart(left[0]))}${left.length > 1 ? ' and ' + esc(partsWords(left.slice(1))) : ''} — add ${left.length > 1 ? 'those' : 'one'} next.`; }
   if (sh.err && !adding) { note = esc(sh.err); tn = 'bad'; }
   const cls = ['addto', o.P ? 'plan-' + o.P : 'dest-mine', spot ? 'spot' : 'done', adding ? 'adding' : '', added ? 'added' : '', fx ? 'fx' : ''].filter(Boolean).join(' ');
   return `<div class="${cls}">${top}${head}${pick}
@@ -8107,9 +8155,10 @@ const A = {
     const t0 = Date.now(); let err = null, undo = null, msg = '', half = false;
     try { try {
       if (o.P) {
-        const prev = (TC.plans[o.P] || []).slice(), had = prev.some(x => SEC[x] && SEC[x].code === s.code), gone = new Set(outs.map(x => x.id));
-        TC.setPlan(o.P, prev.filter(x => !(SEC[x] && SEC[x].code === s.code) && !gone.has(x)).concat(sh.id)); S.plan = o.P;
-        msg = rp ? 'Replaced ' + [...new Set(outs.map(x => x.code))].join(', ') + ' with ' + s.code + ' in Plan ' + o.P : (had ? 'Swapped ' : 'Added ') + s.code + (had ? ' in Plan ' : ' to Plan ') + o.P;
+        const same = x => SEC[x] && SEC[x].code === s.code && samePart(SEC[x], s);
+        const prev = (TC.plans[o.P] || []).slice(), had = prev.some(same), gone = new Set(outs.map(x => x.id));
+        TC.setPlan(o.P, prev.filter(x => !same(x) && !gone.has(x)).concat(sh.id)); S.plan = o.P;
+        msg = rp ? 'Replaced ' + [...new Set(outs.map(x => x.code))].join(', ') + ' with ' + s.code + ' in Plan ' + o.P : (had ? 'Swapped ' : 'Added ') + atPartNm(s) + (had ? ' in Plan ' : ' to Plan ') + o.P;
         undo = () => { TC.setPlan(o.P, prev); render(true); toast('Undone'); };
       } else {
         const snap = mineSnap(s.code), swap = o.repl.map(atNbr).filter(Boolean);
@@ -8117,7 +8166,7 @@ const A = {
         const gone = rp ? [...new Set(outs.map(x => x.code))].map(code => ({ code, snap: mineSnap(code), nbrs: outs.filter(x => x.code === code).map(atNbr), only: personSecs('me').filter(x => x.code === code).every(x => outs.some(y => y.id === x.id)) })) : [];
         err = await TC.addMySection(s, { status: sh.status || 'enrolled', wlPos: sh.status === 'waitlisted' ? (parseInt(sh.wlPos, 10) || null) : null, swap, hadSaved: snap.saved });
         half = gone.length > 0; for (const g of gone) { if (err) break; if (g.only) err = await TC.removeMyClass(g.code); else for (const n of g.nbrs) { if (!err) err = await TC.removeMySection(g.code, n); } }
-        msg = rp ? 'Replaced ' + gone.map(g => g.code).join(', ') + ' with ' + s.code : (swap.length ? 'Swapped ' : 'Added ') + s.code + (swap.length ? ' in My Classes' : ' to My Classes');
+        msg = rp ? 'Replaced ' + gone.map(g => g.code).join(', ') + ' with ' + s.code : (swap.length ? 'Swapped ' : 'Added ') + atPartNm(s) + (swap.length ? ' in My Classes' : ' to My Classes');
         undo = async () => { let e = null; for (const g of gone) { if (!e) e = await TC.restoreMyCode(g.code, g.snap, null); } if (!e) e = await TC.restoreMyCode(s.code, snap, String(s.id)); render(true); toast(e || 'Undone'); };
       }
     } catch (e) { err = 'Couldn’t add that — check your connection.'; }
@@ -8128,6 +8177,7 @@ const A = {
     if (UI.sheet !== sh) { if (err) { if (!(half && undo)) toast(err); } else toastUndo(msg, undo); render(true); return; }
     if (err) { sh.phase = 'preview'; sh.replacing = false; sh.err = err; sh.seq++; render(true); return; }
     sh.phase = 'done'; sh.seq++; render(true);
+    { const left = atPartsLeft(o, s); if (left.length) msg += ' · now pick ' + aPart(left[0]); }   /* lecture + lab: say what's still missing */
     setTimeout(() => { if (UI.sheet === sh) { UI.sheet = null; render(true); setBars(false); } toastUndo(msg, undo); }, 900);
   },
   atRemove: async () => {
@@ -8173,13 +8223,15 @@ const A = {
     if (UI.busy.nm || !splitTerms()) return;
     const s = NOWT.sec[id] || Object.values(NOW_SEC).find(x => x && x.id === id); if (!s || !s.nbr) return;
     const t = nowTerm().code, snap = mineSnapIn(s.code, t);
-    const swap = y === 'keep' ? [] : snap.rows.filter(r => r.class_nbr != null && String(r.class_nbr) !== '' && String(r.class_nbr) !== String(s.nbr)).map(r => String(r.class_nbr));
+    const swap = y === 'keep' ? [] : snap.rows.filter(r => r.class_nbr != null && String(r.class_nbr) !== '' && String(r.class_nbr) !== String(s.nbr) && (!r.section || secPart(r.section) === secPart(s))).map(r => String(r.class_nbr));   /* only the same part (2026-11-01) */
     const sh0 = UI.sheet; UI.busy.nm = 1; render(true);
     let err = null; try { err = await TC.setNowSection(s, { swap }); } catch (e) { err = 'Couldn’t save that — check your connection.'; } finally { UI.busy.nm = 0; }
     if (err) { toast(err); return render(true); }
-    if (UI.sheet === sh0) UI.sheet = null;
-    relinkPeople(); render(true);
-    toastUndo(`${s.code}${secLabel(s.sec) ? ' ' + secLabel(s.sec) : ''} is your ${nowTerm().label} section`, async () => { const e = await TC.restoreMyCodeIn(s.code, t, snap, s.nbr); relinkPeople(); render(true); toast(e || 'Undone'); });
+    relinkPeople();
+    const left = partsMissing(NOWT.byCode[s.code] || [], nowSecs('me').filter(x => x.code === s.code));
+    if (UI.sheet === sh0 && !(sh0 && sh0.type === 'anyClass' && left.length)) UI.sheet = null;   /* the "which sections" sheet stays for the lab */
+    render(true);
+    toastUndo(`${s.code}${secLabel(s.sec) ? ' ' + secLab(s) : ''} is your ${nowTerm().label} section${left.length ? ' · now pick ' + aPart(left[0]) : ''}`, async () => { const e = await TC.restoreMyCodeIn(s.code, t, snap, s.nbr); relinkPeople(); render(true); toast(e || 'Undone'); });
   },
   nowSecRm: async id => {
     if (UI.busy.nm || !splitTerms()) return;
@@ -12200,15 +12252,16 @@ function onbManualResults() {
   const list = q ? Object.keys(COURSES).filter(c => c.toLowerCase().replace(/\s+/g, '').includes(flat) || String(COURSES[c].title || '').toLowerCase().includes(q)).sort().slice(0, 25) : [];
   const fr = (code, id) => TC.friends.filter(f => personSecs(f).some(s => id ? s.id === id : s.code === code)).length;
   const rows = list.map(code => {
-    const have = now ? mine.has(code) : took.has(code), open = UI.onbExpand === code && !have;
+    const held = now ? personSecs('me').filter(x => x.code === code) : [], lacks = now && mine.has(code) && held.length ? partsMissing(secsOf(code), held) : [];
+    const have = (now ? mine.has(code) : took.has(code)) && !lacks.length, open = UI.onbExpand === code && !have;   /* lecture + lab: stays open until both (2026-11-01) */
     const right = have ? `<span class="chip soft">${ONB_I.check}${now ? (onbSecOf(code) ? ' ' + esc(secLabel(onbSecOf(code))) : ' Added') : ' Added'}</span>` : '<span class="plus" aria-hidden="true">＋</span>';
     const head = `<button type="button" class="rrow" data-a="onbExpand" data-x="${esc(code)}" ${have ? 'aria-disabled="true"' : ''} aria-expanded="${open}"><div><div class="t" style="font-size:15px;${open ? 'color:var(--coral)' : ''}">${esc(code)}</div><div class="s">${esc(COURSES[code].title || '')}</div></div>${right}</button>`;
     if (!open) return head;
     if (!now) return head + `<div class="secs"><div class="s">When did you take it?</div><div class="segpick">${ONB_TERMS.map(t => `<button type="button" data-a="onbTook" data-x="${esc(code)}" data-y="${t}">${t}</button>`).join('')}</div></div>`;
-    const ss = secsOf(code);
-    return head + `<div class="secs"><div class="s">Pick your section</div>${ss.map(s => { const n = fr(code, s.id);
-      return `<button type="button" class="secbtn" data-a="onbAdd" data-x="${esc(code)}" data-y="${esc(s.id)}"><span><b style="font-weight:900">${esc(secLabel(s.sec) || '—')}</b> · ${esc(s.async ? 'Online' : s.noTime ? 'Time TBA' : daysLabel(s.days) + ' ' + range(s))}</span>${n ? `<span style="color:var(--teal-t,var(--teal));font-weight:800">${n} ${n === 1 ? 'friend' : 'friends'}</span>` : (s.status === 'full' || s.status === 'wait' ? `<span class="s">${s.status === 'wait' ? 'Waitlist' : 'Full'}</span>` : '')}</button>`; }).join('')}
-      <button type="button" class="secbtn" data-a="onbAdd" data-x="${esc(code)}" data-y=""><span>Add without a section</span></button></div>`;
+    const ss = secsOf(code), mp = multiPart(ss), gs = partGroups(ss);
+    return head + `<div class="secs"><div class="s">${mp ? `Pick your sections — one ${esc(partsWords(partsOf(ss)))}` : 'Pick your section'}</div>${gs.map(g => partHead(g, held.some(h => g.p && samePart(h, g.secs[0]))) + g.secs.map(s => { const n = fr(code, s.id);
+      return `<button type="button" class="secbtn" data-a="onbAdd" data-x="${esc(code)}" data-y="${esc(s.id)}"><span><b style="font-weight:900">${esc(secLabel(s.sec) || '—')}</b> · ${esc(s.async ? 'Online' : s.noTime ? 'Time TBA' : daysLabel(s.days) + ' ' + range(s))}</span>${n ? `<span style="color:var(--teal-t,var(--teal));font-weight:800">${n} ${n === 1 ? 'friend' : 'friends'}</span>` : (s.status === 'full' || s.status === 'wait' ? `<span class="s">${s.status === 'wait' ? 'Waitlist' : 'Full'}</span>` : '')}</button>`; }).join('')).join('')}
+      <button type="button" class="secbtn" data-a="onbAdd" data-x="${esc(code)}" data-y=""><span>${held.length ? 'Done with this class' : 'Add without a section'}</span></button></div>`;
   }).join('');
   return !TC.seatsLoaded ? '<div class="card empty" role="status">Loading this term’s classes…</div>' : !q ? `<div class="card empty">Search by code or name${now ? ` — every ${esc(CFG.TERM_LABEL)} class is here` : ''}.</div>` : list.length ? `<div class="card res">${rows}</div>` : `<div class="card empty">No classes match “${esc(UI.onbQ)}”. Check the code, like ECON 2303.</div>`;
 }
@@ -12310,7 +12363,19 @@ Object.assign(A, {
   },
   onbTab: t => { UI.onbTab = t; UI.onbExpand = null; render(true); },
   onbExpand: code => { UI.onbExpand = UI.onbExpand === code ? null : code; render(true); },
-  onbAdd: async (code, secId) => { if (UI.busy.onb) return; UI.busy.onb = 1; UI.onbErr = ''; const e = await TC.addMyClass(code, secId || null); UI.busy.onb = 0; UI.onbErr = e || ''; UI.onbExpand = null; if (!e) toast(`Added ${code}`); render(true); },
+  onbAdd: async (code, secId) => {
+    if (UI.busy.onb) return;
+    if (!secId && personSecs('me').some(x => x.code === code)) { UI.onbExpand = null; return render(true); }   /* "Done with this class" */
+    const s = secId ? SEC[secId] : null, old = s ? personSecs('me').filter(x => x.code === code && samePart(x, s) && x.id !== s.id) : [];
+    UI.busy.onb = 1; UI.onbErr = '';
+    let e = await TC.addMyClass(code, secId || null);
+    for (const x of old) { if (!e) e = await TC.removeMySection(code, x.id); }   /* a second pick of the same part replaces the first */
+    UI.busy.onb = 0; UI.onbErr = e || '';
+    const left = s && !e ? partsMissing(secsOf(code), personSecs('me').filter(x => x.code === code)) : [];
+    UI.onbExpand = left.length ? code : null;
+    if (!e) toast(left.length ? `Added ${atPartNm(s)} · now pick ${aPart(left[0])}` : `Added ${code}`);
+    render(true);
+  },
   onbRm: async code => { if (UI.busy.onb) return; UI.busy.onb = 1; const e = await TC.removeMyClass(code); UI.busy.onb = 0; UI.onbErr = e || ''; render(true); },
   onbTook: async (code, when) => { const [term, year] = String(when).split(' '); if (UI.busy.onb) return; UI.busy.onb = 1; const e = await TC.addHistory(code, term, +year, null); UI.busy.onb = 0; UI.onbErr = e || ''; UI.onbExpand = null; if (!e) toast(`${code} added to your past classes`); render(true); },
   onbRmTook: async code => { if (UI.busy.onb) return; UI.busy.onb = 1; const e = await TC.removeHistory(code); UI.busy.onb = 0; UI.onbErr = e || ''; render(true); },
@@ -12361,7 +12426,7 @@ const anyFriendsIn = (t, s) => TC.friends.filter(f => (String(t) === String(CFG.
 SHEETS.anyPick = sh => {
   const t = sh.term, L = anyTermLabel(t), list = anyPickList(t), mine = ((anyMine(t) || {}).secs || []).filter(onWeekSec);
   const busy = UI.busy.anyPick ? ' disabled' : '';
-  const cls = x => `<div class="any-pc"><div class="row sb any-pch"><span class="row" style="gap:8px;min-width:0"><span class="code">${esc(x.code)}</span><b class="any-pcn">${esc(anyTitle(t, x.code))}</b></span><button class="any-skip" data-a="anySkip" data-x="${esc(t + '|' + x.code)}" aria-label="Skip ${esc(x.code)}"${busy}>Skip</button></div>${x.secs.map(s2 => anySecBtn(s2, { act: 'anyChoose', x: t + '|' + x.code + '|' + s2.id, fr: anyFriendsIn(t, s2), clash: mine.filter(m => m.code !== s2.code && secClash(s2, m)), busy })).join('')}</div>`;
+  const cls = x => `<div class="any-pc"><div class="row sb any-pch"><span class="row" style="gap:8px;min-width:0"><span class="code">${esc(x.code)}</span><b class="any-pcn">${esc(anyTitle(t, x.code))}</b></span><button class="any-skip" data-a="anySkip" data-x="${esc(t + '|' + x.code)}" aria-label="Skip ${esc(x.code)}"${busy}>Skip</button></div>${partGroups(x.secs).map(g => { const hp = (x.held || []).filter(h => g.p && samePart(h, g.secs[0])); return partHead(g, hp.length) + g.secs.map(s2 => anySecBtn(s2, { act: 'anyChoose', x: t + '|' + x.code + '|' + s2.id, on: hp.some(h => String(h.id) === String(s2.id) || (h.nbr && h.nbr === s2.nbr)), radio: !!g.p, fr: anyFriendsIn(t, s2), clash: mine.filter(m => (m.code !== s2.code || !samePart(m, s2)) && secClash(s2, m)), busy })).join(''); }).join('')}</div>`;
   return `<div class="row sb"><h3>Add times to your classes</h3>${pcX()}</div><div class="muted b" style="font-size:14px;margin-top:4px">${esc(L)} · tap the section you’re in</div>${list.length ? list.map(cls).join('') : '<div class="muted b" style="margin-top:14px;font-size:14px">All set.</div>'}`;
 };
 SHEETS.anyBulk = sh => {
@@ -12387,8 +12452,11 @@ Object.assign(A, {
   anyChoose: async v => {
     const [t, code, id] = String(v || '').split('|'); if (UI.busy.anyPick || !t || !code || !id) return;
     const plan = t === String(CFG.TERM), s = (anySecsOf(t, code) || []).find(x => String(x.id) === id); if (!s) return;
-    const snap = mineSnapIn(code, t); UI.busy.anyPick = 1; render(true);
-    let e = null; try { e = plan ? await TC.addMySection(s, { hadSaved: true }) : await TC.setNowSection(s); } catch (x) { e = 'Couldn’t save that — check your connection.'; } finally { UI.busy.anyPick = 0; }
+    const snap = mineSnapIn(code, t), m0 = anyMine(t), mineIn = ((m0 && m0.secs) || []).filter(x => x.code === code);
+    if (mineIn.some(x => String(x.id) === String(s.id) || (x.nbr && x.nbr === s.nbr))) return;   /* already yours */
+    const swap = mineIn.filter(x => samePart(x, s)).map(x => String(plan ? x.id : (x.nbr || String(x.id).split(':').pop())));   /* the same part only: the lecture stays when the lab goes in */
+    UI.busy.anyPick = 1; render(true);
+    let e = null; try { e = plan ? await TC.addMySection(s, { hadSaved: true, swap }) : await TC.setNowSection(s, { swap }); } catch (x) { e = 'Couldn’t save that — check your connection.'; } finally { UI.busy.anyPick = 0; }
     if (e) { toast(e); return render(true); }
     UI.storyOrder = null; relinkPeople();
     if (UI.sheet && UI.sheet.type === 'anyPick' && !anyPickList(t).length) UI.sheet = null;
@@ -12441,6 +12509,9 @@ function anyCombos(lists, fixed, budget) {
   })(0);
   return { n: steps > B ? -1 : n, pick: first };
 }
+/* (2026-11-01) a pick slot: "CHEM 1210" for a one-part class, "CHEM 1210#LAB" for each part of a multi-part one */
+const slotCode = k => String(k).split('#')[0], slotPart = k => String(k).split('#')[1] || '';
+function slotSecs(t, k) { const l = anySecsOf(t, slotCode(k)) || []; return slotPart(k) ? l.filter(x => secPart(x) === slotPart(k)) : l; }
 async function dprPickBuild(r) {
   if (!TC.ready || !TC.user) return null;
   const want = {};
@@ -12451,9 +12522,10 @@ async function dprPickBuild(r) {
     relinkPeople();
     const m = anyMine(t); if (!m) continue;
     const unp = new Set(m.unplaced), one1 = new Set(m.secs.filter(x => x.oneSec).map(x => x.code));
-    const classes = want[t].filter(c => unp.has(c) || one1.has(c)).map(c => ({ code: c, secs: anySecsOf(t, c) || [] })).filter(x => x.secs.length);
+    const classes = want[t].filter(c => unp.has(c) || one1.has(c)).map(c => ({ code: c, secs: anySecsOf(t, c) || [] })).filter(x => x.secs.length)
+      .flatMap(c => multiPart(c.secs) ? partsOf(c.secs).map(p => ({ code: c.code + '#' + p, secs: c.secs.filter(x => secPart(x) === p) })) : [c]);   /* lecture + lab: a slot each */
     if (!classes.length) continue;
-    const fixed = m.secs.filter(x => onWeekSec(x) && !classes.some(c => c.code === x.code));
+    const fixed = m.secs.filter(x => onWeekSec(x) && !classes.some(c => slotCode(c.code) === x.code));
     const k = anyCombos(classes.map(c => c.secs), fixed), sel = {};
     if (k.n === 1) classes.forEach((c, i) => { sel[c.code] = String(k.pick[i].id); });
     else classes.forEach(c => { if (c.secs.length === 1) sel[c.code] = String(c.secs[0].id); });
@@ -12463,14 +12535,15 @@ async function dprPickBuild(r) {
 }
 SHEETS.dprPick = sh => {
   const all = sh.groups.reduce((n, g) => n + g.classes.length, 0), nSel = sh.groups.reduce((n, g) => n + Object.keys(g.sel).length, 0);
-  const sub = sh.groups.map(g => g.label).join(' and ') + ' · ' + all + ' class' + (all === 1 ? '' : 'es');
+  const nCls = sh.groups.reduce((n, g) => n + new Set(g.classes.map(slotCode)).size, 0);
+  const sub = sh.groups.map(g => g.label).join(' and ') + ' · ' + nCls + ' class' + (nCls === 1 ? '' : 'es');
   const busy = UI.busy.dpk ? ' disabled' : '';
   const grp = (g, gi) => {
-    const m = anyMine(g.term) || { secs: [] }, fixed = m.secs.filter(x => onWeekSec(x) && !g.classes.includes(x.code));
-    const chosen = g.classes.map(c => g.sel[c] && (anySecsOf(g.term, c) || []).find(x => String(x.id) === g.sel[c])).filter(Boolean);
-    return `${sh.groups.length > 1 ? `<div class="dpk-term">${esc(g.label)}</div>` : ''}${g.unique && g.classes.some(c => (anySecsOf(g.term, c) || []).length > 1) ? `<div class="dpk-one">${ic('check', 14, 3)}<span>Only one set of sections fits together, so we picked it. Check it and save.</span></div>` : ''}${g.classes.map(c => {
-      const secs = anySecsOf(g.term, c) || [];
-      return `<div class="card dpk-c" role="group" aria-label="${esc(c)} sections"><div class="dpk-h"><span class="code">${esc(c)}</span><b>${esc(anyTitle(g.term, c))}</b></div>${secs.map(x => anySecBtn(x, { act: 'dprPickSec', x: gi + '|' + c + '|' + x.id, on: g.sel[c] === String(x.id), radio: true, fr: anyFriendsIn(g.term, x), clash: fixed.concat(chosen.filter(y => y.code !== c)).filter(y => secClash(x, y)), tag: secs.length === 1 ? 'Only section' : '', busy })).join('')}</div>`;
+    const m = anyMine(g.term) || { secs: [] }, fixed = m.secs.filter(x => onWeekSec(x) && !g.classes.some(k => slotCode(k) === x.code));
+    const chosenK = g.classes.map(c => [c, g.sel[c] && slotSecs(g.term, c).find(x => String(x.id) === g.sel[c])]).filter(p => p[1]), chosen = chosenK.map(p => p[1]);
+    return `${sh.groups.length > 1 ? `<div class="dpk-term">${esc(g.label)}</div>` : ''}${g.unique && g.classes.some(c => slotSecs(g.term, c).length > 1) ? `<div class="dpk-one">${ic('check', 14, 3)}<span>Only one set of sections fits together, so we picked it. Check it and save.</span></div>` : ''}${g.classes.map(c => {
+      const secs = slotSecs(g.term, c), cc = slotCode(c), pp = slotPart(c);
+      return `<div class="card dpk-c" role="group" aria-label="${esc(cc + (pp ? ' ' + partName(pp) : ''))} sections"><div class="dpk-h"><span class="code">${esc(cc)}</span><b>${esc(pp ? partName(pp) + ' · ' + anyTitle(g.term, cc) : anyTitle(g.term, cc))}</b></div>${secs.map(x => anySecBtn(x, { act: 'dprPickSec', x: gi + '|' + c + '|' + x.id, on: g.sel[c] === String(x.id), radio: true, fr: anyFriendsIn(g.term, x), clash: fixed.concat(chosenK.filter(p => p[0] !== c).map(p => p[1])).filter(y => secClash(x, y)), tag: secs.length === 1 ? (pp ? 'Only ' + partName(pp).toLowerCase() + ' section' : 'Only section') : '', busy })).join('')}</div>`;
     }).join('')}`;
   };
   const allUnique = sh.groups.every(g => g.unique) && nSel === all;
@@ -12498,21 +12571,21 @@ Object.assign(A, {
   dprPickSave: async () => {
     const sh = UI.sheet; if (!sh || sh.type !== 'dprPick' || UI.busy.dpk) return;
     UI.busy.dpk = 1; sh.err = ''; render(true);
-    let n = 0, err = null;
+    let n = 0, err = null; const nC = new Set();   /* classes, not slots: a lecture + its lab is one class */
     try {
       for (const g of sh.groups) {
         const plan = g.term === String(CFG.TERM);
         for (const c of g.classes) {
           const id = g.sel[c]; if (!id || err) continue;
-          const x = (anySecsOf(g.term, c) || []).find(y => String(y.id) === id); if (!x) continue;
+          const x = slotSecs(g.term, c).find(y => String(y.id) === id); if (!x) continue;
           err = plan ? await TC.addMySection(x, { hadSaved: true }) : await TC.setNowSection(x);
-          if (!err) { n++; delete g.sel[c]; g.classes = g.classes.filter(y => y !== c); }
+          if (!err) { n++; nC.add(g.term + ':' + slotCode(c)); delete g.sel[c]; g.classes = g.classes.filter(y => y !== c); }
         }
       }
     } catch (e) { err = 'Couldn’t save that — check your connection.'; } finally { UI.busy.dpk = 0; }
     UI.storyOrder = null;
     if (err) { sh.groups = sh.groups.filter(g => g.classes.length); sh.err = err + (n ? ` (${n} saved)` : ''); if (!sh.groups.length) dprPickClose(sh); else { relinkPeople(); render(true); } return; }
-    dprPickClose(sh); toast(`${n} class${n === 1 ? '' : 'es'} on your week`);
+    dprPickClose(sh); toast(`${nC.size} class${nC.size === 1 ? '' : 'es'} on your week`);
   }
 });
 /* "Send the link to my laptop" — from onboarding's last step and the empty Planner. */

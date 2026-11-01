@@ -35,3 +35,7 @@ brand-i1-2026-11-01.py                 app/index.html <repo root>   (new header 
 edit-tests-brand-i1-2026-11-01.py      <repo root>
 brand-nohat-2026-11-01.py              app/index.html <repo root>
 edit-tests-brand-nohat-2026-11-01.py   <repo root>
+lecture-lab-2026-11-01.py              app/index.html   (one section per part: lecture + lab / activity / seminar)
+edit-tests-lecture-lab-2026-11-01.py   <repo root>
+(new test: check-lecture-lab-2026-11-01.mjs)
+# SQL (not run on production until Tate says so): sql/2026-11-01-same-major-suggestions.sql

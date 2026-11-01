@@ -1674,7 +1674,7 @@ tests.planAnytime = async () => {
   /* a Saturday-only section has a time: it goes under Anytime, and the note says why without saying "no set time" */
   await page.evaluate(() => { addSection({ id: '79902', code: 'BUS 3384A', sec: 'S02-LEC Regular', prof: null, days: 'S', s: 540, e: 720, async: false, noTime: false, seats: 5, status: 'open', cap: 30, wl: 0, location: '', rawDays: 'Sa 9:00AM - 12:00PM', instructor: '' }); UI.sheet = null; TC.plans.C = []; S.addDest = 'C'; openAddTo('79902'); }); await tick(page, 400);
   r = await sheet();
-  ok(r.chips.join() === '+BUS 3384A' && /^Fits Plan C — it meets only on the weekend, so it goes under Anytime\.$/.test(r.note) && !/no set time/.test(r.note), 'anytime: a Saturday-only class is under Anytime, and the note says it meets on the weekend — not "no set time"', r);
+  ok(r.chips.join() === '+BUS 3384A' && /^Fits Plan C — it meets only on the weekend, so it goes under Anytime\.( BUS 3384A also needs an activity — add one next\.)?$/.test(r.note) && !/no set time/.test(r.note), 'anytime: a Saturday-only class is under Anytime, and the note says it meets on the weekend — not "no set time"', r);
   await page.evaluate(() => { TC.plans.C = ['79902']; UI.sheet = null; S.plan = 'C'; A.schedTabGo('plans'); render(true); }); await tick(page, 300);
   ok(await page.evaluate(() => { const a = document.querySelector('#scroll .plancol.plan-C .anytime'); return !!a && /BUS\s*3384A/.test(a.innerText); }), 'anytime: on Plans a Saturday-only class is under Anytime too (it used to be on neither the week nor the card)');
   /* My Classes: the tray shows there too, and the label is read out whole */
