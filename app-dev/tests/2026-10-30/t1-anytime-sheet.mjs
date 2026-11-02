@@ -6,7 +6,7 @@ await page.waitForFunction(() => TC.ready && TC.seatsLoaded && TC.mineRows, null
 const db = () => page.evaluate(async () => (await TC.client().from('saved_classes').select('code,term').eq('user_id', TC.user.id)).data.map(r => r.code).sort());
 await page.evaluate(() => { A.tab('schedule'); A.schedTab('mine'); }); await page.waitForTimeout(400);
 /* an offered class saved with no section */
-const off = await page.evaluate(async () => { const mine = new Set(personSecs('me').map(s => s.code).concat(PEOPLE.me.unplaced || [])); const c = Object.keys(COURSES).find(k => !mine.has(k) && secsOf(k).length); await TC.client().from('saved_classes').upsert({ user_id: TC.user.id, term: CFG.TERM, code: c }, { onConflict: 'user_id,code,term' }); await loadMine(); relinkPeople(); render(true); return c; });
+const off = await page.evaluate(async () => { const mine = new Set(personSecs('me').map(s => s.code).concat(PEOPLE.me.unplaced || [])); const c = Object.keys(COURSES).find(k => !mine.has(k) && secsOf(k).length >= 2);   /* (2026-10-31) one section => shown with it */ await TC.client().from('saved_classes').upsert({ user_id: TC.user.id, term: CFG.TERM, code: c }, { onConflict: 'user_id,code,term' }); await loadMine(); relinkPeople(); render(true); return c; });
 R.ok(await tap(page, `.mine-any .any-c[data-x="${off}"]`), `${off} (offered, no section) is an Anytime chip`);
 R.ok(await sheetType(page) === 'anyClass', 'its chip opens the class sheet, not a dead-end page', await sheetType(page));
 let a = await acts(page);

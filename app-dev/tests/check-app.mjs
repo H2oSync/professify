@@ -1674,7 +1674,7 @@ tests.planAnytime = async () => {
   /* a Saturday-only section has a time: it goes under Anytime, and the note says why without saying "no set time" */
   await page.evaluate(() => { addSection({ id: '79902', code: 'BUS 3384A', sec: 'S02-LEC Regular', prof: null, days: 'S', s: 540, e: 720, async: false, noTime: false, seats: 5, status: 'open', cap: 30, wl: 0, location: '', rawDays: 'Sa 9:00AM - 12:00PM', instructor: '' }); UI.sheet = null; TC.plans.C = []; S.addDest = 'C'; openAddTo('79902'); }); await tick(page, 400);
   r = await sheet();
-  ok(r.chips.join() === '+BUS 3384A' && /^Fits Plan C — it meets only on the weekend, so it goes under Anytime\.$/.test(r.note) && !/no set time/.test(r.note), 'anytime: a Saturday-only class is under Anytime, and the note says it meets on the weekend — not "no set time"', r);
+  ok(r.chips.join() === '+BUS 3384A' && /^Fits Plan C — it meets only on the weekend, so it goes under Anytime\.( BUS 3384A also needs an activity — add one next\.)?$/.test(r.note) && !/no set time/.test(r.note), 'anytime: a Saturday-only class is under Anytime, and the note says it meets on the weekend — not "no set time"', r);
   await page.evaluate(() => { TC.plans.C = ['79902']; UI.sheet = null; S.plan = 'C'; A.schedTabGo('plans'); render(true); }); await tick(page, 300);
   ok(await page.evaluate(() => { const a = document.querySelector('#scroll .plancol.plan-C .anytime'); return !!a && /BUS\s*3384A/.test(a.innerText); }), 'anytime: on Plans a Saturday-only class is under Anytime too (it used to be on neither the week nor the card)');
   /* My Classes: the tray shows there too, and the label is read out whole */
@@ -2387,7 +2387,7 @@ tests.springWall = async () => {
   ok(w.meNowCodes.includes('BUS 3438') && w.meNow.every(id => /^(n|xn):/.test(id)) && w.meSpring === 0 && w.b38title !== 'BUS 3438', 'wall: your Fall classes are drawn from Fall’s own rows, never from Spring’s list (same class number, other term)', w);
   const reads = log.reads.map(r => decodeURIComponent(r));
   const fallSeat = reads.filter(r => /^course_seats\?term=eq\.2268/.test(r)), springSeat = reads.filter(r => /^course_seats\?term=eq\.2274/.test(r));
-  ok(springSeat.length > 0 && fallSeat.length > 0 && fallSeat.every(r => /class_nbr=in\.\(/.test(r)), 'wall: Spring’s whole list is read; Fall is read only by the class numbers people are in', { fallSeat: fallSeat.slice(0, 2) });
+  ok(springSeat.length > 0 && fallSeat.length > 0 && fallSeat.every(r => /class_nbr=in\.\(|course_code=in\.\(/.test(r)), 'wall: Spring’s whole list is read; Fall is read only by the class numbers people are in (and, 2026-10-31, by the codes of classes saved with no section)', { fallSeat: fallSeat.slice(0, 2) });
   /* Home: the newest real thing per friend, with a tag */
   const cards = await page.evaluate(ids => ids.map(id => { const c = document.getElementById('hf-' + id); return c && { tag: (c.querySelector('.fview') || {}).textContent || '', plan: !!c.querySelector('.plancol.plan-A'), blocks: [...c.querySelectorAll('.g-b')].map(b => b.dataset.x) }; }), FX.FRIENDS.map(f => f.id));
   ok(cards[0] && cards[0].tag === 'Spring 2027 classes' && cards[0].blocks.every(x => x === 'BUS 4401') && cards[0].blocks.length > 0, 'home: a friend with Spring classes shows them, tagged', cards[0]);
@@ -2568,10 +2568,11 @@ tests.exploreTerm = async () => {
     const reads = () => o2.log.reads.map(r => decodeURIComponent(r)).filter(r => /^course_seats\?term=eq\.2268/.test(r) && !/class_nbr=in/.test(r));
     /* a friend's page › Fall › a class in their list */
     const fr = await pg2.evaluate(() => TC.friends.find(f => nowSecs(f).some(s => /^n:/.test(s.id)) && !personSecs(f).length && !(PEOPLE[f].unplaced || []).length) || TC.friends.find(f => nowSecs(f).some(s => /^n:/.test(s.id))));
+    const r0 = reads().length;   /* (2026-10-31) the Anytime look-up at open (codes saved with no section) came before */
     await pg2.evaluate(id => A.openFriend(id), fr); await settle(pg2);
     if (await pg2.locator('.fsw button[data-y="now"]').count()) await click(pg2, '.fsw button[data-y="now"]');
     await click(pg2, '.li[data-a="openClass"][data-y="now"]');
-    const c1 = await chip(), r1 = reads();
+    const c1 = await chip(), r1 = reads().slice(r0);
     ok(c1 === 'Fall 2026', 'tap: a class in a friend’s Fall list opens its Fall page', c1);
     ok(r1.length === 1 && /course_code=in\./.test(r1[0]), 'tap: that reads just this class from Fall, not the whole term', r1);
     /* My Classes › Fall */
@@ -4750,8 +4751,8 @@ tests.wordmark = async () => {
   /* Tate, 2026-10-11: his logo image, exact, in place of the typed wordmark */
   const fs = await import('node:fs'), crypto = await import('node:crypto'), pth = await import('node:path');
   const md5 = b => crypto.createHash('md5').update(b).digest('hex');
-  const dir = pth.resolve(pth.dirname(new URL(import.meta.url).pathname), '../patches/logo');
-  const want = { light: md5(fs.readFileSync(pth.join(dir, 'termchamp-logo-light.png'))), dark: md5(fs.readFileSync(pth.join(dir, 'termchamp-logo-dark.png'))) };
+  const dir = pth.resolve(pth.dirname(new URL(import.meta.url).pathname), '../../design/app-icon/2026-11-01');   /* 2026-11-01: new brand */
+  const want = { light: md5(fs.readFileSync(pth.join(dir, 'termchamp-wm-light.png'))), dark: md5(fs.readFileSync(pth.join(dir, 'termchamp-wm-dark.png'))) };
   const { page, close, log } = await openApp({});
   const look = () => page.evaluate(() => {
     const h = document.querySelector('.homehdr h1'), vis = [...h.querySelectorAll('img')].filter(i => getComputedStyle(i).display !== 'none');
@@ -4761,16 +4762,16 @@ tests.wordmark = async () => {
   const L = await look();
   const srcHash = s => s ? md5(Buffer.from(s.replace(/^data:image\/png;base64,/, ''), 'base64')) : '';
   ok(L.label === 'TermChamp' && L.text === '' && L.n === 1 && L.alt === '' && !L.tile, 'logo: Home’s header is one picture, read out as “TermChamp” (no typed wordmark, not the tile)', L);
-  ok(L.loaded && srcHash(L.src) === want.light && L.nat[0] === 672 && L.nat[1] === 144, 'logo: light mode shows Tate’s logo exactly (the cut-out file, drawn from 3× pixels)', { got: srcHash(L.src), want: want.light, nat: L.nat });
-  ok(L.h === 36 && Math.abs(L.w - 168) <= 1, 'logo: 36px tall, its own proportions (168px wide)', L);
+  ok(L.loaded && srcHash(L.src) === want.light && L.nat[0] === 864 && L.nat[1] === 144, 'logo: light mode shows Tate’s logo exactly (the cut-out file, drawn from 3× pixels)', { got: srcHash(L.src), want: want.light, nat: L.nat });
+  ok(L.h === 30 && Math.abs(L.w - 180) <= 1, 'logo: 30px tall (no cap), its own proportions (180px wide)', L);
   await page.evaluate(() => { try { localStorage.setItem('tc-theme', 'dark'); } catch (e) {} applyTheme(true); }); await settle(page, 300);
   const D = await look();
-  ok(D.n === 1 && D.loaded && srcHash(D.src) === want.dark && D.h === 36, 'logo: dark mode shows the dark cut (Term in the dark theme’s navy so it reads on #0A0F1C)', { got: srcHash(D.src), want: want.dark });
+  ok(D.n === 1 && D.loaded && srcHash(D.src) === want.dark && D.h === 30, 'logo: dark mode shows the dark cut (the brighter blue that reads on #0A0F1C)', { got: srcHash(D.src), want: want.dark });
   const lm = await page.evaluate(() => Math.round(document.querySelector('.homehdr h1').getBoundingClientRect().left));
   ok(lm === 12, 'logo: starts 12px from the screen edge, like the stories', lm);
   await page.setViewportSize({ width: 320, height: 640 }); await settle(page, 300);
   const n = await page.evaluate(() => { const h = document.querySelector('.homehdr'), bs = [...h.querySelectorAll('button')].map(b => b.getBoundingClientRect()); const i = [...h.querySelectorAll('h1 img')].find(x => getComputedStyle(x).display !== 'none').getBoundingClientRect(); return { sw: document.getElementById('scroll').scrollWidth, cw: document.getElementById('scroll').clientWidth, imgW: Math.round(i.width), imgR: Math.round(i.right), btnL: Math.round(Math.min(...bs.map(r => r.left))), btnR: Math.round(Math.max(...bs.map(r => r.right))) }; });
-  ok(n.sw <= n.cw && n.imgW === 168 && n.imgR < n.btnL && n.btnR <= 320, 'logo: at 320px it keeps its size, nothing overlaps, nothing runs off the screen', n);
+  ok(n.sw <= n.cw && Math.abs(n.imgW - 180) <= 1 && n.imgR < n.btnL && n.btnR <= 320, 'logo: at 320px it keeps its size, nothing overlaps, nothing runs off the screen', n);
   const cb = await page.evaluate(() => { const i = document.querySelector('.homehdr .tc-logo-i'), c = getComputedStyle(i); return { pe: c.pointerEvents, tc: c.webkitTouchCallout || c.getPropertyValue('-webkit-touch-callout') }; });
   ok(cb.pe === 'none', 'logo: a long press doesn’t offer Save Image (it isn’t a target)', cb);
   ok(log.errors.length === 0, 'logo: no page errors', log.errors);
@@ -4784,7 +4785,7 @@ tests.wordmark = async () => {
   /* onboarding's welcome (signed out, always light) */
   const o = await openApp({ signedIn: false });
   const w = await o.page.evaluate(() => { const d = document.querySelector('.onb .wordmark'); const i = d && d.querySelector('img'); return d && { label: d.getAttribute('aria-label'), role: d.getAttribute('role'), text: d.textContent.trim(), src: i && i.src, h: i && Math.round(i.getBoundingClientRect().height), loaded: i && i.complete && i.naturalWidth > 0 }; });
-  ok(w && w.label === 'TermChamp' && w.role === 'img' && w.text === '' && w.loaded && srcHash(w.src) === want.light && w.h === 48, 'logo: the welcome screen shows the same logo, 48px tall', w && Object.assign({}, w, { src: srcHash(w.src) }));
+  ok(w && w.label === 'TermChamp' && w.role === 'img' && w.text === '' && w.loaded && srcHash(w.src) === want.light && w.h === 40, 'logo: the welcome screen shows the same logo, 40px tall', w && Object.assign({}, w, { src: srcHash(w.src) }));
   await o.close();
 };
 
@@ -5336,11 +5337,13 @@ tests.pastProfPicker = async () => {
   await g.close();
 };
 /* Right after a report is saved: "Who taught these?" — the three latest terms' classes, never transfer credit */
+/* (2026-10-31) the report's "Pick your sections" step, when it opens: Skip for now (it's checked in check-anytime-sections-2026-10-31.mjs) */
+async function skipPick(page) { if (await page.evaluate(() => !!(UI.sheet && UI.sheet.type === 'dprPick'))) { await click(page, '#sheet .dpk-foot [data-a="dprPickSkip"]'); await tick(page, 600); } }
 tests.pastWhoTaught = async () => {
   const { page, close, log } = await openApp({ tables: NOREC() });
   await toPlanner(page);
   await uploadDpr(page, '.tc-dpr input[data-in="dprfile"]');
-  await click(page, '[data-a="dprSave"]'); await tick(page, 2500);
+  await click(page, '[data-a="dprSave"]'); await tick(page, 2500); await skipPick(page);
   const got = await page.evaluate(() => UI.sheet && UI.sheet.type === 'pcWho' ? UI.sheet.keys : null);
   const hist = await page.evaluate(() => (TC.myHistory || []).map(h => [TCPL.canon(h.code) || h.code, h.term, h.year, h.professor]));
   const TO = { Winter: 0, Spring: 1, Summer: 2, Fall: 3 };
@@ -5434,6 +5437,7 @@ tests.dprTransferContinuing = async () => {
   ok(hist.length === 14 && JSON.stringify(x) === JSON.stringify(['AP 300', 'BUS 1TR', 'BUS 2201', 'COMS 1101', 'ECON 2030', 'ENGL 1134', 'MATH 1221', 'PHIL 1T1B']) && JSON.stringify(cp) === JSON.stringify(['BUS 2207', 'BUS 2212', 'BUS 3346', 'BUS 3387', 'BUS 3391', 'STAT 2170']),
     'transfer, a year on: the record keeps 8 transfer (marked) and 6 Cal Poly classes', { x, cp });
   ok(JSON.stringify(mine.map(r => r.code).sort()) === JSON.stringify(['BUS 3431', 'BUS 3438', 'BUS 4401']), 'transfer, a year on: My Classes gets the 3 he’s taking — not this term’s study-abroad placeholder (AP 300, no grade, transfer icon)', mine);
+  await skipPick(page);
   const who = await page.evaluate(() => UI.sheet && UI.sheet.type === 'pcWho' ? UI.sheet.keys.slice().sort() : null);
   ok(JSON.stringify(who) === JSON.stringify(['BUS 2207|Fall|2025', 'BUS 2212|Fall|2025', 'BUS 3346|Spring|2026', 'BUS 3387|Spring|2026', 'BUS 3391|Spring|2026', 'STAT 2170|Fall|2025']),
     'transfer, a year on: “Who taught these?” asks only about his Cal Poly classes — not BUS 2201 or MATH 1221, which he took at a community college the same term', who);
@@ -5842,7 +5846,11 @@ tests.dprRead = async () => {
   const prof = log.writes.filter(x => x.table === 'profiles' && x.m === 'PATCH');
   ok(!prof.some(x => x.body && 'major' in x.body), 'save: the report’s plan code (“BUS”) never becomes the profile’s major', prof.map(x => x.body));
   const after = await page.evaluate(() => ({ tab: S.tab, sub: S.schedTab, sheet: UI.sheet && UI.sheet.type, prefs: !!document.querySelector('#sheet [data-a="plPrefsSave"]'), busy: UI.busy.dpr }));
-  ok(after.tab === 'schedule' && after.sub === 'planner' && after.sheet === 'pcWho' && !after.busy, 'save: lands on the Planner, with “Who taught these?” over it first', after);
+  /* (2026-10-31) first the report's new step, Pick your sections (BUS 4488 has three: nothing picked for you) — Skip for now */
+  ok(after.tab === 'schedule' && after.sub === 'planner' && after.sheet === 'dprPick' && !after.busy, 'save: lands on the Planner, with “Pick your sections” over it first', after);
+  ok(await page.evaluate(() => UI.sheet.groups.length === 1 && UI.sheet.groups[0].classes.join() === 'BUS 4488' && !Object.keys(UI.sheet.groups[0].sel).length), 'save: … this term’s class, no section picked for you (three fit)');
+  await click(page, '#sheet .dpk-foot [data-a="dprPickSkip"]'); await tick(page, 600);
+  ok(await page.evaluate(() => UI.sheet && UI.sheet.type) === 'pcWho', 'save: Skip for now → “Who taught these?”, as before');
   await click(page, '#sheet [data-a="pcWhoDone"].btn'); await tick(page, 600);
   const after2 = await page.evaluate(() => ({ sheet: UI.sheet && UI.sheet.type, prefs: !!document.querySelector('#sheet [data-a="plPrefsSave"]') }));
   ok(after2.sheet === 'plPrefs' && after2.prefs, 'save: then the Planner asks what matters most (first open)', after2);
@@ -6386,7 +6394,11 @@ tests.onbReportLast = async () => {
   await click(page, '[data-a="dprSave"]'); await tick(page, 2500);
   const end = await page.evaluate(() => ({ tab: S.tab, sub: S.schedTab, onb: S.stack.home.some(x => x.s === 'onb'), key: localStorage.getItem('termchamp_app_onb') }));
   ok(end.tab === 'schedule' && end.sub === 'planner' && !end.onb && !end.key, 'onboarding: after the report, onboarding is over (not remembered as unfinished) and the Planner is open', end);
-  ok(await page.evaluate(() => UI.sheet && UI.sheet.type === 'pcWho'), 'onboarding: the report’s classes ask who taught them first');
+  /* (2026-10-31) Pick your sections comes first now; Skip for now, then who taught them, then the notification ask */
+  ok(await page.evaluate(() => UI.sheet && UI.sheet.type === 'dprPick'), 'onboarding: the report’s classes ask for their sections first');
+  await tick(page, 900); const held0 = await page.evaluate(() => window.__asks.length);
+  await click(page, '#sheet .dpk-foot [data-a="dprPickSkip"]'); await tick(page, 600);
+  ok(held0 === 0 && await page.evaluate(() => UI.sheet && UI.sheet.type === 'pcWho'), 'onboarding: then who taught them (no notification ask yet)', held0);
   await tick(page, 900); const held = await page.evaluate(() => window.__asks.slice());
   await click(page, '#sheet [data-a="pcWhoDone"].btn'); await tick(page, 900);
   const asked = await page.evaluate(() => window.__asks.slice());
@@ -6612,7 +6624,7 @@ tests.signup = async () => {
   const up = log.writes.filter(w => w.table === 'profiles' && w.m === 'PATCH').pop();
   ok(up && up.body.class_standing === 'Junior' && up.body.major === 'Business Administration' && /id=eq\./.test(up.query), 'confirm: saves year and major to your profile', up && up.body);
   t = await text(page);
-  ok(/Help friends find you/.test(t) && await page.locator('#ob-phone[type="tel"]').count() === 1 && await page.locator('[data-a="ctPhoneSkip"]').count() === 1, 'onboard: then the optional phone step, with Skip', t.slice(0, 200));
+  ok(/What’s your number\?/.test(t) && await page.locator('#ob-phone[type="tel"]').count() === 1 && /Not now/.test(await page.locator('[data-a="ctPhoneSkip"]').innerText()), 'onboard: then the optional phone step, with Not now (2026-10-31)', t.slice(0, 200));
   await click(page, '[data-a="ctPhoneSkip"]');
   ok(!log.rpcs.some(r => r.fn === 'set_my_phone'), 'onboard: Skip sends no number');
   t = await text(page);
@@ -8444,7 +8456,7 @@ const ledgerAddsUp = v => !!v && v.n > 0 && (v.leg.f || 0) + (v.leg.p || 0) + (v
 const withLeft = async page => (await text(page)) + '\n' + (await page.evaluate(() => { const c = (() => { const g = plGate(); if (g.html) return null; const L = g.L, X = auditLines(TC.audit, L), R = L ? planRank(L) : X ? { audit: true, X, all: [], bare: true } : null; if (!R || R.done) return null; const o = document.getElementById('__lc'); if (o) o.remove(); const d = document.createElement('div'); d.id = '__lc'; d.style.cssText = 'position:absolute;left:-10000px;top:0;width:390px'; const ro = UI.plReqOpen; UI.plReqOpen = new Proxy({}, { get: () => true, has: () => true }); try { d.innerHTML = plLeftCard(R, L, /^[ABC]$/.test(UI.plPlan) ? UI.plPlan : 'A'); } finally { UI.plReqOpen = ro; } document.body.appendChild(d); const c0 = d.firstElementChild; if (c0) [...d.children].slice(1).forEach(x => c0.appendChild(x)); return c0; })(); const t = c ? c.innerText : ''; document.getElementById('__lc')?.remove(); return t; }));
 const pcSum = page => page.evaluate(() => { const c = (() => { const g = plGate(); if (g.html) return null; const L = g.L, X = auditLines(TC.audit, L), R = L ? planRank(L) : X ? { audit: true, X, all: [], bare: true } : null; if (!R || R.done) return null; const o = document.getElementById('__lc'); if (o) o.remove(); const d = document.createElement('div'); d.id = '__lc'; d.style.cssText = 'position:absolute;left:-10000px;top:0;width:390px'; const ro = UI.plReqOpen; UI.plReqOpen = new Proxy({}, { get: () => true, has: () => true }); try { d.innerHTML = plLeftCard(R, L, /^[ABC]$/.test(UI.plPlan) ? UI.plPlan : 'A'); } finally { UI.plReqOpen = ro; } document.body.appendChild(d); const c0 = d.firstElementChild; if (c0) [...d.children].slice(1).forEach(x => c0.appendChild(x)); return c0; })(); return c && { num: (c => { const g = {}; [...c.querySelectorAll('.pll-leg > span')].forEach(e => { g[e.className] = +e.textContent.trim().split(' ')[0]; }); const n = +((((c.querySelector('.pll-bar') || { getAttribute: () => '' }).getAttribute('aria-label') || '').match(/of (\d+)$/) || [])[1] || '').split(' ')[0] || 0; return n ? `${(g.f || 0) + (g.p || 0)} of ${n} filled` : ''; })(c), link: (c.querySelector('.pc-link') || {}).textContent || '', left: ((c.querySelector('.pll-leg .l') || {}).textContent || '').replace(/\s+/g, ' ').replace(/^(\d+)(?=[a-z])/, '$1 ').trim(), cat: (() => { const d = document.createElement('div'); try { d.innerHTML = plannerView(); } catch (e) { return 'ERR ' + e.message; } return (d.querySelector('.pl-top .pl-cat') || {}).textContent || ''; })(), inCard: !!c.querySelector('.pc-catc'), past: !!document.querySelector('#scroll .pc-left, #scroll .pc-num, #scroll .pc-go'), _: document.getElementById('__lc')?.remove() }; });
 const openGroups = async page => { for (let i = 0; i < 6; i++) { const c = page.locator('[data-a="pcGroup"][aria-expanded="false"]'); if (!(await c.count())) break; await c.first().click(); await tick(page, 150); } };
-const saveReport = async page => { await click(page, '[data-a="dprSave"]'); await tick(page, 2500); await page.evaluate(() => { TC.prefs = TC.prefs || { priority: 'degree', units: 16 }; if (UI.sheet && UI.sheet.type === 'pcWho') UI.sheet = null; render(true); }); };
+const saveReport = async page => { await click(page, '[data-a="dprSave"]'); await tick(page, 2500); await skipPick(page); await page.evaluate(() => { TC.prefs = TC.prefs || { priority: 'degree', units: 16 }; if (UI.sheet && UI.sheet.type === 'pcWho') UI.sheet = null; render(true); }); };
 const toPastTab = async page => { await page.evaluate(() => { document.getElementById('scroll').scrollTop = 0; }); await click(page, '[data-a="schedTab"][data-x="past"]'); await tick(page, 1500); };
 
 /* 1. A senior on the Fall Quarter 2023 catalog: the old layout, lettered GE, quarter numbers with their pairs, a
@@ -8595,7 +8607,7 @@ tests.rowRatings = async () => {
 
 tests.dprStressQuarter = async () => {
   const { page, close, log } = await openApp({ tables: XFER_T('Business Administration', 'Senior'), height: 2600 });
-  await page.addInitScript(() => { try { const s0 = JSON.parse(localStorage.getItem('sb-rqkndeqbcahozidniesn-auth-token') || 'null'); if (s0 && s0.user) localStorage.setItem('tc_ct:' + s0.user.id, JSON.stringify({ on: true })); } catch (e) {} });
+  await page.addInitScript(() => { try { const s0 = JSON.parse(localStorage.getItem('sb-rqkndeqbcahozidniesn-auth-token') || 'null'); if (s0 && s0.user) localStorage.setItem('tc_ct:' + s0.user.id, JSON.stringify({ on: true, phOk: 1 })); } catch (e) {} });
   await toPlanner(page); await uploadFile(page, 'dpr-stress-quarter.pdf');
   ok(await readPills(page) === '36 filled|3 left|5 transfer', 'quarter catalog: Report read — 33 Satisfied + 3 in progress = 36 filled, 3 left (the Senior Project is its own line, 2026-10-12), 5 transfer (ART 3TC1, DUD 3TR, PORT 1TC2, BUS 401, TRAN 302)', await readPills(page));
   await saveReport(page);

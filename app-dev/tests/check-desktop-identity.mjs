@@ -43,7 +43,7 @@ test('logo', async () => {
   let r = await q();
   ok(r.l === PHONE_LIGHT && r.d === PHONE_DARK, "the header's two logo images are the phone's TC_LOGO / TC_LOGO_DARK, byte for byte", { l: r.l && r.l.length, d: r.d && r.d.length });
   ok(r.lv && !r.dv && !r.tv, 'light theme: the light logo shows, not the dark one, not the tile', r);
-  ok(r.lb.h >= 32 && r.lb.h <= 36.5 && r.lb.w > 80, 'the logo is 32-36px tall, with its own width (not squeezed)', r.lb);
+  ok(r.lb.h >= 26 && r.lb.h <= 30.5 && r.lb.w > 80, 'the logo is 26-30px tall (no cap), with its own width (not squeezed)', r.lb);
   ok(!r.typed && r.text === '', 'the typed "TermChamp" wordmark is gone', r.text);
   ok(r.aria === 'TermChamp — go to home', 'the button still names the app', r.aria);
   await theme(page, 'dark'); r = await q();
@@ -60,7 +60,7 @@ test('logo', async () => {
     const x = await q.call(null).catch(() => null);
     const y = await m.page.evaluate(() => { const v = document.querySelector('.brand .brand-logo:not([style*="none"])'); const logos = [...document.querySelectorAll('.brand .brand-logo')].filter(__vis);
       return { n: logos.length, b: logos[0] && __box(logos[0]), pill: __box(document.getElementById('authBtn')), tile: __vis(document.querySelector('.brand .brand-tile')), vw: innerWidth, sw: document.documentElement.scrollWidth }; });
-    ok(y.n === 1 && !y.tile && y.b.r <= y.pill.l - 4 && y.b.h >= 30, `390 ${th}: one logo image fits left of the account pill`, y);
+    ok(y.n === 1 && !y.tile && y.b.r <= y.pill.l - 4 && y.b.h >= 25, `390 ${th}: one logo image fits left of the account pill`, y);
     ok(y.sw <= y.vw, `390 ${th}: the header never scrolls the page sideways`, y);
     await m.close();
   }

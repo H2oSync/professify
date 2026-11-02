@@ -6,6 +6,10 @@ const R = mk('t2-now-section'); const port = +(process.env.APP_PORT || 8653);
 const T = JSON.parse(JSON.stringify(FX.TABLES));
 T.course_seats = T.course_seats.concat(T.course_seats.filter(r => r.course_code !== 'BUS 3438').map(r => Object.assign({}, r, { term: '2274' })));
 T.saved_classes.push({ user_id: FX.ME.id, term: '2268', code: 'PHIL 3331' });
+/* (2026-10-31) a second Fall section (invented): a class with ONE section now shows it, so this one needs two to stay Anytime */
+T.course_seats.push(Object.assign({}, T.course_seats.find(r => r.term === '2268' && r.course_code === 'PHIL 3331'), { section: '02', class_nbr: '70950', days: 'MoWe 1:10PM - 3:00PM' }));
+/* (2026-10-31) and not one you finished last spring (the fixtures' record has PHIL 3331, Spring 2026): that one is now hidden */
+T.class_history = T.class_history.filter(h => !(h.user_id === FX.ME.id && h.code === 'PHIL 3331'));
 const { page, close, log } = await openApp({ port, terms: SPRING_CFG, tables: T });
 await page.waitForFunction(() => TC.ready && TC.seatsLoaded && TC.nowMineRows, null, { timeout: 15000 }); await page.clock.runFor(800); await page.waitForTimeout(400);
 const rows = () => page.evaluate(async () => ({ saved: (await TC.client().from('saved_classes').select('code,term').eq('user_id', TC.user.id).eq('code', 'PHIL 3331')).data, secs: (await TC.client().from('my_sections').select('code,term,class_nbr,days,status').eq('user_id', TC.user.id).eq('code', 'PHIL 3331')).data }));
