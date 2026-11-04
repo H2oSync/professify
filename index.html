@@ -764,6 +764,11 @@ window.toggleTheme = toggleTheme;
      real target. display:block keeps the two on separate lines. */
   .auth-alt{display:block;width:100%;background:none;border:0;color:var(--muted);font-size:var(--t-link);cursor:pointer;margin-top:6px;padding:11px 4px;min-height:44px;text-decoration:underline;text-underline-offset:2px}
   .auth-alt:disabled{opacity:.5;cursor:default;text-decoration:none}
+.auth-alt.auth-resend-loud{background:var(--good);color:var(--accent-ink);text-decoration:none;border-radius:11px;font-weight:700;font-size:var(--t-name);margin-top:10px}
+.auth-alt.auth-resend-loud:disabled{opacity:.55}
+.auth-submit.auth-code-cta{margin:0 0 10px}
+.auth-submit.auth-quiet{background:transparent;color:var(--text);box-shadow:inset 0 0 0 1.5px var(--line)}
+.auth-back.auth-top{z-index:210}
   .auth-who{display:flex;align-items:center;gap:12px;margin-bottom:14px}
   .auth-who .a{width:42px;height:42px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;flex:none}
   /* ---------- SETTINGS ---------- */
@@ -5202,7 +5207,7 @@ table.wl-table{border-collapse:collapse;width:100%;min-width:520px}
    The flag is the whole switch — every gp* surface already gates on gpFlagOn(), so this is
    one word and the code stays in git. Turn it back on the same day the migration runs. */
 window.PROFESSIFY_FLAGS={groups:false,messages:true};
-window.PROFESSIFY_BUILD='2026-10-17 13:58';
+window.PROFESSIFY_BUILD='2026-11-04 05:15';
 /* Paint the build stamp everywhere it appears. */
 try{
   (function(){
@@ -13862,6 +13867,8 @@ function authHandoff(){
 }
 function closeAuth(){
   document.getElementById('authBack').classList.remove('open'); document.body.style.overflow='';
+  document.getElementById('authBack').classList.remove('auth-top');
+  try{ _authPendingPw=''; }catch(e){}
   try{ clearInterval(_authResendT); }catch(e){}
   // Backing out of the gate abandons the intent; leaving it armed would fire on some later,
   // unrelated sign-in and yank the student into a review form they didn't ask for.
@@ -14050,7 +14057,7 @@ var _authPendingPw='';      /* signup only, seconds-lived, cleared in a finally.
    so a shared browser cannot leak one account's state into another's, and when we have never seen
    either the card falls back to wording that is true whichever it is. The password itself is
    never stored — only the fact that one exists. */
-function pwSeenKey(){ try{ return 'professify_pw_set_'+((sbUser&&sbUser.id)||''); }catch(e){ return ''; } }
+function pwSeenKey(){ try{ return (sbUser&&sbUser.id)?'professify_pw_set_'+sbUser.id:''; }catch(e){ return ''; } }
 function pwMarkSet(){ try{ var k=pwSeenKey(); if(k)localStorage.setItem(k,'1'); }catch(e){} }
 function pwKnownSet(){ try{ var k=pwSeenKey(); return !!(k&&localStorage.getItem(k)==='1'); }catch(e){ return false; } }
 var _authPwMin=8;
@@ -14108,6 +14115,7 @@ function authPwToggle(){
   try{el.focus();el.setSelectionRange(el.value.length,el.value.length);}catch(e){}
 }
 function authEmailStep(){
+  _authPendingPw='';
   var ctx=(window._authCtx&&AUTH_CONTEXTS[window._authCtx])||null;
   var isNew=(window._authMode==='signup');
   var k=isNew?'Create your account':'Welcome back';
@@ -14135,7 +14143,7 @@ function authEmailStep(){
     +'</form>'
     /* The escape hatch, and deliberately not hidden behind "Forgot password?": every account that
        existed before today has NO password, and their owners have nothing to forget. */
-    +'<button class="auth-alt" onclick="authCodeInstead()">'
+    +'<button class="auth-alt" id="authAlt" type="button" onclick="authCodeInstead()">'
       +(isNew?'Sign up without a password (email me a code)':'Email me a code instead')+'</button>';
   setTimeout(function(){var e=document.getElementById('authEmail');if(e)e.focus();},50);
 }
@@ -14219,9 +14227,9 @@ function authCodeStep(email){
   var esc=jsAttr(email);   /* was escapeHtml(email).replace(/'/g,"\\'"): with ' now an entity that order breaks out of the string (security-pass2, 2026-10-15) */
   document.getElementById('authBody').innerHTML=
     '<div class="auth-k">Check your inbox</div><h2 class="auth-h">Enter your code</h2>'
-    +'<p class="auth-sub">We emailed a verification code to <b>'+escapeHtml(email)+'</b>.</p>'
+    +'<p class="auth-sub">We emailed a 6-digit code to <b>'+escapeHtml(email)+'</b>.</p>'
     +'<p class="auth-sub" id="authJunk" style="margin-top:-4px;font-size:13px">Not there? Check your <b>Junk</b> or <b>Spam</b> folder for \u201cYour TermChamp code\u201d from noreply@termchamp.com.</p>'
-    +'<input id="authCode" class="auth-input" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="Enter code" style="letter-spacing:5px;text-align:center;font-size:20px;font-weight:700" oninput="authCheckCode()">'
+    +'<input id="authCode" class="auth-input" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code" style="letter-spacing:5px;text-align:center;font-size:20px;font-weight:700" oninput="authCheckCode()">'
     +'<div id="authErr" class="auth-err"></div>'
     +'<button id="authVerifyBtn" class="auth-submit" disabled onclick="authVerify(\''+esc+'\')">Verify &amp; continue</button>'
     /* The email lands in spam often enough that "start the whole flow over" was the only
@@ -14242,8 +14250,9 @@ function authResendCooldown(sec){
     left--;
     var b=document.getElementById('authResend');
     if(!b){ clearInterval(_authResendT); return; }
-    if(left<=0){ clearInterval(_authResendT); b.disabled=false; b.textContent='Didn\u2019t get it? Resend code'; }
-    else b.textContent='Resend code in '+left+'s';
+    var loud=b.classList.contains('auth-resend-loud');
+    if(left<=0){ clearInterval(_authResendT); b.disabled=false; b.textContent=loud?'Send a new code':'Didn\u2019t get it? Resend code'; }
+    else b.textContent=(loud?'Send a new code in ':'Resend code in ')+left+'s';
   },1000);
 }
 async function authResend(email){
@@ -14264,10 +14273,10 @@ async function authResend(email){
     authResendCooldown(w?Number(w[1])+1:60);
   }
 }
-function authCheckCode(){ var el=document.getElementById('authCode'); var v=(el.value||'').replace(/\D/g,''); if(el.value!==v)el.value=v; var b=document.getElementById('authVerifyBtn'); if(b)b.disabled=v.length<6; }
+function authCheckCode(){ var el=document.getElementById('authCode'); var v=(el.value||'').replace(/\D/g,'').slice(0,6); if(el.value!==v)el.value=v; var b=document.getElementById('authVerifyBtn'); if(b)b.disabled=v.length!==6; }
 async function authVerify(email){
-  var code=(document.getElementById('authCode').value||'').replace(/\D/g,'');
-  if(code.length<6){authSay('Enter the code from your email.');return;}
+  var code=(document.getElementById('authCode').value||'').replace(/\D/g,'').slice(0,6);
+  if(code.length!==6){authSay('Enter the 6-digit code from your email.');return;}
   var btn=document.getElementById('authVerifyBtn'); if(btn){btn.disabled=true;btn.textContent='Verifying\u2026';}
   try{
     var r=await sb.auth.verifyOtp({email:email,token:code,type:'email'}); if(r.error)throw r.error;
@@ -14276,27 +14285,92 @@ async function authVerify(email){
       /* The password is set HERE, on the session the code just created, rather than at signUp():
          updateUser() on an authenticated session needs no email template and no redirect handler,
          so it works on this project today whatever the Supabase templates say. */
-      var pwNote='';
+      var pwFailed=false, pwSaved=false;
       if(_authPendingPw){
         try{
           var up=await sb.auth.updateUser({password:_authPendingPw});
           if(up&&up.error)throw up.error;
+          pwSaved=true;
         }catch(pe){
-          /* Verified is verified. A password that would not save is a reason to tell them where to
-             set one, never a reason to refuse the sign-in they just completed. */
-          pwNote='You’re signed in, but we couldn’t save your password. Set one in Settings → You.';
-          try{console.warn('[professify] password not set at signup:',(pe&&pe.message)||pe);}catch(_c){}
+          /* Verified is verified. A password that would not save is a reason to ask for it again,
+             never a reason to refuse the sign-in they just completed. "Same as the old" means the
+             account already has exactly this password — that is a success (2026-11-04). */
+          if(authPwSame(pe)) pwSaved=true;
+          else { pwFailed=true; try{console.warn('[professify] password not set at signup:',(pe&&pe.message)||pe);}catch(_c){} }
         }
       }
       _authPendingPw='';
-      updateAuthUI(); if(typeof renderAccountSection==='function')renderAccountSection(); closeAuth();
-      if(pwNote){ try{frToast(pwNote);}catch(_t){} }
+      if(pwSaved) pwMarkSet();
+      /* Signed in from here on: a throw while repainting must not read as "your code was wrong". */
+      try{ updateAuthUI(); if(typeof renderAccountSection==='function')renderAccountSection(); }catch(_u){ try{console.warn('[professify] after sign-in:',_u);}catch(_c){} }
+      /* No password this device has seen work → ask for one now, on the spot (2026-11-04). A code
+         log-in used to leave the account on codes forever while the browser kept autofilling a
+         password the server never had. */
+      if(pwFailed||!pwKnownSet()){ authSetPwStep(pwFailed?'failed':'code'); return; }
+      closeAuth();
       try{authHandoff();}catch(e){} return;
     }
     throw new Error('Could not verify. Try again.');
-  }catch(e){ authErr(e&&e.message,'That code was wrong or expired.'); if(btn){btn.disabled=false;btn.textContent='Verify & continue';} }
-  finally{ _authPendingPw=''; }
+  }catch(e){
+    /* The sign-up password is KEPT here (2026-11-04). It used to be cleared in a finally, so a wrong
+       or expired code followed by a resend made the account with no password and no warning. */
+    var em=String((e&&e.message)||'');
+    if(/expired|invalid|token/i.test(em)) authSay('That code is wrong or expired. Send a new one below'+(_authPendingPw?' — your password is kept.':'.'));
+    else authErr(em,'That code was wrong or expired.');
+    authResendLoud(true);
+    if(btn){btn.disabled=false;btn.textContent='Verify & continue';}
+  }
 }
+/* After a wrong or expired code, "Send a new code" is the big button, not a grey link. */
+function authResendLoud(on){
+  var b=document.getElementById('authResend'); if(!b)return;
+  b.classList.toggle('auth-resend-loud',!!on);
+  if(!b.disabled) b.textContent=on?'Send a new code':'Didn\u2019t get it? Resend code';
+}
+/* SET YOUR PASSWORD — right after a code log-in, or a sign-up whose password didn't save. The
+   account email rides along as the username, so the password manager files it under the right
+   address and offers it here and in the TermChamp app. Typing the current password confirms it
+   (Supabase answers "same as the old") without changing anything. */
+function authSetPwStep(why){
+  var email=''; try{ email=(sbUser&&sbUser.email)||''; }catch(e){}
+  var failed=(why==='failed');
+  /* Above the "Set up your plan" wizard (z-index 200), which a new account's sign-in opens at the
+     same moment: the password comes first, the wizard is waiting underneath when this closes. */
+  try{ document.getElementById('authBack').classList.add('auth-top'); }catch(e){}
+  document.getElementById('authBody').innerHTML=
+    '<div class="auth-k">'+(failed?'One more thing':'You\u2019re in')+'</div>'
+    +'<h2 class="auth-h">'+(failed?'Your password didn\u2019t save':'Set your password')+'</h2>'
+    +'<p class="auth-sub">'+(failed?'Set it now so you can log in with it next time':'So next time you can log in with it')+' \u2014 here and in the TermChamp app. Already have one? Enter it to keep it, or a new one to replace it.</p>'
+    +'<form id="authPwForm" onsubmit="authSetPwSave();return false">'
+      +'<input type="email" name="email" autocomplete="username" value="'+escapeHtml(email)+'" readonly tabindex="-1" aria-label="Account email" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none">'
+      +authPwField(true)
+      +'<div id="authErr" class="auth-err"></div>'
+      +'<button id="authPwSave" class="auth-submit" type="submit">Save password</button>'
+    +'</form>'
+    +'<button class="auth-alt" id="authPwLater" onclick="authSetPwLater()">Not now</button>';
+  setTimeout(function(){var e=document.getElementById('authPw');if(e)e.focus();},50);
+}
+async function authSetPwSave(){
+  var el=document.getElementById('authPw'), b=document.getElementById('authPwSave');
+  var pw=(el&&el.value)||'';
+  if(pw.length<_authPwMin){ authSay('At least '+_authPwMin+' characters.'); return; }
+  if(b){b.disabled=true;b.textContent='Saving\u2026';}
+  try{
+    var r=await sb.auth.updateUser({password:pw});
+    if(r&&r.error)throw r.error;
+    pwMarkSet(); authSetPwDone('Password saved. Use it here and in the TermChamp app.');
+  }catch(e){
+    var m=String((e&&e.message)||'');
+    if(authPwSame(e)){ pwMarkSet(); authSetPwDone('That\u2019s already your password \u2014 you\u2019re all set.'); return; }
+    authSay(/at least|too short|weak/i.test(m)?'Too short \u2014 use at least '+_authPwMin+' characters.':'Couldn\u2019t save your password. Try again, or set it later in Settings.');
+    if(b){b.disabled=false;b.textContent='Save password';}
+  }
+}
+/* Supabase refuses a password equal to the current one (code same_password): the account already
+   has it, which is a success here. */
+function authPwSame(e){ return !!e && (e.code==='same_password' || /should be different from the old|different from the old password/i.test(String(e.message||''))); }
+function authSetPwDone(msg){ try{ if(typeof renderPasswordCard==='function')renderPasswordCard(true); }catch(e){} closeAuth(); try{frToast(msg);}catch(e){} try{authHandoff();}catch(e){} }
+function authSetPwLater(){ closeAuth(); try{authHandoff();}catch(e){} }
 /* Log in with a password. No email, which is the entire point. */
 async function authLoginPassword(){
   var email=((document.getElementById('authEmail')||{}).value||'').trim();
@@ -14325,14 +14399,24 @@ async function authLoginPassword(){
        the honest message has to cover both without accusing someone of forgetting something they
        never set — and the way out has to be one tap, not a support email. */
     if(/invalid login credentials|invalid credentials/i.test(msg)){
-      authSay('That email and password don’t match. If you’ve never set a password, use the code button below.');
+      authSay('That email and password don’t match. If you’ve never set a password, or aren’t sure, get a code instead.');
+      authPromoteCode();
     } else if(/email not confirmed|not confirmed/i.test(msg)){
-      authSay('This address hasn’t been confirmed yet — use the code button below to finish setting it up.');
+      authSay('This address hasn’t been confirmed yet — get a code to finish setting it up.');
+      authPromoteCode();
     } else {
       authErr(msg,'Could not sign in. Try again.');
     }
-    if(btn){btn.disabled=false;btn.textContent=label||'Log in';}
+    if(btn){btn.disabled=false;btn.textContent=(btn.dataset.label||label||'Log in');}
   }
+}
+/* After a failed password, the code is the obvious next step: it moves up under the message as the
+   big green button, and Log in steps back to an outline "Try my password again" (2026-11-04). */
+function authPromoteCode(){
+  var a=document.getElementById('authAlt'), s=document.getElementById('authSend'), er=document.getElementById('authErr');
+  if(a){ a.type='button'; a.className='auth-submit auth-code-cta'; a.textContent='Email me a code instead'; if(er&&er.parentNode)er.parentNode.insertBefore(a,er.nextSibling); }
+  if(s){ s.classList.add('auth-quiet'); s.dataset.label='Try my password again'; }
+  if(a) setTimeout(function(){ try{ a.focus(); }catch(e){} },0);
 }
 /* Set or change a password from Settings — the path for every account that predates passwords, and
    the one a student who forgot theirs lands on after signing in with a code. */
