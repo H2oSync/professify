@@ -1609,6 +1609,7 @@ button.pll-h svg{margin-left:auto;align-self:center}
 .tc-dpr h3{font-size:22px;font-weight:900;line-height:1.2;margin-top:4px}
 .tc-dpr p{font-size:14px;font-weight:700;line-height:1.45;margin-top:6px}
 .tc-dpr .tc-dpr-go{display:grid;place-items:center;margin-top:14px;background:#fff;color:#1E40AF;box-shadow:none;cursor:pointer}
+.tc-vhfile{position:absolute;width:1px;height:1px;padding:0;margin:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);border:0;opacity:0}
 .tc-dpr .tc-dpr-alt{display:grid;place-items:center;margin-top:8px;height:46px;font-size:15px;background:rgba(15,23,42,.18);color:#fff;box-shadow:none}
 .tc-dpr small{display:block;font-size:12.5px;font-weight:700;line-height:1.45;margin-top:12px}
 .tc-dpr-row{display:flex;align-items:center;gap:12px;margin:14px 12px 0;padding:12px 14px;border-radius:18px;background:var(--tint1)}
@@ -2210,6 +2211,8 @@ button.mrname{min-height:44px}
 .onb .ghost{min-height:44px;border:0;background:none;color:var(--muted);font-weight:800;font-size:15px;width:100%;display:flex;align-items:center;justify-content:center;gap:5px;text-decoration:none}
 .onb .ghost.pink{color:var(--pink-t,var(--pink))}
 .onb .ghost.red{color:var(--red)}
+.onb #resend.resend-big{justify-content:center;font-weight:800}
+.onb #resend.resend-big .plink{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 22px;border-radius:999px;background:var(--blue);color:#fff;text-decoration:none;font-weight:800}
 .onb .plink{color:var(--pink-t,var(--pink));font-weight:800;background:none;border:0;padding:0;text-decoration:none;font-size:inherit}
 .onb .pill-pink{height:32px;padding:0 14px;border:0;border-radius:999px;background:var(--pink-tint);color:var(--pink-t,var(--pink));font-weight:800;font-size:13.5px}
 .onb .dash{border:1.5px dashed var(--pink-line);background:var(--pink-tint);color:var(--pink-t,var(--pink));border-radius:999px;height:36px;padding:0 14px;font-weight:800;font-size:14px;white-space:nowrap;flex-shrink:0}
@@ -2416,7 +2419,7 @@ if(typeof qrcode==="function")window.qrcode=qrcode;
 
 <script>
 
-window.TERMCHAMP_APP_BUILD = '2026-10-15 12:00';
+window.TERMCHAMP_APP_BUILD = '2026-11-04 05:15';
 /* ================================================================================================
    TERMCHAMP — THE PHONE APP (termchamp.com/app)
    ------------------------------------------------------------------------------------------------
@@ -2859,9 +2862,42 @@ TC.signInGoogle = async function () {
   const r = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + '/app/' } });
   if (r.error) toast(r.error.message);
 };
+/* DOES THIS ACCOUNT HAVE A PASSWORD THAT WORKS? (2026-11-04) Supabase can't tell the client, so we
+   remember having SEEN one work: a password log-in that succeeded, or a password we just saved.
+   Same key as the website ('professify_pw_set_<user id>'), so on termchamp.com the website and /app
+   share it. Only the fact is kept, never the password. */
+function pwSeenKey(uid) { return 'professify_pw_set_' + (uid || (TC.user && TC.user.id) || ''); }
+function pwSeenMark(uid) { try { const k = pwSeenKey(uid); if (!/_$/.test(k)) localStorage.setItem(k, '1'); } catch (e) {} }
+function pwSeen(uid) { try { return localStorage.getItem(pwSeenKey(uid)) === '1'; } catch (e) { return false; } }
+/* Supabase refuses a password equal to the current one: code same_password. That means the account
+   already HAS this password — a success for everything here. */
+function pwIsSame(e) { return !!e && (e.code === 'same_password' || /should be different from the old|different from the old password/i.test(String(e.message || ''))); }
+/* After a code log-in, or a sign-up whose password didn't save, ask for a password right away — not
+   in Settings, where nobody looks. Armed BEFORE the code is verified (the session can finish loading
+   before verifyOtp's promise returns) and shown once the app is loaded. */
+const PW_ASK_KEY = 'tc_pw_ask';
+function pwAskArm(why) {
+  try { sessionStorage.setItem(PW_ASK_KEY, why || 'code'); } catch (e) {}
+  TC.pwAsk = why || 'code';
+  if (TC.phase === 'ok') { pwAskMaybe(); render(true); }
+}
+function pwAskDisarm() { TC.pwAsk = ''; try { sessionStorage.removeItem(PW_ASK_KEY); } catch (e) {} }
+function pwAskMaybe() {
+  let why = TC.pwAsk || ''; try { why = why || sessionStorage.getItem(PW_ASK_KEY) || ''; } catch (e) {}
+  if (!why || !TC.user) return;
+  if (UI.sheet) {   /* another sheet is up (an invite, say): stay armed and look again once it's closed */
+    clearTimeout(TC.pwAskT);
+    TC.pwAskT = setTimeout(() => { if (TC.phase === 'ok') { pwAskMaybe(); if (UI.sheet && UI.sheet.type === 'pwAsk') render(true); } }, 1500);
+    return;
+  }
+  pwAskDisarm();
+  if (why !== 'failed' && pwSeen(TC.user.id)) return;
+  UI.sheet = { type: 'pwAsk', why, err: '', busy: false };
+}
 TC.signInPassword = async function (email, pw) {
   const sb = TC.client(); if (!sb) return 'Could not reach TermChamp.';
   const r = await sb.auth.signInWithPassword({ email, password: pw });
+  if (!r.error && r.data && r.data.user) pwSeenMark(r.data.user.id);
   return r.error ? r.error.message : null;
 };
 /* ---- who can sign up: lifted verbatim from index.html by build.py ---- */
@@ -2930,8 +2966,10 @@ TC.signUpVerify = async function (email, code, pw) {
   if (pw) {
     /* Verified is verified: a password that won't save is a reason to say where to set one,
        never a reason to undo the sign-in that just worked. */
+    let saved = true;
     try { const up = await sb.auth.updateUser({ password: pw }); if (up && up.error) throw up.error; }
-    catch (e) { if (!/same|different/i.test(String(e && e.message))) pwNote = 'You’re signed in, but your password didn’t save. Set one in Settings.'; }
+    catch (e) { if (!pwIsSame(e)) { saved = false; pwNote = 'failed'; } }
+    if (saved) pwSeenMark(r.data.session.user.id);
   }
   return { err: null, pwNote };
 };
@@ -3196,7 +3234,7 @@ async function loadAll() {
   TC.profile.concentration = concResolve(TC.profile, concSrv);
   const nm = TC.profile.display_name || TC.profile.username || 'You';
   PEOPLE.me = Object.assign(PEOPLE.me, { name: nm, short: nm.split(/\s+/)[0], ini: initialsOf(nm), avatar: TC.profile.avatar_url || '', color: colorFor(me), handle: TC.profile.username || '' });
-  TC.phase = 'ok'; onbResume(); render(!!TC.ready);
+  TC.phase = 'ok'; onbResume(); pwAskMaybe(); render(!!TC.ready);
   const blk = TC.loadBlocks().catch(() => {});   /* blocks first: they decide which messages a chat shows */
   TC._cpSynced = false;
   /* allSettled (2026-10-30): one loader that fails must not keep the rest of the app from being ready */
@@ -6366,6 +6404,19 @@ SHEETS.blockAsk = ({ uid }) => {
  <div style="display:grid;gap:8px"><button class="btn" style="background:#DC2626" data-a="blockGo" data-x="${esc(uid)}"${busy ? ' disabled' : ''}>${busy ? 'Blocking…' : 'Block ' + f}</button><button class="btn soft" data-a="closeSheet">Cancel</button></div>`;
 };
 /* An invite link's question (security-app, 2026-10-15): nothing is sent until Add. */
+/* Set your password — right after a code log-in, or when a sign-up's password didn't save
+   (2026-11-04). The account email rides along as the username so the password manager files the
+   password under the right address, and it works on the app and termchamp.com alike. */
+SHEETS.pwAsk = ({ why, err, busy }) => {
+  const email = (TC.user && TC.user.email) || '', failed = why === 'failed';
+  return `<h3>${failed ? 'Your password didn’t save' : 'Set your password'}</h3>
+ <div class="muted b" style="font-size:14.5px;margin:8px 0 14px;line-height:1.45">${failed ? 'You’re signed in. Set it now so you can log in with it next time' : 'So next time you can log in with it'} — in the app and on termchamp.com. Already have one? Enter it to keep it, or a new one to replace it.</div>
+ <form class="tc-form" data-submit="pwAsk" novalidate>
+  <input type="email" name="email" autocomplete="username" value="${esc(email)}" readonly tabindex="-1" aria-label="Account email" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none">
+  <label>Password<input id="pwask" type="password" autocomplete="new-password" placeholder="At least 8 characters"></label>
+  ${err ? `<div class="tc-err" role="alert">${esc(err)}</div>` : ''}
+  <div style="display:grid;gap:8px;margin-top:6px"><button class="btn" type="submit"${busy ? ' disabled' : ''}>${busy ? 'Saving…' : 'Save password'}</button><button class="btn soft" type="button" data-a="pwAskNo">Not now</button></div></form>`;
+};
 SHEETS.inviteAsk = ({ id, name, err, busy }) => {
   const who = name ? esc(name) : 'this person', inc = TC.relation(id) === 'incoming';
   return `<h3>Add ${who}?</h3>
@@ -8068,7 +8119,7 @@ const A = {
   refresh: () => { TC.refresh(); toast('Refreshing…'); },
   retrySeats: () => { delete TC.err.seats; render(true); loadSeats(); },
   google: () => TC.signInGoogle(),
-  siMode: m => { UI.signin.mode = m; UI.signin.err = ''; render(); },
+  siMode: m => { UI.signin.mode = m; UI.signin.err = ''; UI.signin.pwFail = false; render(); },
   signOut: () => { UI.sheet = null; TC.signOut(); },
   web: p => { window.open(WEB + (p || '/'), '_blank', 'noopener'); },
   /* A story jumps to that friend's week in the feed (every friend has a card there). */
@@ -8492,7 +8543,8 @@ const SUBMIT = {
     if (eduOk(e) && schoolForEmail(e) !== 'calpoly') { UI.signin.mode = 'waitlist'; UI.signin.err = ''; return render(); }   // SDSU/UCSB: the waitlist
     UI.busy.signin = 1; UI.signin.err = ''; render();
     const err = await TC.signInPassword(e, p); UI.busy.signin = 0;
-    if (err) { UI.signin.err = /invalid/i.test(err) ? 'That email and password don’t match. If you’ve never set a password, use “Email me a code”.' : /not confirmed/i.test(err) ? 'This address hasn’t been confirmed yet — use “Email me a code” to finish setting it up.' : authFriendlyErr(err); render(); }
+    if (!err) pwAskDisarm();
+    if (err) { UI.signin.pwFail = /invalid|not confirmed/i.test(err); UI.signin.err = /invalid/i.test(err) ? 'That email and password don’t match. If you’ve never set a password, use “Email me a code”.' : /not confirmed/i.test(err) ? 'This address hasn’t been confirmed yet — use “Email me a code” to finish setting it up.' : authFriendlyErr(err); render(); }
   },
   sendCode: async form => {
     const e = form.querySelector('#si-email').value.trim(); UI.signin.email = e;
@@ -8505,8 +8557,9 @@ const SUBMIT = {
   verify: async form => {
     const c = onbCode(form); if (c.length < 6 || UI.busy.signin) return;
     UI.busy.signin = 1; UI.signin.err = ''; UI.signin.note = ''; render();
+    pwAskArm('code');
     const err = await TC.verifyCode(UI.signin.email, c); UI.busy.signin = 0;
-    if (err) { UI.signin.err = /expired|invalid|token/i.test(err) ? 'That code is wrong or expired. Check your newest email or resend it.' : authFriendlyErr(err); render(); }
+    if (err) { if (/expired|invalid|token/i.test(err)) pwAskDisarm(); UI.signin.err = /expired|invalid|token/i.test(err) ? 'That code is wrong or expired. Send a new one below.' : authFriendlyErr(err); render(); }
   }
 };
 function scrollEnd() { const sc = document.getElementById('scroll'); sc.scrollTop = sc.scrollHeight; }
@@ -9097,7 +9150,8 @@ TC.saveProfile = async function (f) {
 TC.setPassword = async function (pw) {
   if (String(pw || '').length < 8) return 'At least 8 characters.';
   const r = await TC.client().auth.updateUser({ password: pw });
-  if (r.error) return /same|different from the old/i.test(r.error.message || '') ? 'That’s already your password.' : /weak|short|characters/i.test(r.error.message || '') ? 'Pick a stronger password — longer, with a mix of letters and numbers.' : 'Couldn’t change your password — try again.';
+  if (!r.error || pwIsSame(r.error)) pwSeenMark();   /* saved, or it already was this */
+  if (r.error) return pwIsSame(r.error) ? 'That’s already your password.' : /weak|short|characters/i.test(r.error.message || '') ? 'Pick a stronger password — longer, with a mix of letters and numbers.' : 'Couldn’t change your password — try again.';
   return null;
 };
 TC.setPlanShared = async function (slot, on) {
@@ -9431,7 +9485,7 @@ SCREENS.me = () => {
     meRow('openMyRatings', '', 'star', 'My ratings', TC.myReviewsErr ? 'Couldn’t load' : TC.myReviews === undefined ? '…' : `${revN} posted`),
     meRow('openSettings', '', 'meEye', 'Who sees my schedule', 'Friends'),
     meRow('openMyRatings', '', 'meCard', 'Name on my ratings', TC.myReviewsErr ? 'Couldn’t load' : TC.myReviews === undefined ? '…' : sharedN ? `Friends see ${sharedN}` : 'Anonymous'),
-    `<label class="merow"><span class="merow-i">${ic('meDoc', 20, 2.1)}</span><span class="merow-t"><span class="merow-l">Degree Progress Report</span></span><span class="merow-v">Import PDF</span><span class="chev">${ic('chevR', 18)}</span><input type="file" accept="application/pdf,.pdf" data-in="dprfile" hidden></label>`,
+    `<label class="merow"><span class="merow-i">${ic('meDoc', 20, 2.1)}</span><span class="merow-t"><span class="merow-l">Degree Progress Report</span></span><span class="merow-v">Import PDF</span><span class="chev">${ic('chevR', 18)}</span><input type="file" accept="application/pdf,.pdf" data-in="dprfile" class="tc-vhfile"></label>`,
     deg
   ].join('');
   return {
@@ -9575,7 +9629,7 @@ SCREENS.editProfile = () => {
     body: `<div class="topbtns">${backBtn()}</div><div class="title" style="margin-top:-6px">Edit profile</div>
  <div class="card tc-sec"><div class="row" style="gap:16px">
    <span class="av noph" style="width:76px;height:76px;background:${NOPHOTO};overflow:hidden">${silhouette()}${photo ? `<img src="${esc(photo)}" alt="" style="grid-area:1/1;width:100%;height:100%;object-fit:cover">` : ''}</span>
-   <div style="display:grid;gap:8px"><label class="pbtn pink" style="display:inline-grid;place-items:center;cursor:pointer">${photo ? 'Change photo' : 'Add a photo'}<input id="epfile" type="file" accept="image/png,image/jpeg,image/webp" data-in="epfile" hidden></label>${photo ? '<button class="pbtn" data-a="epRemovePhoto">Remove</button>' : ''}</div></div>
+   <div style="display:grid;gap:8px"><label class="pbtn pink" style="display:inline-grid;place-items:center;cursor:pointer">${photo ? 'Change photo' : 'Add a photo'}<input id="epfile" type="file" accept="image/png,image/jpeg,image/webp" data-in="epfile" class="tc-vhfile"></label>${photo ? '<button class="pbtn" data-a="epRemovePhoto">Remove</button>' : ''}</div></div>
    ${f.photoErr ? `<div class="tc-err">${esc(f.photoErr)}</div>` : ''}</div>
  <form class="card tc-sec tc-form" data-submit="saveProfile" style="margin-top:12px">
   <label>Name<input id="ep-name" data-in="ep" data-k="display_name" value="${esc(f.display_name)}" maxlength="60" autocomplete="name"></label>
@@ -9671,7 +9725,7 @@ function prereqForCard() {
     return `<div class="tc-pqgroup"><span class="tc-pqst" style="color:${isConc ? 'var(--amber-ink)' : 'var(--pink-ink)'}">${isConc ? 'Take in the same term' : 'Still need'}${g.length > 1 ? ' · any one' : ''}</span>${g.map(pqRow).join('')}</div>`;
   }).join('');
   const nudge = r.k === 'norecord' ? `<div class="muted b" style="font-size:13px;line-height:1.45;margin-top:10px">Add your past classes and this updates.</div>
-    <div class="row" style="gap:8px;margin-top:8px"><button class="btn soft grow" data-a="sheet" data-x="logClass">+ Log a class</button><label class="btn soft grow tc-a" style="cursor:pointer">Import report<input type="file" accept="application/pdf,.pdf" data-in="dprfile" hidden></label></div>` : '';
+    <div class="row" style="gap:8px;margin-top:8px"><button class="btn soft grow" data-a="sheet" data-x="logClass">+ Log a class</button><label class="btn soft grow tc-a" style="cursor:pointer">Import report<input type="file" accept="application/pdf,.pdf" data-in="dprfile" class="tc-vhfile"></label></div>` : '';
   return wrap(`<div class="b" style="font-size:14.5px;line-height:1.45;margin-bottom:4px">${lead}</div>${groups}${nudge}`);
 }
 /* ---- PLANNER-PICKS 2026-10-06: Past classes (record, ledger, flowchart) and the Planner (TermChamp's picks) ----
@@ -9695,13 +9749,13 @@ function plSkipped() { try { return localStorage.getItem(plSkipKey()) === '1'; }
 function dprFirstCard() {
   return `<div class="tc-dpr"><div class="tc-dpr-ico">${ic('check', 40, 2.4)}</div><h3>Upload your degree report</h3>
   <p>Your picks and plans start here.</p>
-  <label class="btn tc-dpr-go">Upload PDF<input type="file" accept="application/pdf,.pdf" data-in="dprfile" hidden></label>
+  <label class="btn tc-dpr-go">Upload PDF<input type="file" accept="application/pdf,.pdf" data-in="dprfile" class="tc-vhfile"></label>
   <button class="tc-dpr-link" data-a="plLaptop" ${UI.busy.laptop ? 'disabled' : ''}>${UI.busy.laptop ? 'Sending…' : 'Send the link to my laptop'}</button>
   <button class="btn tc-dpr-alt" data-a="sheet" data-x="logClass">Add classes one at a time</button>
   <button class="tc-dpr-skip" data-a="plShowPicks">Skip for now</button></div>`;
 }
 function dprNudgeRow() {
-  return `<div class="tc-dpr-row"><span class="grow">Upload your Degree Progress Report and these picks know what you’ve taken.</span><label>Upload<input type="file" accept="application/pdf,.pdf" data-in="dprfile" hidden></label></div>`;
+  return `<div class="tc-dpr-row"><span class="grow">Upload your Degree Progress Report and these picks know what you’ve taken.</span><label>Upload<input type="file" accept="application/pdf,.pdf" data-in="dprfile" class="tc-vhfile"></label></div>`;
 }
 function pastView() {
   const g = plGate(); if (g.html) return g.html;
@@ -10760,7 +10814,7 @@ SHEETS.dprRead = () => {
   const r = UI.dpr; if (!r) return '';
   const top = `<div class="at-top"><span class="at-kick">DEGREE PROGRESS REPORT</span><button class="xbtn" data-a="closeSheet" aria-label="Close">${ic('x', 16, 2.4)}</button></div>`;
   if (r.busy) return `<div class="dr">${top}<div class="dr-mid"><div class="dr-pg busy" aria-hidden="true"><i style="width:70%"></i><i style="width:45%"></i><i style="width:90%"></i><i style="width:80%"></i><i style="width:85%"></i><i style="width:60%"></i><i style="width:88%"></i><i style="width:50%"></i><i style="width:75%"></i></div><div class="dr-h">Reading your report…</div></div></div>`;
-  if (r.err) return `<div class="dr">${top}<div class="dr-mid"><div class="dr-h">Couldn’t read it</div><div class="tc-err" style="margin-top:4px">${esc(r.err)}</div></div><div class="dr-foot"><label class="btn" style="cursor:pointer">Try another PDF<input type="file" accept="application/pdf,.pdf" data-in="dprfile" hidden></label></div></div>`;
+  if (r.err) return `<div class="dr">${top}<div class="dr-mid"><div class="dr-h">Couldn’t read it</div><div class="tc-err" style="margin-top:4px">${esc(r.err)}</div></div><div class="dr-foot"><label class="btn" style="cursor:pointer">Try another PDF<input type="file" accept="application/pdf,.pdf" data-in="dprfile" class="tc-vhfile"></label></div></div>`;
   const P = TC.profile || {}, prog = r.program || {}, c = dprCounts(r);
   const major = dprMajorShown(prog), yr = P.class_standing || '';
   const pills = [c.filled != null ? `<span class="dr-pill ok">${c.filled} filled</span>` : '', c.left != null ? `<span class="dr-pill left">${c.left} left</span>` : '', c.unknown ? `<span class="dr-pill unk">${c.unknown} can’t check</span>` : '', c.xfer ? `<span class="dr-pill xfer">${c.xfer} transfer</span>` : ''].filter(Boolean).join('');
@@ -11327,7 +11381,7 @@ function pcBack(sh) {
   if (UI.sheet && UI.sheet.type === 'pcWho' && UI.sheet.scroll) { const y = UI.sheet.scroll; setTimeout(() => { const f = document.querySelector('#sheet .fullpg'); if (f) f.scrollTop = y; }, 0); }
 }
 /* (2026-10-12, option A) rare actions: two quiet links */
-const pcBtns = () => `<div class="pc-btns pc-qb"><button class="pc-btn" data-a="sheet" data-x="logClass">+ Log a class</button><label class="pc-btn">${TC.audit ? 'Upload a new report' : 'Upload report'}<input type="file" accept="application/pdf,.pdf" data-in="dprfile" hidden></label></div>`;
+const pcBtns = () => `<div class="pc-btns pc-qb"><button class="pc-btn" data-a="sheet" data-x="logClass">+ Log a class</button><label class="pc-btn">${TC.audit ? 'Upload a new report' : 'Upload report'}<input type="file" accept="application/pdf,.pdf" data-in="dprfile" class="tc-vhfile"></label></div>`;
 /* Tap a class on your record */
 SHEETS.pcClass = sh => {
   const h = pcRow(sh.key);
@@ -11490,6 +11544,7 @@ Object.assign(A, {
     if (UI.sheet === sh) A.closeSheet(); else render(true);
     toast(rel === 'incoming' ? `You and ${first || 'your friend'} are now friends` : first ? `Friend request sent to ${first} — you’re friends once they accept` : 'Friend request sent — you’re friends once they accept');
   },
+  pwAskNo: () => { UI.sheet = null; render(true); },
   inviteNo: () => {   /* Not now: answered, nothing written */
     try { localStorage.removeItem(INVITE_KEY); } catch (e) {}
     A.closeSheet();
@@ -11856,6 +11911,18 @@ Object.assign(SUBMIT, {
     if (e) { d.busy = 0; d.err = e; return render(true); }
     await TC.afterDelete();
   },
+  pwAsk: async form => {
+    const s = UI.sheet; if (!s || s.type !== 'pwAsk' || s.busy) return;
+    const v = (form.querySelector('#pwask') || {}).value || '';
+    if (v.length < 8) { s.err = `Your password needs ${8 - v.length} more character${8 - v.length === 1 ? '' : 's'}.`; return render(true); }
+    s.busy = true; s.err = ''; render(true);
+    const e = await TC.setPassword(v);
+    if (UI.sheet !== s) return;
+    s.busy = false;
+    if (e && !/already your password/i.test(e)) { s.err = e; return render(true); }
+    UI.sheet = null; render(true);
+    toast(e ? 'That’s already your password — you’re all set.' : 'Password saved. Use it in the app and on termchamp.com.');
+  },
   setPw: async form => {
     const v = form.querySelector('#setpw').value; UI.busy.pw = 1; UI.pwMsg = null; render(true);
     const e = await TC.setPassword(v); UI.busy.pw = 0;
@@ -12065,13 +12132,14 @@ function onbVerify() {
     <div class="code6 ${si.err ? 'bad' : ''}" id="code6" role="group" aria-label="6-digit code">${[0, 1, 2, 3, 4, 5].map(i => `<input inputmode="numeric" pattern="[0-9]*" maxlength="${i === 0 ? 6 : 1}" aria-label="Digit ${i + 1}" value="${esc(String(si.code || '')[i] || '')}" ${i === 0 ? 'autocomplete="one-time-code"' : 'autocomplete="off"'}>`).join('')}</div>
     <div class="hint bad" id="codeErr" role="alert">${esc(si.err || '')}</div>
     ${si.note ? `<div class="hint ok" role="status">${esc(si.note)}</div>` : ''}
-    <div id="resend" class="hint">${onbResendHtml()}</div>
+    <div id="resend" class="hint${si.err ? ' resend-big' : ''}">${onbResendHtml()}</div>
     <div class="champrow">${onbHawk(52)}<div class="bubble">You’re almost there!</div></div></div>
     <div class="foot"><button type="submit" class="btn" id="code-go" ${String(si.code || '').length === 6 && !UI.busy.signin ? '' : 'disabled'}>${UI.busy.signin ? 'Checking…' : 'Verify'}</button></div></form></div>`;
 }
 function onbResendHtml() {
   const left = Math.max(0, Math.ceil(((UI.signin.resendAt || 0) - Date.now()) / 1000));
-  return left ? `Didn’t get it? Resend in 0:${String(left).padStart(2, '0')}` : 'Didn’t get it? <button type="button" class="plink" data-a="suResend">Resend code</button>';
+  const big = !!UI.signin.err;
+  return left ? `${big ? 'Send a new code' : 'Didn’t get it? Resend'} in 0:${String(left).padStart(2, '0')}` : big ? '<button type="button" class="plink" data-a="suResend">Send a new code</button>' : 'Didn’t get it? <button type="button" class="plink" data-a="suResend">Resend code</button>';
 }
 function onbLogin() {
   const si = UI.signin;
@@ -12079,15 +12147,15 @@ function onbLogin() {
     <div class="stack"><div class="kicker">Welcome back</div><h1>Log in</h1></div>
     <div class="field"><label class="label" for="si-email">School email</label><input class="input" id="si-email" data-si="email" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="you@calpoly.edu" value="${esc(si.email)}"></div>
     <div class="field"><label class="label" for="si-pw">Password</label><div class="pwwrap"><input class="input" id="si-pw" type="${si.showPw ? 'text' : 'password'}" autocomplete="current-password"><button type="button" class="pill-pink showpw" data-a="suEye" aria-controls="si-pw" aria-pressed="${!!si.showPw}">${si.showPw ? 'Hide' : 'Show'}</button></div></div>
-    <div><button type="button" class="plink" data-a="siMode" data-x="code">Forgot password, or never set one? Email me a code</button></div>
+    ${si.pwFail ? '' : '<div><button type="button" class="plink" data-a="siMode" data-x="code">Forgot password, or never set one? Email me a code</button></div>'}
     <div class="hint bad" role="alert">${esc(si.err || '')}</div></div>
-    <div class="foot"><button class="btn" type="submit" ${UI.busy.signin ? 'disabled' : ''}>${UI.busy.signin ? 'Logging in…' : 'Log in'}</button>
+    <div class="foot">${si.pwFail ? '<button type="button" class="btn" data-a="siMode" data-x="code" style="margin-bottom:8px">Email me a code instead</button>' : ''}<button class="btn${si.pwFail ? ' soft' : ''}" type="submit" ${UI.busy.signin ? 'disabled' : ''}>${UI.busy.signin ? 'Logging in…' : si.pwFail ? 'Try my password again' : 'Log in'}</button>
     <div class="ghost">New here? <button type="button" class="plink" data-a="siMode" data-x="signup">Create an account</button></div></div></form></div>`;
 }
 function onbCodeLogin() {
   const si = UI.signin;
   return `<div class="onb"><form class="scr" data-submit="sendCode" novalidate>${onbTop()}<div class="body">
-    <div class="stack"><div class="kicker">Welcome back</div><h1>Email me a code</h1><p class="lead">We’ll send a 6-digit code — no password needed. Set one later in Settings.</p></div>
+    <div class="stack"><div class="kicker">Welcome back</div><h1>Email me a code</h1><p class="lead">We’ll send a 6-digit code — no password needed. Then you can set one for next time.</p></div>
     <div class="field"><label class="label" for="si-email">School email</label><input class="input" id="si-email" data-si="email" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="you@calpoly.edu" value="${esc(si.email)}"></div>
     <div class="hint bad" role="alert">${esc(si.err || '')}</div></div>
     <div class="foot"><button class="btn" type="submit" ${UI.busy.signin ? 'disabled' : ''}>${UI.busy.signin ? 'Sending…' : 'Send my code'}</button>
@@ -12201,7 +12269,7 @@ function onbDegree() {
      <div class="row"><div class="stepn">2</div><div><b style="font-weight:900">Degree Progress Report (DPR)</b><small>View PDF › Download</small></div></div>
      <div class="row"><div class="stepn">3</div><div><b style="font-weight:900">Upload it here</b></div></div></div>
     <div class="lock"><span class="dot">${ONB_I.lock}</span>Private · grades and ID never saved.</div></div>
-    <div class="foot">${calpoly ? `<label class="btn" style="cursor:pointer">${ONB_I.file}Upload DPR<input type="file" accept="application/pdf,.pdf" data-in="dprfile" hidden></label>
+    <div class="foot">${calpoly ? `<label class="btn" style="cursor:pointer">${ONB_I.file}Upload DPR<input type="file" accept="application/pdf,.pdf" data-in="dprfile" class="tc-vhfile"></label>
     <button type="button" class="btn soft onb-laptop" data-a="plLaptop" ${UI.busy.laptop ? 'disabled' : ''}>${ONB_I.mail}${UI.busy.laptop ? 'Sending…' : 'Send the link to my laptop'}</button>` : ''}
     <button type="button" class="ghost" data-a="onbStep" data-x="payoff">Skip for now</button></div></div>`;
 }
@@ -12622,8 +12690,8 @@ Object.assign(SUBMIT, {
     UI.busy.signin = 1; si.err = ''; si.note = ''; render();
     const pw = si.pw; si.pw = '';                     // out of memory the moment it's handed over
     const r = await TC.signUpVerify(si.email, code, pw); UI.busy.signin = 0;
-    if (r.err) { si.pw = pw; si.code = ''; si.err = /expired|invalid|token/i.test(r.err) ? 'That code is wrong or expired. Check your newest email or resend it.' : authFriendlyErr(r.err); return render(); }
-    if (r.pwNote) toast(r.pwNote);
+    if (r.err) { si.pw = pw; si.code = ''; si.err = /expired|invalid|token/i.test(r.err) ? 'That code is wrong or expired. Send a new one below — your password is kept.' : authFriendlyErr(r.err); return render(); }
+    if (r.pwNote) pwAskArm('failed');
   },
   onboard: async form => {
     const f = UI.ob; if (!f || UI.busy.ob) return;
